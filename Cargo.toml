@@ -1,6 +1,40 @@
 [package]
 name = "rkit"
 version = "0.1.0"
+authors = ["Nazarí González <nazari.nz@gmail.com>"]
 edition = "2021"
+readme = "README.md"
+homepage = "https://github.com/Nazariglez/rkit"
+repository = "https://github.com/Nazariglez/rkit"
+license = "MIT OR Apache-2.0"
+description = ""
+
+[profile.release]
+# optimize for speed and size
+opt-level = 2
+# link time optimization
+lto = true
+# remove debug symbols
+strip = true
+# do not parallelize optimizations
+codegen-units = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[package.metadata.docs.rs]
+all-features = true
+
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+# gamekit packages
+app = { path = "crates/app" }
+
+## common deps
+log = "0.4.22"
+raw-window-handle = "0.6.2"
 
 [dependencies]
+app.workspace = true
