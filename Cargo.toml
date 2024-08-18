@@ -30,11 +30,14 @@ members = ["crates/*"]
 
 [workspace.dependencies]
 # gamekit packages
-app = { path = "crates/app" }
+core = { path = "crates/core" }
+math = { path = "crates/math" }
 
 ## common deps
 log = "0.4.22"
 raw-window-handle = "0.6.2"
+atomic_refcell = "0.1.13"
 
 [dependencies]
-app.workspace = true
+core.workspace = true
+math.workspace = true
