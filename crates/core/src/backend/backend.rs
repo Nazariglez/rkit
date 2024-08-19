@@ -5,6 +5,8 @@ pub(crate) trait BackendImpl {
     fn title(&self) -> String;
     fn size(&self) -> Vec2;
     fn set_size(&mut self, size: Vec2);
+    fn set_min_size(&mut self, size: Vec2);
+    fn set_max_size(&mut self, size: Vec2);
     fn screen_size(&self) -> Vec2;
     fn is_fullscreen(&self) -> bool;
     fn toggle_fullscreen(&mut self);

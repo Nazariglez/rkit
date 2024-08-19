@@ -1,25 +1,31 @@
-use crate::backend::{get_backend, run};
+use crate::backend::run;
+use crate::window::WindowConfig;
 
-pub(crate) type InitCb<S> = Box<dyn FnOnce() -> Result<S, String>>;
+pub(crate) type InitCb<S> = Box<dyn FnOnce() -> S>;
 pub(crate) type UpdateCb<S> = Box<dyn FnMut(&mut S)>;
+pub(crate) type CleanupCb<S> = Box<dyn FnOnce(&mut S)>;
 
 pub struct AppBuilder<S>
 where
     S: 'static,
 {
+    pub(crate) window: WindowConfig,
     pub(crate) init_cb: InitCb<S>,
     pub(crate) update_cb: UpdateCb<S>,
+    pub(crate) cleanup_cb: CleanupCb<S>,
     // events, cleanup, maybe on? once?
 }
 
 pub(crate) fn builder<F, S>(cb: F) -> AppBuilder<S>
 where
-    F: FnOnce() -> Result<S, String> + 'static,
+    F: FnOnce() -> S + 'static,
     S: 'static,
 {
     AppBuilder {
+        window: WindowConfig::default(),
         init_cb: Box::new(cb),
         update_cb: Box::new(|_| ()),
+        cleanup_cb: Box::new(|_| ()),
     }
 }
 
@@ -27,7 +33,7 @@ impl<S> AppBuilder<S>
 where
     S: 'static,
 {
-    pub fn update<F>(mut self, cb: F) -> Self
+    pub fn on_update<F>(mut self, cb: F) -> Self
     where
         F: FnMut(&mut S) + 'static,
     {
@@ -35,10 +41,15 @@ where
         self
     }
 
+    pub fn on_cleanup<F>(mut self, cb: F) -> Self
+    where
+        F: FnOnce(&mut S) + 'static,
+    {
+        self.cleanup_cb = Box::new(cb);
+        self
+    }
+
     pub fn run(self) -> Result<(), String> {
-        let AppBuilder { init_cb, update_cb } = self;
-        let state = init_cb()?;
-        run(state, update_cb)?;
-        Ok(())
+        run(self)
     }
 }

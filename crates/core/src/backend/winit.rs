@@ -4,15 +4,15 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Fullscreen, Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
 
 use super::backend::BackendImpl;
-use crate::builder::UpdateCb;
+use crate::builder::{AppBuilder, InitCb, UpdateCb};
+use crate::window::WindowConfig;
 use math::{vec2, Vec2};
-
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
@@ -20,6 +20,8 @@ pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
 
 #[derive(Default)]
 pub(crate) struct WinitBackend {
+    initialized: bool,
+    win_opts: WindowAttributes,
     window: Option<Window>,
 }
 
@@ -55,17 +57,23 @@ impl BackendImpl for WinitBackend {
     }
 
     #[inline]
-    fn is_fullscreen(&self) -> bool {
+    fn set_min_size(&mut self, size: Vec2) {
         debug_assert!(self.window.is_some(), "Window must be present");
-        self.window.as_ref().unwrap().fullscreen().is_some()
+        let _ = self
+            .window
+            .as_mut()
+            .unwrap()
+            .set_min_inner_size(Some(LogicalSize::new(size.x, size.y)));
     }
 
     #[inline]
-    fn toggle_fullscreen(&mut self) {
+    fn set_max_size(&mut self, size: Vec2) {
         debug_assert!(self.window.is_some(), "Window must be present");
-        let is_not_fullscreen = !self.is_fullscreen();
-        let mode = is_not_fullscreen.then_some(Fullscreen::Borderless(None));
-        self.window.as_mut().unwrap().set_fullscreen(mode);
+        let _ = self
+            .window
+            .as_mut()
+            .unwrap()
+            .set_max_inner_size(Some(LogicalSize::new(size.x, size.y)));
     }
 
     #[inline]
@@ -77,6 +85,20 @@ impl BackendImpl for WinitBackend {
             let m = m.size().to_logical::<f32>(scale);
             vec2(m.width, m.height)
         })
+    }
+
+    #[inline]
+    fn is_fullscreen(&self) -> bool {
+        debug_assert!(self.window.is_some(), "Window must be present");
+        self.window.as_ref().unwrap().fullscreen().is_some()
+    }
+
+    #[inline]
+    fn toggle_fullscreen(&mut self) {
+        debug_assert!(self.window.is_some(), "Window must be present");
+        let is_not_fullscreen = !self.is_fullscreen();
+        let mode = is_not_fullscreen.then_some(Fullscreen::Borderless(None));
+        self.window.as_mut().unwrap().set_fullscreen(mode);
     }
 
     #[inline]
@@ -128,26 +150,31 @@ impl BackendImpl for WinitBackend {
 }
 
 struct Runner<S> {
-    state: S,
+    window_attrs: WindowAttributes,
+    init: Option<Box<dyn FnOnce() -> S>>,
+    state: Option<S>,
     update: Box<dyn FnMut(&mut S)>,
 }
 
 impl<S> ApplicationHandler for Runner<S> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut attrs =
-            Window::default_attributes().with_inner_size(LogicalSize::new(800.0, 600.0));
+        let mut attrs = self.window_attrs.clone();
 
         #[cfg(target_arch = "wasm32")]
         {
             attrs = attrs.with_append(true);
         }
-        BACKEND.borrow_mut().window = Some(event_loop.create_window(attrs).unwrap());
+
+        get_mut_backend().window = Some(event_loop.create_window(attrs).unwrap());
+        if let Some(init_cb) = self.init.take() {
+            self.state = Some(init_cb());
+        }
     }
 
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
-        window_id: WindowId,
+        _window_id: WindowId,
         event: WindowEvent,
     ) {
         match event {
@@ -156,48 +183,40 @@ impl<S> ApplicationHandler for Runner<S> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
+                (*self.update)(self.state.as_mut().unwrap());
 
-                // Draw.
-                (*self.update)(&mut self.state);
-
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
-                BACKEND
-                    .borrow_mut()
-                    .window
-                    .as_ref()
-                    .unwrap()
-                    .request_redraw();
+                get_mut_backend().window.as_ref().unwrap().request_redraw();
             }
             _ => (),
         }
     }
 }
 
-pub fn run<S>(state: S, update: UpdateCb<S>) -> Result<(), String>
+pub fn run<S>(builder: AppBuilder<S>) -> Result<(), String>
 where
     S: 'static,
 {
-    let event_loop = EventLoop::new().unwrap();
+    let AppBuilder {
+        window,
+        init_cb,
+        update_cb,
+        cleanup_cb,
+    } = builder;
 
-    // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
-    // dispatched any events. This is ideal for games and similar applications.
+    let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut runner = Runner {
-        state: state,
-        update: update,
+        window_attrs: window_attrs(window),
+        init: Some(init_cb),
+        state: None,
+        update: update_cb,
     };
 
-    event_loop.run_app(&mut runner);
+    event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;
+
+    // at this point the runner is not in use, the app is closing
+    cleanup_cb(runner.state.as_mut().unwrap());
 
     Ok(())
 }
@@ -210,4 +229,29 @@ pub(crate) fn get_backend<'a>() -> AtomicRef<'a, WinitBackend> {
 #[inline]
 pub(crate) fn get_mut_backend<'a>() -> AtomicRefMut<'a, WinitBackend> {
     BACKEND.borrow_mut()
+}
+
+fn window_attrs(config: WindowConfig) -> WindowAttributes {
+    let WindowConfig {
+        title,
+        size,
+        min_size,
+        max_size,
+        resizable,
+    } = config;
+
+    let mut attrs = WindowAttributes::default()
+        .with_title(title)
+        .with_inner_size(LogicalSize::new(size.x, size.y))
+        .with_resizable(resizable);
+
+    if let Some(ms) = min_size {
+        attrs = attrs.with_min_inner_size(LogicalSize::new(ms.x, ms.y));
+    }
+
+    if let Some(ms) = max_size {
+        attrs = attrs.with_max_inner_size(LogicalSize::new(ms.x, ms.y));
+    }
+
+    attrs
 }
