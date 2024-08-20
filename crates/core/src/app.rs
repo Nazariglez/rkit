@@ -1,6 +1,8 @@
 use crate::backend::{get_backend, get_mut_backend, BackendImpl};
 use math::{vec2, Vec2};
 
+pub use crate::window::*;
+
 // -- Window section
 #[inline]
 pub fn window_title() -> String {
@@ -20,6 +22,16 @@ pub fn window_size() -> Vec2 {
 #[inline]
 pub fn set_window_size(width: f32, height: f32) {
     get_mut_backend().set_size(vec2(width, height));
+}
+
+#[inline]
+pub fn set_window_min_size(width: f32, height: f32) {
+    get_mut_backend().set_min_size(vec2(width, height));
+}
+
+#[inline]
+pub fn set_window_max_size(width: f32, height: f32) {
+    get_mut_backend().set_max_size(vec2(width, height));
 }
 
 #[inline]
@@ -70,6 +82,11 @@ pub fn is_window_maximized() -> bool {
 #[inline]
 pub fn is_window_minimized() -> bool {
     get_backend().is_minimized()
+}
+
+#[inline]
+pub fn close_window() {
+    get_mut_backend().close()
 }
 
 #[inline]

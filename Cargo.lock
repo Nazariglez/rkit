@@ -212,6 +212,7 @@ name = "core"
 version = "0.0.0"
 dependencies = [
  "atomic_refcell",
+ "bitflags 2.6.0",
  "math",
  "once_cell",
  "winit",

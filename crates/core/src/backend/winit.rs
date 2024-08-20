@@ -2,7 +2,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton as WMouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 
@@ -11,6 +11,7 @@ use winit::platform::web::WindowAttributesExtWebSys;
 
 use super::backend::BackendImpl;
 use crate::builder::{AppBuilder, InitCb, UpdateCb};
+use crate::input::{MouseButton, MouseState};
 use crate::window::WindowConfig;
 use math::{vec2, Vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
@@ -20,9 +21,10 @@ pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
 
 #[derive(Default)]
 pub(crate) struct WinitBackend {
-    initialized: bool,
     win_opts: WindowAttributes,
     window: Option<Window>,
+    request_close: bool,
+    mouse_state: MouseState,
 }
 
 impl BackendImpl for WinitBackend {
@@ -147,6 +149,16 @@ impl BackendImpl for WinitBackend {
             .is_minimized()
             .unwrap_or_default()
     }
+
+    fn close(&mut self) {
+        debug_assert!(self.window.is_some(), "Window must be present");
+        self.request_close = true;
+    }
+
+    fn mouse_state(&self) -> MouseState {
+        debug_assert!(self.window.is_some(), "Window must be present");
+        self.mouse_state
+    }
 }
 
 struct Runner<S> {
@@ -165,7 +177,8 @@ impl<S> ApplicationHandler for Runner<S> {
             attrs = attrs.with_append(true);
         }
 
-        get_mut_backend().window = Some(event_loop.create_window(attrs).unwrap());
+        let win = event_loop.create_window(attrs).unwrap();
+        get_mut_backend().window = Some(win);
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
         }
@@ -178,16 +191,44 @@ impl<S> ApplicationHandler for Runner<S> {
         event: WindowEvent,
     ) {
         match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let mut bck = get_mut_backend();
+                let pos = position.to_logical::<f32>(bck.window.as_ref().unwrap().scale_factor());
+                bck.mouse_state.position.x = pos.x;
+                bck.mouse_state.position.y = pos.y;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let btn = match button {
+                    WMouseButton::Left => MouseButton::Left,
+                    WMouseButton::Right => MouseButton::Right,
+                    WMouseButton::Middle => MouseButton::Middle,
+                    WMouseButton::Back => MouseButton::Back,
+                    WMouseButton::Forward => MouseButton::Forward,
+                    WMouseButton::Other(_) => MouseButton::Unknown,
+                };
+
+                let mut bck = get_mut_backend();
+                match state {
+                    ElementState::Pressed => bck.mouse_state.press(btn),
+                    ElementState::Released => bck.mouse_state.release(btn),
+                }
+            }
             WindowEvent::CloseRequested => {
-                println!("The close button was pressed; stopping");
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
                 (*self.update)(self.state.as_mut().unwrap());
 
-                get_mut_backend().window.as_ref().unwrap().request_redraw();
+                let mut bck = get_mut_backend();
+                bck.window.as_ref().unwrap().request_redraw();
+                bck.mouse_state.tick();
             }
             _ => (),
+        }
+
+        let request_close = get_backend().request_close;
+        if request_close {
+            event_loop.exit();
         }
     }
 }

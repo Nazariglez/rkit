@@ -1,6 +1,8 @@
+use crate::input::MouseState;
 use math::Vec2;
 
 pub(crate) trait BackendImpl {
+    // Window
     fn set_title(&mut self, title: &str);
     fn title(&self) -> String;
     fn size(&self) -> Vec2;
@@ -16,4 +18,8 @@ pub(crate) trait BackendImpl {
     fn is_focused(&self) -> bool;
     fn is_maximized(&self) -> bool;
     fn is_minimized(&self) -> bool;
+    fn close(&mut self);
+
+    // input
+    fn mouse_state(&self) -> MouseState;
 }

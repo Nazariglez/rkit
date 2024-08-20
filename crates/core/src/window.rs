@@ -1,5 +1,6 @@
 use math::{uvec2, UVec2};
 
+// TODO set target FPS? delta_time, elapsed_time?
 #[derive(Debug)]
 pub struct WindowConfig {
     pub title: String,
