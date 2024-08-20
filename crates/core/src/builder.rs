@@ -33,6 +33,11 @@ impl<S> AppBuilder<S>
 where
     S: 'static,
 {
+    pub fn with_window(mut self, config: WindowConfig) -> Self {
+        self.window = config;
+        self
+    }
+
     pub fn on_update<F>(mut self, cb: F) -> Self
     where
         F: FnMut(&mut S) + 'static,

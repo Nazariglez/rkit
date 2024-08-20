@@ -1,7 +1,18 @@
+use rkit::*;
+use rkit::math::*;
 use rkit::app::*;
 
 fn main() {
-    rkit::init().on_update(update).run().unwrap()
+    rkit::init()
+        .with_window(WindowConfig {
+            title: "Whatever".to_string(),
+            size: uvec2(400, 300),
+            resizable: false,
+            ..Default::default()
+        })
+        .on_update(update)
+        .run()
+        .unwrap()
 }
 
 fn update(_s: &mut ()) {

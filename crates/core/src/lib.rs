@@ -3,6 +3,8 @@ mod backend;
 mod builder;
 mod window;
 
+pub use window::WindowConfig;
+
 use crate::builder::{builder, AppBuilder};
 
 pub fn init_with<F, S>(callback: F) -> AppBuilder<S>
