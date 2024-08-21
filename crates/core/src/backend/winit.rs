@@ -2,7 +2,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::{ElementState, MouseButton as WMouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 
@@ -193,9 +193,35 @@ impl<S> ApplicationHandler for Runner<S> {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 let mut bck = get_mut_backend();
-                let pos = position.to_logical::<f32>(bck.window.as_ref().unwrap().scale_factor());
-                bck.mouse_state.position.x = pos.x;
-                bck.mouse_state.position.y = pos.y;
+                let old_mouse_pos = bck.mouse_state.position();
+
+                let w_pos = position.to_logical::<f32>(bck.window.as_ref().unwrap().scale_factor());
+                let pos = vec2(w_pos.x, w_pos.y);
+                let motion_delta = pos - old_mouse_pos;
+
+                bck.mouse_state.position = pos;
+                bck.mouse_state.motion_delta = motion_delta;
+                bck.mouse_state.moving = true;
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let mut bck = get_mut_backend();
+                let scale_factor = bck.window.as_ref().unwrap().scale_factor() as f32;
+                let value = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        let line_scale = 1.0; // just trying magic numbers
+                        vec2(
+                            x * line_scale * scale_factor * x,
+                            y * line_scale * scale_factor * y,
+                        )
+                    }
+                    MouseScrollDelta::PixelDelta(dt) => {
+                        let delta =
+                            dt.to_logical::<f32>(bck.window.as_ref().unwrap().scale_factor());
+                        vec2(delta.x, delta.y)
+                    }
+                };
+                bck.mouse_state.wheel_delta = value;
+                bck.mouse_state.scrolling = true;
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let btn = match button {

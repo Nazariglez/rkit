@@ -49,16 +49,24 @@ fn update(s: &mut AppState) {
         s.last_time = current_time;
     }
 
-    println!(
-        "mpos: {:?}, is min: {:?}, max: {:?} -> Frame Count: {} -> fps: {}",
-        mouse_position(),
-        is_window_focused(),
-        is_window_maximized(),
-        s.frame_count,
-        s.fps
-    );
+    let mdelta = mouse_motion_delta();
+    let wdelta = mouse_wheel_delta();
 
-    if is_mouse_btn_pressed(MouseButton::Left) {
-        close_window();
+    if is_mouse_moving() || is_mouse_scrolling() {
+        println!("{:?} - {:?}", mdelta, wdelta);
     }
+
+    // println!(
+    //     "mpos: {:?}, Frame Count: {} -> fps: {} -- {:?}, motion_delta: {:?}, wheel_delta: {:?}",
+    //     mouse_position(),
+    //     s.frame_count,
+    //     s.fps,
+    //     are_mouse_btns_down(&[MouseButton::Left, MouseButton::Right, MouseButton::Middle]),
+    //     mouse_motion_delta(),
+    //     mouse_wheel_delta()
+    // );
+
+    // if is_mouse_btn_pressed(MouseButton::Left) {
+    //     close_window();
+    // }
 }

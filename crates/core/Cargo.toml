@@ -5,7 +5,13 @@ edition = "2021"
 [dependencies]
 math.workspace = true
 
+log.workspace = true
+
 winit = "0.30.5"
 atomic_refcell.workspace = true
 once_cell = "1.19.0"
 bitflags = "2.6.0"
+strum = "0.26.3"
+strum_macros = "0.26.4"
+smol_str = "0.2.2"
+smallvec = "2.0.0-alpha.7"
