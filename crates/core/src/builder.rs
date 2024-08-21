@@ -1,5 +1,5 @@
+use crate::app::WindowConfig;
 use crate::backend::run;
-use crate::window::WindowConfig;
 
 pub(crate) type InitCb<S> = Box<dyn FnOnce() -> S>;
 pub(crate) type UpdateCb<S> = Box<dyn FnMut(&mut S)>;

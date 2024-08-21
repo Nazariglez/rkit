@@ -37,6 +37,10 @@ math = { path = "crates/math" }
 log = "0.4.22"
 raw-window-handle = "0.6.2"
 atomic_refcell = "0.1.13"
+serde = { version = "1.0", features = ["serde_derive"] }
+rkyv = "0.8.0-alpha.3"
+heapless = "0.8.0"
+arrayvec = "0.7.6"
 
 [dependencies]
 core.workspace = true

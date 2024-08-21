@@ -1,7 +1,5 @@
 use crate::backend::{get_backend, get_mut_backend, BackendImpl};
-use math::{vec2, Vec2};
-
-pub use crate::window::*;
+use math::{uvec2, vec2, UVec2, Vec2};
 
 // -- Window section
 #[inline]
@@ -92,4 +90,28 @@ pub fn close_window() {
 #[inline]
 pub fn screen_size() -> Vec2 {
     get_backend().screen_size()
+}
+
+// --
+
+// TODO set target FPS? delta_time, elapsed_time?
+#[derive(Debug)]
+pub struct WindowConfig {
+    pub title: String,
+    pub size: UVec2,
+    pub min_size: Option<UVec2>,
+    pub max_size: Option<UVec2>,
+    pub resizable: bool,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            title: "GameKit Window".to_string(),
+            size: uvec2(800, 600),
+            min_size: None,
+            max_size: None,
+            resizable: true,
+        }
+    }
 }

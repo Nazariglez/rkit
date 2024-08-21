@@ -10,9 +10,9 @@ use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 use winit::platform::web::WindowAttributesExtWebSys;
 
 use super::backend::BackendImpl;
+use crate::app::WindowConfig;
 use crate::builder::{AppBuilder, InitCb, UpdateCb};
 use crate::input::{MouseButton, MouseState};
-use crate::window::WindowConfig;
 use math::{vec2, Vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
@@ -150,11 +150,13 @@ impl BackendImpl for WinitBackend {
             .unwrap_or_default()
     }
 
+    #[inline]
     fn close(&mut self) {
         debug_assert!(self.window.is_some(), "Window must be present");
         self.request_close = true;
     }
 
+    #[inline]
     fn mouse_state(&self) -> MouseState {
         debug_assert!(self.window.is_some(), "Window must be present");
         self.mouse_state
@@ -289,12 +291,12 @@ where
 }
 
 #[inline]
-pub(crate) fn get_backend<'a>() -> AtomicRef<'a, WinitBackend> {
+pub(crate) fn get_backend() -> AtomicRef<'static, WinitBackend> {
     BACKEND.borrow()
 }
 
 #[inline]
-pub(crate) fn get_mut_backend<'a>() -> AtomicRefMut<'a, WinitBackend> {
+pub(crate) fn get_mut_backend() -> AtomicRefMut<'static, WinitBackend> {
     BACKEND.borrow_mut()
 }
 
