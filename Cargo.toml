@@ -41,6 +41,7 @@ serde = { version = "1.0", features = ["serde_derive"] }
 rkyv = "0.8.0-alpha.3"
 heapless = "0.8.0"
 arrayvec = "0.7.6"
+nohash-hasher = "0.2.0"
 
 [dependencies]
 core.workspace = true

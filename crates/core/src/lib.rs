@@ -2,6 +2,7 @@ pub mod app;
 mod backend;
 mod builder;
 pub mod input;
+mod utils;
 
 use crate::builder::{builder, AppBuilder};
 

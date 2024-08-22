@@ -1,2 +1,3 @@
 * time: fps(), delta_time(), elapsed_time()?
 * rand: set_seed(), current_seed(), etc...
+* add teesting for keyboards and mouse inputs (down state is important because is never cleaned)

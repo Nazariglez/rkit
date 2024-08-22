@@ -56,6 +56,20 @@ fn update(s: &mut AppState) {
         println!("{:?} - {:?}", mdelta, wdelta);
     }
 
+    let btns = mouse_btns_down();
+    if !btns.is_empty() {
+        println!("{:?}", btns);
+    }
+
+    let btns = keys_down();
+    if !btns.is_empty() {
+        println!("{:?}", btns);
+    }
+
+    if is_key_pressed(KeyCode::Space) {
+        toggle_fullscreen();
+    }
+
     // println!(
     //     "mpos: {:?}, Frame Count: {} -> fps: {} -- {:?}, motion_delta: {:?}, wheel_delta: {:?}",
     //     mouse_position(),
