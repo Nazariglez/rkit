@@ -1,7 +1,8 @@
-use heapless::IndexSet;
+use heapless::{IndexMap, IndexSet};
 use nohash_hasher::BuildNoHashHasher;
 
 pub(crate) type EnumSet<T, const N: usize> = IndexSet<T, BuildNoHashHasher<T>, N>;
+pub(crate) type EnumMap<K, V, const N: usize> = IndexMap<K, V, BuildNoHashHasher<K>, N>;
 
 pub(crate) const fn next_pot2(x: usize) -> usize {
     if x == 0 {
