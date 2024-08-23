@@ -1,7 +1,10 @@
+use crate::input::MouseButtonList;
 use crate::option_usize_env;
 use crate::utils::{next_pot2, EnumSet};
+use arrayvec::ArrayVec;
 use math::Vec2;
 use nohash_hasher::IsEnabled;
+use smol_str::SmolStr;
 use std::hash::Hasher;
 use strum::EnumCount;
 use strum_macros::EnumCount;
@@ -516,14 +519,72 @@ impl std::fmt::Debug for KeyCodeList {
     }
 }
 
+#[derive(Default, Clone)]
+pub struct TextList {
+    list: ArrayVec<SmolStr, MAX_KEYS_PRESSED>,
+}
+
+impl TextList {
+    pub fn insert(&mut self, txt: &str) {
+        self.list.push(SmolStr::new(txt))
+    }
+
+    pub fn contains(&self, txt: &str) -> bool {
+        self.list.contains(&SmolStr::new(txt))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &str> + '_ {
+        self.list.iter().map(|s| s.as_str())
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = SmolStr> + 'static {
+        self.list.into_iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.list.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.list.is_empty()
+    }
+
+    pub fn remove(&mut self, txt: &str) -> bool {
+        let idx = self.list.iter().position(|cc| cc.as_str() == txt);
+        match idx {
+            None => false,
+            Some(idx) => {
+                self.list.remove(idx);
+                true
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.list.clear()
+    }
+}
+
+impl std::fmt::Debug for TextList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_set().entries(self.iter()).finish()
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct KeyboardState {
     pub pressed: KeyCodeList,
     pub released: KeyCodeList,
     pub down: KeyCodeList,
+
+    pub text: TextList,
 }
 
 impl KeyboardState {
+    pub fn add_text(&mut self, c: &str) {
+        self.text.insert(c);
+    }
+
     pub fn press(&mut self, btn: KeyCode) {
         self.pressed.insert(btn);
         self.down.insert(btn);
@@ -575,5 +636,167 @@ impl KeyboardState {
     pub fn tick(&mut self) {
         self.pressed.clear();
         self.released.clear();
+        self.text.clear();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_list_insert_contains() {
+        let mut list = KeyCodeList::default();
+        assert!(!list.contains(KeyCode::KeyA));
+
+        list.insert(KeyCode::KeyA);
+        assert!(list.contains(KeyCode::KeyA));
+    }
+
+    #[test]
+    fn test_list_remove() {
+        let mut list = KeyCodeList::default();
+        list.insert(KeyCode::KeyB);
+        assert!(list.contains(KeyCode::KeyB));
+
+        list.remove(KeyCode::KeyB);
+        assert!(!list.contains(KeyCode::KeyB));
+    }
+
+    #[test]
+    fn test_list_len_and_empty() {
+        let mut list = KeyCodeList::default();
+        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
+
+        list.insert(KeyCode::KeyC);
+        assert!(!list.is_empty());
+        assert_eq!(list.len(), 1);
+
+        list.insert(KeyCode::KeyD);
+        assert_eq!(list.len(), 2);
+
+        list.remove(KeyCode::KeyC);
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn test_list_iter() {
+        let mut list = KeyCodeList::default();
+        list.insert(KeyCode::KeyE);
+        list.insert(KeyCode::KeyF);
+
+        let keys: Vec<_> = list.iter().collect();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&KeyCode::KeyE));
+        assert!(keys.contains(&KeyCode::KeyF));
+    }
+
+    #[test]
+    fn test_text_list_insert_contains() {
+        let mut text_list = TextList::default();
+        assert!(!text_list.contains("Hello"));
+
+        text_list.insert("Hello");
+        assert!(text_list.contains("Hello"));
+    }
+
+    #[test]
+    fn test_text_list_remove() {
+        let mut text_list = TextList::default();
+        text_list.insert("World");
+        assert!(text_list.contains("World"));
+
+        text_list.remove("World");
+        assert!(!text_list.contains("World"));
+    }
+
+    #[test]
+    fn test_text_list_len_and_empty() {
+        let mut text_list = TextList::default();
+        assert!(text_list.is_empty());
+        assert_eq!(text_list.len(), 0);
+
+        text_list.insert("Rust");
+        assert!(!text_list.is_empty());
+        assert_eq!(text_list.len(), 1);
+
+        text_list.insert("Language");
+        assert_eq!(text_list.len(), 2);
+
+        text_list.remove("Rust");
+        assert_eq!(text_list.len(), 1);
+    }
+
+    #[test]
+    fn test_text_list_iter() {
+        let mut text_list = TextList::default();
+        text_list.insert("Hello");
+        text_list.insert("World");
+
+        let texts: Vec<_> = text_list.iter().collect();
+        assert_eq!(texts.len(), 2);
+        assert!(texts.contains(&"Hello"));
+        assert!(texts.contains(&"World"));
+    }
+
+    #[test]
+    fn test_state_add_text() {
+        let mut state = KeyboardState::default();
+        assert!(!state.text.contains("Typing"));
+
+        state.add_text("Typing");
+        assert!(state.text.contains("Typing"));
+    }
+
+    #[test]
+    fn test_state_press_and_release() {
+        let mut state = KeyboardState::default();
+
+        assert!(!state.is_pressed(KeyCode::KeyG));
+        assert!(!state.is_down(KeyCode::KeyG));
+        assert!(!state.is_released(KeyCode::KeyG));
+
+        state.press(KeyCode::KeyG);
+        assert!(state.is_pressed(KeyCode::KeyG));
+        assert!(state.is_down(KeyCode::KeyG));
+        assert!(!state.is_released(KeyCode::KeyG));
+
+        state.release(KeyCode::KeyG);
+        assert!(!state.is_pressed(KeyCode::KeyG));
+        assert!(!state.is_down(KeyCode::KeyG));
+        assert!(state.is_released(KeyCode::KeyG));
+    }
+
+    #[test]
+    fn test_state_are_pressed_are_released_are_down() {
+        let mut state = KeyboardState::default();
+        state.press(KeyCode::KeyH);
+        state.press(KeyCode::KeyI);
+
+        let pressed = state.are_pressed(&[KeyCode::KeyH, KeyCode::KeyJ, KeyCode::KeyI]);
+        assert_eq!(pressed, [true, false, true]);
+
+        state.release(KeyCode::KeyI);
+
+        let released = state.are_released(&[KeyCode::KeyH, KeyCode::KeyI]);
+        assert_eq!(released, [false, true]);
+
+        let down = state.are_down(&[KeyCode::KeyH, KeyCode::KeyI]);
+        assert_eq!(down, [true, false]);
+    }
+
+    #[test]
+    fn test_state_tick() {
+        let mut state = KeyboardState::default();
+        state.press(KeyCode::KeyL);
+        state.press(KeyCode::KeyM);
+        state.add_text("Clearing");
+
+        state.tick();
+
+        assert!(state.pressed.is_empty());
+        assert!(state.released.is_empty());
+        assert!(state.text.is_empty());
     }
 }

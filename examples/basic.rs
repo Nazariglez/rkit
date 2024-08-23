@@ -44,7 +44,7 @@ fn update(s: &mut AppState) {
 
     if elapsed_time >= Duration::from_secs(1) {
         s.fps = s.frame_count as f32 / elapsed_time.as_secs_f32();
-        println!("FPS: {}", s.fps);
+        // println!("FPS: {}", s.fps);
         s.frame_count = 0;
         s.last_time = current_time;
     }
@@ -53,21 +53,28 @@ fn update(s: &mut AppState) {
     let wdelta = mouse_wheel_delta();
 
     if is_mouse_moving() || is_mouse_scrolling() {
-        println!("{:?} - {:?}", mdelta, wdelta);
+        // println!("{:?} - {:?}", mdelta, wdelta);
     }
 
     let btns = mouse_btns_down();
     if !btns.is_empty() {
-        println!("{:?}", btns);
+        // println!("{:?}", btns);
     }
 
     let btns = keys_down();
     if !btns.is_empty() {
-        println!("{:?}", btns);
+        // println!("{:?}", btns);
     }
 
     if is_key_pressed(KeyCode::Space) {
-        toggle_fullscreen();
+        // toggle_fullscreen();
+    }
+
+    let text = text_pressed();
+    if !text.is_empty() {
+        text.iter().for_each(|t| {
+            print!("{}", t);
+        });
     }
 
     // println!(

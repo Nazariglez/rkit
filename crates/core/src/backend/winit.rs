@@ -2,7 +2,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::{ElementState, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode as WKeyCode, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
@@ -187,7 +187,8 @@ impl<S> ApplicationHandler for Runner<S> {
             attrs = attrs.with_append(true);
         }
 
-        let win = event_loop.create_window(attrs).unwrap();
+        let mut win = event_loop.create_window(attrs).unwrap();
+        win.set_ime_allowed(true); // allow for chars
         get_mut_backend().window = Some(win);
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
@@ -247,6 +248,20 @@ impl<S> ApplicationHandler for Runner<S> {
                 match event.state {
                     ElementState::Pressed => bck.keyboard_state.press(key),
                     ElementState::Released => bck.keyboard_state.release(key),
+                }
+
+                // chars
+                if let Some(txt) = event.text {
+                    bck.keyboard_state.add_text(txt.as_str());
+                }
+            }
+            WindowEvent::Ime(ime) => {
+                // chars
+                match ime {
+                    Ime::Commit(c) => {
+                        get_mut_backend().keyboard_state.add_text(c.as_str());
+                    }
+                    _ => {}
                 }
             }
             WindowEvent::CloseRequested => {

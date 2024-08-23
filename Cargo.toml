@@ -42,6 +42,7 @@ rkyv = "0.8.0-alpha.3"
 heapless = "0.8.0"
 arrayvec = "0.7.6"
 nohash-hasher = "0.2.0"
+smol_str = "0.2.2"
 
 [dependencies]
 core.workspace = true

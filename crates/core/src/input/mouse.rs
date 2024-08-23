@@ -162,3 +162,116 @@ impl MouseState {
         self.scrolling = false;
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use math::vec2;
+
+    #[test]
+    fn test_list_insert_contains() {
+        let mut list = MouseButtonList::default();
+        assert!(!list.contains(MouseButton::Left));
+
+        list.insert(MouseButton::Left);
+        assert!(list.contains(MouseButton::Left));
+    }
+
+    #[test]
+    fn test_list_remove() {
+        let mut list = MouseButtonList::default();
+        list.insert(MouseButton::Right);
+        assert!(list.contains(MouseButton::Right));
+
+        list.remove(MouseButton::Right);
+        assert!(!list.contains(MouseButton::Right));
+    }
+
+    #[test]
+    fn test_list_len_and_empty() {
+        let mut list = MouseButtonList::default();
+        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
+
+        list.insert(MouseButton::Middle);
+        assert!(!list.is_empty());
+        assert_eq!(list.len(), 1);
+
+        list.insert(MouseButton::Left);
+        assert_eq!(list.len(), 2);
+
+        list.remove(MouseButton::Middle);
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn test_list_iter() {
+        let mut list = MouseButtonList::default();
+        list.insert(MouseButton::Back);
+        list.insert(MouseButton::Forward);
+
+        let buttons: Vec<_> = list.iter().collect();
+        assert_eq!(buttons.len(), 2);
+        assert!(buttons.contains(&MouseButton::Back));
+        assert!(buttons.contains(&MouseButton::Forward));
+    }
+
+    #[test]
+    fn test_state_press_and_release() {
+        let mut state = MouseState::default();
+
+        assert!(!state.is_pressed(MouseButton::Left));
+        assert!(!state.is_down(MouseButton::Left));
+        assert!(!state.is_released(MouseButton::Left));
+
+        state.press(MouseButton::Left);
+        assert!(state.is_pressed(MouseButton::Left));
+        assert!(state.is_down(MouseButton::Left));
+        assert!(!state.is_released(MouseButton::Left));
+
+        state.release(MouseButton::Left);
+        assert!(!state.is_pressed(MouseButton::Left));
+        assert!(!state.is_down(MouseButton::Left));
+        assert!(state.is_released(MouseButton::Left));
+    }
+
+    #[test]
+    fn test_state_are_pressed_are_released_are_down() {
+        let mut state = MouseState::default();
+        state.press(MouseButton::Left);
+        state.press(MouseButton::Right);
+
+        let pressed =
+            state.are_pressed(&[MouseButton::Left, MouseButton::Middle, MouseButton::Right]);
+        assert_eq!(pressed, [true, false, true]);
+
+        state.release(MouseButton::Right);
+
+        let released = state.are_released(&[MouseButton::Left, MouseButton::Right]);
+        assert_eq!(released, [false, true]);
+
+        let down = state.are_down(&[MouseButton::Left, MouseButton::Right]);
+        assert_eq!(down, [true, false]);
+    }
+
+    #[test]
+    fn test_state_tick() {
+        let mut state = MouseState::default();
+        state.press(MouseButton::Left);
+        state.press(MouseButton::Right);
+        state.motion_delta = vec2(5.0, 5.0);
+        state.moving = true;
+        state.wheel_delta = vec2(1.0, 1.0);
+        state.scrolling = true;
+
+        state.tick();
+
+        assert!(state.pressed.is_empty());
+        assert!(state.released.is_empty());
+        assert_eq!(state.down.len(), 2);
+        assert_eq!(state.motion_delta, Vec2::ZERO);
+        assert!(!state.moving);
+        assert_eq!(state.wheel_delta, Vec2::ZERO);
+        assert!(!state.scrolling);
+    }
+}

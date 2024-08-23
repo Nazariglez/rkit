@@ -111,6 +111,7 @@ pub fn keys_released() -> KeyCodeList {
     get_backend().keyboard_state().released.clone()
 }
 
+#[inline]
 pub fn is_key_down(key: KeyCode) -> bool {
     get_backend().keyboard_state().is_down(key)
 }
@@ -123,4 +124,9 @@ pub fn are_keys_down<const N: usize>(keys: &[KeyCode; N]) -> [bool; N] {
 #[inline]
 pub fn keys_down() -> KeyCodeList {
     get_backend().keyboard_state().down.clone()
+}
+
+#[inline]
+pub fn text_pressed() -> TextList {
+    get_backend().keyboard_state().text.clone()
 }
