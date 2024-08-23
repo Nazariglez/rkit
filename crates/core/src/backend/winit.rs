@@ -13,7 +13,7 @@ use winit::platform::web::WindowAttributesExtWebSys;
 use super::backend::BackendImpl;
 use crate::app::WindowConfig;
 use crate::builder::AppBuilder;
-use crate::input::{KeyCode, KeyboardState, MouseButton, MouseState};
+use crate::input::{GamepadState, KeyCode, KeyboardState, MouseButton, MouseState};
 use math::{vec2, Vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
@@ -27,6 +27,7 @@ pub(crate) struct WinitBackend {
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
+    gamepad_state: GamepadState,
 }
 
 impl BackendImpl for WinitBackend {
@@ -168,6 +169,11 @@ impl BackendImpl for WinitBackend {
     fn keyboard_state(&self) -> &KeyboardState {
         debug_assert!(self.window.is_some(), "Window must be present");
         &self.keyboard_state
+    }
+
+    #[inline]
+    fn gamepad_state(&self) -> &GamepadState {
+        &self.gamepad_state
     }
 }
 

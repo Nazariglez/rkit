@@ -22,6 +22,7 @@ bitflags = "2.6.0"
 strum = "0.26.3"
 strum_macros = "0.26.4"
 smallvec = "2.0.0-alpha.7"
+gilrs = "0.10.9"
 
 [features]
 # Hackish, to add environment variables for test builds

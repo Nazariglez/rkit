@@ -1,4 +1,4 @@
-use crate::input::{KeyboardState, MouseState};
+use crate::input::{GamepadState, KeyboardState, MouseState};
 use math::Vec2;
 
 pub(crate) trait BackendImpl {
@@ -23,4 +23,5 @@ pub(crate) trait BackendImpl {
     // input
     fn mouse_state(&self) -> &MouseState;
     fn keyboard_state(&self) -> &KeyboardState;
+    fn gamepad_state(&self) -> &GamepadState;
 }
