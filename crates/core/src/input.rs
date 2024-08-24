@@ -130,3 +130,6 @@ pub fn keys_down() -> KeyCodeList {
 pub fn text_pressed() -> TextList {
     get_backend().keyboard_state().text.clone()
 }
+
+// -- Gamepad
+// TODO gamepad API

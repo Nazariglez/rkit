@@ -7,13 +7,23 @@
 //     Unknown,
 // }
 
+use crate::option_usize_env;
 use crate::utils::{next_pot2, EnumSet};
+use arrayvec::ArrayVec;
 use nohash_hasher::IsEnabled;
+use smallvec::SmallVec;
 use std::hash::Hasher;
 use strum::EnumCount;
 use strum_macros::{EnumCount, FromRepr};
 
 const GAMEPAD_BUTTON_COUNT_POT2: usize = next_pot2(GamepadButton::COUNT);
+
+// Passing this env variable we can control the size of the hashset to reduce memory consume.
+// 16 gamepads at once seems more than enough, most games have a max of 4-8, and other libs as
+// SDL seems to allow a max of 16. still, we can pass as var in the build.rs a higher value
+// if the game will require more gamepads
+const MAX_GAMEPADS_CONNECTED: usize = option_usize_env!("GK_MAX_GAMEPADS_CONNECTED", 16);
+pub(crate) const GAMEPADS_CONNECTED_POT2: usize = next_pot2(MAX_GAMEPADS_CONNECTED);
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount)]
@@ -150,9 +160,10 @@ impl std::fmt::Debug for GamepadAxisList {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct GamepadState {
-    // TODO devices available
+#[derive(Debug, Default, Clone)]
+pub struct GamepadInfo {
+    id: usize,
+
     pub pressed: GamepadButtonList,
     pub down: GamepadButtonList,
     pub released: GamepadButtonList,
@@ -160,4 +171,99 @@ pub struct GamepadState {
     pub axis: GamepadAxisList,
 }
 
-impl GamepadState {}
+impl GamepadInfo {
+    pub fn press(&mut self, btn: GamepadButton) {
+        self.pressed.insert(btn);
+        self.down.insert(btn);
+        self.released.remove(btn);
+    }
+
+    pub fn release(&mut self, btn: GamepadButton) {
+        self.released.insert(btn);
+        self.down.remove(btn);
+        self.pressed.remove(btn);
+    }
+
+    pub fn set_axis_strength(&mut self, axis: GamepadAxis, strength: f32) {
+        self.axis.set_strength(axis, strength);
+    }
+
+    pub fn axis_strength(&mut self, axis: GamepadAxis) -> f32 {
+        self.axis.strength(axis)
+    }
+
+    pub fn are_pressed<const N: usize>(&self, btns: &[GamepadButton; N]) -> [bool; N] {
+        let mut res = [false; N];
+        btns.iter().enumerate().for_each(|(i, &btn)| {
+            res[i] = self.is_pressed(btn);
+        });
+        res
+    }
+
+    pub fn is_pressed(&self, btn: GamepadButton) -> bool {
+        self.pressed.contains(btn)
+    }
+
+    pub fn are_released<const N: usize>(&self, btns: &[GamepadButton; N]) -> [bool; N] {
+        let mut res = [false; N];
+        btns.iter().enumerate().for_each(|(i, &btn)| {
+            res[i] = self.is_released(btn);
+        });
+        res
+    }
+
+    pub fn is_released(&self, btn: GamepadButton) -> bool {
+        self.released.contains(btn)
+    }
+
+    pub fn are_down<const N: usize>(&self, btns: &[GamepadButton; N]) -> [bool; N] {
+        let mut res = [false; N];
+        btns.iter().enumerate().for_each(|(i, &btn)| {
+            res[i] = self.is_down(btn);
+        });
+        res
+    }
+
+    pub fn is_down(&self, btn: GamepadButton) -> bool {
+        self.down.contains(btn)
+    }
+
+    pub fn tick(&mut self) {
+        self.pressed.clear();
+        self.released.clear();
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct GamepadList {
+    list: ArrayVec<GamepadInfo, GAMEPADS_CONNECTED_POT2>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct GamepadState {
+    pub gamepads: GamepadList,
+}
+
+impl GamepadState {
+    pub fn add(&mut self, id: usize) {
+        self.gamepads.list.push(GamepadInfo {
+            id,
+            ..Default::default()
+        });
+    }
+
+    pub fn remove(&mut self, id: usize) {
+        let idx = self.gamepads.list.iter().position(|info| info.id == id);
+        if let Some(idx) = idx {
+            self.gamepads.list.remove(idx);
+        }
+    }
+
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut GamepadInfo> {
+        self.gamepads.list.iter_mut().find(|info| info.id == id)
+    }
+
+    pub fn tick(&mut self) {
+        self.gamepads.list.iter_mut().for_each(|info| info.tick());
+    }
+}

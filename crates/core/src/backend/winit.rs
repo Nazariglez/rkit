@@ -12,6 +12,7 @@ use winit::platform::web::WindowAttributesExtWebSys;
 
 use super::backend::BackendImpl;
 use crate::app::WindowConfig;
+use crate::backend::gamepad_gilrs::GilrsBackend;
 use crate::builder::AppBuilder;
 use crate::input::{GamepadState, KeyCode, KeyboardState, MouseButton, MouseState};
 use math::{vec2, Vec2};
@@ -27,7 +28,8 @@ pub(crate) struct WinitBackend {
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
-    gamepad_state: GamepadState,
+    // gamepad_state: GamepadState,
+    gilrs: GilrsBackend,
 }
 
 impl BackendImpl for WinitBackend {
@@ -173,7 +175,7 @@ impl BackendImpl for WinitBackend {
 
     #[inline]
     fn gamepad_state(&self) -> &GamepadState {
-        &self.gamepad_state
+        &self.gilrs.state
     }
 }
 
@@ -274,8 +276,13 @@ impl<S> ApplicationHandler for Runner<S> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
+                // gamepad must be updated before the update cb
+                get_mut_backend().gilrs.tick();
+
+                // app's update cb
                 (*self.update)(self.state.as_mut().unwrap());
 
+                // post-update
                 let mut bck = get_mut_backend();
                 bck.window.as_ref().unwrap().request_redraw();
                 bck.mouse_state.tick();

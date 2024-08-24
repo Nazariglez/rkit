@@ -23,6 +23,7 @@ strum = "0.26.3"
 strum_macros = "0.26.4"
 smallvec = "2.0.0-alpha.7"
 gilrs = "0.10.9"
+crossbeam-channel = "0.5.13"
 
 [features]
 # Hackish, to add environment variables for test builds

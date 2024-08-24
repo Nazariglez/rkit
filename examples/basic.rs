@@ -73,7 +73,7 @@ fn update(s: &mut AppState) {
     let text = text_pressed();
     if !text.is_empty() {
         text.iter().for_each(|t| {
-            print!("{}", t);
+            println!("{}", t);
         });
     }
 

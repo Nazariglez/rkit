@@ -16,9 +16,13 @@ pub(crate) const fn next_pot2(x: usize) -> usize {
     n |= n >> 4;
     n |= n >> 8;
     n |= n >> 16;
-    if size_of::<usize>() > 4 {
+
+    // Only perform this shift if we're on a 64-bit platform, if not this will overflow (as in wasm32)
+    #[cfg(target_pointer_width = "64")]
+    {
         n |= n >> 32;
     }
+
     n + 1
 }
 
