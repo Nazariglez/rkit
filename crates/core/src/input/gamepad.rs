@@ -25,6 +25,9 @@ const GAMEPAD_BUTTON_COUNT_POT2: usize = next_pot2(GamepadButton::COUNT);
 const MAX_GAMEPADS_CONNECTED: usize = option_usize_env!("GK_MAX_GAMEPADS_CONNECTED", 16);
 pub(crate) const GAMEPADS_CONNECTED_POT2: usize = next_pot2(MAX_GAMEPADS_CONNECTED);
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct GamepadId(pub(crate) usize);
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount)]
 #[repr(u8)]
@@ -188,7 +191,7 @@ impl GamepadInfo {
         self.axis.set_strength(axis, strength);
     }
 
-    pub fn axis_strength(&mut self, axis: GamepadAxis) -> f32 {
+    pub fn axis_strength(&self, axis: GamepadAxis) -> f32 {
         self.axis.strength(axis)
     }
 
@@ -234,36 +237,78 @@ impl GamepadInfo {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct GamepadList {
-    list: ArrayVec<GamepadInfo, GAMEPADS_CONNECTED_POT2>,
+    ids: ArrayVec<GamepadId, GAMEPADS_CONNECTED_POT2>,
+}
+
+impl GamepadList {
+    pub fn iter(&self) -> impl Iterator<Item = &GamepadId> + '_ {
+        self.ids.iter()
+    }
+
+    pub fn into_iter<'a>(self) -> impl IntoIterator<Item = GamepadId> + 'a {
+        self.ids.into_iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.clear();
+    }
+}
+
+impl std::fmt::Debug for GamepadList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_set().entries(self.iter()).finish()
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GamepadState {
-    pub gamepads: GamepadList,
+    pub gamepads: ArrayVec<GamepadInfo, GAMEPADS_CONNECTED_POT2>,
 }
 
 impl GamepadState {
+    pub fn available(&self) -> GamepadList {
+        GamepadList {
+            ids: self
+                .gamepads
+                .iter()
+                .map(|info| GamepadId(info.id))
+                .collect::<ArrayVec<_, GAMEPADS_CONNECTED_POT2>>(),
+        }
+    }
+
     pub fn add(&mut self, id: usize) {
-        self.gamepads.list.push(GamepadInfo {
+        self.gamepads.push(GamepadInfo {
             id,
             ..Default::default()
         });
     }
 
     pub fn remove(&mut self, id: usize) {
-        let idx = self.gamepads.list.iter().position(|info| info.id == id);
+        let idx = self.gamepads.iter().position(|info| info.id == id);
         if let Some(idx) = idx {
-            self.gamepads.list.remove(idx);
+            self.gamepads.remove(idx);
         }
     }
 
     pub fn get_mut(&mut self, id: usize) -> Option<&mut GamepadInfo> {
-        self.gamepads.list.iter_mut().find(|info| info.id == id)
+        self.gamepads.iter_mut().find(|info| info.id == id)
+    }
+
+    pub fn get(&self, id: usize) -> Option<&GamepadInfo> {
+        self.gamepads.iter().find(|info| info.id == id)
     }
 
     pub fn tick(&mut self) {
-        self.gamepads.list.iter_mut().for_each(|info| info.tick());
+        self.gamepads.iter_mut().for_each(|info| info.tick());
     }
 }

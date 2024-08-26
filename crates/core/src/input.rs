@@ -132,4 +132,112 @@ pub fn text_pressed() -> TextList {
 }
 
 // -- Gamepad
-// TODO gamepad API
+#[inline]
+pub fn gamepads_available() -> GamepadList {
+    get_backend().gamepad_state().available()
+}
+
+#[inline]
+pub fn is_gamepad_btn_pressed(id: GamepadId, btn: GamepadButton) -> bool {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.is_pressed(btn))
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn are_gamepad_btns_pressed<const N: usize>(
+    id: GamepadId,
+    btns: &[GamepadButton; N],
+) -> [bool; N] {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.are_pressed(btns))
+        .unwrap_or([false; N])
+}
+
+#[inline]
+pub fn gamepad_btns_pressed(id: GamepadId) -> GamepadButtonList {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.pressed.clone())
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn is_gamepad_btn_released(id: GamepadId, btn: GamepadButton) -> bool {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.is_released(btn))
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn are_gamepad_btns_released<const N: usize>(
+    id: GamepadId,
+    btns: &[GamepadButton; N],
+) -> [bool; N] {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.are_released(btns))
+        .unwrap_or([false; N])
+}
+
+#[inline]
+pub fn gamepad_btns_released(id: GamepadId) -> GamepadButtonList {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.released.clone())
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn is_gamepad_btn_down(id: GamepadId, btn: GamepadButton) -> bool {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.is_down(btn))
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn gamepad_btns_down(id: GamepadId) -> GamepadButtonList {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.down.clone())
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn are_gamepad_btns_down<const N: usize>(
+    id: GamepadId,
+    btns: &[GamepadButton; N],
+) -> [bool; N] {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.are_down(btns))
+        .unwrap_or([false; N])
+}
+
+#[inline]
+pub fn gamepad_axis_movement(id: GamepadId, axis: GamepadAxis) -> f32 {
+    get_backend()
+        .gamepad_state()
+        .get(id.0)
+        .map(|info| info.axis_strength(axis))
+        .unwrap_or_default()
+}
+
+// TODO gamepad name?
+// #[inline]
+// pub fn gamepad_name<'a>(id: GamepadId) -> &'a str {
+//     todo!()
+// }
