@@ -4,6 +4,7 @@ use math::Vec2;
 mod gamepad;
 mod keyboard;
 mod mouse;
+mod touch;
 
 pub use gamepad::*;
 pub use keyboard::*;
@@ -141,7 +142,7 @@ pub fn gamepads_available() -> GamepadList {
 pub fn is_gamepad_btn_pressed(id: GamepadId, btn: GamepadButton) -> bool {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.is_pressed(btn))
         .unwrap_or_default()
 }
@@ -153,7 +154,7 @@ pub fn are_gamepad_btns_pressed<const N: usize>(
 ) -> [bool; N] {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.are_pressed(btns))
         .unwrap_or([false; N])
 }
@@ -162,7 +163,7 @@ pub fn are_gamepad_btns_pressed<const N: usize>(
 pub fn gamepad_btns_pressed(id: GamepadId) -> GamepadButtonList {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.pressed.clone())
         .unwrap_or_default()
 }
@@ -171,7 +172,7 @@ pub fn gamepad_btns_pressed(id: GamepadId) -> GamepadButtonList {
 pub fn is_gamepad_btn_released(id: GamepadId, btn: GamepadButton) -> bool {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.is_released(btn))
         .unwrap_or_default()
 }
@@ -183,7 +184,7 @@ pub fn are_gamepad_btns_released<const N: usize>(
 ) -> [bool; N] {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.are_released(btns))
         .unwrap_or([false; N])
 }
@@ -192,7 +193,7 @@ pub fn are_gamepad_btns_released<const N: usize>(
 pub fn gamepad_btns_released(id: GamepadId) -> GamepadButtonList {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.released.clone())
         .unwrap_or_default()
 }
@@ -201,7 +202,7 @@ pub fn gamepad_btns_released(id: GamepadId) -> GamepadButtonList {
 pub fn is_gamepad_btn_down(id: GamepadId, btn: GamepadButton) -> bool {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.is_down(btn))
         .unwrap_or_default()
 }
@@ -210,7 +211,7 @@ pub fn is_gamepad_btn_down(id: GamepadId, btn: GamepadButton) -> bool {
 pub fn gamepad_btns_down(id: GamepadId) -> GamepadButtonList {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.down.clone())
         .unwrap_or_default()
 }
@@ -222,7 +223,7 @@ pub fn are_gamepad_btns_down<const N: usize>(
 ) -> [bool; N] {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.are_down(btns))
         .unwrap_or([false; N])
 }
@@ -231,7 +232,7 @@ pub fn are_gamepad_btns_down<const N: usize>(
 pub fn gamepad_axis_movement(id: GamepadId, axis: GamepadAxis) -> f32 {
     get_backend()
         .gamepad_state()
-        .get(id.0)
+        .get(id.raw())
         .map(|info| info.axis_strength(axis))
         .unwrap_or_default()
 }
@@ -241,3 +242,6 @@ pub fn gamepad_axis_movement(id: GamepadId, axis: GamepadAxis) -> f32 {
 // pub fn gamepad_name<'a>(id: GamepadId) -> &'a str {
 //     todo!()
 // }
+
+// -- Touch/Gestures
+// TODO touch/gestures

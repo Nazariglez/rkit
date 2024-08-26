@@ -28,6 +28,12 @@ pub(crate) const GAMEPADS_CONNECTED_POT2: usize = next_pot2(MAX_GAMEPADS_CONNECT
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GamepadId(pub(crate) usize);
 
+impl GamepadId {
+    pub(crate) fn raw(&self) -> usize {
+        self.0
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount)]
 #[repr(u8)]
