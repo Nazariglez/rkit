@@ -31,7 +31,6 @@ members = ["crates/*"]
 [workspace.dependencies]
 # gamekit packages
 core = { path = "crates/core" }
-math = { path = "crates/math" }
 
 ## common deps
 log = "0.4.22"
@@ -46,4 +45,3 @@ smol_str = "0.2.2"
 
 [dependencies]
 core.workspace = true
-math.workspace = true

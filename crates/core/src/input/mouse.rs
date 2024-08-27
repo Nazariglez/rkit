@@ -1,5 +1,5 @@
+use crate::math::Vec2;
 use crate::utils::{next_pot2, EnumSet};
-use math::Vec2;
 use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
@@ -166,7 +166,7 @@ impl MouseState {
 #[cfg(test)]
 mod test {
     use super::*;
-    use math::vec2;
+    use crate::math::vec2;
 
     #[test]
     fn test_list_insert_contains() {

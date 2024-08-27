@@ -1,8 +1,8 @@
 use crate::input::MouseButtonList;
+use crate::math::Vec2;
 use crate::option_usize_env;
 use crate::utils::{next_pot2, EnumSet};
 use arrayvec::ArrayVec;
-use math::Vec2;
 use nohash_hasher::IsEnabled;
 use smol_str::SmolStr;
 use std::hash::Hasher;

@@ -1,5 +1,5 @@
 use crate::backend::{get_backend, BackendImpl};
-use math::Vec2;
+use crate::math::Vec2;
 
 mod gamepad;
 mod keyboard;

@@ -15,7 +15,7 @@ use crate::app::WindowConfig;
 use crate::backend::gamepad_gilrs::GilrsBackend;
 use crate::builder::AppBuilder;
 use crate::input::{GamepadState, KeyCode, KeyboardState, MouseButton, MouseState};
-use math::{vec2, Vec2};
+use crate::math::{vec2, Vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =

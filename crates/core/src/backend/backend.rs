@@ -1,5 +1,5 @@
 use crate::input::{GamepadState, KeyboardState, MouseState};
-use math::Vec2;
+use crate::math::Vec2;
 
 pub(crate) trait BackendImpl {
     // Window
