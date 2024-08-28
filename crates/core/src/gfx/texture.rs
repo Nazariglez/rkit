@@ -1,3 +1,35 @@
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct TextureId(pub(crate) u64);
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct TextureDescriptor<'a> {
+    pub label: Option<&'a str>,
+    pub format: TextureFormat,
+    pub write: bool,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct TextureData<'a> {
+    pub bytes: &'a [u8],
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub enum TextureWrap {
+    #[default]
+    Clamp,
+    Repeat,
+    MirrorRepeat,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub enum TextureFilter {
+    #[default]
+    Linear,
+    Nearest,
+}
+
 /// Enum representing texture formats supported by WebGL2
 /// which is the min compatibility layer we aim for
 #[derive(Debug, Copy, Clone)]
@@ -64,4 +96,11 @@ pub enum TextureFormat {
     Depth32Float, // WebGL2: GL_DEPTH_COMPONENT32F
     Depth24Stencil8, // WebGL2: GL_DEPTH24_STENCIL8
     Depth32FloatStencil8, // WebGL2: GL_DEPTH32F_STENCIL8 (via WEBGL_depth_texture extension)
+}
+
+impl Default for TextureFormat {
+    fn default() -> Self {
+        // TODO this could be different depending on platforms (webgl2?)
+        Self::Rgba8UNormSrgb
+    }
 }

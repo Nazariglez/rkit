@@ -8,6 +8,7 @@ pub struct WindowConfig {
     pub min_size: Option<UVec2>,
     pub max_size: Option<UVec2>,
     pub resizable: bool,
+    pub vsync: bool,
 }
 
 impl Default for WindowConfig {
@@ -18,6 +19,7 @@ impl Default for WindowConfig {
             min_size: None,
             max_size: None,
             resizable: true,
+            vsync: false,
         }
     }
 }
