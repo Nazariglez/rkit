@@ -1,6 +1,7 @@
 pub mod app;
 mod backend;
 mod builder;
+mod gfx;
 pub mod input;
 pub mod math;
 mod utils;

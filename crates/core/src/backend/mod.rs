@@ -1,6 +1,11 @@
+mod app_winit;
 mod backend;
 mod gamepad_gilrs;
-mod winit;
+mod gfx_wgpu;
 
+pub(crate) use app_winit::*;
 pub(crate) use backend::BackendImpl;
-pub(crate) use winit::*;
+
+pub mod gfx {
+    pub use super::gfx_wgpu::*;
+}
