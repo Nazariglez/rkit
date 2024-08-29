@@ -19,7 +19,6 @@ pub use texture::*;
 // - Gfx
 #[inline]
 pub fn render_to_frame(renderer: &Renderer) -> Result<(), String> {
-    println!("here yes?");
     get_mut_backend().gfx().render(renderer)
 }
 

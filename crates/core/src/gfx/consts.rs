@@ -13,5 +13,5 @@ pub const MAX_BIND_GROUPS_PER_PIPELINE: usize = 4;
 #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
 pub const MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE: usize = 11;
 
-#[cfg(not(any(target_arch = "wasm32", feature = "webgl")))]
+#[cfg(not(all(target_arch = "wasm32", feature = "webgl")))]
 pub const MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE: usize = 12;

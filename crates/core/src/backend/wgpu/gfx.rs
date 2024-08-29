@@ -51,7 +51,6 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn render(&mut self, renderer: &Renderer) -> Result<(), String> {
-        println!("how about here?");
         let frame = self
             .frame
             .as_mut()
@@ -175,8 +174,6 @@ impl GfxBackendImpl for GfxBackend {
         if !renderer.passes.is_empty() {
             frame.dirty = true;
         }
-
-        println!("here?");
 
         Ok(())
     }

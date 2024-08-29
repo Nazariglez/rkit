@@ -39,7 +39,6 @@ impl AppState {
 }
 
 fn update(s: &mut AppState) {
-    println!("hereeeeEE?");
     s.frame_count += 1;
 
     let current_time = Instant::now();

@@ -206,8 +206,6 @@ impl<S> ApplicationHandler for Runner<S> {
         let mut win = event_loop.create_window(attrs).unwrap();
         win.set_ime_allowed(true); // allow for chars
 
-        println!("tell me I am here...");
-
         let win_size = win.inner_size();
         let gfx_initiated = get_backend().gfx.is_some();
         if gfx_initiated {
@@ -216,16 +214,20 @@ impl<S> ApplicationHandler for Runner<S> {
                 self.vsync,
                 uvec2(win_size.width, win_size.height),
             );
-            debug_assert!(res.is_ok(), "Gfx backend cannot update surface");
-            if let Err(e) = res {
-                log::error!("Error updating surface on Gfx backend: {}", e);
+            match res {
+                Ok(_) => {
+                    log::trace!("Surface updated");
+                }
+                Err(e) => {
+                    log::error!("Error updating surface on Gfx backend: {}", e);
+                }
             }
         } else {
             let gfx = GfxBackend::init(&win, self.vsync, uvec2(win_size.width, win_size.height));
-            debug_assert!(gfx.is_ok(), "Gfx backend is not OK");
             match gfx {
                 Ok(gfx) => {
                     get_mut_backend().gfx = Some(gfx);
+                    log::trace!("Surface initiated");
                 }
                 Err(e) => {
                     log::error!("Error initiating Gfx backend: {}", e);
@@ -233,10 +235,10 @@ impl<S> ApplicationHandler for Runner<S> {
             }
         }
 
+        win.request_redraw();
         get_mut_backend().window = Some(win);
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
-            println!("init?");
         }
     }
 
@@ -246,7 +248,6 @@ impl<S> ApplicationHandler for Runner<S> {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        println!("evt?: {:?}", event);
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 let mut bck = get_mut_backend();
@@ -316,8 +317,6 @@ impl<S> ApplicationHandler for Runner<S> {
             WindowEvent::RedrawRequested => {
                 // gamepad must be updated before the update cb
                 get_mut_backend().gilrs.tick();
-
-                println!("not here?");
 
                 // app's update cb
                 get_mut_backend().gfx().prepare_frame();
