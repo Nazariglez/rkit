@@ -1,6 +1,9 @@
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct TextureId(pub(crate) u64);
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct RenderTextureId(pub(crate) u64);
+
 #[derive(Debug, Default, Copy, Clone)]
 pub struct TextureDescriptor<'a> {
     pub label: Option<&'a str>,

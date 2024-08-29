@@ -1,4 +1,6 @@
 use rkit::app::*;
+use rkit::gfx;
+use rkit::gfx::Color;
 use rkit::input::*;
 use rkit::math::*;
 use std::time::{Duration, Instant};
@@ -37,6 +39,7 @@ impl AppState {
 }
 
 fn update(s: &mut AppState) {
+    println!("hereeeeEE?");
     s.frame_count += 1;
 
     let current_time = Instant::now();
@@ -90,4 +93,13 @@ fn update(s: &mut AppState) {
     // if is_mouse_btn_pressed(MouseButton::Left) {
     //     close_window();
     // }
+
+    // -- Draw
+    let mut renderer = gfx::Renderer::new();
+    renderer.begin_pass().clear_color(Color::rgb(0.1, 0.2, 0.3));
+    // .pipeline(&state.pip)
+    // .buffers(&[&state.vbo])
+    // .draw(0..3);
+
+    gfx::render_to_frame(&renderer).unwrap();
 }

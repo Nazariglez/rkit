@@ -1,7 +1,11 @@
+use crate::backend::gfx::RenderTexture;
+use crate::gfx::Renderer;
 use crate::input::{GamepadState, KeyboardState, MouseState};
+use crate::math::UVec2;
 use crate::math::Vec2;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-pub(crate) trait BackendImpl {
+pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     // Window
     fn set_title(&mut self, title: &str);
     fn title(&self) -> String;
@@ -24,4 +28,25 @@ pub(crate) trait BackendImpl {
     fn mouse_state(&self) -> &MouseState;
     fn keyboard_state(&self) -> &KeyboardState;
     fn gamepad_state(&self) -> &GamepadState;
+
+    // gfx
+    fn gfx(&mut self) -> &mut G;
+}
+
+pub(crate) trait GfxBackendImpl {
+    fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    where
+        Self: Sized,
+        W: HasDisplayHandle + HasWindowHandle;
+
+    fn update_surface<W>(&mut self, window: &W, vsync: bool, win_size: UVec2) -> Result<(), String>
+    where
+        Self: Sized,
+        W: HasDisplayHandle + HasWindowHandle;
+
+    fn prepare_frame(&mut self);
+    fn present_frame(&mut self);
+
+    fn render(&mut self, renderer: &Renderer) -> Result<(), String>;
+    fn render_to(&mut self, texture: &RenderTexture, renderer: &Renderer) -> Result<(), String>;
 }

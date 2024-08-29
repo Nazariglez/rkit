@@ -1,5 +1,5 @@
 use crate::gfx::{TextureFilter, TextureFormat, TextureId, TextureWrap};
-use glam::Vec2;
+use crate::math::Vec2;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use wgpu::{Sampler, Texture as RawTexture, TextureFormat as WTextureFormat, TextureView};

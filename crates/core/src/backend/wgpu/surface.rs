@@ -1,6 +1,6 @@
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::texture::{InnerTexture, Texture};
-use glam::Vec2;
+use crate::math::{UVec2, Vec2};
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
@@ -20,7 +20,7 @@ impl Surface {
     pub fn new<W>(
         ctx: &mut Context,
         window: &W,
-        win_physical_size: Vec2,
+        win_physical_size: UVec2,
         vsync: bool,
         depth_texture: InnerTexture,
     ) -> Result<Self, String>
@@ -40,7 +40,7 @@ impl Surface {
             ctx.ensure_surface_compatibility(&surface)?;
         }
 
-        let Vec2 {
+        let UVec2 {
             x: width,
             y: height,
         } = win_physical_size;
@@ -48,8 +48,8 @@ impl Surface {
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: capabilities.formats[0],
-            width: width as u32,
-            height: height as u32,
+            width,
+            height,
             present_mode: if vsync {
                 wgpu::PresentMode::AutoVsync
             } else {
