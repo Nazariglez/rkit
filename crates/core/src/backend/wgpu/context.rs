@@ -10,7 +10,7 @@ pub(crate) struct Context {
 impl Context {
     pub(crate) fn new() -> Result<Self, String> {
         let instance = Instance::default();
-        let (adapter, device, queue) = pollster::block_on(generate_inner_ctx(&instance, None))?;
+        let (adapter, device, queue) = generate_inner_ctx(&instance, None)?;
         Ok(Self {
             instance,
             adapter,
@@ -24,8 +24,7 @@ impl Context {
     }
 
     pub fn ensure_surface_compatibility(&mut self, surface: &RawSurface) -> Result<(), String> {
-        let (adapter, device, queue) =
-            pollster::block_on(generate_inner_ctx(&self.instance, Some(surface)))?;
+        let (adapter, device, queue) = generate_inner_ctx(&self.instance, Some(surface))?;
         self.adapter = adapter;
         self.device = device;
         self.queue = queue;
@@ -33,7 +32,23 @@ impl Context {
     }
 }
 
-async fn generate_inner_ctx(
+#[cfg(target_arch = "wasm32")]
+fn generate_inner_ctx(
+    instance: &Instance,
+    surface: Option<&RawSurface<'_>>,
+) -> Result<(Adapter, Device, Queue), String> {
+    wasm_bindgen_futures::spawn_local(generate_wgpu_ctx(instance, surface))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn generate_inner_ctx(
+    instance: &Instance,
+    surface: Option<&RawSurface<'_>>,
+) -> Result<(Adapter, Device, Queue), String> {
+    pollster::block_on(generate_wgpu_ctx(instance, surface))
+}
+
+async fn generate_wgpu_ctx(
     instance: &Instance,
     surface: Option<&RawSurface<'_>>,
 ) -> Result<(Adapter, Device, Queue), String> {

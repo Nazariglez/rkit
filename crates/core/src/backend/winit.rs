@@ -13,12 +13,16 @@ use winit::platform::web::WindowAttributesExtWebSys;
 
 use super::backend::{BackendImpl, GfxBackendImpl};
 use crate::app::WindowConfig;
-use crate::backend::gamepad_gilrs::GilrsBackend;
 use crate::backend::wgpu::GfxBackend;
 use crate::builder::AppBuilder;
-use crate::input::{GamepadState, KeyCode, KeyboardState, MouseButton, MouseState};
+use crate::input::{KeyCode, KeyboardState, MouseButton, MouseState};
 use crate::math::{vec2, Vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
+
+#[cfg(feature = "gamepad")]
+use crate::backend::gamepad_gilrs::GilrsBackend;
+#[cfg(feature = "gamepad")]
+use crate::input::GamepadState;
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));
@@ -30,6 +34,8 @@ pub(crate) struct WinitBackend {
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
+
+    #[cfg(feature = "gamepad")]
     gilrs: GilrsBackend,
     gfx: Option<GfxBackend>,
 }
@@ -175,6 +181,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         &self.keyboard_state
     }
 
+    #[cfg(feature = "gamepad")]
     #[inline]
     fn gamepad_state(&self) -> &GamepadState {
         &self.gilrs.state
@@ -315,8 +322,11 @@ impl<S> ApplicationHandler for Runner<S> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // gamepad must be updated before the update cb
-                get_mut_backend().gilrs.tick();
+                #[cfg(feature = "gamepad")]
+                {
+                    // gamepad must be updated before the update cb
+                    get_mut_backend().gilrs.tick();
+                }
 
                 // app's update cb
                 get_mut_backend().gfx().prepare_frame();

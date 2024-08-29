@@ -1,9 +1,12 @@
 use crate::backend::gfx::RenderTexture;
 use crate::gfx::Renderer;
-use crate::input::{GamepadState, KeyboardState, MouseState};
+use crate::input::{KeyboardState, MouseState};
 use crate::math::UVec2;
 use crate::math::Vec2;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+
+#[cfg(feature = "gamepad")]
+use crate::input::GamepadState;
 
 pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     // Window
@@ -27,6 +30,8 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     // input
     fn mouse_state(&self) -> &MouseState;
     fn keyboard_state(&self) -> &KeyboardState;
+
+    #[cfg(feature = "gamepad")]
     fn gamepad_state(&self) -> &GamepadState;
 
     // gfx

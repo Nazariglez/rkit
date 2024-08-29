@@ -45,3 +45,7 @@ smol_str = "0.2.2"
 
 [dependencies]
 core.workspace = true
+
+[features]
+default = []
+gamepad = ["core/gamepad"]

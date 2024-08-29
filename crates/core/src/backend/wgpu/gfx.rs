@@ -21,6 +21,12 @@ pub(crate) struct GfxBackend {
     frame: Option<DrawFrame>,
 }
 
+// This is a hack for wasm32 browsers where there is no threads
+#[cfg(target_arch = "wasm32")]
+unsafe impl Send for GfxBackend {}
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for GfxBackend {}
+
 impl GfxBackendImpl for GfxBackend {
     fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
     where
