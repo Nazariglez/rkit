@@ -9,7 +9,7 @@ fn main() {
     rkit::init_with(|| AppState::new())
         .with_window(WindowConfig {
             title: "Whatever".to_string(),
-            size: uvec2(400, 300),
+            size: uvec2(800, 600),
             resizable: false,
             ..Default::default()
         })

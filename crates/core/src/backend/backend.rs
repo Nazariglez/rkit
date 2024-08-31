@@ -39,12 +39,17 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
 }
 
 pub(crate) trait GfxBackendImpl {
-    fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    async fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
     where
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle;
 
-    fn update_surface<W>(&mut self, window: &W, vsync: bool, win_size: UVec2) -> Result<(), String>
+    async fn update_surface<W>(
+        &mut self,
+        window: &W,
+        vsync: bool,
+        win_size: UVec2,
+    ) -> Result<(), String>
     where
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle;

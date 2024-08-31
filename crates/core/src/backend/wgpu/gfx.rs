@@ -28,20 +28,26 @@ unsafe impl Send for GfxBackend {}
 unsafe impl Sync for GfxBackend {}
 
 impl GfxBackendImpl for GfxBackend {
-    fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    async fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
     where
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle,
     {
-        Self::new(window, vsync, win_size)
+        Self::new(window, vsync, win_size).await
     }
 
-    fn update_surface<W>(&mut self, window: &W, vsync: bool, win_size: UVec2) -> Result<(), String>
+    async fn update_surface<W>(
+        &mut self,
+        window: &W,
+        vsync: bool,
+        win_size: UVec2,
+    ) -> Result<(), String>
     where
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle,
     {
-        let surface = init_surface(&mut self.ctx, window, self.depth_format, win_size, vsync)?;
+        let surface =
+            init_surface(&mut self.ctx, window, self.depth_format, win_size, vsync).await?;
         self.surface = surface;
         Ok(())
     }
@@ -190,13 +196,13 @@ impl GfxBackendImpl for GfxBackend {
 }
 
 impl GfxBackend {
-    fn new<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    async fn new<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
     where
         W: HasWindowHandle + HasDisplayHandle,
     {
         let depth_format = TextureFormat::Depth24Stencil8; // make it configurable?
-        let mut ctx = Context::new()?;
-        let surface = init_surface(&mut ctx, window, depth_format, win_size, vsync)?;
+        let mut ctx = Context::new().await?;
+        let surface = init_surface(&mut ctx, window, depth_format, win_size, vsync).await?;
         Ok(Self {
             next_resource_id: 0,
             vsync,
@@ -252,7 +258,7 @@ impl GfxBackend {
     }
 }
 
-fn init_surface<W>(
+async fn init_surface<W>(
     ctx: &mut Context,
     window: &W,
     depth_format: TextureFormat,
@@ -277,7 +283,7 @@ where
         }),
     )?;
 
-    Surface::new(ctx, window, win_physical_size, vsync, depth_texture)
+    Surface::new(ctx, window, win_physical_size, vsync, depth_texture).await
 }
 
 struct InnerTextureInfo {}

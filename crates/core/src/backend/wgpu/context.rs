@@ -8,9 +8,9 @@ pub(crate) struct Context {
 }
 
 impl Context {
-    pub(crate) fn new() -> Result<Self, String> {
+    pub(crate) async fn new() -> Result<Self, String> {
         let instance = Instance::default();
-        let (adapter, device, queue) = generate_inner_ctx(&instance, None)?;
+        let (adapter, device, queue) = generate_wgpu_ctx(&instance, None).await?;
         Ok(Self {
             instance,
             adapter,
@@ -23,8 +23,11 @@ impl Context {
         self.adapter.is_surface_supported(surface)
     }
 
-    pub fn ensure_surface_compatibility(&mut self, surface: &RawSurface) -> Result<(), String> {
-        let (adapter, device, queue) = generate_inner_ctx(&self.instance, Some(surface))?;
+    pub async fn ensure_surface_compatibility(
+        &mut self,
+        surface: &RawSurface<'_>,
+    ) -> Result<(), String> {
+        let (adapter, device, queue) = generate_wgpu_ctx(&self.instance, Some(surface)).await?;
         self.adapter = adapter;
         self.device = device;
         self.queue = queue;
@@ -37,7 +40,8 @@ fn generate_inner_ctx(
     instance: &Instance,
     surface: Option<&RawSurface<'_>>,
 ) -> Result<(Adapter, Device, Queue), String> {
-    wasm_bindgen_futures::spawn_local(generate_wgpu_ctx(instance, surface))
+    todo!()
+    // wasm_bindgen_futures::spawn_local(generate_wgpu_ctx(instance, surface))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

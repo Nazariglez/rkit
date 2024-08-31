@@ -17,7 +17,7 @@ pub(crate) struct Surface {
 }
 
 impl Surface {
-    pub fn new<W>(
+    pub async fn new<W>(
         ctx: &mut Context,
         window: &W,
         win_physical_size: UVec2,
@@ -37,7 +37,7 @@ impl Surface {
 
         if !ctx.is_surface_compatible(&surface) {
             log::trace!("Generating WGPU adapter compatible surface.",);
-            ctx.ensure_surface_compatibility(&surface)?;
+            ctx.ensure_surface_compatibility(&surface).await?;
         }
 
         let UVec2 {

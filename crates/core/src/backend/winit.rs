@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use crate::math::uvec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
@@ -216,11 +218,11 @@ impl<S> ApplicationHandler for Runner<S> {
         let win_size = win.inner_size();
         let gfx_initiated = get_backend().gfx.is_some();
         if gfx_initiated {
-            let res = get_mut_backend().gfx.as_mut().unwrap().update_surface(
+            let res = pollster::block_on(get_mut_backend().gfx.as_mut().unwrap().update_surface(
                 &win,
                 self.vsync,
                 uvec2(win_size.width, win_size.height),
-            );
+            ));
             match res {
                 Ok(_) => {
                     log::trace!("Surface updated");
@@ -230,7 +232,11 @@ impl<S> ApplicationHandler for Runner<S> {
                 }
             }
         } else {
-            let gfx = GfxBackend::init(&win, self.vsync, uvec2(win_size.width, win_size.height));
+            let gfx = pollster::block_on(GfxBackend::init(
+                &win,
+                self.vsync,
+                uvec2(win_size.width, win_size.height),
+            ));
             match gfx {
                 Ok(gfx) => {
                     get_mut_backend().gfx = Some(gfx);
