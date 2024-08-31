@@ -1,4 +1,8 @@
-use wgpu::{Adapter, Device, Instance, PowerPreference, Queue, Surface as RawSurface};
+use log::warn;
+use wgpu::{
+    Adapter, Backends, Device, Instance, InstanceDescriptor, InstanceFlags, PowerPreference, Queue,
+    Surface as RawSurface,
+};
 
 pub(crate) struct Context {
     pub instance: Instance,
@@ -9,7 +13,16 @@ pub(crate) struct Context {
 
 impl Context {
     pub(crate) async fn new() -> Result<Self, String> {
-        let instance = Instance::default();
+        let instance = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
+            Instance::new(InstanceDescriptor {
+                backends: Backends::GL,
+                flags: InstanceFlags::default().with_env(),
+                dx12_shader_compiler: Default::default(),
+                gles_minor_version: wgpu::util::gles_minor_version_from_env().unwrap_or_default(),
+            })
+        } else {
+            Instance::default()
+        };
         let (adapter, device, queue) = generate_wgpu_ctx(&instance, None).await?;
         Ok(Self {
             instance,
@@ -35,23 +48,6 @@ impl Context {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn generate_inner_ctx(
-    instance: &Instance,
-    surface: Option<&RawSurface<'_>>,
-) -> Result<(Adapter, Device, Queue), String> {
-    todo!()
-    // wasm_bindgen_futures::spawn_local(generate_wgpu_ctx(instance, surface))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn generate_inner_ctx(
-    instance: &Instance,
-    surface: Option<&RawSurface<'_>>,
-) -> Result<(Adapter, Device, Queue), String> {
-    pollster::block_on(generate_wgpu_ctx(instance, surface))
-}
-
 async fn generate_wgpu_ctx(
     instance: &Instance,
     surface: Option<&RawSurface<'_>>,
@@ -59,11 +55,13 @@ async fn generate_wgpu_ctx(
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: PowerPreference::HighPerformance,
-            force_fallback_adapter: false,
             compatible_surface: surface,
+            ..Default::default()
         })
         .await
-        .ok_or_else(|| "Cannot create WGPU Adapter for {:?}".to_string())?;
+        .ok_or_else(|| "Cannot create WGPU Adapter".to_string())?;
+
+    log::info!("WGPU Adapter {:?}", adapter.get_info());
 
     // TODO depending on adapter here, require limits for it.
     let limits = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
@@ -84,6 +82,9 @@ async fn generate_wgpu_ctx(
         )
         .await
         .map_err(|err| err.to_string())?;
+
+    log::info!("WGPU Limits {:?}", device.limits());
+    log::info!("WGPU Features {:?}", device.features());
 
     Ok((adapter, device, queue))
 }

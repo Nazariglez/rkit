@@ -5,3 +5,4 @@
 * change is_down to is_pressed, and is_pressed to is_just_pressed, same for is_released
 * SDL backend (sdl2? sdl3 seems to be a wip and pretty behind in the rust bindings)
 * gamepad for wasm32, (check gamepad current impl with different gamepads)
+* WebGL compatiblity seems to not be working... adapter always return None

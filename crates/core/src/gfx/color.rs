@@ -141,6 +141,34 @@ impl Color {
             }
         }
     }
+
+    // TODO check three-rs to see if this is right
+    /// Converts the sRGB color to linear RGB color
+    pub fn to_linear_rgb(&self) -> [f32; 3] {
+        let f = |x: f32| {
+            if x > 0.04045 {
+                ((x + 0.055) / 1.055).powf(2.4)
+            } else {
+                x / 12.92
+            }
+        };
+        [f(self.r), f(self.g), f(self.b)]
+    }
+
+    // TODO check three-rs to see if this is right
+    /// Converts a linear RGB color to sRGB and returns a Color struct
+    pub fn from_linear_rgb(r: f32, g: f32, b: f32) -> Color {
+        let f = |x: f32| {
+            if x > 0.0031308 {
+                let a = 0.055;
+                (1.0 + a) * x.powf(1.0 / 2.4) - a
+            } else {
+                12.92 * x
+            }
+        };
+
+        Color::rgb(f(r), f(g), f(b))
+    }
 }
 
 impl From<Color> for [u8; 4] {

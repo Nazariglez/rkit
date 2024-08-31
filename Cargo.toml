@@ -49,4 +49,11 @@ core.workspace = true
 
 [features]
 default = []
+# enable clipboard
+clipboard = ["core/clipboard"]
+# enable dropping files to window
+drop_files = ["core/drop_files"]
+# enables gamepad api
 gamepad = ["core/gamepad"]
+# force webgl
+webgl = ["core/webgl"]

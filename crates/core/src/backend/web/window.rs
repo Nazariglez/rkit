@@ -24,13 +24,14 @@ pub(crate) struct WebWindow {
 impl HasWindowHandle for WebWindow {
     fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
         let canvas: &JsValue = &self.canvas;
-        Ok(WebCanvasWindowHandle::new(NonNull::from(canvas).cast()).into())
+        let window_handle = WebCanvasWindowHandle::new(NonNull::from(canvas).cast());
+        Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::WebCanvas(window_handle)) })
     }
 }
 
 impl HasDisplayHandle for WebWindow {
     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        Ok(WebDisplayHandle::new().into())
+        Ok(unsafe { DisplayHandle::borrow_raw(RawDisplayHandle::Web(WebDisplayHandle::new())) })
     }
 }
 

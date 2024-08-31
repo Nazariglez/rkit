@@ -14,6 +14,10 @@ use crate::input::{KeyboardState, MouseState};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use glam::Vec2;
 use once_cell::sync::Lazy;
+use std::cell::RefCell;
+use std::rc::Rc;
+use utils::request_animation_frame;
+use wasm_bindgen::closure::Closure;
 use window::WebWindow;
 
 #[cfg(feature = "gamepad")]
@@ -37,7 +41,7 @@ where
     let AppBuilder {
         window: config,
         init_cb,
-        update_cb,
+        mut update_cb,
         cleanup_cb,
     } = builder;
     log::debug!("Yes");
@@ -45,13 +49,50 @@ where
     let vsync = config.vsync;
     let size = config.size;
 
-    let window = WebWindow::new(config).unwrap();
-    let gfx = GfxBackend::init(&window, vsync, size).await.unwrap();
+    let win = WebWindow::new(config).unwrap();
+    let gfx = GfxBackend::init(&win, vsync, size).await.unwrap();
+    let mut bck = get_mut_backend();
+    bck.win = Some(win);
+    bck.gfx = Some(gfx);
+
+    let mut runner = Runner {
+        state: init_cb(),
+        update: update_cb,
+    };
+
+    let callback = Rc::new(RefCell::new(None));
+    let inner_callback = callback.clone();
+    let win = web_sys::window().unwrap();
+    *callback.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        runner.tick();
+        request_animation_frame(&win, inner_callback.borrow().as_ref().unwrap());
+    }) as Box<dyn FnMut()>));
+
+    request_animation_frame(
+        &web_sys::window().unwrap(),
+        callback.borrow().as_ref().unwrap(),
+    );
+}
+
+struct Runner<S> {
+    state: S,
+    update: Box<dyn FnMut(&mut S)>,
+}
+
+impl<S> Runner<S> {
+    fn tick(&mut self) {
+        get_mut_backend().gfx().prepare_frame();
+        (*self.update)(&mut self.state);
+        get_mut_backend().gfx().present_frame();
+    }
 }
 
 // - Backend
 #[derive(Default)]
-pub(crate) struct WebBackend {}
+pub(crate) struct WebBackend {
+    win: Option<WebWindow>,
+    gfx: Option<GfxBackend>,
+}
 
 // hackish to allow the Lazy<T>, this is fine because wasm32 is not multithread
 unsafe impl Sync for WebBackend {}
@@ -122,7 +163,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
 
     // gfx
     fn gfx(&mut self) -> &mut GfxBackend {
-        todo!()
+        self.gfx.as_mut().unwrap()
     }
 }
 
