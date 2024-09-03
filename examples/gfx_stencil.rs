@@ -137,10 +137,7 @@ fn update(s: &mut State) {
         .pipeline(&s.mask_pip)
         .buffers(&[&s.mask_vbo])
         .stencil_reference(1)
-        .draw(0..18);
-
-    renderer
-        .begin_pass()
+        .draw(0..18)
         .pipeline(&s.pip)
         .buffers(&[&s.vbo])
         .stencil_reference(1)
