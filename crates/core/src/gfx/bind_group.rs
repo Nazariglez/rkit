@@ -2,7 +2,7 @@ use crate::backend::gfx::Texture;
 use crate::gfx::consts::{
     MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE,
 };
-use crate::gfx::BindGroupLayoutRef;
+use crate::gfx::{BindGroupLayoutRef, TextureId};
 use arrayvec::ArrayVec;
 
 pub const MAX_BINDING_ENTRIES: usize =
@@ -11,8 +11,20 @@ pub const MAX_BINDING_ENTRIES: usize =
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct BindGroupId(pub(crate) u64);
 
+impl From<u64> for BindGroupId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct BindGroupLayoutId(pub(crate) u64);
+
+impl From<u64> for BindGroupLayoutId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct BindGroupLayout {

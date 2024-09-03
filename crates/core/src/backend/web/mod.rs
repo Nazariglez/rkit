@@ -51,9 +51,11 @@ where
 
     let win = WebWindow::new(config).unwrap();
     let gfx = GfxBackend::init(&win, vsync, size).await.unwrap();
-    let mut bck = get_mut_backend();
-    bck.win = Some(win);
-    bck.gfx = Some(gfx);
+    {
+        let mut bck = get_mut_backend();
+        bck.win = Some(win);
+        bck.gfx = Some(gfx);
+    }
 
     let mut runner = Runner {
         state: init_cb(),
@@ -168,8 +170,10 @@ impl BackendImpl<GfxBackend> for WebBackend {
 }
 
 pub(crate) fn get_backend() -> AtomicRef<'static, WebBackend> {
+    log::info!("GET BACKEND");
     BACKEND.borrow()
 }
 pub(crate) fn get_mut_backend() -> AtomicRefMut<'static, WebBackend> {
+    log::info!("GET MUT BACKEND");
     BACKEND.borrow_mut()
 }

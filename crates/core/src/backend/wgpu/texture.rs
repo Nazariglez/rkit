@@ -141,3 +141,22 @@ impl TextureFormat {
         }
     }
 }
+
+impl TextureWrap {
+    pub(crate) fn to_wgpu(&self) -> wgpu::AddressMode {
+        match self {
+            TextureWrap::Clamp => wgpu::AddressMode::ClampToEdge,
+            TextureWrap::Repeat => wgpu::AddressMode::Repeat,
+            TextureWrap::MirrorRepeat => wgpu::AddressMode::MirrorRepeat,
+        }
+    }
+}
+
+impl TextureFilter {
+    pub(crate) fn to_wgpu(&self) -> wgpu::FilterMode {
+        match self {
+            TextureFilter::Linear => wgpu::FilterMode::Linear,
+            TextureFilter::Nearest => wgpu::FilterMode::Nearest,
+        }
+    }
+}

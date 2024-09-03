@@ -1,6 +1,12 @@
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct TextureId(pub(crate) u64);
 
+impl From<u64> for TextureId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct RenderTextureId(pub(crate) u64);
 

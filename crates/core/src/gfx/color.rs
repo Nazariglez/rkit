@@ -1,4 +1,4 @@
-/// Represents a color in the sRGB space
+/// Represents a color in the sRGB space (alpha is linear)
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Color {
     /// Red value
@@ -142,32 +142,14 @@ impl Color {
         }
     }
 
-    // TODO check three-rs to see if this is right
     /// Converts the sRGB color to linear RGB color
-    pub fn to_linear_rgb(&self) -> [f32; 3] {
-        let f = |x: f32| {
-            if x > 0.04045 {
-                ((x + 0.055) / 1.055).powf(2.4)
-            } else {
-                x / 12.92
-            }
-        };
-        [f(self.r), f(self.g), f(self.b)]
+    pub fn to_linear_rgba(&self) -> LinearColor {
+        (*self).into()
     }
 
-    // TODO check three-rs to see if this is right
     /// Converts a linear RGB color to sRGB and returns a Color struct
-    pub fn from_linear_rgb(r: f32, g: f32, b: f32) -> Color {
-        let f = |x: f32| {
-            if x > 0.0031308 {
-                let a = 0.055;
-                (1.0 + a) * x.powf(1.0 / 2.4) - a
-            } else {
-                12.92 * x
-            }
-        };
-
-        Color::rgb(f(r), f(g), f(b))
+    pub fn from_linear_rgb(c: LinearColor) -> Color {
+        c.into()
     }
 }
 
@@ -241,4 +223,89 @@ pub fn hex_to_rgba(hex: u32) -> [f32; 4] {
 /// Converts a hexadecimal value to string
 pub fn hex_to_string(hex: u32) -> String {
     format!("{:#X}", hex)
+}
+
+/// Color on the linear space
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct LinearColor {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+}
+
+impl From<Color> for LinearColor {
+    fn from(c: Color) -> Self {
+        Self {
+            r: gamma_to_linear(c.r),
+            g: gamma_to_linear(c.g),
+            b: gamma_to_linear(c.g),
+            a: c.a,
+        }
+    }
+}
+
+impl From<LinearColor> for Color {
+    fn from(c: LinearColor) -> Self {
+        Self {
+            r: linear_to_gamma(c.r),
+            g: linear_to_gamma(c.g),
+            b: linear_to_gamma(c.b),
+            a: c.a,
+        }
+    }
+}
+
+/// Converts the value from srgb space to linear
+pub fn gamma_to_linear(x: f32) -> f32 {
+    if x > 0.04045 {
+        ((x + 0.055) / 1.055).powf(2.4)
+    } else {
+        x / 12.92
+    }
+}
+
+/// Converts the value from linear space to srg
+pub fn linear_to_gamma(x: f32) -> f32 {
+    if x > 0.0031308 {
+        let a = 0.055;
+        (1.0 + a) * x.powf(1.0 / 2.4) - a
+    } else {
+        12.92 * x
+    }
+}
+
+pub enum ColorType {
+    Gamma(Color),
+    Linear(LinearColor),
+}
+
+impl From<Color> for ColorType {
+    fn from(c: Color) -> Self {
+        Self::Gamma(c)
+    }
+}
+
+impl From<LinearColor> for ColorType {
+    fn from(c: LinearColor) -> Self {
+        Self::Linear(c)
+    }
+}
+
+impl From<ColorType> for Color {
+    fn from(c: ColorType) -> Self {
+        match c {
+            ColorType::Gamma(c) => c,
+            ColorType::Linear(c) => c.into(),
+        }
+    }
+}
+
+impl From<ColorType> for LinearColor {
+    fn from(c: ColorType) -> Self {
+        match c {
+            ColorType::Gamma(c) => c.into(),
+            ColorType::Linear(c) => c,
+        }
+    }
 }

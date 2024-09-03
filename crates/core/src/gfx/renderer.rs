@@ -3,7 +3,7 @@ use crate::gfx::consts::{
     MAX_BIND_GROUPS_PER_PIPELINE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE, MAX_VERTEX_BUFFERS,
 };
 use crate::gfx::pipeline::ClearOptions;
-use crate::gfx::Color;
+use crate::gfx::{Buffer, Color, RenderPipeline};
 use arrayvec::ArrayVec;
 use glam::{vec2, Vec2};
 use std::ops::Range;
@@ -19,8 +19,8 @@ pub(crate) struct RPassVertices {
 #[derive(Default)]
 pub struct RenderPass<'a> {
     pub(crate) size: Option<Vec2>,
-    // pub(crate) pipeline: Option<&'a RenderPipeline>,
-    // pub(crate) buffers: ArrayVec<&'a Buffer, MAX_BUFFERS>,
+    pub(crate) pipeline: Option<&'a RenderPipeline>,
+    pub(crate) buffers: ArrayVec<&'a Buffer, MAX_BUFFERS>,
     pub(crate) clear_options: ClearOptions,
     pub(crate) vertices: Vec<RPassVertices>,
     pub(crate) bind_groups: ArrayVec<&'a BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
@@ -56,16 +56,16 @@ impl<'a> RenderPass<'a> {
         self.clear_options.stencil = Some(stencil);
         self
     }
-    //
-    // pub fn pipeline(&mut self, pipeline: &'a RenderPipeline) -> &mut Self {
-    //     self.pipeline = Some(pipeline);
-    //     self
-    // }
-    //
-    // pub fn buffers(&mut self, buffers: &[&'a Buffer]) -> &mut Self {
-    //     self.buffers.try_extend_from_slice(buffers).unwrap();
-    //     self
-    // }
+
+    pub fn pipeline(&mut self, pipeline: &'a RenderPipeline) -> &mut Self {
+        self.pipeline = Some(pipeline);
+        self
+    }
+
+    pub fn buffers(&mut self, buffers: &[&'a Buffer]) -> &mut Self {
+        self.buffers.try_extend_from_slice(buffers).unwrap();
+        self
+    }
 
     pub fn bindings(&mut self, groups: &[&'a BindGroup]) -> &mut Self {
         self.bind_groups.try_extend_from_slice(groups).unwrap();

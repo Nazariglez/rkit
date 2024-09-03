@@ -1,7 +1,32 @@
-use crate::gfx::Color;
+use super::consts::{MAX_BIND_GROUPS_PER_PIPELINE, MAX_VERTEX_BUFFERS};
+use crate::gfx::{BindGroupLayout, BlendMode, Color, IndexFormat, TextureId, VertexLayout};
+use arrayvec::ArrayVec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct PipelineId(pub(crate) u64);
+
+impl From<u64> for PipelineId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct RenderPipelineDescriptor<'a> {
+    pub label: Option<&'a str>,
+    pub shader: &'a str,
+    pub depth_stencil: Option<DepthStencil>,
+    pub stencil: Option<Stencil>,
+    pub vertex_layout: ArrayVec<VertexLayout, MAX_VERTEX_BUFFERS>,
+    pub primitive: Primitive,
+    pub index_format: IndexFormat,
+    pub bind_group_layout: ArrayVec<BindGroupLayout, MAX_BIND_GROUPS_PER_PIPELINE>,
+    pub blend_mode: Option<BlendMode>,
+    pub cull_mode: Option<CullMode>,
+    pub vs_entry: Option<&'a str>,
+    pub fs_entry: Option<&'a str>,
+    pub color_mask: ColorMask,
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct DepthStencil {

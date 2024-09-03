@@ -1,5 +1,5 @@
 use crate::backend::gfx::RenderTexture;
-use crate::gfx::Renderer;
+use crate::gfx::{Buffer, BufferDescriptor, RenderPipeline, RenderPipelineDescriptor, Renderer};
 use crate::input::{KeyboardState, MouseState};
 use crate::math::UVec2;
 use crate::math::Vec2;
@@ -59,4 +59,10 @@ pub(crate) trait GfxBackendImpl {
 
     fn render(&mut self, renderer: &Renderer) -> Result<(), String>;
     fn render_to(&mut self, texture: &RenderTexture, renderer: &Renderer) -> Result<(), String>;
+
+    fn create_render_pipeline(
+        &mut self,
+        desc: RenderPipelineDescriptor,
+    ) -> Result<RenderPipeline, String>;
+    fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String>;
 }

@@ -3,12 +3,19 @@ use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::texture::{InnerTexture, Texture};
+use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
+use crate::gfx::consts::SURFACE_DEFAULT_DEPTH_FORMAT;
 use crate::gfx::{
-    Color, RenderTexture, Renderer, TextureData, TextureDescriptor, TextureFormat, TextureId,
+    BindGroupLayoutRef, BindType, Buffer, BufferDescriptor, BufferUsage, Color, RenderPipeline,
+    RenderPipelineDescriptor, RenderTexture, Renderer, TextureData, TextureDescriptor,
+    TextureFormat, TextureId,
 };
 use crate::math::{vec2, UVec2, Vec2};
+use arrayvec::ArrayVec;
+use std::borrow::Cow;
 use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{Color as WColor, Queue, StoreOp, TextureDimension};
 use winit::raw_window_handle::HasDisplayHandle;
 
@@ -72,11 +79,9 @@ impl GfxBackendImpl for GfxBackend {
             .passes
             .iter()
             .try_for_each(|rp| -> Result<(), String> {
-                // let (uses_depth, uses_stencil) = rp
-                //     .pipeline
-                //     .map_or((false, false), |pip| (pip.uses_depth, pip.uses_stencil));
-
-                let (uses_depth, uses_stencil) = (false, false);
+                let (uses_depth, uses_stencil) = rp
+                    .pipeline
+                    .map_or((false, false), |pip| (pip.uses_depth, pip.uses_stencil));
 
                 let color = Some(rp.clear_options.color.map_or_else(
                     || wgpu::RenderPassColorAttachment {
@@ -141,7 +146,7 @@ impl GfxBackendImpl for GfxBackend {
                     occlusion_query_set: None,
                 });
 
-                /* if let Some(pip) = rp.pipeline {
+                if let Some(pip) = rp.pipeline {
                     rpass.set_pipeline(&pip.raw);
 
                     let mut vertex_buffers_slot = 0;
@@ -177,7 +182,7 @@ impl GfxBackendImpl for GfxBackend {
                             }
                         }
                     });
-                }*/
+                }
 
                 Ok(())
             })?;
@@ -193,6 +198,205 @@ impl GfxBackendImpl for GfxBackend {
     fn render_to(&mut self, texture: &RenderTexture, renderer: &Renderer) -> Result<(), String> {
         todo!()
     }
+
+    fn create_render_pipeline(
+        &mut self,
+        desc: RenderPipelineDescriptor,
+    ) -> Result<RenderPipeline, String> {
+        let shader = self
+            .ctx
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: desc.label,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(desc.shader)),
+            });
+
+        let mut bind_group_layouts = desc
+            .bind_group_layout
+            .iter()
+            .map(|bgl| {
+                self.ctx
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: desc.label,
+                        entries: &bgl
+                            .entries
+                            .iter()
+                            .map(|entry| {
+                                let visibility = wgpu_shader_visibility(
+                                    entry.visible_vertex,
+                                    entry.visible_fragment,
+                                    entry.visible_compute,
+                                );
+                                let binding = entry.location;
+                                match entry.typ {
+                                    BindType::Texture => wgpu::BindGroupLayoutEntry {
+                                        binding,
+                                        visibility,
+                                        ty: wgpu::BindingType::Texture {
+                                            multisampled: false,
+                                            view_dimension: wgpu::TextureViewDimension::D2,
+                                            sample_type: wgpu::TextureSampleType::Float {
+                                                filterable: true,
+                                            },
+                                        },
+                                        count: None,
+                                    },
+                                    BindType::Sampler => wgpu::BindGroupLayoutEntry {
+                                        binding,
+                                        visibility,
+                                        ty: wgpu::BindingType::Sampler(
+                                            wgpu::SamplerBindingType::Filtering,
+                                        ),
+                                        count: None,
+                                    },
+                                    BindType::Uniform => wgpu::BindGroupLayoutEntry {
+                                        binding,
+                                        visibility,
+                                        ty: wgpu::BindingType::Buffer {
+                                            ty: wgpu::BufferBindingType::Uniform,
+                                            has_dynamic_offset: false,
+                                            min_binding_size: None,
+                                        },
+                                        count: None,
+                                    },
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        let pipeline_layout =
+            self.ctx
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: desc.label,
+                    bind_group_layouts: &bind_group_layouts.iter().collect::<Vec<&_>>(),
+                    push_constant_ranges: &[],
+                });
+
+        // TODO is this right? I don't see issues if we keep formats the same for now
+        let swapchain_format = self.surface.capabilities.formats[0];
+        let (attrs, mut buffers): (Vec<_>, Vec<_>) = desc
+            .vertex_layout
+            .iter()
+            .map(|vl| {
+                let mut offset = 0;
+                let attrs = vl
+                    .attributes
+                    .iter()
+                    .map(|attr| {
+                        let a = wgpu::VertexAttribute {
+                            format: attr.format.to_wgpu(),
+                            offset,
+                            shader_location: attr.location as _,
+                        };
+                        offset += a.format.size();
+                        a
+                    })
+                    .collect::<Vec<_>>();
+
+                let layout = wgpu::VertexBufferLayout {
+                    array_stride: offset,
+                    step_mode: vl.step_mode.to_wgpu(),
+                    attributes: &[],
+                };
+
+                (attrs, layout)
+            })
+            .unzip();
+
+        buffers
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, buff)| buff.attributes = &attrs[i]);
+
+        let swapchain_color_target: wgpu::ColorTargetState = swapchain_format.into();
+        let color_target = wgpu::ColorTargetState {
+            blend: desc.blend_mode.map(|bm| bm.to_wgpu()),
+            write_mask: desc.color_mask.to_wgpu(),
+            ..swapchain_color_target
+        };
+
+        let raw = self
+            .ctx
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: desc.label,
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: desc.vs_entry.unwrap_or("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &buffers,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: desc.fs_entry.unwrap_or("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(color_target)],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: desc.primitive.to_wgpu(),
+                    cull_mode: desc.cull_mode.map(|cm| cm.to_wgpu()),
+                    ..Default::default()
+                },
+                depth_stencil: wgpu_depth_stencil(desc.depth_stencil, desc.stencil),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
+
+        let index_format = desc.index_format.to_wgpu();
+        let mut bind_group_layout = ArrayVec::new();
+        bind_group_layouts.reverse();
+        while let Some(bgl) = bind_group_layouts.pop() {
+            bind_group_layout.push(BindGroupLayoutRef {
+                id: resource_id(&mut self.next_resource_id),
+                raw: Arc::new(bgl),
+            });
+        }
+        Ok(RenderPipeline {
+            id: resource_id(&mut self.next_resource_id),
+            raw: Arc::new(raw),
+            index_format,
+            uses_depth: desc.depth_stencil.is_some(),
+            uses_stencil: desc.stencil.is_some(),
+            bind_group_layout,
+        })
+    }
+
+    fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String> {
+        let mut usage = desc.usage.to_wgpu();
+        if desc.write {
+            usage |= wgpu::BufferUsages::COPY_DST;
+        }
+
+        let raw = self.ctx.device.create_buffer_init(&BufferInitDescriptor {
+            label: desc.label,
+            contents: desc.content,
+            usage,
+        });
+
+        let usage = desc.usage;
+        let size = desc.content.len();
+
+        Ok(Buffer {
+            id: resource_id(&mut self.next_resource_id),
+            raw: Arc::new(raw),
+            usage,
+            write: desc.write,
+            size,
+        })
+    }
+}
+
+#[inline(always)]
+fn resource_id<T: From<u64>>(count: &mut u64) -> T {
+    let id = *count;
+    *count += 1;
+    T::from(id)
 }
 
 impl GfxBackend {
@@ -200,7 +404,7 @@ impl GfxBackend {
     where
         W: HasWindowHandle + HasDisplayHandle,
     {
-        let depth_format = TextureFormat::Depth24Stencil8; // make it configurable?
+        let depth_format = SURFACE_DEFAULT_DEPTH_FORMAT; // make it configurable?
         let mut ctx = Context::new().await?;
         let surface = init_surface(&mut ctx, window, depth_format, win_size, vsync).await?;
         Ok(Self {
