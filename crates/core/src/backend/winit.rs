@@ -25,6 +25,7 @@ use crate::math::{vec2, Vec2};
 use crate::backend::gamepad_gilrs::GilrsBackend;
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;
+use crate::time;
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));
@@ -328,6 +329,8 @@ impl<S> ApplicationHandler for Runner<S> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
+                time::tick();
+
                 #[cfg(feature = "gamepad")]
                 {
                     // gamepad must be updated before the update cb

@@ -5,10 +5,11 @@ use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::texture::{InnerTexture, Texture};
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::SURFACE_DEFAULT_DEPTH_FORMAT;
+use crate::gfx::MAX_BINDING_ENTRIES;
 use crate::gfx::{
-    BindGroupLayoutRef, BindType, Buffer, BufferDescriptor, BufferUsage, Color, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, Renderer, TextureData, TextureDescriptor,
-    TextureFormat, TextureId,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
+    BufferDescriptor, BufferUsage, Color, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
+    Renderer, TextureData, TextureDescriptor, TextureFormat, TextureId,
 };
 use crate::math::{vec2, UVec2, Vec2};
 use arrayvec::ArrayVec;
@@ -133,12 +134,11 @@ impl GfxBackendImpl for GfxBackend {
                     label: None,
                     color_attachments: &[color],
                     depth_stencil_attachment: if depth.is_some() || stencil.is_some() {
-                        // Some(wgpu::RenderPassDepthStencilAttachment {
-                        //     view: &frame.surface.depth_texture.view,
-                        //     depth_ops: depth,
-                        //     stencil_ops: stencil,
-                        // })
-                        None // TODO
+                        Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &self.surface.depth_texture.view,
+                            depth_ops: depth,
+                            stencil_ops: stencil,
+                        })
                     } else {
                         None
                     },
@@ -389,6 +389,61 @@ impl GfxBackendImpl for GfxBackend {
             write: desc.write,
             size,
         })
+    }
+
+    fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String> {
+        let mut entries: ArrayVec<_, MAX_BINDING_ENTRIES> = Default::default();
+        desc.entry.iter().for_each(|entry| match entry {
+            BindGroupEntry::Texture { location, texture } => {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: *location,
+                    resource: wgpu::BindingResource::TextureView(&texture.inner.view),
+                });
+                // entries.push(wgpu::BindGroupEntry {
+                //             binding: *location,
+                //             resource: wgpu::BindingResource::Sampler(texture.sampler.as_ref()),
+                //         });
+            }
+            BindGroupEntry::Uniform { location, buffer } => {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: *location,
+                    resource: buffer.raw.as_entire_binding(),
+                });
+            } // BindGroupEntry::Sampler { location, sampler } => {
+              //     entries.push(wgpu::BindGroupEntry {
+              //         binding: *location,
+              //         resource: wgpu::BindingResource::Sampler(&sampler.raw),
+              //     });
+              // }
+        });
+        let raw = self
+            .ctx
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: desc.label,
+                layout: &desc
+                    .layout
+                    .ok_or_else(|| "Cannot create binding group with a missing layout.")?
+                    .raw,
+                entries: &entries,
+            });
+
+        Ok(BindGroup {
+            id: resource_id(&mut self.next_resource_id),
+            raw: Arc::new(raw),
+        })
+    }
+
+    fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String> {
+        debug_assert!(buffer.write, "Cannot write data to a static buffer");
+        debug_assert!(
+            buffer.len() <= offset as usize + data.len(),
+            "Invalid buffer size '{}' expected '{}'",
+            buffer.len(),
+            offset as usize + data.len()
+        );
+        self.ctx.queue.write_buffer(&buffer.raw, offset as _, data);
+        Ok(())
     }
 }
 

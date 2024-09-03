@@ -1,8 +1,9 @@
 use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
 use crate::gfx::{
-    BindGroupLayout, BlendMode, Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode,
-    CullMode, DepthStencil, IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor,
-    Stencil, VertexLayout,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef, BlendMode,
+    Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, CullMode, DepthStencil,
+    IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, Stencil, Texture,
+    VertexLayout,
 };
 
 pub struct RenderPipelineBuilder<'a> {
@@ -114,5 +115,93 @@ impl<'a> BufferBuilder<'a> {
     pub fn build(self) -> Result<Buffer, String> {
         let Self { desc } = self;
         get_mut_backend().gfx().create_buffer(desc)
+    }
+}
+
+pub struct BindGroupBuilder<'a> {
+    desc: BindGroupDescriptor<'a>,
+}
+
+impl<'a> BindGroupBuilder<'a> {
+    pub(crate) fn new() -> Self {
+        let desc = Default::default();
+        Self { desc }
+    }
+
+    pub fn with_layout(mut self, layout: &'a BindGroupLayoutRef) -> Self {
+        self.desc.layout = Some(layout);
+        self
+    }
+
+    pub fn with_texture(mut self, location: u32, texture: &'a Texture) -> Self {
+        self.desc
+            .entry
+            .push(BindGroupEntry::Texture { location, texture });
+
+        // self.desc
+        //     .entry
+        //     .push(BindGroupEntry::Sampler { location, sampler });
+
+        self
+    }
+
+    // pub fn with_sampler(mut self, location: u32, sampler: &'a Sampler) -> Self {
+    //     self.desc
+    //         .entry
+    //         .push(BindGroupEntry::Sampler { location, sampler });
+    //     self
+    // }
+
+    pub fn with_uniform(mut self, location: u32, buffer: &'a Buffer) -> Self {
+        self.desc
+            .entry
+            .push(BindGroupEntry::Uniform { location, buffer });
+        self
+    }
+
+    pub fn build(self) -> Result<BindGroup, String> {
+        let Self { desc } = self;
+        get_mut_backend().gfx().create_bind_group(desc)
+    }
+}
+
+pub struct BufferWriteBuilder<'a> {
+    buffer: &'a Buffer,
+    offset: u64,
+    data: Option<&'a [u8]>,
+}
+
+impl<'a> BufferWriteBuilder<'a> {
+    pub fn new(buffer: &'a Buffer) -> Self {
+        Self {
+            buffer,
+            offset: 0,
+            data: None,
+        }
+    }
+
+    pub fn with_data<D: bytemuck::Pod>(mut self, data: &'a [D]) -> Self {
+        self.data = Some(bytemuck::cast_slice(data));
+        self
+    }
+
+    pub fn with_offset(mut self, offset: u64) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    pub fn build(self) -> Result<(), String> {
+        let Self {
+            buffer,
+            offset,
+            data,
+        } = self;
+
+        if !buffer.is_writable() {
+            return Err("Buffer is not Writable".to_string());
+        }
+
+        let data = data.unwrap_or(&[]);
+        get_mut_backend().gfx().write_buffer(buffer, offset, data)
     }
 }

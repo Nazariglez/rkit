@@ -14,6 +14,24 @@ pub struct Buffer {
     pub(crate) size: usize,
 }
 
+impl Buffer {
+    pub fn id(&self) -> BufferId {
+        self.id
+    }
+
+    pub fn usage(&self) -> BufferUsage {
+        self.usage
+    }
+
+    pub fn is_writable(&self) -> bool {
+        self.write
+    }
+
+    pub fn len(&self) -> usize {
+        self.size
+    }
+}
+
 impl BufferUsage {
     pub(crate) fn to_wgpu(&self) -> wgpu::BufferUsages {
         match self {

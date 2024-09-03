@@ -22,6 +22,7 @@ use window::WebWindow;
 
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;
+use crate::time;
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WebBackend>> =
     Lazy::new(|| AtomicRefCell::new(WebBackend::default()));
@@ -83,6 +84,8 @@ struct Runner<S> {
 
 impl<S> Runner<S> {
     fn tick(&mut self) {
+        time::tick();
+
         get_mut_backend().gfx().prepare_frame();
         (*self.update)(&mut self.state);
         get_mut_backend().gfx().present_frame();
@@ -170,10 +173,8 @@ impl BackendImpl<GfxBackend> for WebBackend {
 }
 
 pub(crate) fn get_backend() -> AtomicRef<'static, WebBackend> {
-    log::info!("GET BACKEND");
     BACKEND.borrow()
 }
 pub(crate) fn get_mut_backend() -> AtomicRefMut<'static, WebBackend> {
-    log::info!("GET MUT BACKEND");
     BACKEND.borrow_mut()
 }

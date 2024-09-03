@@ -5,6 +5,7 @@ build = "build.rs"
 
 [dependencies]
 # gk dependencies
+utils.workspace = true
 
 # external common deps
 log.workspace = true
@@ -29,6 +30,9 @@ wgpu = "22.1.0"
 
 # gamepad
 gilrs = { version = "0.10.9", optional = true }
+
+# Instant compatible with wasm
+instant = { version = "0.1.13", features = ["wasm-bindgen"] }
 
 ## deps only for this crate
 once_cell = "1.19.0"

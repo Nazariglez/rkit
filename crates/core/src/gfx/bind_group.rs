@@ -2,7 +2,7 @@ use crate::backend::gfx::Texture;
 use crate::gfx::consts::{
     MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE,
 };
-use crate::gfx::{BindGroupLayoutRef, TextureId};
+use crate::gfx::{BindGroupLayoutRef, Buffer, TextureId};
 use arrayvec::ArrayVec;
 
 pub const MAX_BINDING_ENTRIES: usize =
@@ -120,5 +120,5 @@ pub struct BindGroupDescriptor<'a> {
 pub enum BindGroupEntry<'a> {
     Texture { location: u32, texture: &'a Texture },
     // Sampler { location: u32, sampler: &'a Sampler },
-    // Uniform { location: u32, buffer: &'a Buffer },
+    Uniform { location: u32, buffer: &'a Buffer },
 }

@@ -31,6 +31,7 @@ members = ["crates/*"]
 [workspace.dependencies]
 # gamekit packages
 core = { path = "crates/core" }
+utils = { path = "crates/utils" }
 
 ## common deps
 log = "0.4.22"
@@ -47,13 +48,16 @@ bytemuck = "1.17.1"
 
 [dependencies]
 core.workspace = true
+utils.workspace = true
+
+fastrand = { version = "2.1.1", optional = true }
 
 [dev-dependencies]
 log.workspace = true
 bytemuck = {workspace = true, features = ["derive"]}
 
 [features]
-default = []
+default = ["random"]
 # enable clipboard
 clipboard = ["core/clipboard"]
 # enable dropping files to window
@@ -62,3 +66,5 @@ drop_files = ["core/drop_files"]
 gamepad = ["core/gamepad"]
 # force webgl
 webgl = ["core/webgl"]
+# enable fastrand random
+random = ["dep:fastrand"]

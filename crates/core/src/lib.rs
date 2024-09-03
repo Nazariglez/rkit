@@ -4,6 +4,7 @@ mod builder;
 pub mod gfx;
 pub mod input;
 pub mod math;
+pub mod time;
 mod utils;
 
 use crate::builder::{builder, AppBuilder};
