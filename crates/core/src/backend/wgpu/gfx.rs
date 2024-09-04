@@ -2,15 +2,14 @@ use crate::backend::backend::GfxBackendImpl;
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;
 use crate::backend::wgpu::surface::Surface;
-use crate::backend::wgpu::texture::{InnerTexture, Texture};
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::SURFACE_DEFAULT_DEPTH_FORMAT;
-use crate::gfx::MAX_BINDING_ENTRIES;
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
     BufferDescriptor, BufferUsage, Color, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
-    Renderer, TextureData, TextureDescriptor, TextureFormat, TextureId,
+    Renderer, Texture, TextureData, TextureDescriptor, TextureFormat, TextureId,
 };
+use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2, Vec2};
 use arrayvec::ArrayVec;
 use std::borrow::Cow;
@@ -54,8 +53,16 @@ impl GfxBackendImpl for GfxBackend {
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle,
     {
-        let surface =
-            init_surface(&mut self.ctx, window, self.depth_format, win_size, vsync).await?;
+        let id = resource_id(&mut self.next_resource_id);
+        let surface = init_surface(
+            id,
+            &mut self.ctx,
+            window,
+            self.depth_format,
+            win_size,
+            vsync,
+        )
+        .await?;
         self.surface = surface;
         Ok(())
     }
@@ -397,24 +404,21 @@ impl GfxBackendImpl for GfxBackend {
             BindGroupEntry::Texture { location, texture } => {
                 entries.push(wgpu::BindGroupEntry {
                     binding: *location,
-                    resource: wgpu::BindingResource::TextureView(&texture.inner.view),
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
                 });
-                // entries.push(wgpu::BindGroupEntry {
-                //             binding: *location,
-                //             resource: wgpu::BindingResource::Sampler(texture.sampler.as_ref()),
-                //         });
             }
             BindGroupEntry::Uniform { location, buffer } => {
                 entries.push(wgpu::BindGroupEntry {
                     binding: *location,
                     resource: buffer.raw.as_entire_binding(),
                 });
-            } // BindGroupEntry::Sampler { location, sampler } => {
-              //     entries.push(wgpu::BindGroupEntry {
-              //         binding: *location,
-              //         resource: wgpu::BindingResource::Sampler(&sampler.raw),
-              //     });
-              // }
+            }
+            BindGroupEntry::Sampler { location, sampler } => {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: *location,
+                    resource: wgpu::BindingResource::Sampler(&sampler.raw),
+                });
+            }
         });
         let raw = self
             .ctx
@@ -445,6 +449,40 @@ impl GfxBackendImpl for GfxBackend {
         self.ctx.queue.write_buffer(&buffer.raw, offset as _, data);
         Ok(())
     }
+
+    fn create_sampler(&mut self, desc: SamplerDescriptor) -> Result<Sampler, String> {
+        let raw = self.ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: desc.label,
+            address_mode_u: desc.wrap_x.to_wgpu(),
+            address_mode_v: desc.wrap_y.to_wgpu(),
+            address_mode_w: desc.wrap_z.to_wgpu(),
+            mag_filter: desc.mag_filter.to_wgpu(),
+            min_filter: desc.min_filter.to_wgpu(),
+            mipmap_filter: desc
+                .mipmap_filter
+                .map_or(Default::default(), |tf| tf.to_wgpu()),
+            ..Default::default()
+        });
+        Ok(Sampler {
+            id: resource_id(&mut self.next_resource_id),
+            raw: Arc::new(raw),
+            wrap_x: desc.wrap_x,
+            wrap_y: desc.wrap_y,
+            wrap_z: desc.wrap_z,
+            mag_filter: desc.mag_filter,
+            min_filter: desc.min_filter,
+            mipmap_filter: desc.mipmap_filter,
+        })
+    }
+
+    fn create_texture(
+        &mut self,
+        desc: TextureDescriptor,
+        data: Option<TextureData>,
+    ) -> Result<Texture, String> {
+        let id = resource_id(&mut self.next_resource_id);
+        create_texture(id, &self.ctx.device, &self.ctx.queue, desc, data)
+    }
 }
 
 #[inline(always)]
@@ -461,9 +499,18 @@ impl GfxBackend {
     {
         let depth_format = SURFACE_DEFAULT_DEPTH_FORMAT; // make it configurable?
         let mut ctx = Context::new().await?;
-        let surface = init_surface(&mut ctx, window, depth_format, win_size, vsync).await?;
+        let mut next_resource_id = 0;
+        let surface = init_surface(
+            resource_id(&mut next_resource_id),
+            &mut ctx,
+            window,
+            depth_format,
+            win_size,
+            vsync,
+        )
+        .await?;
         Ok(Self {
-            next_resource_id: 0,
+            next_resource_id,
             vsync,
             ctx,
             depth_format,
@@ -518,6 +565,7 @@ impl GfxBackend {
 }
 
 async fn init_surface<W>(
+    id: TextureId,
     ctx: &mut Context,
     window: &W,
     depth_format: TextureFormat,
@@ -528,6 +576,7 @@ where
     W: HasDisplayHandle + HasWindowHandle,
 {
     let depth_texture = create_texture(
+        id,
         &ctx.device,
         &ctx.queue,
         TextureDescriptor {
@@ -548,11 +597,12 @@ where
 struct InnerTextureInfo {}
 
 fn create_texture(
+    id: TextureId,
     device: &wgpu::Device,
     queue: &Queue,
     desc: TextureDescriptor,
     data: Option<TextureData>,
-) -> Result<InnerTexture, String> {
+) -> Result<Texture, String> {
     let size = data.map_or(wgpu::Extent3d::default(), |d| wgpu::Extent3d {
         width: d.width,
         height: d.height,
@@ -603,11 +653,13 @@ fn create_texture(
 
     let view = raw.create_view(&wgpu::TextureViewDescriptor::default());
 
-    Ok(InnerTexture {
+    Ok(Texture {
+        id,
         raw: Arc::new(raw),
         view: Arc::new(view),
         size: vec2(size.width as _, size.height as _),
         write: desc.write,
+        format: desc.format,
     })
 }
 

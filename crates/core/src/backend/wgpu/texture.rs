@@ -1,29 +1,19 @@
-use crate::gfx::{TextureFilter, TextureFormat, TextureId, TextureWrap};
+use crate::gfx::{SamplerId, TextureFilter, TextureFormat, TextureId, TextureWrap};
 use crate::math::Vec2;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use wgpu::{Sampler, Texture as RawTexture, TextureFormat as WTextureFormat, TextureView};
-
-#[derive(Clone)]
-pub(crate) struct InnerTexture {
-    pub(crate) raw: Arc<RawTexture>,
-    pub(crate) view: Arc<TextureView>,
-    pub(crate) size: Vec2,
-    pub(crate) write: bool,
-}
+use wgpu::{
+    Sampler as RawSampler, Texture as RawTexture, TextureFormat as WTextureFormat, TextureView,
+};
 
 #[derive(Clone)]
 pub struct Texture {
     pub(crate) id: TextureId,
-    pub(crate) inner: InnerTexture,
-    pub(crate) sampler: Arc<Sampler>,
+    pub(crate) raw: Arc<RawTexture>,
+    pub(crate) view: Arc<TextureView>,
+    pub(crate) size: Vec2,
+    pub(crate) write: bool,
     pub(crate) format: TextureFormat,
-    pub(crate) wrap_x: TextureWrap,
-    pub(crate) wrap_y: TextureWrap,
-    pub(crate) wrap_z: TextureWrap,
-    pub(crate) mag_filter: TextureFilter,
-    pub(crate) min_filter: TextureFilter,
-    pub(crate) mipmap_filter: Option<TextureFilter>,
 }
 
 impl Texture {
@@ -32,53 +22,33 @@ impl Texture {
     }
 
     pub fn size(&self) -> Vec2 {
-        self.inner.size
+        self.size
     }
 
     pub fn width(&self) -> f32 {
-        self.inner.size.x
+        self.size.x
     }
 
     pub fn height(&self) -> f32 {
-        self.inner.size.y
+        self.size.y
     }
 
     pub fn is_writable(&self) -> bool {
-        self.inner.write
+        self.write
     }
 
     pub fn format(&self) -> TextureFormat {
         self.format
     }
-
-    pub fn wrap_x(&self) -> TextureWrap {
-        self.wrap_x
-    }
-
-    pub fn wrap_y(&self) -> TextureWrap {
-        self.wrap_y
-    }
-
-    pub fn wrap_z(&self) -> TextureWrap {
-        self.wrap_z
-    }
-
-    pub fn mag_filter(&self) -> TextureFilter {
-        self.mag_filter
-    }
-
-    pub fn min_filter(&self) -> TextureFilter {
-        self.min_filter
-    }
 }
 
 impl Debug for Texture {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // TODO more fields
         f.debug_struct("Texture")
             .field("id", &self.id)
-            .field("size", &self.inner.size)
-            .field("write", &self.inner.write)
+            .field("size", &self.size)
+            .field("write", &self.write)
+            .field("format", &self.format)
             .finish()
     }
 }
@@ -158,5 +128,57 @@ impl TextureFilter {
             TextureFilter::Linear => wgpu::FilterMode::Linear,
             TextureFilter::Nearest => wgpu::FilterMode::Nearest,
         }
+    }
+}
+
+// - Sampler
+#[derive(Clone)]
+pub struct Sampler {
+    pub(crate) id: SamplerId,
+    pub(crate) raw: Arc<RawSampler>,
+    pub(crate) wrap_x: TextureWrap,
+    pub(crate) wrap_y: TextureWrap,
+    pub(crate) wrap_z: TextureWrap,
+    pub(crate) mag_filter: TextureFilter,
+    pub(crate) min_filter: TextureFilter,
+    pub(crate) mipmap_filter: Option<TextureFilter>,
+}
+
+impl Sampler {
+    pub fn id(&self) -> SamplerId {
+        self.id
+    }
+
+    pub fn wrap_x(&self) -> TextureWrap {
+        self.wrap_x
+    }
+
+    pub fn wrap_y(&self) -> TextureWrap {
+        self.wrap_y
+    }
+
+    pub fn wrap_z(&self) -> TextureWrap {
+        self.wrap_z
+    }
+
+    pub fn mag_filter(&self) -> TextureFilter {
+        self.mag_filter
+    }
+
+    pub fn min_filter(&self) -> TextureFilter {
+        self.min_filter
+    }
+}
+
+impl Debug for Sampler {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sampler")
+            .field("id", &self.id)
+            .field("wrap_x", &self.wrap_x)
+            .field("wrap_y", &self.wrap_y)
+            .field("wrap_z", &self.wrap_z)
+            .field("mag_filter", &self.mag_filter)
+            .field("min_filter", &self.min_filter)
+            .finish()
     }
 }

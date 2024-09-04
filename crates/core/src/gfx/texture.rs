@@ -113,3 +113,24 @@ impl Default for TextureFormat {
         Self::Rgba8UNormSrgb
     }
 }
+
+// - Sampler
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct SamplerId(pub(crate) u64);
+
+impl From<u64> for SamplerId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct SamplerDescriptor<'a> {
+    pub label: Option<&'a str>,
+    pub wrap_x: TextureWrap,
+    pub wrap_y: TextureWrap,
+    pub wrap_z: TextureWrap,
+    pub mag_filter: TextureFilter,
+    pub min_filter: TextureFilter,
+    pub mipmap_filter: Option<TextureFilter>,
+}

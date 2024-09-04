@@ -1,5 +1,5 @@
 use crate::backend::wgpu::context::Context;
-use crate::backend::wgpu::texture::{InnerTexture, Texture};
+use crate::backend::wgpu::texture::Texture;
 use crate::math::{UVec2, Vec2};
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
@@ -13,7 +13,7 @@ pub(crate) struct Surface {
     pub surface: Arc<RawSurface<'static>>,
     pub config: SurfaceConfiguration,
     pub capabilities: Arc<SurfaceCapabilities>,
-    pub depth_texture: InnerTexture,
+    pub depth_texture: Texture,
 }
 
 impl Surface {
@@ -22,7 +22,7 @@ impl Surface {
         window: &W,
         win_physical_size: UVec2,
         vsync: bool,
-        depth_texture: InnerTexture,
+        depth_texture: Texture,
     ) -> Result<Self, String>
     where
         W: HasDisplayHandle + HasWindowHandle,

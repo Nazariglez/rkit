@@ -2,9 +2,11 @@ use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef, BlendMode,
     Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, CullMode, DepthStencil,
-    IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, Stencil, Texture,
+    IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, Sampler, SamplerDescriptor,
+    Stencil, Texture, TextureData, TextureDescriptor, TextureFilter, TextureFormat, TextureWrap,
     VertexLayout,
 };
+use image::EncodableLayout;
 
 pub struct RenderPipelineBuilder<'a> {
     desc: RenderPipelineDescriptor<'a>,
@@ -138,19 +140,15 @@ impl<'a> BindGroupBuilder<'a> {
             .entry
             .push(BindGroupEntry::Texture { location, texture });
 
-        // self.desc
-        //     .entry
-        //     .push(BindGroupEntry::Sampler { location, sampler });
-
         self
     }
 
-    // pub fn with_sampler(mut self, location: u32, sampler: &'a Sampler) -> Self {
-    //     self.desc
-    //         .entry
-    //         .push(BindGroupEntry::Sampler { location, sampler });
-    //     self
-    // }
+    pub fn with_sampler(mut self, location: u32, sampler: &'a Sampler) -> Self {
+        self.desc
+            .entry
+            .push(BindGroupEntry::Sampler { location, sampler });
+        self
+    }
 
     pub fn with_uniform(mut self, location: u32, buffer: &'a Buffer) -> Self {
         self.desc
@@ -203,5 +201,124 @@ impl<'a> BufferWriteBuilder<'a> {
 
         let data = data.unwrap_or(&[]);
         get_mut_backend().gfx().write_buffer(buffer, offset, data)
+    }
+}
+
+pub struct SamplerBuilder<'a> {
+    desc: SamplerDescriptor<'a>,
+}
+impl<'a> SamplerBuilder<'a> {
+    pub fn new() -> Self {
+        let desc = SamplerDescriptor::default();
+        Self { desc }
+    }
+
+    pub fn with_wrap_x(mut self, wrap: TextureWrap) -> Self {
+        self.desc.wrap_x = wrap;
+        self
+    }
+
+    pub fn with_wrap_y(mut self, wrap: TextureWrap) -> Self {
+        self.desc.wrap_y = wrap;
+        self
+    }
+
+    pub fn with_wrap_z(mut self, wrap: TextureWrap) -> Self {
+        self.desc.wrap_z = wrap;
+        self
+    }
+
+    pub fn with_min_filter(mut self, filter: TextureFilter) -> Self {
+        self.desc.min_filter = filter;
+        self
+    }
+
+    pub fn with_mag_filter(mut self, filter: TextureFilter) -> Self {
+        self.desc.mag_filter = filter;
+        self
+    }
+
+    pub fn with_mipmap_filter(mut self, filter: TextureFilter) -> Self {
+        self.desc.mipmap_filter = Some(filter);
+        self
+    }
+
+    pub fn build(self) -> Result<Sampler, String> {
+        let Self { desc } = self;
+        get_mut_backend().gfx().create_sampler(desc)
+    }
+}
+
+enum TextureRawData<'a> {
+    Empty,
+    Image(&'a [u8]),
+    Raw {
+        bytes: &'a [u8],
+        width: u32,
+        height: u32,
+    },
+}
+
+pub struct TextureBuilder<'a> {
+    desc: TextureDescriptor<'a>,
+    data: TextureRawData<'a>,
+}
+
+impl<'a> TextureBuilder<'a> {
+    pub fn new() -> Self {
+        let desc = TextureDescriptor::default();
+        let data = TextureRawData::Empty;
+        Self { desc, data }
+    }
+
+    pub fn from_image(mut self, image: &'a [u8]) -> Self {
+        self.data = TextureRawData::Image(image);
+        self
+    }
+
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.desc.label = Some(label);
+        self
+    }
+
+    pub fn with_format(mut self, format: TextureFormat) -> Self {
+        self.desc.format = format;
+        self
+    }
+
+    pub fn with_write_flag(mut self, writable: bool) -> Self {
+        self.desc.write = writable;
+        self
+    }
+
+    pub fn build(self) -> Result<Texture, String> {
+        let Self { desc, data } = self;
+        match data {
+            TextureRawData::Empty => get_mut_backend().gfx().create_texture(desc, None),
+            TextureRawData::Image(bytes) => {
+                let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
+                let rgba = img.to_rgba8();
+                get_mut_backend().gfx().create_texture(
+                    desc,
+                    Some(TextureData {
+                        bytes: rgba.as_bytes(),
+                        width: rgba.width(),
+                        height: rgba.height(),
+                    }),
+                )
+            }
+            TextureRawData::Raw {
+                bytes,
+                width,
+                height,
+            } => get_mut_backend().gfx().create_texture(
+                desc,
+                Some(TextureData {
+                    bytes,
+                    width,
+                    height,
+                }),
+            ),
+        }
     }
 }

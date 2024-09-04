@@ -60,3 +60,13 @@ pub fn create_bind_group<'a>() -> BindGroupBuilder<'a> {
 pub fn write_buffer<'a>(buffer: &'a Buffer) -> BufferWriteBuilder {
     BufferWriteBuilder::new(buffer)
 }
+
+#[inline]
+pub fn create_sampler<'a>() -> SamplerBuilder<'a> {
+    SamplerBuilder::new()
+}
+
+#[inline]
+pub fn create_texture<'a>() -> TextureBuilder<'a> {
+    TextureBuilder::new()
+}
