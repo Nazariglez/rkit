@@ -3,6 +3,7 @@ mod buffer;
 mod context;
 mod frame;
 mod gfx;
+mod offscreen;
 mod pipeline;
 mod render_texture;
 mod surface;

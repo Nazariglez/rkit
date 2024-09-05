@@ -4,8 +4,8 @@ use crate::math::{UVec2, Vec2};
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
-    Device, Surface as RawSurface, SurfaceCapabilities, SurfaceConfiguration, SurfaceTexture,
-    TextureFormat as RawTextureFormat,
+    Device, RenderPipeline as WRenderPipeline, Surface as RawSurface, SurfaceCapabilities,
+    SurfaceConfiguration, SurfaceTexture, TextureFormat as RawTextureFormat,
 };
 use winit::raw_window_handle::HasWindowHandle;
 
@@ -48,13 +48,14 @@ impl Surface {
         } = win_physical_size;
         let capabilities = surface.get_capabilities(&ctx.adapter);
 
-        let raw_format = RawTextureFormat::Rgba8UnormSrgb;
-        let is_compatible_format = capabilities.formats.contains(&raw_format);
+        log::info!("Surface formats: {:?}", capabilities.formats);
 
-        println!("{:?}", capabilities.formats);
-        // if !is_compatible_format {
-        //     return Err(format!("The Device does not support surfaces with {:?} format.", raw_format));
-        // }
+        let raw_format = capabilities
+            .formats
+            .iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(capabilities.formats[0]);
 
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

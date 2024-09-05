@@ -77,7 +77,7 @@ pub enum TextureFormat {
     Rgba8UInt,      // WebGL2: GL_RGBA8UI
     Rgba8Int,       // WebGL2: GL_RGBA8I
     Bgra8UNorm,     // WebGL2: GL_BGRA8_EXT (via EXT_texture_format_BGRA8888 extension)
-    // Bgra8UNormSrgb, // WebGL2 not supported
+    Bgra8UNormSrgb, // WebGL2: not supported
 
     // Single channel 16-bit textures
     R16UNorm, // WebGL2: GL_R16 (requires EXT_texture_norm16 extension)

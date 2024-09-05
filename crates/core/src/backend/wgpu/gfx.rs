@@ -1,6 +1,7 @@
 use crate::backend::backend::GfxBackendImpl;
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;
+use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
@@ -18,16 +19,23 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{Color as WColor, Queue, StoreOp, TextureDimension, TextureFormat as WTextureFormat};
+use wgpu::{
+    Backend, Color as WColor, Queue, RenderPipeline as WRenderPipeline, StoreOp, TextureDimension,
+    TextureFormat as WTextureFormat,
+};
 use winit::raw_window_handle::HasDisplayHandle;
 
 pub(crate) struct GfxBackend {
+    pub(crate) surface: Surface, // Eventually we could have a HashMap<WindowId, Surface> if we want multiple window
+
     next_resource_id: u64,
     vsync: bool,
     ctx: Context,
     depth_format: TextureFormat,
-    surface: Surface, // Eventually we could have a HashMap<WindowId, Surface> if we want multiple window
     frame: Option<DrawFrame>,
+
+    // used as intermediate for surface and pipeline texture formats
+    offscreen: Option<OffscreenSurfaceData>,
 }
 
 // This is a hack for wasm32 browsers where there is no threads
@@ -80,125 +88,17 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn render(&mut self, renderer: &Renderer) -> Result<(), String> {
-        let frame = self
-            .frame
-            .as_mut()
-            .ok_or_else(|| "Unavailable frame".to_string())?;
+        // TODO change this, "take" is ugly as hell
+        let offscreen = self
+            .offscreen
+            .take()
+            .ok_or_else(|| "Invalid Offscreen surface".to_string())
+            .unwrap();
+        self.render_to(&offscreen.texture, renderer)?;
+        self.offscreen = Some(offscreen);
 
-        renderer
-            .passes
-            .iter()
-            .try_for_each(|rp| -> Result<(), String> {
-                let (uses_depth, uses_stencil) = rp
-                    .pipeline
-                    .map_or((false, false), |pip| (pip.uses_depth, pip.uses_stencil));
-
-                let color = Some(rp.clear_options.color.map_or_else(
-                    || wgpu::RenderPassColorAttachment {
-                        view: &frame.view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: StoreOp::Store,
-                        },
-                    },
-                    |color| wgpu::RenderPassColorAttachment {
-                        view: &frame.view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: rp.clear_options.color.map_or(wgpu::LoadOp::Load, |color| {
-                                wgpu::LoadOp::Clear(color.to_wgpu())
-                            }),
-                            store: StoreOp::Store,
-                        },
-                    },
-                ));
-
-                let depth = if uses_depth {
-                    Some(wgpu::Operations {
-                        load: rp
-                            .clear_options
-                            .depth
-                            .map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
-                        store: StoreOp::Store,
-                    })
-                } else {
-                    None
-                };
-
-                let stencil = if uses_stencil {
-                    Some(wgpu::Operations {
-                        load: rp
-                            .clear_options
-                            .stencil
-                            .map_or(wgpu::LoadOp::Load, |stencil| wgpu::LoadOp::Clear(stencil)),
-                        store: StoreOp::Store,
-                    })
-                } else {
-                    None
-                };
-
-                let mut encoder = &mut frame.encoder;
-                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[color],
-                    depth_stencil_attachment: if depth.is_some() || stencil.is_some() {
-                        Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &self.surface.depth_texture.view,
-                            depth_ops: depth,
-                            stencil_ops: stencil,
-                        })
-                    } else {
-                        None
-                    },
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-
-                if let Some(pip) = rp.pipeline {
-                    rpass.set_pipeline(&pip.raw);
-
-                    let mut vertex_buffers_slot = 0;
-                    let mut indexed = false;
-                    rp.buffers.iter().for_each(|buff| match buff.usage {
-                        BufferUsage::Vertex => {
-                            rpass.set_vertex_buffer(vertex_buffers_slot, buff.raw.slice(..));
-                            vertex_buffers_slot += 1;
-                        }
-                        BufferUsage::Index => {
-                            debug_assert!(!indexed, "Cannot bind more than one Index buffer");
-                            indexed = true;
-                            rpass.set_index_buffer(buff.raw.slice(..), pip.index_format)
-                        }
-                        BufferUsage::Uniform => {}
-                    });
-
-                    rp.bind_groups.iter().enumerate().for_each(|(i, bg)| {
-                        rpass.set_bind_group(i as _, &bg.raw, &[]);
-                    });
-
-                    if let Some(sr) = rp.stencil_ref {
-                        rpass.set_stencil_reference(sr as _);
-                    }
-
-                    rp.vertices.iter().for_each(|vertices| {
-                        if !vertices.range.is_empty() {
-                            let instances = 0..vertices.instances.unwrap_or(1);
-                            if indexed {
-                                rpass.draw_indexed(vertices.range.clone(), 0, instances);
-                            } else {
-                                rpass.draw(vertices.range.clone(), instances);
-                            }
-                        }
-                    });
-                }
-
-                Ok(())
-            })?;
-
-        // mark the frame as dirty if some work was made
         if !renderer.passes.is_empty() {
-            frame.dirty = true;
+            self.frame.as_mut().unwrap().dirty = true;
         }
 
         Ok(())
@@ -461,7 +361,7 @@ impl GfxBackendImpl for GfxBackend {
         });
 
         if compatible_formats.is_empty() {
-            compatible_formats.push(self.surface.raw_format);
+            compatible_formats.push(TextureFormat::Rgba8UNormSrgb.to_wgpu());
         }
 
         let blend = desc.blend_mode.map(|bm| bm.to_wgpu());
@@ -710,14 +610,21 @@ impl GfxBackend {
             vsync,
         )
         .await?;
-        Ok(Self {
+
+        let mut bck = Self {
             next_resource_id,
             vsync,
             ctx,
             depth_format,
             surface,
             frame: None,
-        })
+            offscreen: None,
+        };
+
+        let offscreen = OffscreenSurfaceData::new(&mut bck)?;
+        bck.offscreen = Some(offscreen);
+
+        Ok(bck)
     }
 
     fn push_frame(&mut self) -> Result<(), String> {
@@ -742,21 +649,139 @@ impl GfxBackend {
         Ok(())
     }
 
+    pub(crate) fn render_to_frame(
+        &mut self,
+        frame: &mut DrawFrame,
+        renderer: &Renderer,
+    ) -> Result<(), String> {
+        renderer
+            .passes
+            .iter()
+            .try_for_each(|rp| -> Result<(), String> {
+                let (uses_depth, uses_stencil) = rp
+                    .pipeline
+                    .map_or((false, false), |pip| (pip.uses_depth, pip.uses_stencil));
+
+                let color = Some(rp.clear_options.color.map_or_else(
+                    || wgpu::RenderPassColorAttachment {
+                        view: &frame.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: StoreOp::Store,
+                        },
+                    },
+                    |color| wgpu::RenderPassColorAttachment {
+                        view: &frame.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: rp.clear_options.color.map_or(wgpu::LoadOp::Load, |color| {
+                                wgpu::LoadOp::Clear(color.to_wgpu())
+                            }),
+                            store: StoreOp::Store,
+                        },
+                    },
+                ));
+
+                let depth = if uses_depth {
+                    Some(wgpu::Operations {
+                        load: rp
+                            .clear_options
+                            .depth
+                            .map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
+                        store: StoreOp::Store,
+                    })
+                } else {
+                    None
+                };
+
+                let stencil = if uses_stencil {
+                    Some(wgpu::Operations {
+                        load: rp
+                            .clear_options
+                            .stencil
+                            .map_or(wgpu::LoadOp::Load, |stencil| wgpu::LoadOp::Clear(stencil)),
+                        store: StoreOp::Store,
+                    })
+                } else {
+                    None
+                };
+
+                let mut encoder = &mut frame.encoder;
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[color],
+                    depth_stencil_attachment: if depth.is_some() || stencil.is_some() {
+                        Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &self.surface.depth_texture.view,
+                            depth_ops: depth,
+                            stencil_ops: stencil,
+                        })
+                    } else {
+                        None
+                    },
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                if let Some(pip) = rp.pipeline {
+                    rpass.set_pipeline(&pip.raw);
+
+                    let mut vertex_buffers_slot = 0;
+                    let mut indexed = false;
+                    rp.buffers.iter().for_each(|buff| match buff.usage {
+                        BufferUsage::Vertex => {
+                            rpass.set_vertex_buffer(vertex_buffers_slot, buff.raw.slice(..));
+                            vertex_buffers_slot += 1;
+                        }
+                        BufferUsage::Index => {
+                            debug_assert!(!indexed, "Cannot bind more than one Index buffer");
+                            indexed = true;
+                            rpass.set_index_buffer(buff.raw.slice(..), pip.index_format)
+                        }
+                        BufferUsage::Uniform => {}
+                    });
+
+                    rp.bind_groups.iter().enumerate().for_each(|(i, bg)| {
+                        rpass.set_bind_group(i as _, &bg.raw, &[]);
+                    });
+
+                    if let Some(sr) = rp.stencil_ref {
+                        rpass.set_stencil_reference(sr as _);
+                    }
+
+                    rp.vertices.iter().for_each(|vertices| {
+                        if !vertices.range.is_empty() {
+                            let instances = 0..vertices.instances.unwrap_or(1);
+                            if indexed {
+                                rpass.draw_indexed(vertices.range.clone(), 0, instances);
+                            } else {
+                                rpass.draw(vertices.range.clone(), instances);
+                            }
+                        }
+                    });
+                }
+
+                Ok(())
+            })?;
+
+        Ok(())
+    }
+
     fn present_to_screen(&mut self) {
         match self.frame.take() {
             None => {
                 log::error!("Cannot find a frame to present.");
             }
-            Some(df) => {
-                let DrawFrame {
-                    frame,
-                    view,
-                    encoder,
-                    dirty,
-                    present_check: _,
-                } = df;
+            Some(mut df) => {
+                if df.dirty {
+                    // TODO change this: "take" is ugly as hell
+                    let offscreen = self.offscreen.take().unwrap();
+                    offscreen.present(self, &mut df).unwrap();
+                    self.offscreen = Some(offscreen);
 
-                if dirty {
+                    let DrawFrame { frame, encoder, .. } = df;
+
                     self.ctx.queue.submit(Some(encoder.finish()));
                     frame.present();
                 }

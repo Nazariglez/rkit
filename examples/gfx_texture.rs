@@ -1,6 +1,6 @@
 use rkit::gfx::{
     self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, IndexFormat,
-    RenderPipeline, Renderer, VertexFormat, VertexLayout,
+    RenderPipeline, Renderer, TextureFormat, VertexFormat, VertexLayout,
 };
 
 // language=wgsl
