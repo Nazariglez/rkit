@@ -1,8 +1,7 @@
-use crate::backend::gfx::RenderTexture;
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, Renderer, Sampler, SamplerDescriptor, Texture, TextureData,
-    TextureDescriptor,
+    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
+    SamplerDescriptor, Texture, TextureData, TextureDescriptor,
 };
 use crate::input::{KeyboardState, MouseState};
 use crate::math::UVec2;
@@ -77,4 +76,8 @@ pub(crate) trait GfxBackendImpl {
         desc: TextureDescriptor,
         data: Option<TextureData>,
     ) -> Result<Texture, String>;
+    fn create_render_texture(
+        &mut self,
+        desc: RenderTextureDescriptor,
+    ) -> Result<RenderTexture, String>;
 }

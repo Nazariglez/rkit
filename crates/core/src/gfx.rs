@@ -70,3 +70,8 @@ pub fn create_sampler<'a>() -> SamplerBuilder<'a> {
 pub fn create_texture<'a>() -> TextureBuilder<'a> {
     TextureBuilder::new()
 }
+
+#[inline]
+pub fn create_render_texture<'a>() -> RenderTextureBuilder<'a> {
+    RenderTextureBuilder::new()
+}

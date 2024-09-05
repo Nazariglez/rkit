@@ -1,5 +1,9 @@
-use super::consts::{MAX_BIND_GROUPS_PER_PIPELINE, MAX_VERTEX_BUFFERS};
-use crate::gfx::{BindGroupLayout, BlendMode, Color, IndexFormat, TextureId, VertexLayout};
+use super::consts::{
+    MAX_BIND_GROUPS_PER_PIPELINE, MAX_PIPELINE_COMPATIBLE_TEXTURES, MAX_VERTEX_BUFFERS,
+};
+use crate::gfx::{
+    BindGroupLayout, BlendMode, Color, IndexFormat, TextureFormat, TextureId, VertexLayout,
+};
 use arrayvec::ArrayVec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -26,6 +30,7 @@ pub struct RenderPipelineDescriptor<'a> {
     pub vs_entry: Option<&'a str>,
     pub fs_entry: Option<&'a str>,
     pub color_mask: ColorMask,
+    pub compatible_textures: ArrayVec<TextureFormat, MAX_PIPELINE_COMPATIBLE_TEXTURES>,
 }
 
 #[derive(Debug, Copy, Clone)]

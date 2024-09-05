@@ -3,20 +3,22 @@ use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
-use crate::gfx::consts::SURFACE_DEFAULT_DEPTH_FORMAT;
+use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
     BufferDescriptor, BufferUsage, Color, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
-    Renderer, Texture, TextureData, TextureDescriptor, TextureFormat, TextureId,
+    RenderTextureDescriptor, Renderer, Texture, TextureData, TextureDescriptor, TextureFormat,
+    TextureId,
 };
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2, Vec2};
 use arrayvec::ArrayVec;
+use glam::uvec2;
 use std::borrow::Cow;
 use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{Color as WColor, Queue, StoreOp, TextureDimension};
+use wgpu::{Color as WColor, Queue, StoreOp, TextureDimension, TextureFormat as WTextureFormat};
 use winit::raw_window_handle::HasDisplayHandle;
 
 pub(crate) struct GfxBackend {
@@ -203,7 +205,136 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn render_to(&mut self, texture: &RenderTexture, renderer: &Renderer) -> Result<(), String> {
-        todo!()
+        debug_assert!(
+            texture.texture.write,
+            "Cannot write data to a static render texture"
+        );
+        let mut encoder = self
+            .ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("RenderTexture Encoder"),
+            });
+
+        renderer
+            .passes
+            .iter()
+            .try_for_each(|rp| -> Result<(), String> {
+                let (uses_depth, uses_stencil) = rp
+                    .pipeline
+                    .map_or((false, false), |pip| (pip.uses_depth, pip.uses_stencil));
+
+                let color = Some(rp.clear_options.color.map_or_else(
+                    || wgpu::RenderPassColorAttachment {
+                        view: &texture.texture.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: StoreOp::Store,
+                        },
+                    },
+                    |color| wgpu::RenderPassColorAttachment {
+                        view: &texture.texture.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: rp.clear_options.color.map_or(wgpu::LoadOp::Load, |color| {
+                                wgpu::LoadOp::Clear(color.to_wgpu())
+                            }),
+                            store: StoreOp::Store,
+                        },
+                    },
+                ));
+
+                let depth = if uses_depth {
+                    Some(wgpu::Operations {
+                        load: rp
+                            .clear_options
+                            .depth
+                            .map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
+                        store: StoreOp::Store,
+                    })
+                } else {
+                    None
+                };
+
+                let stencil = if uses_stencil {
+                    Some(wgpu::Operations {
+                        load: rp
+                            .clear_options
+                            .stencil
+                            .map_or(wgpu::LoadOp::Load, |stencil| wgpu::LoadOp::Clear(stencil)),
+                        store: StoreOp::Store,
+                    })
+                } else {
+                    None
+                };
+
+                let depth_stencil_attachment = texture.depth_texture.as_ref().and_then(|dt| {
+                    if depth.is_some() || stencil.is_some() {
+                        Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &dt.view,
+                            depth_ops: depth,
+                            stencil_ops: stencil,
+                        })
+                    } else {
+                        None
+                    }
+                });
+
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[color],
+                    depth_stencil_attachment,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                if let Some(pip) = rp.pipeline {
+                    rpass.set_pipeline(&pip.raw);
+
+                    let mut vertex_buffers_slot = 0;
+                    let mut indexed = false;
+                    rp.buffers.iter().for_each(|buff| match buff.usage {
+                        BufferUsage::Vertex => {
+                            rpass.set_vertex_buffer(vertex_buffers_slot, buff.raw.slice(..));
+                            vertex_buffers_slot += 1;
+                        }
+                        BufferUsage::Index => {
+                            debug_assert!(!indexed, "Cannot bind more than one Index buffer");
+                            indexed = true;
+                            rpass.set_index_buffer(buff.raw.slice(..), pip.index_format)
+                        }
+                        BufferUsage::Uniform => {}
+                    });
+
+                    rp.bind_groups.iter().enumerate().for_each(|(i, bg)| {
+                        rpass.set_bind_group(i as _, &bg.raw, &[]);
+                    });
+
+                    if let Some(sr) = rp.stencil_ref {
+                        rpass.set_stencil_reference(sr as _);
+                    }
+
+                    rp.vertices.iter().for_each(|vertices| {
+                        if !vertices.range.is_empty() {
+                            let instances = 0..vertices.instances.unwrap_or(1);
+                            if indexed {
+                                rpass.draw_indexed(vertices.range.clone(), 0, instances);
+                            } else {
+                                rpass.draw(vertices.range.clone(), instances);
+                            }
+                        }
+                    });
+                }
+
+                Ok(())
+            })?;
+
+        if !renderer.passes.is_empty() {
+            self.ctx.queue.submit(Some(encoder.finish()));
+        }
+
+        Ok(())
     }
 
     fn create_render_pipeline(
@@ -283,8 +414,6 @@ impl GfxBackendImpl for GfxBackend {
                     push_constant_ranges: &[],
                 });
 
-        // TODO is this right? I don't see issues if we keep formats the same for now
-        let swapchain_format = self.surface.capabilities.formats[0];
         let (attrs, mut buffers): (Vec<_>, Vec<_>) = desc
             .vertex_layout
             .iter()
@@ -319,12 +448,35 @@ impl GfxBackendImpl for GfxBackend {
             .enumerate()
             .for_each(|(i, buff)| buff.attributes = &attrs[i]);
 
-        let swapchain_color_target: wgpu::ColorTargetState = swapchain_format.into();
-        let color_target = wgpu::ColorTargetState {
-            blend: desc.blend_mode.map(|bm| bm.to_wgpu()),
-            write_mask: desc.color_mask.to_wgpu(),
-            ..swapchain_color_target
-        };
+        // compatible formats by default for pipelines
+        let mut compatible_formats: ArrayVec<WTextureFormat, MAX_PIPELINE_COMPATIBLE_TEXTURES> =
+            ArrayVec::new();
+        desc.compatible_textures.iter().for_each(|tf| {
+            let wgpu_tf = tf.to_wgpu();
+            if compatible_formats.contains(&wgpu_tf) {
+                return;
+            }
+
+            compatible_formats.push(wgpu_tf);
+        });
+
+        if compatible_formats.is_empty() {
+            compatible_formats.push(self.surface.raw_format);
+        }
+
+        let blend = desc.blend_mode.map(|bm| bm.to_wgpu());
+        let write_mask = desc.color_mask.to_wgpu();
+        let fragment_targets = compatible_formats
+            .iter()
+            .map(|format| {
+                let swapchain_color_target: wgpu::ColorTargetState = (*format).into();
+                Some(wgpu::ColorTargetState {
+                    blend,
+                    write_mask,
+                    ..swapchain_color_target
+                })
+            })
+            .collect::<ArrayVec<_, MAX_PIPELINE_COMPATIBLE_TEXTURES>>();
 
         let raw = self
             .ctx
@@ -342,7 +494,7 @@ impl GfxBackendImpl for GfxBackend {
                     module: &shader,
                     entry_point: desc.fs_entry.unwrap_or("fs_main"),
                     compilation_options: Default::default(),
-                    targets: &[Some(color_target)],
+                    targets: fragment_targets.as_slice(),
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: desc.primitive.to_wgpu(),
@@ -482,6 +634,55 @@ impl GfxBackendImpl for GfxBackend {
     ) -> Result<Texture, String> {
         let id = resource_id(&mut self.next_resource_id);
         create_texture(id, &self.ctx.device, &self.ctx.queue, desc, data)
+    }
+
+    fn create_render_texture(
+        &mut self,
+        desc: RenderTextureDescriptor,
+    ) -> Result<RenderTexture, String> {
+        // Create the color texture
+        let texture = self.create_texture(
+            TextureDescriptor {
+                label: Some("Create RenderTexture inner color texture"),
+                format: desc.format,
+                write: true,
+            },
+            Some(TextureData {
+                bytes: &[],
+                width: desc.width,
+                height: desc.height,
+            }),
+        )?;
+
+        // Create the depth texture
+        let depth_texture = {
+            let tex = desc.depth.then(|| {
+                self.create_texture(
+                    TextureDescriptor {
+                        label: Some("Create RenderTexture inner color texture"),
+                        format: TextureFormat::Depth32Float,
+                        write: true,
+                    },
+                    Some(TextureData {
+                        bytes: &[],
+                        width: desc.width,
+                        height: desc.height,
+                    }),
+                )
+            });
+
+            match tex {
+                Some(Ok(t)) => Some(t),
+                Some(Err(e)) => return Err(e),
+                None => None,
+            }
+        };
+
+        Ok(RenderTexture {
+            id: resource_id(&mut self.next_resource_id),
+            texture,
+            depth_texture,
+        })
     }
 }
 
@@ -657,7 +858,7 @@ fn create_texture(
         id,
         raw: Arc::new(raw),
         view: Arc::new(view),
-        size: vec2(size.width as _, size.height as _),
+        size: uvec2(size.width as _, size.height as _),
         write: desc.write,
         format: desc.format,
     })

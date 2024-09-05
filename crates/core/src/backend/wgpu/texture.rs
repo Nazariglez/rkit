@@ -1,5 +1,5 @@
 use crate::gfx::{SamplerId, TextureFilter, TextureFormat, TextureId, TextureWrap};
-use crate::math::Vec2;
+use crate::math::UVec2;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use wgpu::{
@@ -11,7 +11,7 @@ pub struct Texture {
     pub(crate) id: TextureId,
     pub(crate) raw: Arc<RawTexture>,
     pub(crate) view: Arc<TextureView>,
-    pub(crate) size: Vec2,
+    pub(crate) size: UVec2,
     pub(crate) write: bool,
     pub(crate) format: TextureFormat,
 }
@@ -21,15 +21,15 @@ impl Texture {
         self.id
     }
 
-    pub fn size(&self) -> Vec2 {
+    pub fn size(&self) -> UVec2 {
         self.size
     }
 
-    pub fn width(&self) -> f32 {
+    pub fn width(&self) -> u32 {
         self.size.x
     }
 
-    pub fn height(&self) -> f32 {
+    pub fn height(&self) -> u32 {
         self.size.y
     }
 
@@ -72,7 +72,7 @@ impl TextureFormat {
             TextureFormat::Rgba8UInt => WTextureFormat::Rgba8Uint,
             TextureFormat::Rgba8Int => WTextureFormat::Rgba8Sint,
             TextureFormat::Bgra8UNorm => WTextureFormat::Bgra8Unorm,
-
+            // TextureFormat::Bgra8UNormSrgb => WTextureFormat::Bgra8UnormSrgb,
             TextureFormat::R16UNorm => WTextureFormat::R16Unorm,
             TextureFormat::R16INorm => WTextureFormat::R16Snorm,
             TextureFormat::R16UInt => WTextureFormat::R16Uint,

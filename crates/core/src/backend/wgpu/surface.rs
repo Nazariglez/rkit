@@ -5,6 +5,7 @@ use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
     Device, Surface as RawSurface, SurfaceCapabilities, SurfaceConfiguration, SurfaceTexture,
+    TextureFormat as RawTextureFormat,
 };
 use winit::raw_window_handle::HasWindowHandle;
 
@@ -14,6 +15,7 @@ pub(crate) struct Surface {
     pub config: SurfaceConfiguration,
     pub capabilities: Arc<SurfaceCapabilities>,
     pub depth_texture: Texture,
+    pub raw_format: RawTextureFormat,
 }
 
 impl Surface {
@@ -45,9 +47,18 @@ impl Surface {
             y: height,
         } = win_physical_size;
         let capabilities = surface.get_capabilities(&ctx.adapter);
+
+        let raw_format = RawTextureFormat::Rgba8UnormSrgb;
+        let is_compatible_format = capabilities.formats.contains(&raw_format);
+
+        println!("{:?}", capabilities.formats);
+        // if !is_compatible_format {
+        //     return Err(format!("The Device does not support surfaces with {:?} format.", raw_format));
+        // }
+
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: capabilities.formats[0],
+            format: raw_format,
             width,
             height,
             present_mode: if vsync {
@@ -62,9 +73,12 @@ impl Surface {
 
         surface.configure(&ctx.device, &config);
 
-        println!(
-            "Surface size({:?} {:?}) depth_texture({:?})",
-            config.width, config.height, depth_texture.size
+        log::info!(
+            "Surface size({:?} {:?}), depth_texture({:?}), format({:?})",
+            config.width,
+            config.height,
+            depth_texture.size,
+            raw_format
         );
 
         Ok(Self {
@@ -72,6 +86,7 @@ impl Surface {
             config,
             capabilities: Arc::new(capabilities),
             depth_texture,
+            raw_format,
         })
     }
 

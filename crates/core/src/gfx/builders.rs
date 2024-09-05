@@ -2,9 +2,9 @@ use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef, BlendMode,
     Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, CullMode, DepthStencil,
-    IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, Sampler, SamplerDescriptor,
-    Stencil, Texture, TextureData, TextureDescriptor, TextureFilter, TextureFormat, TextureWrap,
-    VertexLayout,
+    IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
+    RenderTextureDescriptor, Sampler, SamplerDescriptor, Stencil, Texture, TextureData,
+    TextureDescriptor, TextureFilter, TextureFormat, TextureWrap, VertexLayout,
 };
 use image::EncodableLayout;
 
@@ -81,6 +81,11 @@ impl<'a> RenderPipelineBuilder<'a> {
 
     pub fn with_color_mask(mut self, mask: ColorMask) -> Self {
         self.desc.color_mask = mask;
+        self
+    }
+
+    pub fn with_compatible_texture(mut self, format: TextureFormat) -> Self {
+        self.desc.compatible_textures.push(format);
         self
     }
 
@@ -320,5 +325,46 @@ impl<'a> TextureBuilder<'a> {
                 }),
             ),
         }
+    }
+}
+
+pub struct RenderTextureBuilder<'a> {
+    desc: RenderTextureDescriptor<'a>,
+}
+
+impl<'a> RenderTextureBuilder<'a> {
+    pub fn new() -> Self {
+        let desc = RenderTextureDescriptor::default();
+        Self { desc }
+    }
+
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.desc.label = Some(label);
+        self
+    }
+
+    pub fn with_depth(mut self, enabled: bool) -> Self {
+        self.desc.depth = enabled;
+        self
+    }
+
+    pub fn with_size(mut self, width: u32, height: u32) -> Self {
+        self.desc.width = width;
+        self.desc.height = height;
+        self
+    }
+
+    pub fn build(self) -> Result<RenderTexture, String> {
+        let Self { desc } = self;
+
+        let no_size = self.desc.width == 0 || self.desc.height == 0;
+        if no_size {
+            return Err(format!(
+                "RenderTexture size cannot be zero 'width={}', 'height={}'",
+                self.desc.width, self.desc.height
+            ));
+        }
+
+        get_mut_backend().gfx().create_render_texture(desc)
     }
 }

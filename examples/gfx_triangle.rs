@@ -28,28 +28,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-struct AppState {
+struct State {
     pip: RenderPipeline,
     vbo: Buffer,
 }
 
-fn main() {
-    rkit::init_with(AppState::new)
-        .on_update(update)
-        .run()
-        .unwrap()
-}
-
-impl AppState {
-    fn new() -> Self {
+impl State {
+    fn new() -> Result<Self, String> {
         let pip = gfx::create_render_pipeline(SHADER)
             .with_vertex_layout(
                 VertexLayout::new()
                     .with_attr(0, VertexFormat::Float32x2)
                     .with_attr(1, VertexFormat::Float32x3),
             )
-            .build()
-            .unwrap();
+            .build()?;
 
         #[rustfmt::skip]
         let vertices: &[f32] = &[
@@ -58,12 +50,19 @@ impl AppState {
             1.0, 0.0,   0.0, 0.0, 1.0,
         ];
 
-        let vbo = gfx::create_vertex_buffer(vertices).build().unwrap();
-        AppState { pip, vbo }
+        let vbo = gfx::create_vertex_buffer(vertices).build()?;
+        Ok(Self { pip, vbo })
     }
 }
 
-fn update(s: &mut AppState) {
+fn main() {
+    rkit::init_with(|| State::new().unwrap())
+        .on_update(update)
+        .run()
+        .unwrap()
+}
+
+fn update(s: &mut State) {
     let mut renderer = Renderer::new();
     renderer
         .begin_pass()
