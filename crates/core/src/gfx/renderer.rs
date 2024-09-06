@@ -1,22 +1,23 @@
 use crate::backend::gfx::BindGroup;
+use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
 use crate::gfx::consts::{
     MAX_BIND_GROUPS_PER_PIPELINE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE, MAX_VERTEX_BUFFERS,
 };
 use crate::gfx::pipeline::ClearOptions;
-use crate::gfx::{Buffer, Color, RenderPipeline};
+use crate::gfx::{Buffer, Color, RenderPipeline, RenderTexture};
 use arrayvec::ArrayVec;
 use glam::{vec2, Vec2};
 use std::ops::Range;
 
 const MAX_BUFFERS: usize = MAX_VERTEX_BUFFERS + MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE + 1;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct RPassVertices {
     pub(crate) range: Range<u32>,
     pub(crate) instances: Option<u32>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct RenderPass<'a> {
     pub(crate) size: Option<Vec2>,
     pub(crate) pipeline: Option<&'a RenderPipeline>,
@@ -89,7 +90,7 @@ impl<'a> RenderPass<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Renderer<'a> {
     pub(crate) passes: Vec<RenderPass<'a>>,
 }
@@ -106,5 +107,22 @@ impl<'a> Renderer<'a> {
     pub fn begin_pass(&mut self) -> &mut RenderPass<'a> {
         self.passes.push(RenderPass::default());
         self.passes.last_mut().unwrap()
+    }
+}
+
+pub trait AsRenderer {
+    fn render(&self, target: Option<&RenderTexture>) -> Result<(), String>;
+
+    fn flush(&self, renderer: &Renderer, target: Option<&RenderTexture>) -> Result<(), String> {
+        match target {
+            None => get_mut_backend().gfx().render(renderer),
+            Some(rt) => get_mut_backend().gfx().render_to(rt, renderer),
+        }
+    }
+}
+
+impl<'a> AsRenderer for Renderer<'a> {
+    fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
+        self.flush(self, target)
     }
 }

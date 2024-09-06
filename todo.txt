@@ -1,8 +1,14 @@
-* time: fps(), delta_time(), elapsed_time()?
-* rand: set_seed(), current_seed(), etc...
-* add teesting for keyboards and mouse inputs (down state is important because is never cleaned)
-* hide behind features?: mouse, keyboard, gamepad, ime/chars, etc...
-* change is_down to is_pressed, and is_pressed to is_just_pressed, same for is_released
-* SDL backend (sdl2? sdl3 seems to be a wip and pretty behind in the rust bindings)
-* gamepad for wasm32, (check gamepad current impl with different gamepads)
-* WebGL compatility seems to not be working... adapter always return None
+- todo:
+    * gamepad for wasm32
+    * input wasm32
+
+- questions:
+    * is it better `mouse::is_btn_pressed` or `is_mouse_btn_pressed`, `is_window_fullscreen` or `window::is_fullscreen`, etc..
+    * do we need an sdl backend, sdl2 or sdl3?
+    * do we want to hide keyboard, mouse and ime under features?
+
+- know issues:
+    * webgl not working
+    * stencil must be done in one pass
+    * resize doesn't update the surface/offscreen
+    * gfx_render_texture looks a bit weird when textures overlap, like darker colors?

@@ -1,0 +1,15 @@
+[package]
+name = "draw"
+edition = "2021"
+
+[dependencies]
+core.workspace = true
+utils.workspace = true
+
+log.workspace = true
+smallvec.workspace = true
+once_cell.workspace = true
+atomic_refcell.workspace = true
+heapless.workspace = true
+
+internment = "0.8.4"

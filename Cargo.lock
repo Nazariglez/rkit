@@ -231,6 +231,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "borsh"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6362ed55def622cddc70a4746a68554d7b687713770de539e59a739b249f8ed"
+dependencies = [
+ "cfg_aliases 0.2.1",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -447,7 +456,7 @@ dependencies = [
  "pollster",
  "raw-window-handle",
  "smallvec 2.0.0-alpha.7",
- "smol_str",
+ "smol_str 0.3.1",
  "strum",
  "strum_macros",
  "utils",
@@ -593,6 +602,20 @@ name = "dpi"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f25c0e292a7ca6d6498557ff1df68f32c99850012b6ea401cf8daf771f22ff53"
+
+[[package]]
+name = "draw"
+version = "0.0.0"
+dependencies = [
+ "atomic_refcell",
+ "core",
+ "heapless",
+ "internment",
+ "log",
+ "once_cell",
+ "smallvec 2.0.0-alpha.7",
+ "utils",
+]
 
 [[package]]
 name = "either"
@@ -979,6 +1002,15 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "internment"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78d408a22389be01e56d8083e6a53bfd6226e392d2bd9661196a426be36e165e"
+dependencies = [
+ "hashbrown",
 ]
 
 [[package]]
@@ -1782,6 +1814,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "core",
+ "draw",
  "fastrand",
  "log",
  "utils",
@@ -1939,6 +1972,16 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "smol_str"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66eaf762c5af19db3108300515c8aa7a50efc90ff745f4c62288052ebf9fdd25"
+dependencies = [
+ "borsh",
  "serde",
 ]
 
@@ -2833,7 +2876,7 @@ dependencies = [
  "rustix",
  "sctk-adwaita",
  "smithay-client-toolkit",
- "smol_str",
+ "smol_str 0.2.2",
  "tracing",
  "unicode-segmentation",
  "wasm-bindgen",

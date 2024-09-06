@@ -1,0 +1,203 @@
+use super::{Pixel, Triangle};
+use crate::m2d::painter_2d::DrawPipeline;
+use core::app::window_size;
+use core::gfx::{AsRenderer, Color, RenderPipeline, RenderTexture, Renderer};
+use core::math::{Mat3, Mat4, Vec2};
+use smallvec::SmallVec;
+use std::ops::{Deref, DerefMut};
+
+// TODO Cached elements is a must
+// TODO Camera2D
+
+// Quads(1000) * Vertices(6)(2f32 per vert) * f32(4bytes) = 48kbs
+// Quads(1000) * Indices(6) * u32(4bytes) = 24kbs
+// I think that windows, and web have 1MB of default stack size, so this should be fine for now
+const STACK_ALLOCATED_QUADS: usize = 1000;
+
+struct BatchInfo {
+    start_idx: usize,
+    end_idx: usize,
+    pipeline: DrawPipeline,
+}
+
+impl Clone for BatchInfo {
+    fn clone(&self) -> Self {
+        Self {
+            start_idx: self.start_idx,
+            end_idx: self.end_idx,
+            pipeline: self.pipeline.clone(),
+        }
+    }
+}
+
+impl BatchInfo {
+    fn is_compatible(&self, other: &Self) -> bool {
+        if self.pipeline != other.pipeline {
+            return false;
+        }
+
+        // TODO
+        true
+    }
+}
+
+pub struct Drawing<'a, T>
+where
+    T: Element2D,
+{
+    inner: Option<T>,
+    draw: &'a mut Draw2D,
+}
+
+impl<'a, T> Drawing<'a, T>
+where
+    T: Element2D,
+{
+    pub fn new(draw: &'a mut Draw2D, inner: T) -> Self {
+        Self {
+            inner: Some(inner),
+            draw,
+        }
+    }
+
+    pub fn into_inner(mut self) -> T {
+        self.inner.take().unwrap()
+    }
+}
+
+impl<T> Drop for Drawing<'_, T>
+where
+    T: Element2D,
+{
+    fn drop(&mut self) {
+        if let Some(inner) = self.inner.take() {
+            self.draw.add_element(&inner);
+        }
+    }
+}
+
+impl<T> Deref for Drawing<'_, T>
+where
+    T: Element2D,
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref().unwrap()
+    }
+}
+
+impl<T> DerefMut for Drawing<'_, T>
+where
+    T: Element2D,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner.as_mut().unwrap()
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct Draw2D {
+    projection: Mat4,
+    clear_color: Option<Color>,
+    alpha: f32,
+    batches: SmallVec<BatchInfo, STACK_ALLOCATED_QUADS>,
+    vertices: SmallVec<f32, { STACK_ALLOCATED_QUADS * 12 }>,
+    indices: SmallVec<u32, { STACK_ALLOCATED_QUADS * 6 }>,
+}
+
+impl Draw2D {
+    pub fn new() -> Self {
+        let size = window_size();
+        let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
+        Self {
+            projection,
+            ..Default::default()
+        }
+    }
+
+    pub fn clear(&mut self, color: Color) {
+        self.clear_color = Some(color);
+    }
+
+    pub fn set_alpha(&mut self, alpha: f32) {
+        self.alpha = alpha;
+    }
+
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+
+    pub fn add_element<T>(&mut self, element: &T)
+    where
+        T: Element2D,
+    {
+        element.process(self);
+    }
+
+    pub fn add_to_batch<'a>(&'a mut self, info: DrawingInfo<'a>) {
+        let start_idx = self.indices.len();
+        let end_idx = start_idx + info.indices.len();
+        let pipeline = info.pipeline.clone();
+        let batch = BatchInfo {
+            start_idx,
+            end_idx,
+            pipeline,
+        };
+
+        let new_batch = match self.batches.last() {
+            None => true,
+            Some(last) => last.is_compatible(&batch),
+        };
+
+        if new_batch {
+            self.batches.push(batch);
+        }
+    }
+
+    // - Transform TODO
+    pub fn projection(&self) -> Mat4 {
+        Mat4::IDENTITY
+    }
+
+    pub fn push_transform(&mut self) {}
+
+    pub fn set_matrix(&mut self) {}
+
+    pub fn matrix(&self) -> Mat3 {
+        Mat3::IDENTITY
+    }
+
+    pub fn pop_transform(&mut self) {}
+
+    // - included methods
+    pub fn pixel(&mut self, pos: Vec2) -> Drawing<'_, Pixel> {
+        Drawing::new(self, Pixel::new(pos))
+    }
+
+    pub fn triangle(&mut self, p1: Vec2, p2: Vec2, p3: Vec2) -> Drawing<'_, Triangle> {
+        Drawing::new(self, Triangle::new(p1, p2, p3))
+    }
+}
+
+pub struct DrawingInfo<'a> {
+    pub pipeline: DrawPipeline,
+    pub vertices: &'a [f32],
+    pub indices: &'a [u32],
+}
+
+pub trait Element2D {
+    fn process(&self, draw: &mut Draw2D);
+}
+
+impl AsRenderer for Draw2D {
+    fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
+        let mut renderer = Renderer::new();
+        let mut pass = renderer.begin_pass();
+        if let Some(color) = self.clear_color {
+            pass.clear_color(color);
+        }
+
+        self.flush(&renderer, target)
+    }
+}

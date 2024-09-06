@@ -22,13 +22,19 @@ pub use texture::*;
 
 // - Gfx
 #[inline]
-pub fn render_to_frame(renderer: &Renderer) -> Result<(), String> {
-    get_mut_backend().gfx().render(renderer)
+pub fn render_to_frame<R>(renderer: &R) -> Result<(), String>
+where
+    R: AsRenderer,
+{
+    renderer.render(None)
 }
 
 #[inline]
-pub fn render_to_texture(texture: &RenderTexture, renderer: &Renderer) -> Result<(), String> {
-    get_mut_backend().gfx().render_to(texture, renderer)
+pub fn render_to_texture<R>(texture: &RenderTexture, renderer: &R) -> Result<(), String>
+where
+    R: AsRenderer,
+{
+    renderer.render(Some(texture))
 }
 
 #[inline]
