@@ -2,13 +2,18 @@ use crate::gfx::{
     BufferId, BufferUsage, CompareMode, CullMode, IndexFormat, Primitive, StencilAction,
     VertexFormat, VertexStepMode,
 };
+use atomic_refcell::AtomicRefCell;
 use std::sync::Arc;
 use wgpu::{Buffer as RawBuffer, BufferUsages, StencilOperation};
 
 #[derive(Clone)]
 pub struct Buffer {
     pub(crate) id: BufferId,
-    pub(crate) raw: Arc<RawBuffer>,
+    // NOTE: this ugly double Arc is because to create the raw binding we need a reference
+    // to Buffer that cannot be under a borrow because lifetime issues, and the atomic
+    // refcell is necessary to update the buffer when the size is too small on write
+    // operations if the performance is not acceptable we can think about unsafe I guess
+    pub(crate) raw: Arc<AtomicRefCell<Arc<RawBuffer>>>,
     pub(crate) usage: BufferUsage,
     pub(crate) write: bool,
     pub(crate) size: usize,

@@ -1,6 +1,9 @@
-use crate::create_pixel_pipeline;
+use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
+use arrayvec::ArrayVec;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::RenderPipeline;
+use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
+use core::gfx::{self, Buffer, RenderPass};
+use core::math::Mat4;
 use internment::Intern;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -23,6 +26,14 @@ impl DrawPipeline {
             DrawPipeline::Custom(inner) => inner,
         }
     }
+
+    pub(crate) fn id_intern(&self) -> Intern<str> {
+        match self {
+            DrawPipeline::Pixel => "gk_pixel".into(),
+            DrawPipeline::Shapes => "gk_shapes".into(),
+            DrawPipeline::Custom(inner) => *inner,
+        }
+    }
 }
 
 impl From<&str> for DrawPipeline {
@@ -32,29 +43,60 @@ impl From<&str> for DrawPipeline {
 }
 
 pub(crate) struct Painter2D {
-    pipelines: HashMap<Intern<str>, RenderPipeline>,
+    pub pipelines: HashMap<Intern<str>, PipelineContext>,
+    pub ubo_transform: Buffer,
+    pub vbo: Buffer,
+    pub ebo: Buffer,
 }
 
 impl Default for Painter2D {
     fn default() -> Self {
-        // Initialize pipelines
+        let ubo = gfx::create_uniform_buffer(Mat4::IDENTITY.as_ref())
+            .with_label("Painter2D UBO Transform")
+            .with_write_flag(true)
+            .build()
+            .unwrap();
+
+        let vbo = gfx::create_vertex_buffer(&[] as &[f32])
+            .with_label("Painter2D VBO")
+            .with_write_flag(true)
+            .build()
+            .unwrap();
+
+        let ebo = gfx::create_index_buffer(&[] as &[u32])
+            .with_label("Painter2D EBO")
+            .with_write_flag(true)
+            .build()
+            .unwrap();
+
         let mut painter = Self {
             pipelines: Default::default(),
+            ubo_transform: ubo,
+            vbo,
+            ebo,
         };
 
-        painter.add_pipeline(DrawPipeline::Pixel.id(), create_pixel_pipeline().unwrap());
+        // painter.add_pipeline(DrawPipeline::Pixel.id(), create_pixel_pipeline_ctx().unwrap());
+        painter.add_pipeline(
+            DrawPipeline::Shapes.id(),
+            create_shapes_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+        );
 
         painter
     }
 }
 
 impl Painter2D {
-    pub fn add_pipeline(&mut self, id: &str, pip: RenderPipeline) -> Option<RenderPipeline> {
+    pub fn add_pipeline(&mut self, id: &str, pip: PipelineContext) -> Option<PipelineContext> {
         self.pipelines.insert(id.into(), pip)
     }
 
-    pub fn remove_pipeline(&mut self, id: &str) -> Option<RenderPipeline> {
+    pub fn remove_pipeline(&mut self, id: &str) -> Option<PipelineContext> {
         self.pipelines.remove(&id.into())
+    }
+
+    pub fn ctx(&self, id: &Intern<str>) -> Option<&PipelineContext> {
+        self.pipelines.get(id)
     }
 }
 

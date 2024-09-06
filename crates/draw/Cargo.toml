@@ -11,5 +11,6 @@ smallvec.workspace = true
 once_cell.workspace = true
 atomic_refcell.workspace = true
 heapless.workspace = true
+arrayvec.workspace = true
 
 internment = "0.8.4"

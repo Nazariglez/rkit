@@ -14,14 +14,15 @@ use crate::gfx::{
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2, Vec2};
 use arrayvec::ArrayVec;
+use atomic_refcell::AtomicRefCell;
 use glam::uvec2;
 use std::borrow::Cow;
 use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    Backend, Color as WColor, Queue, RenderPipeline as WRenderPipeline, StoreOp, TextureDimension,
-    TextureFormat as WTextureFormat,
+    Backend, BufferBinding, BufferDescriptor as WBufferDescriptor, Color as WColor, Queue,
+    RenderPipeline as WRenderPipeline, StoreOp, TextureDimension, TextureFormat as WTextureFormat,
 };
 use winit::raw_window_handle::HasDisplayHandle;
 
@@ -196,13 +197,16 @@ impl GfxBackendImpl for GfxBackend {
                     let mut indexed = false;
                     rp.buffers.iter().for_each(|buff| match buff.usage {
                         BufferUsage::Vertex => {
-                            rpass.set_vertex_buffer(vertex_buffers_slot, buff.raw.slice(..));
+                            rpass.set_vertex_buffer(
+                                vertex_buffers_slot,
+                                buff.raw.borrow().slice(..),
+                            );
                             vertex_buffers_slot += 1;
                         }
                         BufferUsage::Index => {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
-                            rpass.set_index_buffer(buff.raw.slice(..), pip.index_format)
+                            rpass.set_index_buffer(buff.raw.borrow().slice(..), pip.index_format)
                         }
                         BufferUsage::Uniform => {}
                     });
@@ -432,18 +436,27 @@ impl GfxBackendImpl for GfxBackend {
             usage |= wgpu::BufferUsages::COPY_DST;
         }
 
-        let raw = self.ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: desc.label,
-            contents: desc.content,
-            usage,
-        });
+        let raw = if desc.content.is_empty() {
+            self.ctx.device.create_buffer(&WBufferDescriptor {
+                label: desc.label,
+                size: 1024,
+                usage,
+                mapped_at_creation: false,
+            })
+        } else {
+            self.ctx.device.create_buffer_init(&BufferInitDescriptor {
+                label: desc.label,
+                contents: desc.content,
+                usage,
+            })
+        };
 
         let usage = desc.usage;
         let size = desc.content.len();
 
         Ok(Buffer {
             id: resource_id(&mut self.next_resource_id),
-            raw: Arc::new(raw),
+            raw: Arc::new(AtomicRefCell::new(Arc::new(raw))),
             usage,
             write: desc.write,
             size,
@@ -451,27 +464,35 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String> {
-        let mut entries: ArrayVec<_, MAX_BINDING_ENTRIES> = Default::default();
-        desc.entry.iter().for_each(|entry| match entry {
-            BindGroupEntry::Texture { location, texture } => {
-                entries.push(wgpu::BindGroupEntry {
+        // borrow checker hack to reference Arc<Buffer>
+        let buffers: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
+            .entry
+            .iter()
+            .map(|entry| match entry {
+                BindGroupEntry::Uniform { buffer, .. } => Some(buffer.raw.borrow().clone()),
+                _ => None,
+            })
+            .collect();
+
+        let entries: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
+            .entry
+            .iter()
+            .enumerate()
+            .map(|(idx, entry)| match entry {
+                BindGroupEntry::Texture { location, texture } => wgpu::BindGroupEntry {
                     binding: *location,
                     resource: wgpu::BindingResource::TextureView(&texture.view),
-                });
-            }
-            BindGroupEntry::Uniform { location, buffer } => {
-                entries.push(wgpu::BindGroupEntry {
+                },
+                BindGroupEntry::Uniform { location, buffer } => wgpu::BindGroupEntry {
                     binding: *location,
-                    resource: buffer.raw.as_entire_binding(),
-                });
-            }
-            BindGroupEntry::Sampler { location, sampler } => {
-                entries.push(wgpu::BindGroupEntry {
+                    resource: buffers[idx].as_ref().unwrap().as_entire_binding(),
+                },
+                BindGroupEntry::Sampler { location, sampler } => wgpu::BindGroupEntry {
                     binding: *location,
                     resource: wgpu::BindingResource::Sampler(&sampler.raw),
-                });
-            }
-        });
+                },
+            })
+            .collect();
         let raw = self
             .ctx
             .device
@@ -498,7 +519,9 @@ impl GfxBackendImpl for GfxBackend {
             buffer.len(),
             offset as usize + data.len()
         );
-        self.ctx.queue.write_buffer(&buffer.raw, offset as _, data);
+        self.ctx
+            .queue
+            .write_buffer(&buffer.raw.borrow(), offset as _, data);
         Ok(())
     }
 
@@ -731,13 +754,16 @@ impl GfxBackend {
                     let mut indexed = false;
                     rp.buffers.iter().for_each(|buff| match buff.usage {
                         BufferUsage::Vertex => {
-                            rpass.set_vertex_buffer(vertex_buffers_slot, buff.raw.slice(..));
+                            rpass.set_vertex_buffer(
+                                vertex_buffers_slot,
+                                buff.raw.borrow().slice(..),
+                            );
                             vertex_buffers_slot += 1;
                         }
                         BufferUsage::Index => {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
-                            rpass.set_index_buffer(buff.raw.slice(..), pip.index_format)
+                            rpass.set_index_buffer(buff.raw.borrow().slice(..), pip.index_format)
                         }
                         BufferUsage::Uniform => {}
                     });

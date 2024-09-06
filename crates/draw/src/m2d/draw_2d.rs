@@ -1,8 +1,13 @@
-use super::{Pixel, Triangle};
+use super::{get_2d_painter, Pixel, Triangle};
 use crate::m2d::painter_2d::DrawPipeline;
+use arrayvec::ArrayVec;
 use core::app::window_size;
-use core::gfx::{AsRenderer, Color, RenderPipeline, RenderTexture, Renderer};
+use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
+use core::gfx::{
+    self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer,
+};
 use core::math::{Mat3, Mat4, Vec2};
+use internment::Intern;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
 
@@ -13,6 +18,12 @@ use std::ops::{Deref, DerefMut};
 // Quads(1000) * Indices(6) * u32(4bytes) = 24kbs
 // I think that windows, and web have 1MB of default stack size, so this should be fine for now
 const STACK_ALLOCATED_QUADS: usize = 1000;
+
+#[derive(Clone)]
+pub struct PipelineContext {
+    pub pipeline: RenderPipeline,
+    pub groups: ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
+}
 
 struct BatchInfo {
     start_idx: usize,
@@ -153,6 +164,12 @@ impl Draw2D {
         if new_batch {
             self.batches.push(batch);
         }
+
+        let current = self.batches.last_mut().unwrap();
+        current.end_idx = end_idx;
+
+        self.vertices.extend_from_slice(info.vertices);
+        self.indices.extend_from_slice(info.indices);
     }
 
     // - Transform TODO
@@ -192,11 +209,55 @@ pub trait Element2D {
 
 impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
+        let painter = get_2d_painter();
+        let ubo_transform = &painter.ubo_transform;
+        let vbo = &painter.vbo;
+        let ebo = &painter.ebo;
+
+        // TODO check dirty transform flag to avoid update all the time this
+        gfx::write_buffer(ubo_transform)
+            .with_data(self.projection.as_ref())
+            .build()
+            .unwrap();
+
         let mut renderer = Renderer::new();
         let mut pass = renderer.begin_pass();
         if let Some(color) = self.clear_color {
             pass.clear_color(color);
         }
+
+        self.batches
+            .iter()
+            .for_each(|b| match painter.ctx(&b.pipeline.id_intern()) {
+                Some(ctx) => {
+                    gfx::write_buffer(vbo)
+                        .with_data(&self.vertices)
+                        .build()
+                        .unwrap();
+
+                    gfx::write_buffer(ebo)
+                        .with_data(&self.indices)
+                        .build()
+                        .unwrap();
+
+                    let binds: ArrayVec<_, MAX_BIND_GROUPS_PER_PIPELINE> =
+                        ctx.groups.iter().collect();
+                    pass.pipeline(&ctx.pipeline)
+                        .buffers(&[&vbo, &ebo])
+                        .bindings(&binds);
+
+                    pass.draw(0..(self.indices.len() as u32));
+                }
+                None => {
+                    log::error!(
+                        "There is no Pipeline in the Draw2D ctx for '{}'",
+                        b.pipeline.id()
+                    );
+                    if cfg!(debug_assertions) {
+                        panic!("Missing 2D Pipeline '{}'", b.pipeline.id());
+                    }
+                }
+            });
 
         self.flush(&renderer, target)
     }
