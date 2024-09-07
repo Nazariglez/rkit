@@ -15,3 +15,4 @@ arrayvec.workspace = true
 rayon.workspace = true
 
 internment = "0.8.4"
+lyon = "1.0.1"

@@ -239,7 +239,7 @@ impl From<Color> for LinearColor {
         Self {
             r: gamma_to_linear(c.r),
             g: gamma_to_linear(c.g),
-            b: gamma_to_linear(c.g),
+            b: gamma_to_linear(c.b),
             a: c.a,
         }
     }

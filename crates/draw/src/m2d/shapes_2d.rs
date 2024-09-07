@@ -1,6 +1,7 @@
 use super::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext};
 use core::gfx::{self, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
 use core::math::{Mat3, Vec2};
+use smallvec::SmallVec;
 
 const VERTICES_OFFSET: usize = 6; // pos(f32x2) + color(f32x4)
 
@@ -62,11 +63,26 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     })
 }
 
+// NOTE: The idea of the hint is to avoid allocations on the heap for most common shapes
+// there are going to be case of complex shapes, or with a lot of lines, or with
+// rounded corners where is going to need more space, so is going to be heap allocated
+// but the alternative is to alloc everything on the heap, and I am trying to avoid it
+// because this will be most likely called once per frame.
+//
+// Usually we will use for triangulating something along the lines of if n>=3 -> (n-2),
+// however, we need to think about rounded corners, giving them some margin, so I am
+// trying with 5 triangles per point, and we can adjust in the future
+// pub struct Shape<const VERTICES_HINT: usize, const INDICES_HINT: usize> {
+//     vertices: SmallVec<f32, VERTICES_HINT>,
+//     indices: SmallVec<u32, INDICES_HINT>,
+// }
+
 pub struct Triangle {
     points: [Vec2; 3],
     color: Color,
     alpha: f32,
     transform: Mat3,
+    // cached: Option<Shape<6, 3>>
 }
 
 impl Triangle {
@@ -76,6 +92,7 @@ impl Triangle {
             color: Color::WHITE,
             alpha: 1.0,
             transform: Mat3::IDENTITY,
+            // cached: None,
         }
     }
 

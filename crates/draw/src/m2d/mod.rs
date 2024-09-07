@@ -1,4 +1,5 @@
 mod draw_2d;
+mod images_2d;
 mod painter_2d;
 mod pixel;
 mod shapes_2d;
