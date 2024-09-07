@@ -614,6 +614,7 @@ dependencies = [
  "internment",
  "log",
  "once_cell",
+ "rayon",
  "smallvec 2.0.0-alpha.7",
  "utils",
 ]

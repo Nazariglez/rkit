@@ -464,7 +464,7 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String> {
-        // borrow checker hack to reference Arc<Buffer>
+        // NOTE: borrow checker hack to reference Arc<Buffer> later
         let buffers: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
             .entry
             .iter()
@@ -483,8 +483,13 @@ impl GfxBackendImpl for GfxBackend {
                     binding: *location,
                     resource: wgpu::BindingResource::TextureView(&texture.view),
                 },
-                BindGroupEntry::Uniform { location, buffer } => wgpu::BindGroupEntry {
+                BindGroupEntry::Uniform {
+                    location,
+                    buffer: _,
+                } => wgpu::BindGroupEntry {
                     binding: *location,
+                    // NOTE: hacky as hell... this is made to please the borrow checker,
+                    // we need to reference a buffer who lives outside of this loop
                     resource: buffers[idx].as_ref().unwrap().as_entire_binding(),
                 },
                 BindGroupEntry::Sampler { location, sampler } => wgpu::BindGroupEntry {
@@ -493,6 +498,7 @@ impl GfxBackendImpl for GfxBackend {
                 },
             })
             .collect();
+
         let raw = self
             .ctx
             .device

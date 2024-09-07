@@ -11,6 +11,10 @@ use std::collections::HashMap;
 pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =
     Lazy::new(|| AtomicRefCell::new(Painter2D::default()));
 
+// hackish to allow the Lazy<T>, this is fine because wasm32 is not multithreading
+unsafe impl Sync for Painter2D {}
+unsafe impl Send for Painter2D {}
+
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum DrawPipeline {
     Pixel,

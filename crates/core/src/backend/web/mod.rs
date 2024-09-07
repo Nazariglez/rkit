@@ -12,7 +12,7 @@ use crate::builder::{AppBuilder, CleanupCb, InitCb, UpdateCb};
 use crate::gfx::GfxBackend;
 use crate::input::{KeyboardState, MouseState};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use glam::Vec2;
+use glam::{vec2, Vec2};
 use once_cell::sync::Lazy;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -111,7 +111,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
         todo!()
     }
     fn size(&self) -> Vec2 {
-        todo!()
+        self.win.as_ref().map_or(Vec2::ZERO, |w| w.size())
     }
     fn set_size(&mut self, size: Vec2) {
         todo!()

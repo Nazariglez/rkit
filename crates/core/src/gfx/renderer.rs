@@ -69,7 +69,15 @@ impl<'a> RenderPass<'a> {
     }
 
     pub fn bindings(&mut self, groups: &[&'a BindGroup]) -> &mut Self {
-        self.bind_groups.try_extend_from_slice(groups).unwrap();
+        self.bind_groups
+            .try_extend_from_slice(groups)
+            .map_err(|_| {
+                format!(
+                    "Exceeded the maximum number ({}) of supported BindGroups.",
+                    self.bind_groups.capacity()
+                )
+            })
+            .unwrap();
         self
     }
 

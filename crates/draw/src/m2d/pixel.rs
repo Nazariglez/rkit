@@ -1,7 +1,7 @@
 use super::draw_2d::Element2D;
 use crate::{Draw2D, DrawPipeline, DrawingInfo};
 use core::gfx::{Color, RenderPipeline};
-use core::math::Vec2;
+use core::math::{Mat3, Vec2};
 
 pub fn create_pixel_pipeline() -> Result<RenderPipeline, String> {
     todo!()
@@ -33,6 +33,8 @@ impl Element2D for Pixel {
             pipeline: DrawPipeline::Pixel,
             vertices: &[self.pos.x, self.pos.y],
             indices: &[0],
+            offset: 2,
+            transform: Mat3::IDENTITY,
         })
     }
 }

@@ -1,6 +1,8 @@
 use super::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext};
 use core::gfx::{self, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
-use core::math::Vec2;
+use core::math::{Mat3, Vec2};
+
+const VERTICES_OFFSET: usize = 6; // pos(f32x2) + color(f32x4)
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -63,6 +65,8 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
 pub struct Triangle {
     points: [Vec2; 3],
     color: Color,
+    alpha: f32,
+    transform: Mat3,
 }
 
 impl Triangle {
@@ -70,10 +74,12 @@ impl Triangle {
         Self {
             points: [p1, p2, p3],
             color: Color::WHITE,
+            alpha: 1.0,
+            transform: Mat3::IDENTITY,
         }
     }
 
-    pub fn color(mut self, color: Color) -> Self {
+    pub fn color(&mut self, color: Color) -> &mut Self {
         self.color = color;
         self
     }
@@ -81,12 +87,11 @@ impl Triangle {
 
 impl Element2D for Triangle {
     fn process(&self, draw: &mut Draw2D) {
-        let alpha = draw.alpha();
-
         // compute matrix
 
         let [a, b, c] = self.points;
         let color = self.color;
+        let alpha = self.alpha;
 
         #[rustfmt::skip]
         let vertices = [
@@ -101,6 +106,8 @@ impl Element2D for Triangle {
             pipeline: DrawPipeline::Shapes,
             vertices: &vertices,
             indices: &indices,
+            offset: VERTICES_OFFSET,
+            transform: self.transform,
         })
     }
 }

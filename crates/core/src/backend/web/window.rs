@@ -1,6 +1,7 @@
-use super::utils::{canvas_add_event_listener, set_size_dpi};
+use super::utils::{canvas_add_event_listener, get_gk_size, set_size_dpi};
 use crate::app::WindowConfig;
 use crate::math::{uvec2, UVec2};
+use glam::{vec2, Vec2};
 use js_sys::wasm_bindgen::JsValue;
 use raw_window_handle::{
     DisplayHandle, HasDisplayHandle, RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle,
@@ -75,9 +76,14 @@ impl WebWindow {
         })
     }
 
-    fn set_size(&mut self, width: u32, height: u32) {
+    pub fn set_size(&mut self, width: u32, height: u32) {
         set_size_dpi(&self.canvas, width as _, height as _);
         self.config.size = uvec2(width, height);
+    }
+
+    pub fn size(&self) -> Vec2 {
+        let (w, h) = get_gk_size(&self.canvas);
+        vec2(w as _, h as _)
     }
 }
 

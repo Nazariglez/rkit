@@ -6,7 +6,7 @@ use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{
     self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer,
 };
-use core::math::{Mat3, Mat4, Vec2};
+use core::math::{vec3, Mat3, Mat4, Vec2};
 use internment::Intern;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
@@ -47,7 +47,6 @@ impl BatchInfo {
             return false;
         }
 
-        // TODO
         true
     }
 }
@@ -112,6 +111,8 @@ pub struct Draw2D {
     projection: Mat4,
     clear_color: Option<Color>,
     alpha: f32,
+
+    indices_offset: usize,
     batches: SmallVec<BatchInfo, STACK_ALLOCATED_QUADS>,
     vertices: SmallVec<f32, { STACK_ALLOCATED_QUADS * 12 }>,
     indices: SmallVec<u32, { STACK_ALLOCATED_QUADS * 6 }>,
@@ -123,6 +124,7 @@ impl Draw2D {
         let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
         Self {
             projection,
+            alpha: 1.0,
             ..Default::default()
         }
     }
@@ -158,18 +160,39 @@ impl Draw2D {
 
         let new_batch = match self.batches.last() {
             None => true,
-            Some(last) => last.is_compatible(&batch),
+            Some(last) => !last.is_compatible(&batch),
         };
 
         if new_batch {
+            println!("#----> new batch ");
             self.batches.push(batch);
         }
 
         let current = self.batches.last_mut().unwrap();
         current.end_idx = end_idx;
 
-        self.vertices.extend_from_slice(info.vertices);
-        self.indices.extend_from_slice(info.indices);
+        // the indices must use an offset
+        self.indices.extend(
+            info.indices
+                .iter()
+                .map(|idx| idx + self.indices_offset as u32),
+        );
+        self.indices_offset += info.vertices.len() / info.offset;
+
+        let matrix = self.matrix() * info.transform;
+        // NOTE: we make the assumption that the order is always [x, y, r, g, b, a,... (anything else until offset), then repeat]
+        // then we multiply the position by the matrix and the alpha by the global alpha
+        self.vertices
+            .extend(info.vertices.chunks_exact(info.offset).flat_map(|v| {
+                debug_assert!(v.len() >= 6);
+                let &[x, y, r, g, b, a, ..] = v else {
+                    unreachable!("Vertices are always 6, this should not happen")
+                };
+                let xyz = matrix * vec3(x, y, 1.0);
+                [xyz.x, xyz.y, r, g, b, a * self.alpha]
+                    .into_iter()
+                    .chain(v[6..].iter().copied())
+            }));
     }
 
     // - Transform TODO
@@ -201,6 +224,8 @@ pub struct DrawingInfo<'a> {
     pub pipeline: DrawPipeline,
     pub vertices: &'a [f32],
     pub indices: &'a [u32],
+    pub offset: usize,
+    pub transform: Mat3,
 }
 
 pub trait Element2D {
@@ -220,33 +245,42 @@ impl AsRenderer for Draw2D {
             .build()
             .unwrap();
 
-        let mut renderer = Renderer::new();
-        let mut pass = renderer.begin_pass();
-        if let Some(color) = self.clear_color {
-            pass.clear_color(color);
-        }
+        gfx::write_buffer(vbo)
+            .with_data(&self.vertices)
+            .build()
+            .unwrap();
 
+        gfx::write_buffer(ebo)
+            .with_data(&self.indices)
+            .build()
+            .unwrap();
+
+        let mut cleared = false;
+        let mut renderer = Renderer::new();
         self.batches
             .iter()
             .for_each(|b| match painter.ctx(&b.pipeline.id_intern()) {
                 Some(ctx) => {
-                    gfx::write_buffer(vbo)
-                        .with_data(&self.vertices)
-                        .build()
-                        .unwrap();
+                    let mut pass = renderer.begin_pass();
 
-                    gfx::write_buffer(ebo)
-                        .with_data(&self.indices)
-                        .build()
-                        .unwrap();
+                    // clear only once
+                    if !cleared {
+                        if let Some(color) = self.clear_color {
+                            pass.clear_color(color);
+                            cleared = true;
+                        }
+                    }
 
                     let binds: ArrayVec<_, MAX_BIND_GROUPS_PER_PIPELINE> =
                         ctx.groups.iter().collect();
+
                     pass.pipeline(&ctx.pipeline)
-                        .buffers(&[&vbo, &ebo])
+                        .buffers(&[vbo, ebo])
                         .bindings(&binds);
 
-                    pass.draw(0..(self.indices.len() as u32));
+                    let start = b.start_idx as u32;
+                    let end = b.end_idx as u32;
+                    pass.draw(start..end);
                 }
                 None => {
                     log::error!(
