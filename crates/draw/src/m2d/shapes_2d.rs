@@ -125,6 +125,7 @@ impl Element2D for Triangle {
             indices: &indices,
             offset: VERTICES_OFFSET,
             transform: self.transform,
+            texture: None,
         })
     }
 }

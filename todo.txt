@@ -2,6 +2,7 @@
     * gamepad for wasm32
     * input wasm32
     * write operations on buffers must duplicate the size of the buffer if it's not enough
+    * Texture must have the sampler inside, so maybe Texture and Sampler are going to be InnerTexture and InnerSampler and then Texture will containes both
 
 - questions:
     * is it better `mouse::is_btn_pressed` or `is_mouse_btn_pressed`, `is_window_fullscreen` or `window::is_fullscreen`, etc..

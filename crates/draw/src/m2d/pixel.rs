@@ -35,6 +35,7 @@ impl Element2D for Pixel {
             indices: &[0],
             offset: 2,
             transform: Mat3::IDENTITY,
+            texture: None,
         })
     }
 }

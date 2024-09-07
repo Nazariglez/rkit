@@ -16,6 +16,12 @@ pub struct Texture {
     pub(crate) format: TextureFormat,
 }
 
+impl PartialEq<Self> for Texture {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl Texture {
     pub fn id(&self) -> TextureId {
         self.id

@@ -1,8 +1,6 @@
 use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
-use arrayvec::ArrayVec;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
-use core::gfx::{self, Buffer, RenderPass};
+use core::gfx::{self, BindGroup, Buffer, RenderPass, SamplerId, TextureId};
 use core::math::Mat4;
 use internment::Intern;
 use once_cell::sync::Lazy;
@@ -46,11 +44,18 @@ impl From<&str> for DrawPipeline {
     }
 }
 
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+struct SpriteId {
+    texture: TextureId,
+    sampler: SamplerId,
+}
+
 pub(crate) struct Painter2D {
     pub pipelines: HashMap<Intern<str>, PipelineContext>,
     pub ubo_transform: Buffer,
     pub vbo: Buffer,
     pub ebo: Buffer,
+    pub sprites_cache: HashMap<SpriteId, BindGroup>,
 }
 
 impl Default for Painter2D {
@@ -78,6 +83,7 @@ impl Default for Painter2D {
             ubo_transform: ubo,
             vbo,
             ebo,
+            sprites_cache: Default::default(),
         };
 
         // painter.add_pipeline(DrawPipeline::Pixel.id(), create_pixel_pipeline_ctx().unwrap());

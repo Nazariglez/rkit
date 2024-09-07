@@ -1,10 +1,11 @@
 use super::{get_2d_painter, Pixel, Triangle};
+use crate::m2d::images_2d::Image;
 use crate::m2d::painter_2d::DrawPipeline;
 use arrayvec::ArrayVec;
 use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{
-    self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer,
+    self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer, Texture,
 };
 use core::math::{vec3, Mat3, Mat4, Vec2};
 use internment::Intern;
@@ -29,6 +30,7 @@ struct BatchInfo {
     start_idx: usize,
     end_idx: usize,
     pipeline: DrawPipeline,
+    texture: Option<Texture>,
 }
 
 impl Clone for BatchInfo {
@@ -37,6 +39,7 @@ impl Clone for BatchInfo {
             start_idx: self.start_idx,
             end_idx: self.end_idx,
             pipeline: self.pipeline.clone(),
+            texture: None,
         }
     }
 }
@@ -44,6 +47,10 @@ impl Clone for BatchInfo {
 impl BatchInfo {
     fn is_compatible(&self, other: &Self) -> bool {
         if self.pipeline != other.pipeline {
+            return false;
+        }
+
+        if self.texture != other.texture {
             return false;
         }
 
@@ -156,6 +163,7 @@ impl Draw2D {
             start_idx,
             end_idx,
             pipeline,
+            texture: info.texture.cloned(),
         };
 
         let new_batch = match self.batches.last() {
@@ -218,6 +226,10 @@ impl Draw2D {
     pub fn triangle(&mut self, p1: Vec2, p2: Vec2, p3: Vec2) -> Drawing<'_, Triangle> {
         Drawing::new(self, Triangle::new(p1, p2, p3))
     }
+
+    pub fn image(&mut self, texture: &Texture) -> Drawing<'_, Image> {
+        Drawing::new(self, Image::new(texture))
+    }
 }
 
 pub struct DrawingInfo<'a> {
@@ -226,6 +238,7 @@ pub struct DrawingInfo<'a> {
     pub indices: &'a [u32],
     pub offset: usize,
     pub transform: Mat3,
+    pub texture: Option<&'a Texture>,
 }
 
 pub trait Element2D {
