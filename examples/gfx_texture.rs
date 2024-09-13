@@ -79,12 +79,6 @@ impl State {
             0.5, -0.5,     1.0, 0.0,
             -0.5, -0.5,     0.0, 0.0,
             -0.5,  0.5,     0.0, 1.0,
-
-            //pos           //coords
-            0.3,  0.3,     1.0, 1.0,
-            0.3, -0.3,     1.0, 0.0,
-            -0.3, -0.3,     0.0, 0.0,
-            -0.3,  0.3,     0.0, 1.0
         ];
         let vbo = gfx::create_vertex_buffer(vertices).build()?;
 
@@ -92,9 +86,6 @@ impl State {
         let indices: &[u16] = &[
             0, 1, 3,
             1, 2, 3,
-
-            7, 6, 5,
-            7, 5, 4,
         ];
         let ebo = gfx::create_index_buffer(indices).build()?;
 

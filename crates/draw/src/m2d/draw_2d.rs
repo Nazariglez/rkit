@@ -1,6 +1,7 @@
 use super::{get_2d_painter, Pixel, Triangle};
 use crate::m2d::images_2d::Image;
 use crate::m2d::painter_2d::DrawPipeline;
+use crate::sprite::Sprite;
 use arrayvec::ArrayVec;
 use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
@@ -30,7 +31,7 @@ struct BatchInfo {
     start_idx: usize,
     end_idx: usize,
     pipeline: DrawPipeline,
-    texture: Option<Texture>,
+    sprite: Option<Sprite>,
 }
 
 impl Clone for BatchInfo {
@@ -39,7 +40,7 @@ impl Clone for BatchInfo {
             start_idx: self.start_idx,
             end_idx: self.end_idx,
             pipeline: self.pipeline.clone(),
-            texture: None,
+            sprite: None,
         }
     }
 }
@@ -50,7 +51,7 @@ impl BatchInfo {
             return false;
         }
 
-        if self.texture != other.texture {
+        if self.sprite != other.sprite {
             return false;
         }
 
@@ -163,7 +164,7 @@ impl Draw2D {
             start_idx,
             end_idx,
             pipeline,
-            texture: info.texture.cloned(),
+            sprite: info.sprite.cloned(),
         };
 
         let new_batch = match self.batches.last() {
@@ -227,8 +228,8 @@ impl Draw2D {
         Drawing::new(self, Triangle::new(p1, p2, p3))
     }
 
-    pub fn image(&mut self, texture: &Texture) -> Drawing<'_, Image> {
-        Drawing::new(self, Image::new(texture))
+    pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image> {
+        Drawing::new(self, Image::new(sprite))
     }
 }
 
@@ -238,7 +239,7 @@ pub struct DrawingInfo<'a> {
     pub indices: &'a [u32],
     pub offset: usize,
     pub transform: Mat3,
-    pub texture: Option<&'a Texture>,
+    pub sprite: Option<&'a Sprite>,
 }
 
 pub trait Element2D {

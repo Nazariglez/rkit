@@ -1,10 +1,15 @@
 mod m2d;
+mod sprite;
 
 pub use m2d::*;
-
-use core::gfx::RenderPipeline;
+pub use sprite::*;
 
 // -- Draw API
+#[inline]
+pub fn create_sprite<'a>() -> SpriteBuilder<'a> {
+    SpriteBuilder::new()
+}
+
 #[inline]
 pub fn add_2d_pipeline(id: &str, pip: PipelineContext) -> Option<PipelineContext> {
     get_mut_2d_painter().add_pipeline(id, pip)

@@ -218,6 +218,11 @@ impl<'a> SamplerBuilder<'a> {
         Self { desc }
     }
 
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.desc.label = Some(label);
+        self
+    }
+
     pub fn with_wrap_x(mut self, wrap: TextureWrap) -> Self {
         self.desc.wrap_x = wrap;
         self

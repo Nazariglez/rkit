@@ -1,10 +1,13 @@
 use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
+use crate::sprite::SpriteId;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, Buffer, RenderPass, SamplerId, TextureId};
 use core::math::Mat4;
 use internment::Intern;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =
     Lazy::new(|| AtomicRefCell::new(Painter2D::default()));
@@ -17,6 +20,7 @@ unsafe impl Send for Painter2D {}
 pub enum DrawPipeline {
     Pixel,
     Shapes,
+    Images,
     Custom(Intern<str>),
 }
 
@@ -25,6 +29,7 @@ impl DrawPipeline {
         match self {
             DrawPipeline::Pixel => "gk_pixel",
             DrawPipeline::Shapes => "gk_shapes",
+            DrawPipeline::Images => "gk_images",
             DrawPipeline::Custom(inner) => inner,
         }
     }
@@ -33,6 +38,7 @@ impl DrawPipeline {
         match self {
             DrawPipeline::Pixel => "gk_pixel".into(),
             DrawPipeline::Shapes => "gk_shapes".into(),
+            DrawPipeline::Images => "gk_images".into(),
             DrawPipeline::Custom(inner) => *inner,
         }
     }
@@ -44,10 +50,15 @@ impl From<&str> for DrawPipeline {
     }
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
-struct SpriteId {
-    texture: TextureId,
-    sampler: SamplerId,
+struct CachedBindGroup {
+    signal: Arc<AtomicBool>,
+    bind: BindGroup,
+}
+
+impl CachedBindGroup {
+    fn expired(&self) -> bool {
+        self.signal.load(Ordering::Relaxed)
+    }
 }
 
 pub(crate) struct Painter2D {
@@ -55,7 +66,7 @@ pub(crate) struct Painter2D {
     pub ubo_transform: Buffer,
     pub vbo: Buffer,
     pub ebo: Buffer,
-    pub sprites_cache: HashMap<SpriteId, BindGroup>,
+    pub sprites_cache: HashMap<SpriteId, CachedBindGroup>,
 }
 
 impl Default for Painter2D {
@@ -89,6 +100,11 @@ impl Default for Painter2D {
         // painter.add_pipeline(DrawPipeline::Pixel.id(), create_pixel_pipeline_ctx().unwrap());
         painter.add_pipeline(
             DrawPipeline::Shapes.id(),
+            create_shapes_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+        );
+
+        painter.add_pipeline(
+            DrawPipeline::Images.id(),
             create_shapes_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
         );
 
