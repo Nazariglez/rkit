@@ -1,9 +1,9 @@
 use super::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext};
 use core::gfx::{self, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
 use core::math::{Mat3, Vec2};
-use smallvec::SmallVec;
 
-const VERTICES_OFFSET: usize = 6; // pos(f32x2) + color(f32x4)
+// pos(f32x2) + color(f32x4)
+const VERTICES_OFFSET: usize = 6;
 
 // language=wgsl
 const SHADER: &str = r#"

@@ -1,5 +1,6 @@
 use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
 use crate::sprite::SpriteId;
+use crate::{create_images_2d_pipeline_ctx, Sprite};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, Buffer, RenderPass, SamplerId, TextureId};
 use core::math::Mat4;
@@ -105,7 +106,7 @@ impl Default for Painter2D {
 
         painter.add_pipeline(
             DrawPipeline::Images.id(),
-            create_shapes_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+            create_images_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
         );
 
         painter
@@ -123,6 +124,15 @@ impl Painter2D {
 
     pub fn ctx(&self, id: &Intern<str>) -> Option<&PipelineContext> {
         self.pipelines.get(id)
+    }
+
+    pub fn cached_bind_group_for(&mut self, sprite: &Sprite) -> BindGroup {
+        self.sprites_cache
+            .get(&sprite.id())
+            .as_ref()
+            .unwrap()
+            .bind
+            .clone()
     }
 }
 

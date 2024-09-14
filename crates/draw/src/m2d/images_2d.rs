@@ -1,9 +1,81 @@
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Sprite};
-use core::gfx::Color;
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite};
+use core::gfx::{self, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
 use core::math::{Mat3, UVec2, Vec2};
 
 // pos(f32x2) + uvs(f32x2) + color(f32x4)
 const VERTICES_OFFSET: usize = 8;
+
+// language=wgsl
+const SHADER: &str = r#"
+struct Transform {
+    mvp: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> transform: Transform;
+
+struct VertexInput {
+    @location(0) position: vec2<f32>,
+    @location(1) color: vec4<f32>,
+    @location(2) uvs: vec2<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uvs: vec2<f32>,
+    @location(1) color: vec4<f32>,
+};
+
+@vertex
+fn vs_main(
+    model: VertexInput,
+) -> VertexOutput {
+    var out: VertexOutput;
+    out.color = model.color;
+    out.position = transform.mvp * vec4(model.position, 0.0, 1.0);
+    return out;
+}
+
+@group(1) @binding(0)
+var t_texture: texture_2d<f32>;
+@group(1) @binding(1)
+var s_texture: sampler;
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    return textureSample(t_texture, s_texture, in.uvs) * in.color;
+}
+"#;
+
+pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
+    let pip = gfx::create_render_pipeline(SHADER)
+        .with_label("Draw2D images default pipeline")
+        .with_vertex_layout(
+            VertexLayout::new()
+                .with_attr(0, VertexFormat::Float32x2)
+                .with_attr(1, VertexFormat::Float32x4)
+                .with_attr(2, VertexFormat::Float32x2),
+        )
+        .with_bind_group_layout(
+            BindGroupLayout::new().with_entry(BindingType::uniform(0).with_vertex_visibility(true)),
+        )
+        .with_bind_group_layout(
+            BindGroupLayout::new()
+                .with_entry(BindingType::texture(0).with_fragment_visibility(true))
+                .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
+        )
+        .build()?;
+
+    let bind_group = gfx::create_bind_group()
+        .with_layout(pip.bind_group_layout_id(0)?)
+        .with_uniform(0, &ubo_transform)
+        .build()?;
+
+    Ok(PipelineContext {
+        pipeline: pip,
+        groups: (&[bind_group] as &[_]).try_into().unwrap(),
+    })
+}
 
 pub struct Image {
     sprite: Sprite,
@@ -52,10 +124,10 @@ impl Element2D for Image {
 
         #[rustfmt::skip]
         let vertices = [
-            x1, y1, u1, v1, c.r, c.g, c.b, c.a,
-            x2, y1, u2, v1, c.r, c.g, c.b, c.a,
-            x1, y2, u1, v2, c.r, c.g, c.b, c.a,
-            x2, y2, u2, v2, c.r, c.g, c.b, c.a,
+            x1, y1, c.r, c.g, c.b, c.a, u1, v1,
+            x2, y1, c.r, c.g, c.b, c.a, u2, v1,
+            x1, y2, c.r, c.g, c.b, c.a, u1, v2,
+            x2, y2, c.r, c.g, c.b, c.a, u2, v2,
         ];
 
         let indices = [0, 1, 2, 2, 1, 3];
