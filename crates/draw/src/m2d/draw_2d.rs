@@ -10,7 +10,9 @@ use core::gfx::{
 };
 use core::math::{vec3, Mat3, Mat4, Vec2};
 use internment::Intern;
+use log::warn;
 use smallvec::SmallVec;
+use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 
 // TODO Cached elements is a must
@@ -248,7 +250,8 @@ pub trait Element2D {
 
 impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
-        let painter = get_2d_painter();
+        let mut painter = get_mut_2d_painter();
+
         let ubo_transform = &painter.ubo_transform;
         let vbo = &painter.vbo;
         let ebo = &painter.ebo;
@@ -269,18 +272,12 @@ impl AsRenderer for Draw2D {
             .build()
             .unwrap();
 
-        let mut owned_binds: ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> = ArrayVec::new();
-        let mut binds: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> = ArrayVec::new();
-
         let mut cleared = false;
         let mut renderer = Renderer::new();
         self.batches
             .iter()
             .for_each(|b| match painter.ctx(&b.pipeline.id_intern()) {
                 Some(ctx) => {
-                    owned_binds.clear();
-                    binds.clear();
-
                     let mut pass = renderer.begin_pass();
 
                     // clear only once
@@ -291,14 +288,13 @@ impl AsRenderer for Draw2D {
                         }
                     }
 
-                    owned_binds.extend(ctx.groups.iter().cloned());
+                    let binds: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
+                        ctx.groups.iter().collect();
 
                     if let Some(sprite) = &b.sprite {
-                        let texture_group = get_mut_2d_painter().cached_bind_group_for(sprite);
-                        owned_binds.push(texture_group);
+                        // let texture_group = get_mut_2d_painter().cached_bind_group_for(sprite);
+                        // todo
                     }
-
-                    binds.extend(owned_binds.iter());
 
                     pass.pipeline(&ctx.pipeline)
                         .buffers(&[vbo, ebo])
