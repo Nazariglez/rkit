@@ -168,7 +168,7 @@ impl OffscreenSurfaceData {
 
         let bind_group = gfx.create_bind_group(BindGroupDescriptor {
             label: Some("Offscreen Surface BindGroup"),
-            layout: Some(pip.bind_group_layout_id(0)?),
+            layout: Some(pip.bind_group_layout_ref(0)?),
             entry: (&[
                 BindGroupEntry::Texture {
                     location: 0,

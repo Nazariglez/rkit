@@ -308,6 +308,7 @@ impl<'a> TextureBuilder<'a> {
             TextureRawData::Image(bytes) => {
                 let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
                 let rgba = img.to_rgba8();
+                println!("rgba {rgba:?}");
                 get_mut_backend().gfx().create_texture(
                     desc,
                     Some(TextureData {

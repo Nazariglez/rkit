@@ -2,7 +2,7 @@ use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContex
 use crate::sprite::SpriteId;
 use crate::{create_images_2d_pipeline_ctx, Sprite};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::{self, BindGroup, Buffer, RenderPass, SamplerId, TextureId};
+use core::gfx::{self, BindGroup, Buffer, RenderPass, RenderPipeline, SamplerId, TextureId};
 use core::math::Mat4;
 use internment::Intern;
 use once_cell::sync::Lazy;
@@ -126,11 +126,21 @@ impl Painter2D {
         self.pipelines.get(id)
     }
 
-    pub fn cached_bind_group_for(&mut self, sprite: &Sprite) -> BindGroup {
+    pub fn cached_bind_group_for(&mut self, pip: &RenderPipeline, sprite: &Sprite) -> BindGroup {
         self.sprites_cache
-            .get(&sprite.id())
-            .as_ref()
-            .unwrap()
+            .entry(sprite.id())
+            .or_insert_with(|| {
+                let bind = gfx::create_bind_group()
+                    .with_layout(pip.bind_group_layout_ref(1).unwrap())
+                    .with_texture(0, sprite.texture())
+                    .with_sampler(1, sprite.sampler())
+                    .build()
+                    .unwrap(); // TODO raise error?
+
+                let signal = sprite.expired_signal.clone();
+
+                CachedBindGroup { signal, bind }
+            })
             .bind
             .clone()
     }

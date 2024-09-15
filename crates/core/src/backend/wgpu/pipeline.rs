@@ -14,12 +14,18 @@ pub struct RenderPipeline {
     pub(crate) bind_group_layout: ArrayVec<BindGroupLayoutRef, MAX_BIND_GROUPS_PER_PIPELINE>,
 }
 
+impl PartialEq for RenderPipeline {
+    fn eq(&self, other: &Self) -> bool {
+        self.id != other.id
+    }
+}
+
 impl RenderPipeline {
     pub fn id(&self) -> PipelineId {
         self.id
     }
 
-    pub fn bind_group_layout_id(&self, index: u32) -> Result<&BindGroupLayoutRef, String> {
+    pub fn bind_group_layout_ref(&self, index: u32) -> Result<&BindGroupLayoutRef, String> {
         self.bind_group_layout
             .get(index as usize)
             .ok_or_else(|| format!("Invalid Bind Group '{}' in pipeline", index))

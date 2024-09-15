@@ -25,6 +25,6 @@ fn main() -> Result<(), String> {
 fn update(s: &mut State) {
     let mut draw = draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
-    draw.image(&s.sprite).position(window_size() * 0.5);
+    draw.image(&s.sprite); //.position(window_size() * 0.5);
     gfx::render_to_frame(&draw).unwrap();
 }

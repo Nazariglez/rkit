@@ -128,12 +128,12 @@ impl State {
             .build()?;
 
         let bind_group_1 = gfx::create_bind_group()
-            .with_layout(pip.bind_group_layout_id(0)?)
+            .with_layout(pip.bind_group_layout_ref(0)?)
             .with_uniform(0, &ubo)
             .build()?;
 
         let bind_group_2 = gfx::create_bind_group()
-            .with_layout(pip.bind_group_layout_id(1)?)
+            .with_layout(pip.bind_group_layout_ref(1)?)
             .with_texture(0, &texture)
             .with_sampler(1, &sampler)
             .build()?;

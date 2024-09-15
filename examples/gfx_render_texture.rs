@@ -74,7 +74,7 @@ impl State {
         let sampler = gfx::create_sampler().build()?;
 
         let texture_bind_group = gfx::create_bind_group()
-            .with_layout(pip.bind_group_layout_id(0)?)
+            .with_layout(pip.bind_group_layout_ref(0)?)
             .with_texture(0, &texture)
             .with_sampler(1, &sampler)
             .build()?;
@@ -110,7 +110,7 @@ impl State {
             .build()?;
 
         let rt_bind_group = gfx::create_bind_group()
-            .with_layout(pip.bind_group_layout_id(0)?)
+            .with_layout(pip.bind_group_layout_ref(0)?)
             .with_texture(0, rt.texture())
             .with_sampler(1, &sampler)
             .build()?;
@@ -120,7 +120,7 @@ impl State {
             .build()?;
 
         let rt2_bind_group = gfx::create_bind_group()
-            .with_layout(pip.bind_group_layout_id(0)?)
+            .with_layout(pip.bind_group_layout_ref(0)?)
             .with_texture(0, rt2.texture())
             .with_sampler(1, &sampler)
             .build()?;

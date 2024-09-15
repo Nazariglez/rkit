@@ -9,19 +9,14 @@ use core::gfx::{
     self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer, Texture,
 };
 use core::math::{vec3, Mat3, Mat4, Vec2};
-use internment::Intern;
-use log::warn;
 use smallvec::SmallVec;
-use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 
 // TODO Cached elements is a must
 // TODO Camera2D
 
-// Quads(1000) * Vertices(6)(2f32 per vert) * f32(4bytes) = 48kbs
-// Quads(1000) * Indices(6) * u32(4bytes) = 24kbs
-// I think that windows, and web have 1MB of default stack size, so this should be fine for now
-const STACK_ALLOCATED_QUADS: usize = 1000;
+// This is used to avoid heap allocations when doing small number of drawcalls
+const STACK_ALLOCATED_QUADS: usize = 200;
 
 #[derive(Clone)]
 pub struct PipelineContext {
@@ -32,7 +27,8 @@ pub struct PipelineContext {
 struct BatchInfo {
     start_idx: usize,
     end_idx: usize,
-    pipeline: DrawPipeline,
+    pipeline: RenderPipeline,
+    bind_groups: ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
     sprite: Option<Sprite>,
 }
 
@@ -42,6 +38,7 @@ impl Clone for BatchInfo {
             start_idx: self.start_idx,
             end_idx: self.end_idx,
             pipeline: self.pipeline.clone(),
+            bind_groups: self.bind_groups.clone(),
             sprite: None,
         }
     }
@@ -53,6 +50,7 @@ impl BatchInfo {
             return false;
         }
 
+        // FIXME check bind_groups instead of sprite?
         if self.sprite != other.sprite {
             return false;
         }
@@ -161,11 +159,26 @@ impl Draw2D {
     pub fn add_to_batch<'a>(&'a mut self, info: DrawingInfo<'a>) {
         let start_idx = self.indices.len();
         let end_idx = start_idx + info.indices.len();
-        let pipeline = info.pipeline.clone();
+        let mut painter = get_mut_2d_painter();
+        let ctx = painter
+            .pipelines
+            .get(&info.pipeline.id_intern())
+            .ok_or_else(|| "Missing Pipeline")
+            .unwrap(); // TODO raise error?
+        let pipeline = ctx.pipeline.clone();
+        let mut bind_groups = ctx.groups.clone();
+
+        if let Some(sp) = info.sprite {
+            let bind_group = painter.cached_bind_group_for(&pipeline, sp);
+            // FIXME this is wrong, it should be bind_groups[1] = bind_group
+            bind_groups.push(bind_group);
+        }
+
         let batch = BatchInfo {
             start_idx,
             end_idx,
             pipeline,
+            bind_groups,
             sprite: info.sprite.cloned(),
         };
 
@@ -274,46 +287,28 @@ impl AsRenderer for Draw2D {
 
         let mut cleared = false;
         let mut renderer = Renderer::new();
-        self.batches
-            .iter()
-            .for_each(|b| match painter.ctx(&b.pipeline.id_intern()) {
-                Some(ctx) => {
-                    let mut pass = renderer.begin_pass();
+        self.batches.iter().for_each(|b| {
+            let mut pass = renderer.begin_pass();
 
-                    // clear only once
-                    if !cleared {
-                        if let Some(color) = self.clear_color {
-                            pass.clear_color(color);
-                            cleared = true;
-                        }
-                    }
-
-                    let binds: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
-                        ctx.groups.iter().collect();
-
-                    if let Some(sprite) = &b.sprite {
-                        // let texture_group = get_mut_2d_painter().cached_bind_group_for(sprite);
-                        // todo
-                    }
-
-                    pass.pipeline(&ctx.pipeline)
-                        .buffers(&[vbo, ebo])
-                        .bindings(&binds);
-
-                    let start = b.start_idx as u32;
-                    let end = b.end_idx as u32;
-                    pass.draw(start..end);
+            // clear only once
+            if !cleared {
+                if let Some(color) = self.clear_color {
+                    pass.clear_color(color);
+                    cleared = true;
                 }
-                None => {
-                    log::error!(
-                        "There is no Pipeline in the Draw2D ctx for '{}'",
-                        b.pipeline.id()
-                    );
-                    if cfg!(debug_assertions) {
-                        panic!("Missing 2D Pipeline '{}'", b.pipeline.id());
-                    }
-                }
-            });
+            }
+
+            let binds: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
+                b.bind_groups.iter().collect();
+
+            pass.pipeline(&b.pipeline)
+                .buffers(&[vbo, ebo])
+                .bindings(&binds);
+
+            let start = b.start_idx as u32;
+            let end = b.end_idx as u32;
+            pass.draw(start..end);
+        });
 
         self.flush(&renderer, target)
     }

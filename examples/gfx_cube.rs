@@ -117,7 +117,7 @@ impl State {
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_layout(pip.bind_group_layout_id(0)?)
+            .with_layout(pip.bind_group_layout_ref(0)?)
             .with_uniform(0, &ubo)
             .build()?;
 

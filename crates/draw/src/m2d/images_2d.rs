@@ -1,5 +1,5 @@
 use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite};
-use core::gfx::{self, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
+use core::gfx::{self, BlendMode, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
 use core::math::{Mat3, UVec2, Vec2};
 
 // pos(f32x2) + uvs(f32x2) + color(f32x4)
@@ -64,10 +64,11 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
                 .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
         )
+        .with_blend_mode(BlendMode::NORMAL)
         .build()?;
 
     let bind_group = gfx::create_bind_group()
-        .with_layout(pip.bind_group_layout_id(0)?)
+        .with_layout(pip.bind_group_layout_ref(0)?)
         .with_uniform(0, &ubo_transform)
         .build()?;
 
@@ -114,11 +115,10 @@ impl Image {
 
 impl Element2D for Image {
     fn process(&self, draw: &mut Draw2D) {
-        // TODO (on add to batch creatr bind_group if necessary)
         let c = self.color.with_alpha(self.color.a * self.alpha);
         let Vec2 { x: x1, y: y1 } = self.position;
         let UVec2 { x: x2, y: y2 } = self.sprite.size();
-        let (x2, y2) = (x2 as f32, y2 as f32);
+        let (x2, y2) = (x1 + x2 as f32, y1 + y2 as f32);
 
         let (u1, v1, u2, v2) = (0.0, 0.0, 1.0, 1.0);
 
