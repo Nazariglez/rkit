@@ -16,7 +16,7 @@ pub struct RenderPipeline {
 
 impl PartialEq for RenderPipeline {
     fn eq(&self, other: &Self) -> bool {
-        self.id != other.id
+        self.id == other.id
     }
 }
 

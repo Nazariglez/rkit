@@ -31,9 +31,8 @@ impl Element2D for Pixel {
         // compute matrix
         draw.add_to_batch(DrawingInfo {
             pipeline: DrawPipeline::Pixel,
-            vertices: &[self.pos.x, self.pos.y],
+            vertices: &mut [self.pos.x, self.pos.y],
             indices: &[0],
-            offset: 2,
             transform: Mat3::IDENTITY,
             sprite: None,
         })

@@ -8,6 +8,12 @@ pub struct BindGroup {
     pub(crate) raw: Arc<RawBindGroup>,
 }
 
+impl BindGroup {
+    pub fn id(&self) -> BindGroupId {
+        self.id
+    }
+}
+
 #[derive(Clone)]
 pub struct BindGroupLayoutRef {
     pub(crate) id: BindGroupLayoutId,

@@ -22,6 +22,10 @@ const STACK_ALLOCATED_QUADS: usize = 200;
 pub struct PipelineContext {
     pub pipeline: RenderPipeline,
     pub groups: ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
+    pub vertex_offset: usize,
+    pub x_pos: usize,
+    pub y_pos: usize,
+    pub alpha_pos: usize,
 }
 
 struct BatchInfo {
@@ -160,25 +164,32 @@ impl Draw2D {
         let start_idx = self.indices.len();
         let end_idx = start_idx + info.indices.len();
         let mut painter = get_mut_2d_painter();
-        let ctx = painter
+        let PipelineContext {
+            pipeline,
+            mut groups,
+            vertex_offset,
+            x_pos,
+            y_pos,
+            alpha_pos,
+        } = painter
             .pipelines
             .get(&info.pipeline.id_intern())
             .ok_or_else(|| "Missing Pipeline")
-            .unwrap(); // TODO raise error?
-        let pipeline = ctx.pipeline.clone();
-        let mut bind_groups = ctx.groups.clone();
+            .unwrap()
+            .clone();
 
         if let Some(sp) = info.sprite {
             let bind_group = painter.cached_bind_group_for(&pipeline, sp);
+            println!("using bg: {:?}", bind_group.id());
             // FIXME this is wrong, it should be bind_groups[1] = bind_group
-            bind_groups.push(bind_group);
+            groups.push(bind_group);
         }
 
         let batch = BatchInfo {
             start_idx,
             end_idx,
             pipeline,
-            bind_groups,
+            bind_groups: groups,
             sprite: info.sprite.cloned(),
         };
 
@@ -201,22 +212,26 @@ impl Draw2D {
                 .iter()
                 .map(|idx| idx + self.indices_offset as u32),
         );
-        self.indices_offset += info.vertices.len() / info.offset;
+        self.indices_offset += info.vertices.len() / vertex_offset;
 
         let matrix = self.matrix() * info.transform;
-        // NOTE: we make the assumption that the order is always [x, y, r, g, b, a,... (anything else until offset), then repeat]
-        // then we multiply the position by the matrix and the alpha by the global alpha
-        self.vertices
-            .extend(info.vertices.chunks_exact(info.offset).flat_map(|v| {
-                debug_assert!(v.len() >= 6);
-                let &[x, y, r, g, b, a, ..] = v else {
-                    unreachable!("Vertices are always 6, this should not happen")
-                };
+        info.vertices
+            .chunks_exact_mut(vertex_offset)
+            .for_each(|chunk| {
+                debug_assert!(chunk.len() >= 6);
+
+                let x = chunk[x_pos];
+                let y = chunk[y_pos];
+                let alpha = chunk[alpha_pos];
+
                 let xyz = matrix * vec3(x, y, 1.0);
-                [xyz.x, xyz.y, r, g, b, a * self.alpha]
-                    .into_iter()
-                    .chain(v[6..].iter().copied())
-            }));
+                let new_alpha = alpha * self.alpha;
+
+                chunk[x_pos] = xyz.x;
+                chunk[y_pos] = xyz.y;
+                chunk[alpha_pos] = new_alpha;
+            });
+        self.vertices.extend_from_slice(info.vertices);
     }
 
     // - Transform TODO
@@ -250,9 +265,8 @@ impl Draw2D {
 
 pub struct DrawingInfo<'a> {
     pub pipeline: DrawPipeline,
-    pub vertices: &'a [f32],
+    pub vertices: &'a mut [f32],
     pub indices: &'a [u32],
-    pub offset: usize,
     pub transform: Mat3,
     pub sprite: Option<&'a Sprite>,
 }

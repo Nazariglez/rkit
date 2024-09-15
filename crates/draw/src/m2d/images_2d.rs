@@ -1,9 +1,8 @@
 use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite};
-use core::gfx::{self, BlendMode, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
+use core::gfx::{
+    self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
+};
 use core::math::{Mat3, UVec2, Vec2};
-
-// pos(f32x2) + uvs(f32x2) + color(f32x4)
-const VERTICES_OFFSET: usize = 8;
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -16,8 +15,8 @@ var<uniform> transform: Transform;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
-    @location(1) color: vec4<f32>,
-    @location(2) uvs: vec2<f32>,
+    @location(1) uvs: vec2<f32>,
+    @location(2) color: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -53,8 +52,8 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         .with_vertex_layout(
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
-                .with_attr(1, VertexFormat::Float32x4)
-                .with_attr(2, VertexFormat::Float32x2),
+                .with_attr(1, VertexFormat::Float32x2)
+                .with_attr(2, VertexFormat::Float32x4),
         )
         .with_bind_group_layout(
             BindGroupLayout::new().with_entry(BindingType::uniform(0).with_vertex_visibility(true)),
@@ -64,7 +63,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
                 .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
         )
-        .with_blend_mode(BlendMode::NORMAL)
+        // .with_blend_mode(BlendMode::NORMAL)
         .build()?;
 
     let bind_group = gfx::create_bind_group()
@@ -75,6 +74,10 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     Ok(PipelineContext {
         pipeline: pip,
         groups: (&[bind_group] as &[_]).try_into().unwrap(),
+        vertex_offset: 8,
+        x_pos: 0,
+        y_pos: 1,
+        alpha_pos: 5,
     })
 }
 
@@ -123,20 +126,19 @@ impl Element2D for Image {
         let (u1, v1, u2, v2) = (0.0, 0.0, 1.0, 1.0);
 
         #[rustfmt::skip]
-        let vertices = [
-            x1, y1, c.r, c.g, c.b, c.a, u1, v1,
-            x2, y1, c.r, c.g, c.b, c.a, u2, v1,
-            x1, y2, c.r, c.g, c.b, c.a, u1, v2,
-            x2, y2, c.r, c.g, c.b, c.a, u2, v2,
+        let mut vertices = [
+            x1, y1, u1, v1, c.r, c.g, c.b, c.a,
+            x2, y1, u2, v1, c.r, c.g, c.b, c.a,
+            x1, y2, u1, v2, c.r, c.g, c.b, c.a,
+            x2, y2, u2, v2, c.r, c.g, c.b, c.a,
         ];
 
         let indices = [0, 1, 2, 2, 1, 3];
 
         draw.add_to_batch(DrawingInfo {
             pipeline: DrawPipeline::Images,
-            vertices: &vertices,
+            vertices: &mut vertices,
             indices: &indices,
-            offset: VERTICES_OFFSET,
             transform: self.transform,
             sprite: Some(&self.sprite),
         })

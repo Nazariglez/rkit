@@ -2,9 +2,6 @@ use super::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext};
 use core::gfx::{self, BindGroupLayout, BindingType, Buffer, Color, VertexFormat, VertexLayout};
 use core::math::{Mat3, Vec2};
 
-// pos(f32x2) + color(f32x4)
-const VERTICES_OFFSET: usize = 6;
-
 // language=wgsl
 const SHADER: &str = r#"
 struct Transform {
@@ -60,6 +57,10 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     Ok(PipelineContext {
         pipeline: pip,
         groups: (&[bind_group] as &[_]).try_into().unwrap(),
+        vertex_offset: 6,
+        x_pos: 0,
+        y_pos: 1,
+        alpha_pos: 5,
     })
 }
 
@@ -111,7 +112,7 @@ impl Element2D for Triangle {
         let alpha = self.alpha;
 
         #[rustfmt::skip]
-        let vertices = [
+        let mut vertices = [
             a.x, a.y, color.r, color.g, color.b, color.a * alpha,
             b.x, b.y, color.r, color.g, color.b, color.a * alpha,
             c.x, c.y, color.r, color.g, color.b, color.a * alpha,
@@ -121,9 +122,8 @@ impl Element2D for Triangle {
 
         draw.add_to_batch(DrawingInfo {
             pipeline: DrawPipeline::Shapes,
-            vertices: &vertices,
+            vertices: &mut vertices,
             indices: &indices,
-            offset: VERTICES_OFFSET,
             transform: self.transform,
             sprite: None,
         })

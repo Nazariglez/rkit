@@ -46,7 +46,6 @@ struct State {
 impl State {
     fn new() -> Result<Self, String> {
         let pip = gfx::create_render_pipeline(SHADER)
-            .with_label("Draw2D shapes default pipeline")
             .with_vertex_layout(
                 VertexLayout::new()
                     .with_attr(0, VertexFormat::Float32x2)
@@ -57,7 +56,6 @@ impl State {
                     .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                     .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
             )
-            .with_index_format(IndexFormat::UInt16)
             .with_blend_mode(BlendMode::NORMAL)
             .build()?;
 
@@ -84,7 +82,7 @@ impl State {
         let vbo = gfx::create_vertex_buffer(vertices).build()?;
 
         #[rustfmt::skip]
-        let indices: &[u16] = &[
+        let indices: &[u32] = &[
             0, 1, 3,
             1, 2, 3,
         ];

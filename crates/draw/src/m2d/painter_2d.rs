@@ -137,6 +137,8 @@ impl Painter2D {
                     .build()
                     .unwrap(); // TODO raise error?
 
+                println!("created bg: {:?}", bind.id());
+
                 let signal = sprite.expired_signal.clone();
 
                 CachedBindGroup { signal, bind }
