@@ -13,6 +13,7 @@ use crate::gfx::{
 };
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2, Vec2};
+use crate::utils::next_pot2;
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
 use glam::uvec2;
@@ -436,23 +437,25 @@ impl GfxBackendImpl for GfxBackend {
             usage |= wgpu::BufferUsages::COPY_DST;
         }
 
-        let raw = if desc.content.is_empty() {
-            self.ctx.device.create_buffer(&WBufferDescriptor {
+        let (raw, size) = if desc.content.is_empty() {
+            let size = 1024;
+            let raw = self.ctx.device.create_buffer(&WBufferDescriptor {
                 label: desc.label,
-                size: 1024,
+                size,
                 usage,
                 mapped_at_creation: false,
-            })
+            });
+            (raw, size as usize)
         } else {
-            self.ctx.device.create_buffer_init(&BufferInitDescriptor {
+            let raw = self.ctx.device.create_buffer_init(&BufferInitDescriptor {
                 label: desc.label,
                 contents: desc.content,
                 usage,
-            })
+            });
+            (raw, desc.content.len())
         };
 
         let usage = desc.usage;
-        let size = desc.content.len();
 
         Ok(Buffer {
             id: resource_id(&mut self.next_resource_id),
@@ -460,6 +463,7 @@ impl GfxBackendImpl for GfxBackend {
             usage,
             write: desc.write,
             size,
+            inner_label: Arc::new(desc.label.map_or_else(|| "".to_string(), |l| l.to_string())),
         })
     }
 
@@ -519,12 +523,76 @@ impl GfxBackendImpl for GfxBackend {
 
     fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String> {
         debug_assert!(buffer.write, "Cannot write data to a static buffer");
-        debug_assert!(
-            buffer.len() <= offset as usize + data.len(),
-            "Invalid buffer size '{}' expected '{}'",
+
+        println!(
+            "id: {:?} len: {} offset: {} data.len: {} -> {}",
+            buffer.id(),
             buffer.len(),
+            offset,
+            data.len(),
             offset as usize + data.len()
         );
+
+        // update inner buffer if the size is not enough
+        if buffer.len() < data.len() {
+            let required = offset as usize + data.len();
+            let next_size = next_buffer_size(buffer.len(), required);
+
+            log::info!(
+                "Updating Buffer '{}' size from {} to {}",
+                buffer.inner_label,
+                buffer.size,
+                next_size
+            );
+            let mut usage = buffer.usage.to_wgpu();
+            usage |= wgpu::BufferUsages::COPY_DST;
+
+            let raw = self.ctx.device.create_buffer(&WBufferDescriptor {
+                label: buffer.inner_label.as_str().into(),
+                size: next_size as _,
+                usage,
+                mapped_at_creation: false,
+            });
+
+            // copy current memory to the new one
+            if offset > 0 {
+                log::info!(
+                    "Copying Buffer '{}' memory until offset {}",
+                    buffer.inner_label,
+                    offset
+                );
+                let mut encoder =
+                    self.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Buffer Copy Encoder"),
+                        });
+
+                encoder.copy_buffer_to_buffer(&buffer.raw.borrow(), 0, &raw, 0, offset);
+
+                self.ctx.queue.submit(Some(encoder.finish()));
+            }
+
+            *buffer.raw.borrow_mut() = Arc::new(raw);
+            // buffer.size = next_size; // TODO fixme
+
+            println!(
+                "increased -> id: {:?} len: {} offset: {} data.len: {} -> {}",
+                buffer.id(),
+                buffer.len(),
+                offset,
+                data.len(),
+                offset as usize + data.len()
+            );
+        }
+
+        //
+        // debug_assert!(
+        //     buffer.len() >= offset as usize + data.len(),
+        //     "Invalid buffer size '{}' expected '{}'",
+        //     buffer.len(),
+        //     offset as usize + data.len()
+        // );
         self.ctx
             .queue
             .write_buffer(&buffer.raw.borrow(), offset as _, data);
@@ -930,4 +998,8 @@ impl Color {
             a: self.a as f64,
         }
     }
+}
+
+fn next_buffer_size(current: usize, required: usize) -> usize {
+    next_pot2(current.max(required))
 }

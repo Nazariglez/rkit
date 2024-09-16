@@ -23,3 +23,9 @@ pub fn remove_2d_pipeline(id: &str) -> Option<PipelineContext> {
 pub fn draw_2d() -> Draw2D {
     Draw2D::new()
 }
+
+// TODO execute this somehow at the end of the frame
+#[inline]
+pub fn clean_2d() {
+    get_mut_2d_painter().clean();
+}

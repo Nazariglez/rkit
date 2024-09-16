@@ -6,6 +6,11 @@ use atomic_refcell::AtomicRefCell;
 use std::sync::Arc;
 use wgpu::{Buffer as RawBuffer, BufferUsages, StencilOperation};
 
+pub struct InnerBuffer {
+    pub size: usize,
+    pub raw: Arc<RawBuffer>,
+}
+
 #[derive(Clone)]
 pub struct Buffer {
     pub(crate) id: BufferId,
@@ -17,6 +22,7 @@ pub struct Buffer {
     pub(crate) usage: BufferUsage,
     pub(crate) write: bool,
     pub(crate) size: usize,
+    pub(crate) inner_label: Arc<String>,
 }
 
 impl Buffer {

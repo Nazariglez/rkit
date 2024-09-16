@@ -137,14 +137,15 @@ impl Painter2D {
                     .build()
                     .unwrap(); // TODO raise error?
 
-                println!("created bg: {:?}", bind.id());
-
                 let signal = sprite.expired_signal.clone();
-
                 CachedBindGroup { signal, bind }
             })
             .bind
             .clone()
+    }
+
+    pub fn clean(&mut self) {
+        self.sprites_cache.retain(|k, v| !v.expired());
     }
 }
 

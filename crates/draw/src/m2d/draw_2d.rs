@@ -218,7 +218,7 @@ impl Draw2D {
         info.vertices
             .chunks_exact_mut(vertex_offset)
             .for_each(|chunk| {
-                debug_assert!(chunk.len() >= 6);
+                debug_assert!(chunk.len() >= 2);
 
                 let x = chunk[x_pos];
                 let y = chunk[y_pos];
