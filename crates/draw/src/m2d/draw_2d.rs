@@ -198,7 +198,6 @@ impl Draw2D {
         };
 
         if new_batch {
-            println!("#----> new batch ");
             self.batches.push(batch);
         }
 
