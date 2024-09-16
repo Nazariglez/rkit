@@ -25,7 +25,7 @@ pub struct PipelineContext {
     pub vertex_offset: usize,
     pub x_pos: usize,
     pub y_pos: usize,
-    pub alpha_pos: usize,
+    pub alpha_pos: Option<usize>,
 }
 
 struct BatchInfo {
@@ -222,14 +222,15 @@ impl Draw2D {
 
                 let x = chunk[x_pos];
                 let y = chunk[y_pos];
-                let alpha = chunk[alpha_pos];
 
                 let xyz = matrix * vec3(x, y, 1.0);
-                let new_alpha = alpha * self.alpha;
-
                 chunk[x_pos] = xyz.x;
                 chunk[y_pos] = xyz.y;
-                chunk[alpha_pos] = new_alpha;
+
+                if let Some(a_pos) = alpha_pos {
+                    let alpha = chunk[a_pos] * self.alpha;
+                    chunk[a_pos] = alpha;
+                }
             });
         self.vertices.extend_from_slice(info.vertices);
     }

@@ -31,6 +31,7 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
     out.color = model.color;
+    out.uvs = model.uvs;
     out.position = transform.mvp * vec4(model.position, 0.0, 1.0);
     return out;
 }
@@ -63,7 +64,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
                 .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
         )
-        // .with_blend_mode(BlendMode::NORMAL)
+        .with_blend_mode(BlendMode::NORMAL)
         .build()?;
 
     let bind_group = gfx::create_bind_group()
@@ -77,7 +78,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         vertex_offset: 8,
         x_pos: 0,
         y_pos: 1,
-        alpha_pos: 5,
+        alpha_pos: Some(5),
     })
 }
 

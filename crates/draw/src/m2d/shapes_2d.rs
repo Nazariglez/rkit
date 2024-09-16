@@ -60,7 +60,7 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         vertex_offset: 6,
         x_pos: 0,
         y_pos: 1,
-        alpha_pos: 5,
+        alpha_pos: Some(5),
     })
 }
 
