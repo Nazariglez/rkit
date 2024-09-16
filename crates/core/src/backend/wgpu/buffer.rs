@@ -6,7 +6,7 @@ use atomic_refcell::AtomicRefCell;
 use std::sync::Arc;
 use wgpu::{Buffer as RawBuffer, BufferUsages, StencilOperation};
 
-pub struct InnerBuffer {
+pub(crate) struct InnerBuffer {
     pub size: usize,
     pub raw: Arc<RawBuffer>,
 }
@@ -18,10 +18,9 @@ pub struct Buffer {
     // to Buffer that cannot be under a borrow because lifetime issues, and the atomic
     // refcell is necessary to update the buffer when the size is too small on write
     // operations if the performance is not acceptable we can think about unsafe I guess
-    pub(crate) raw: Arc<AtomicRefCell<Arc<RawBuffer>>>,
+    pub(crate) inner: Arc<AtomicRefCell<InnerBuffer>>,
     pub(crate) usage: BufferUsage,
     pub(crate) write: bool,
-    pub(crate) size: usize,
     pub(crate) inner_label: Arc<String>,
 }
 
@@ -39,7 +38,7 @@ impl Buffer {
     }
 
     pub fn len(&self) -> usize {
-        self.size
+        self.inner.borrow().size
     }
 }
 

@@ -7,9 +7,9 @@ use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
-    BufferDescriptor, BufferUsage, Color, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
-    RenderTextureDescriptor, Renderer, Texture, TextureData, TextureDescriptor, TextureFormat,
-    TextureId,
+    BufferDescriptor, BufferUsage, Color, InnerBuffer, RenderPipeline, RenderPipelineDescriptor,
+    RenderTexture, RenderTextureDescriptor, Renderer, Texture, TextureData, TextureDescriptor,
+    TextureFormat, TextureId,
 };
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2, Vec2};
@@ -200,14 +200,17 @@ impl GfxBackendImpl for GfxBackend {
                         BufferUsage::Vertex => {
                             rpass.set_vertex_buffer(
                                 vertex_buffers_slot,
-                                buff.raw.borrow().slice(..),
+                                buff.inner.borrow().raw.slice(..),
                             );
                             vertex_buffers_slot += 1;
                         }
                         BufferUsage::Index => {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
-                            rpass.set_index_buffer(buff.raw.borrow().slice(..), pip.index_format)
+                            rpass.set_index_buffer(
+                                buff.inner.borrow().raw.slice(..),
+                                pip.index_format,
+                            )
                         }
                         BufferUsage::Uniform => {}
                     });
@@ -459,10 +462,12 @@ impl GfxBackendImpl for GfxBackend {
 
         Ok(Buffer {
             id: resource_id(&mut self.next_resource_id),
-            raw: Arc::new(AtomicRefCell::new(Arc::new(raw))),
+            inner: Arc::new(AtomicRefCell::new(InnerBuffer {
+                size,
+                raw: Arc::new(raw),
+            })),
             usage,
             write: desc.write,
-            size,
             inner_label: Arc::new(desc.label.map_or_else(|| "".to_string(), |l| l.to_string())),
         })
     }
@@ -473,7 +478,7 @@ impl GfxBackendImpl for GfxBackend {
             .entry
             .iter()
             .map(|entry| match entry {
-                BindGroupEntry::Uniform { buffer, .. } => Some(buffer.raw.borrow().clone()),
+                BindGroupEntry::Uniform { buffer, .. } => Some(buffer.inner.borrow().raw.clone()),
                 _ => None,
             })
             .collect();
@@ -524,15 +529,6 @@ impl GfxBackendImpl for GfxBackend {
     fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String> {
         debug_assert!(buffer.write, "Cannot write data to a static buffer");
 
-        println!(
-            "id: {:?} len: {} offset: {} data.len: {} -> {}",
-            buffer.id(),
-            buffer.len(),
-            offset,
-            data.len(),
-            offset as usize + data.len()
-        );
-
         // update inner buffer if the size is not enough
         if buffer.len() < data.len() {
             let required = offset as usize + data.len();
@@ -541,7 +537,7 @@ impl GfxBackendImpl for GfxBackend {
             log::info!(
                 "Updating Buffer '{}' size from {} to {}",
                 buffer.inner_label,
-                buffer.size,
+                buffer.len(),
                 next_size
             );
             let mut usage = buffer.usage.to_wgpu();
@@ -568,34 +564,26 @@ impl GfxBackendImpl for GfxBackend {
                             label: Some("Buffer Copy Encoder"),
                         });
 
-                encoder.copy_buffer_to_buffer(&buffer.raw.borrow(), 0, &raw, 0, offset);
+                encoder.copy_buffer_to_buffer(&buffer.inner.borrow().raw, 0, &raw, 0, offset);
 
                 self.ctx.queue.submit(Some(encoder.finish()));
             }
 
-            *buffer.raw.borrow_mut() = Arc::new(raw);
-            // buffer.size = next_size; // TODO fixme
-
-            println!(
-                "increased -> id: {:?} len: {} offset: {} data.len: {} -> {}",
-                buffer.id(),
-                buffer.len(),
-                offset,
-                data.len(),
-                offset as usize + data.len()
-            );
+            *buffer.inner.borrow_mut() = InnerBuffer {
+                size: next_size,
+                raw: Arc::new(raw),
+            };
         }
 
-        //
-        // debug_assert!(
-        //     buffer.len() >= offset as usize + data.len(),
-        //     "Invalid buffer size '{}' expected '{}'",
-        //     buffer.len(),
-        //     offset as usize + data.len()
-        // );
+        debug_assert!(
+            buffer.len() >= offset as usize + data.len(),
+            "Invalid buffer size '{}' expected '{}'",
+            buffer.len(),
+            offset as usize + data.len()
+        );
         self.ctx
             .queue
-            .write_buffer(&buffer.raw.borrow(), offset as _, data);
+            .write_buffer(&buffer.inner.borrow().raw, offset as _, data);
         Ok(())
     }
 
@@ -830,14 +818,17 @@ impl GfxBackend {
                         BufferUsage::Vertex => {
                             rpass.set_vertex_buffer(
                                 vertex_buffers_slot,
-                                buff.raw.borrow().slice(..),
+                                buff.inner.borrow().raw.slice(..),
                             );
                             vertex_buffers_slot += 1;
                         }
                         BufferUsage::Index => {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
-                            rpass.set_index_buffer(buff.raw.borrow().slice(..), pip.index_format)
+                            rpass.set_index_buffer(
+                                buff.inner.borrow().raw.slice(..),
+                                pip.index_format,
+                            )
                         }
                         BufferUsage::Uniform => {}
                     });

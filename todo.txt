@@ -1,7 +1,6 @@
 - todo:
     * gamepad for wasm32
     * input wasm32
-    * write operations on buffers must duplicate the size of the buffer if it's not enough
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
 
 - questions:

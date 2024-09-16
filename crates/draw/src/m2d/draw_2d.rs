@@ -180,7 +180,6 @@ impl Draw2D {
 
         if let Some(sp) = info.sprite {
             let bind_group = painter.cached_bind_group_for(&pipeline, sp);
-            println!("using bg: {:?}", bind_group.id());
             // FIXME this is wrong, it should be bind_groups[1] = bind_group
             groups.push(bind_group);
         }

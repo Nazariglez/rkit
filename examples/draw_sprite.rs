@@ -26,9 +26,8 @@ fn main() -> Result<(), String> {
 fn update(s: &mut State) {
     let mut draw = draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
-    for i in 0..10 {
-        draw.image(&s.sprite)
-            .position(window_size() * 0.5 + Vec2::splat(i as f32 * 10.0));
+    for i in 0..100 {
+        draw.image(&s.sprite).position(Vec2::splat(i as f32 * 10.0));
     }
     gfx::render_to_frame(&draw).unwrap();
 }
