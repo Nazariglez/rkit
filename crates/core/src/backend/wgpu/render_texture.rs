@@ -1,6 +1,6 @@
 use crate::backend::wgpu::texture::Texture;
 use crate::gfx::RenderTextureId;
-use crate::math::UVec2;
+use crate::math::Vec2;
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
@@ -15,15 +15,15 @@ impl RenderTexture {
         self.id
     }
 
-    pub fn size(&self) -> UVec2 {
+    pub fn size(&self) -> Vec2 {
         self.texture.size()
     }
 
-    pub fn width(&self) -> u32 {
+    pub fn width(&self) -> f32 {
         self.texture.width()
     }
 
-    pub fn height(&self) -> u32 {
+    pub fn height(&self) -> f32 {
         self.texture.height()
     }
 

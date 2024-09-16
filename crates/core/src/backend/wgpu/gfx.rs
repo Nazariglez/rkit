@@ -974,7 +974,7 @@ fn create_texture(
         id,
         raw: Arc::new(raw),
         view: Arc::new(view),
-        size: uvec2(size.width as _, size.height as _),
+        size: vec2(size.width as _, size.height as _),
         write: desc.write,
         format: desc.format,
     })

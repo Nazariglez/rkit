@@ -121,8 +121,8 @@ impl Element2D for Image {
     fn process(&self, draw: &mut Draw2D) {
         let c = self.color.with_alpha(self.color.a * self.alpha);
         let Vec2 { x: x1, y: y1 } = self.position;
-        let UVec2 { x: x2, y: y2 } = self.sprite.size();
-        let (x2, y2) = (x1 + x2 as f32, y1 + y2 as f32);
+        let Vec2 { x: x2, y: y2 } = self.sprite.size();
+        let (x2, y2) = (x1 + x2, y1 + y2);
 
         let (u1, v1, u2, v2) = (0.0, 0.0, 1.0, 1.0);
 

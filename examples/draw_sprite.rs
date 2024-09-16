@@ -1,7 +1,6 @@
 use rkit::app::window_size;
 use rkit::draw::{draw_2d, Sprite};
 use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
 
 struct State {
     sprite: Sprite,
@@ -24,10 +23,10 @@ fn main() -> Result<(), String> {
 }
 
 fn update(s: &mut State) {
+    let pos = window_size() * 0.5 - s.sprite.size() * 0.5;
+
     let mut draw = draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
-    for i in 0..100 {
-        draw.image(&s.sprite).position(Vec2::splat(i as f32 * 10.0));
-    }
+    draw.image(&s.sprite).position(pos);
     gfx::render_to_frame(&draw).unwrap();
 }

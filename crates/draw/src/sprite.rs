@@ -41,7 +41,7 @@ impl Sprite {
         &self.sampler
     }
 
-    pub fn size(&self) -> UVec2 {
+    pub fn size(&self) -> Vec2 {
         self.texture.size()
     }
 }

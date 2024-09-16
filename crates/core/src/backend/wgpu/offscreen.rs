@@ -194,8 +194,8 @@ impl OffscreenSurfaceData {
     }
 
     pub fn update(&mut self, gfx: &mut GfxBackend) -> Result<(), String> {
-        let same_width = gfx.surface.config.width == self.texture.width();
-        let same_height = gfx.surface.config.height == self.texture.height();
+        let same_width = gfx.surface.config.width == self.texture.width() as u32;
+        let same_height = gfx.surface.config.height == self.texture.height() as u32;
         let needs_update = !(same_width && same_height);
         if !needs_update {
             // do nothing

@@ -1,5 +1,5 @@
 use crate::gfx::{SamplerId, TextureFilter, TextureFormat, TextureId, TextureWrap};
-use crate::math::UVec2;
+use crate::math::{UVec2, Vec2};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use wgpu::{
@@ -11,7 +11,7 @@ pub struct Texture {
     pub(crate) id: TextureId,
     pub(crate) raw: Arc<RawTexture>,
     pub(crate) view: Arc<TextureView>,
-    pub(crate) size: UVec2,
+    pub(crate) size: Vec2,
     pub(crate) write: bool,
     pub(crate) format: TextureFormat,
 }
@@ -27,15 +27,15 @@ impl Texture {
         self.id
     }
 
-    pub fn size(&self) -> UVec2 {
+    pub fn size(&self) -> Vec2 {
         self.size
     }
 
-    pub fn width(&self) -> u32 {
+    pub fn width(&self) -> f32 {
         self.size.x
     }
 
-    pub fn height(&self) -> u32 {
+    pub fn height(&self) -> f32 {
         self.size.y
     }
 
