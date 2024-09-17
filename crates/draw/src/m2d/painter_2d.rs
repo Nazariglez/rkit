@@ -9,6 +9,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use utils::drop_signal::DropSignal;
 
 pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =
     Lazy::new(|| AtomicRefCell::new(Painter2D::default()));
@@ -52,13 +53,13 @@ impl From<&str> for DrawPipeline {
 }
 
 struct CachedBindGroup {
-    signal: Arc<AtomicBool>,
+    signal: DropSignal,
     bind: BindGroup,
 }
 
 impl CachedBindGroup {
     fn expired(&self) -> bool {
-        self.signal.load(Ordering::Relaxed)
+        self.signal.is_expired()
     }
 }
 
@@ -137,7 +138,7 @@ impl Painter2D {
                     .build()
                     .unwrap(); // TODO raise error?
 
-                let signal = sprite.expired_signal.clone();
+                let signal = sprite.drop_observer.signal();
                 CachedBindGroup { signal, bind }
             })
             .bind

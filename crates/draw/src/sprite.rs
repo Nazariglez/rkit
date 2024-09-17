@@ -2,9 +2,8 @@ use core::gfx::{
     Sampler, SamplerBuilder, SamplerId, Texture, TextureBuilder, TextureFilter, TextureFormat,
     TextureId, TextureWrap,
 };
-use core::math::{UVec2, Vec2};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use core::math::{vec2, Rect, UVec2, Vec2};
+use utils::drop_signal::DropObserver;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub struct SpriteId {
@@ -14,25 +13,24 @@ pub struct SpriteId {
 
 #[derive(Clone)]
 pub struct Sprite {
+    id: SpriteId,
     texture: Texture,
     sampler: Sampler,
-    //frame: RectFrame, // TODO sprite rect frame
-    pub(crate) expired_signal: Arc<AtomicBool>,
+    frame: Rect,
+    pub(crate) drop_observer: DropObserver,
 }
 
 impl PartialEq for Sprite {
     fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id()
+        self.id() == other.id() && self.frame == other.frame
     }
 }
 
 impl Sprite {
     pub fn id(&self) -> SpriteId {
-        SpriteId {
-            texture: self.texture.id(),
-            sampler: self.sampler.id(),
-        }
+        self.id
     }
+
     pub fn texture(&self) -> &Texture {
         &self.texture
     }
@@ -42,13 +40,29 @@ impl Sprite {
     }
 
     pub fn size(&self) -> Vec2 {
-        self.texture.size()
+        self.frame.size
     }
-}
 
-impl Drop for Sprite {
-    fn drop(&mut self) {
-        self.expired_signal.store(true, Ordering::SeqCst);
+    pub fn width(&self) -> f32 {
+        self.frame.size.x
+    }
+
+    pub fn height(&self) -> f32 {
+        self.frame.size.y
+    }
+
+    pub fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    pub fn clone_with_frame(&self, frame: Rect) -> Self {
+        Self {
+            id: self.id,
+            texture: self.texture.clone(),
+            sampler: self.sampler.clone(),
+            frame,
+            drop_observer: self.drop_observer.clone(),
+        }
     }
 }
 
@@ -150,12 +164,17 @@ impl<'a> SpriteBuilder<'a> {
             None => sampler_builder.build()?,
             Some(s) => s,
         };
-        let expired_signal = Arc::new(AtomicBool::new(false));
-        // TODO frame
+        let frame = Rect::new(vec2(0.0, 0.0), texture.size());
+        let drop_observer = DropObserver::default();
         Ok(Sprite {
+            id: SpriteId {
+                texture: texture.id(),
+                sampler: sampler.id(),
+            },
             texture,
             sampler,
-            expired_signal,
+            frame,
+            drop_observer,
         })
     }
 }

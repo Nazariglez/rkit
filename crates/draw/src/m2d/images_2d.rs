@@ -2,7 +2,7 @@ use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprit
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{Mat3, UVec2, Vec2};
+use core::math::{Mat3, Rect, Vec2};
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -87,6 +87,8 @@ pub struct Image {
     position: Vec2,
     color: Color,
     alpha: f32,
+    size: Option<Vec2>,
+    crop: Option<Rect>,
     transform: Mat3,
 }
 
@@ -97,6 +99,8 @@ impl Image {
             position: Vec2::ZERO,
             color: Color::WHITE,
             alpha: 1.0,
+            crop: None,
+            size: None,
             transform: Mat3::IDENTITY,
         }
     }
@@ -115,16 +119,43 @@ impl Image {
         self.position = pos;
         self
     }
+
+    pub fn size(&mut self, size: Vec2) -> &mut Self {
+        self.size = Some(size);
+        self
+    }
+
+    pub fn crop(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
+        self.crop = Some(Rect::new(origin, size));
+        self.size(size)
+    }
 }
 
 impl Element2D for Image {
     fn process(&self, draw: &mut Draw2D) {
         let c = self.color.with_alpha(self.color.a * self.alpha);
         let Vec2 { x: x1, y: y1 } = self.position;
-        let Vec2 { x: x2, y: y2 } = self.sprite.size();
+        let Vec2 { x: x2, y: y2 } = self.size.unwrap_or(self.sprite.size());
         let (x2, y2) = (x1 + x2, y1 + y2);
 
-        let (u1, v1, u2, v2) = (0.0, 0.0, 1.0, 1.0);
+        let frame = self.sprite.frame();
+        let Rect {
+            origin: Vec2 { x: sx, y: sy },
+            size: Vec2 { x: sw, y: sh },
+        } = self.crop.map_or(frame, |mut r| {
+            r.origin += frame.origin;
+            r
+        });
+
+        let (u1, v1, u2, v2) = {
+            let Vec2 { x: tw, y: th } = self.sprite.texture().size();
+            let u1 = sx / tw;
+            let v1 = sy / th;
+            let u2 = (sx + sw) / tw;
+            let v2 = (sy + sh) / th;
+
+            (u1, v1, u2, v2)
+        };
 
         #[rustfmt::skip]
         let mut vertices = [

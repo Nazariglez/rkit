@@ -106,7 +106,7 @@ impl State {
         let ebo = gfx::create_index_buffer(indices).build()?;
 
         let rt = gfx::create_render_texture()
-            .with_size(texture.width(), texture.height())
+            .with_size(texture.width() as _, texture.height() as _)
             .build()?;
 
         let rt_bind_group = gfx::create_bind_group()
@@ -116,7 +116,7 @@ impl State {
             .build()?;
 
         let rt2 = gfx::create_render_texture()
-            .with_size(texture.width(), texture.height())
+            .with_size(texture.width() as _, texture.height() as _)
             .build()?;
 
         let rt2_bind_group = gfx::create_bind_group()
