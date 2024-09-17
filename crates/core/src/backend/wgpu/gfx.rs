@@ -22,8 +22,9 @@ use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    Backend, BufferBinding, BufferDescriptor as WBufferDescriptor, Color as WColor, Queue,
-    RenderPipeline as WRenderPipeline, StoreOp, TextureDimension, TextureFormat as WTextureFormat,
+    Backend, BufferBinding, BufferDescriptor as WBufferDescriptor, Color as WColor, Extent3d,
+    ImageCopyTexture, ImageDataLayout, Origin3d, Queue, RenderPipeline as WRenderPipeline, StoreOp,
+    TextureAspect, TextureDimension, TextureFormat as WTextureFormat,
 };
 use winit::raw_window_handle::HasDisplayHandle;
 
@@ -621,6 +622,52 @@ impl GfxBackendImpl for GfxBackend {
         create_texture(id, &self.ctx.device, &self.ctx.queue, desc, data)
     }
 
+    fn write_texture(
+        &mut self,
+        texture: &Texture,
+        offset: UVec2,
+        size: UVec2,
+        data: &[u8],
+    ) -> Result<(), String> {
+        debug_assert!(
+            texture.write,
+            "Cannot update an immutable texture '{:?}'",
+            texture.id()
+        );
+        let channels = data.len() as u32 / (size.element_product());
+        println!(
+            "channels: {} ({} / {}) ({:?})",
+            channels,
+            data.len(),
+            size.element_product(),
+            size
+        );
+        self.ctx.queue.write_texture(
+            ImageCopyTexture {
+                texture: &texture.raw,
+                mip_level: 0,
+                origin: Origin3d {
+                    x: offset.x,
+                    y: offset.y,
+                    z: 0,
+                },
+                aspect: TextureAspect::All,
+            },
+            data,
+            ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(size.x * channels),
+                rows_per_image: None,
+            },
+            Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+        );
+        Ok(())
+    }
+
     fn create_render_texture(
         &mut self,
         desc: RenderTextureDescriptor,
@@ -948,6 +995,8 @@ fn create_texture(
 
     if !is_depth_texture {
         if let Some(d) = data {
+            // TODO, get the bytes_per_row/channles from the TextureFormat instead?
+            let channels = d.bytes.len() as u32 / (d.height * d.width);
             if !d.bytes.is_empty() {
                 queue.write_texture(
                     wgpu::ImageCopyTexture {
@@ -959,7 +1008,7 @@ fn create_texture(
                     d.bytes,
                     wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: Some(d.width * 4),
+                        bytes_per_row: Some(d.width * channels),
                         rows_per_image: Some(d.height),
                     },
                     size,
@@ -968,7 +1017,10 @@ fn create_texture(
         }
     }
 
-    let view = raw.create_view(&wgpu::TextureViewDescriptor::default());
+    let view = raw.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(desc.format.to_wgpu()),
+        ..Default::default()
+    });
 
     Ok(Texture {
         id,

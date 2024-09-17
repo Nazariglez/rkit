@@ -68,6 +68,11 @@ pub fn write_buffer<'a>(buffer: &'a Buffer) -> BufferWriteBuilder {
 }
 
 #[inline]
+pub fn write_texture<'a>(tex: &'a Texture) -> TextureWriteBuilder {
+    TextureWriteBuilder::new(tex)
+}
+
+#[inline]
 pub fn create_sampler<'a>() -> SamplerBuilder<'a> {
     SamplerBuilder::new()
 }

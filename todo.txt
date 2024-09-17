@@ -1,7 +1,9 @@
 - todo:
+    * text rendering (draw.text and draw.rich_text)
     * gamepad for wasm32
     * input wasm32
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
+    * transform_2d (scale, flip, etc...) and mouse check against global + local
 
 - questions:
     * is it better `mouse::is_btn_pressed` or `is_mouse_btn_pressed`, `is_window_fullscreen` or `window::is_fullscreen`, etc..
@@ -9,6 +11,7 @@
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
+    * linux not working because issues with surface size? (fix asap)
     * webgl not working
     * stencil must be done in one pass
     * resize doesn't update the surface/offscreen

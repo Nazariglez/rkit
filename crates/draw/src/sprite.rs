@@ -85,6 +85,11 @@ impl<'a> SpriteBuilder<'a> {
         self
     }
 
+    pub fn from_bytes(mut self, bytes: &'a [u8], width: u32, height: u32) -> Self {
+        self.texture_builder = self.texture_builder.from_bytes(bytes, width, height);
+        self
+    }
+
     pub fn with_sampler(mut self, sampler: Sampler) -> Self {
         self.sampler = Some(sampler);
         self

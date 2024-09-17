@@ -6,6 +6,7 @@ use crate::gfx::{
     RenderTextureDescriptor, Sampler, SamplerDescriptor, Stencil, Texture, TextureData,
     TextureDescriptor, TextureFilter, TextureFormat, TextureWrap, VertexLayout,
 };
+use glam::{uvec2, UVec2};
 use image::EncodableLayout;
 
 pub struct RenderPipelineBuilder<'a> {
@@ -269,6 +270,52 @@ enum TextureRawData<'a> {
     },
 }
 
+pub struct TextureWriteBuilder<'a> {
+    offset: UVec2,
+    size: UVec2,
+    tex: &'a Texture,
+    data: Option<&'a [u8]>,
+}
+
+impl<'a> TextureWriteBuilder<'a> {
+    pub fn new(texture: &'a Texture) -> Self {
+        let size = uvec2(texture.width() as _, texture.height() as _);
+        Self {
+            offset: Default::default(),
+            size,
+            tex: texture,
+            data: None,
+        }
+    }
+
+    pub fn from_data(mut self, data: &'a [u8]) -> Self {
+        self.data = Some(data);
+        self
+    }
+
+    pub fn with_offset(mut self, offset: UVec2) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    pub fn with_size(mut self, size: UVec2) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn build(mut self) -> Result<(), String> {
+        let Self {
+            offset,
+            size,
+            tex,
+            data,
+        } = self;
+        get_mut_backend()
+            .gfx()
+            .write_texture(tex, offset, size, data.unwrap())
+    }
+}
+
 pub struct TextureBuilder<'a> {
     desc: TextureDescriptor<'a>,
     data: TextureRawData<'a>,
@@ -283,6 +330,15 @@ impl<'a> TextureBuilder<'a> {
 
     pub fn from_image(mut self, image: &'a [u8]) -> Self {
         self.data = TextureRawData::Image(image);
+        self
+    }
+
+    pub fn from_bytes(mut self, bytes: &'a [u8], width: u32, height: u32) -> Self {
+        self.data = TextureRawData::Raw {
+            bytes,
+            width,
+            height,
+        };
         self
     }
 

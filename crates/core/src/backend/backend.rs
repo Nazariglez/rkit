@@ -76,6 +76,13 @@ pub(crate) trait GfxBackendImpl {
         desc: TextureDescriptor,
         data: Option<TextureData>,
     ) -> Result<Texture, String>;
+    fn write_texture(
+        &mut self,
+        texture: &Texture,
+        offset: UVec2,
+        size: UVec2,
+        data: &[u8],
+    ) -> Result<(), String>;
     fn create_render_texture(
         &mut self,
         desc: RenderTextureDescriptor,

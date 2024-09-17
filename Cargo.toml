@@ -33,6 +33,7 @@ members = ["crates/*"]
 core = { path = "crates/core" }
 utils = { path = "crates/utils" }
 draw = { path = "crates/draw" }
+text = { path = "crates/text" }
 
 ## common deps
 log = "0.4.22"
@@ -53,6 +54,7 @@ rayon = "1.10.0"
 [dependencies]
 core.workspace = true
 utils.workspace = true
+text.workspace = true
 draw = { workspace = true, optional = true }
 
 fastrand = { version = "2.1.1", optional = true }
@@ -60,6 +62,8 @@ fastrand = { version = "2.1.1", optional = true }
 [dev-dependencies]
 log.workspace = true
 bytemuck = {workspace = true, features = ["derive"]}
+cosmic-text = "0.12.1"
+etagere = "0.2.13"
 
 [features]
 default = ["random", "draw"]
