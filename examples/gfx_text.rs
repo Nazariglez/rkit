@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use cosmic_text::{
     Align, Attrs, Buffer as TBuffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch,
-    SwashCache, SwashContent, Weight,
+    SwashCache, SwashContent, Weight, Wrap,
 };
 use draw::draw_2d;
 use etagere::*;
@@ -45,7 +45,7 @@ struct State {
     tbuffer: TBuffer,
     cache: SwashCache,
     font_system: FontSystem,
-    images: HashMap<CacheKey, (Sprite, GlyphInfo)>,
+    glyphs: HashMap<CacheKey, GlyphInfo>,
     atlas_allocator: AtlasAllocator,
     tex: Sprite,
 }
@@ -59,8 +59,8 @@ impl State {
         let tbuffer = create_text_buffer(&mut font_system);
         let atlas = AtlasAllocator::new(size2(W as _, H as _));
         let tex = draw::create_sprite()
-            .from_bytes(&[0; (W * H) as _], W, H)
-            .with_format(TextureFormat::R8UNorm)
+            .from_bytes(&[0; (W * H * 4) as _], W, H)
+            // .with_format(TextureFormat::R8UNorm)
             .with_write_flag(true)
             .build()?;
 
@@ -68,7 +68,7 @@ impl State {
             font_system,
             tbuffer,
             cache: SwashCache::new(),
-            images: HashMap::default(),
+            glyphs: HashMap::default(),
             atlas_allocator: atlas,
             tex,
         })
@@ -94,7 +94,7 @@ fn measure(buffer: &TBuffer) -> Vec2 {
 
 fn update(s: &mut State) {
     let mut draw = draw_2d();
-    draw.clear(Color::WHITE);
+    draw.clear(Color::BLACK);
     let mut pos = vec2(10.0, 300.0);
 
     let block_size = measure(&s.tbuffer);
@@ -102,67 +102,65 @@ fn update(s: &mut State) {
     for run in s.tbuffer.layout_runs() {
         for glyph in run.glyphs {
             let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-            if !s.images.contains_key(&physical_glyph.cache_key) {
+            if !s.glyphs.contains_key(&physical_glyph.cache_key) {
                 if let Some(image) = s
                     .cache
                     .get_image_uncached(&mut s.font_system, physical_glyph.cache_key)
                 {
+                    let width = image.placement.width;
+                    let height = image.placement.height;
+
+                    if width == 0 || height == 0 {
+                        continue;
+                    }
+
+                    let alloc = s
+                        .atlas_allocator
+                        .allocate(size2((width + 1) as _, (height + 1) as _))
+                        .unwrap();
+
+                    let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
+                    let size = uvec2(width, height);
+
+                    let mut store = |bytes: &[u8]| {
+                        gfx::write_texture(&s.tex.texture())
+                            .from_data(&bytes)
+                            .with_offset(offset)
+                            .with_size(size)
+                            .build()
+                            .unwrap();
+
+                        let info = GlyphInfo {
+                            pos: Pos::new(image.placement.left as _, -image.placement.top as _),
+                            size: Pos::new(image.placement.width as _, image.placement.height as _),
+                            atlas_pos: vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _),
+                        };
+
+                        s.glyphs.insert(physical_glyph.cache_key, info);
+                    };
+
                     match image.content {
                         SwashContent::Mask => {
-                            let width = image.placement.width;
-                            let height = image.placement.height;
-
-                            if width == 0 || height == 0 {
-                                continue;
-                            }
-                            let tex = draw::create_sprite()
-                                .from_bytes(&image.data, width, height)
-                                .with_format(TextureFormat::R8UNorm)
-                                .build()
-                                .unwrap();
-
-                            let alloc = s
-                                .atlas_allocator
-                                .allocate(size2(width as _, height as _))
-                                .unwrap();
-
-                            let offset =
-                                uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
-                            let size = uvec2(width, height);
-                            gfx::write_texture(&s.tex.texture())
-                                .from_data(&image.data)
-                                .with_offset(offset)
-                                .with_size(size)
-                                .build()
-                                .unwrap();
-
-                            let info = GlyphInfo {
-                                pos: Pos::new(image.placement.left as _, -image.placement.top as _),
-                                size: Pos::new(
-                                    image.placement.width as _,
-                                    image.placement.height as _,
-                                ),
-                                atlas_pos: vec2(
-                                    alloc.rectangle.min.x as _,
-                                    alloc.rectangle.min.y as _,
-                                ),
-                            };
-
-                            s.images.insert(physical_glyph.cache_key, (tex, info));
+                            let bytes = image
+                                .data
+                                .iter()
+                                .flat_map(|v| Color::rgba_u8(255, 255, 255, *v).to_rgba_u8())
+                                .collect::<Vec<_>>();
+                            store(&bytes);
                         }
                         SwashContent::SubpixelMask => {
                             println!("|||||||||||||| HERE?");
                         }
                         SwashContent::Color => {
-                            println!("|||||||||||||||||||||here?");
+                            // println!("|||||||||||||||||||||here?");
+                            store(&image.data);
                         }
                     }
                 }
             }
 
-            if let Some((sprite, info)) = s.images.get(&physical_glyph.cache_key) {
+            if let Some(info) = s.glyphs.get(&physical_glyph.cache_key) {
                 let p = info.atlas_pos;
-                draw.image(sprite).position(p);
                 draw.image(&s.tex).position(vec2(400.0, 0.0));
 
                 let offset = vec2(block_size.x - run.line_w, 0.0) * 0.5;
@@ -171,21 +169,15 @@ fn update(s: &mut State) {
                 let pp = pos + offset + glyph_pos + info.pos.as_vec2() + vec2(0.0, run.line_y);
                 draw.image(&s.tex)
                     .crop(info.atlas_pos, info.size.as_vec2())
+                    // .color(Color::RED)
                     .position(pp);
-                // .crop(crop_origin, crop_size);
-
-                // pos.x += info.atlas.size.x;
             }
-
-            // println!("{:?}", glyph);
         }
     }
 
     println!("--------------");
 
     gfx::render_to_frame(&draw).unwrap();
-
-    // panic!()
 }
 
 fn create_text_buffer(font_system: &mut FontSystem) -> TBuffer {
@@ -197,14 +189,17 @@ fn create_text_buffer(font_system: &mut FontSystem) -> TBuffer {
     let mut buffer = TBuffer::new(font_system, metrics); // Create the buffer for text
 
     let attrs = Attrs::new()
-        .family(Family::Name("JetBrains Mono"))
-        .weight(Weight::BOLD); //.family(Family::Name("Utu")); //.family(Family::SansSerif).weight(Weight::BOLD);
+        // .family(Family::Name("JetBrains Mono"));
+        .family(Family::Name("FiraCode Nerd Font"));
+    // .weight(Weight::BOLD); //.family(Family::Name("Utu")); //.family(Family::SansSerif).weight(Weight::BOLD);
     buffer.set_text(
         font_system,
-        "😂 Kanji 漢字, Japanese\n pronunciation: [kaɲdʑi])",
+        "Kanji 漢字, Japanese 😂-👍 pronunciation: [kaɲdʑi]) >= != 󱎌 󱘗󱘗󱘗󱘗󱘗",
         attrs,
         Shaping::Advanced,
     ); // Set the text
+    buffer.set_wrap(font_system, Wrap::Word);
+    buffer.set_size(font_system, Some(250.0), None);
     buffer.shape_until_scroll(font_system, false);
 
     list_fonts(font_system);
