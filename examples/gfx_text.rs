@@ -3,17 +3,42 @@ use rkit::gfx::{self, Color, Texture, TextureFormat};
 use std::collections::HashMap;
 
 use cosmic_text::{
-    Attrs, Buffer as TBuffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch, SwashCache,
-    SwashContent, Weight,
+    Align, Attrs, Buffer as TBuffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch,
+    SwashCache, SwashContent, Weight,
 };
 use draw::draw_2d;
 use etagere::*;
-use rkit::math::{uvec2, vec2, Rect};
+use rkit::math::{uvec2, vec2, Rect, Vec2};
+
+#[derive(Copy, Clone, Debug)]
+struct Pos<N> {
+    x: N,
+    y: N,
+}
+
+impl<N> Pos<N> {
+    pub fn new(x: N, y: N) -> Self {
+        Self { x, y }
+    }
+}
+
+impl Pos<i16> {
+    pub fn as_vec2(self) -> Vec2 {
+        vec2(self.x as _, self.y as _)
+    }
+}
+
+impl Pos<u16> {
+    pub fn as_vec2(self) -> Vec2 {
+        vec2(self.x as _, self.y as _)
+    }
+}
 
 #[derive(Debug)]
 struct GlyphInfo {
-    pos: Rect, // TODO use i16 and u16 to reduce memory consumition to half
-    atlas: Rect,
+    pos: Pos<i16>,
+    size: Pos<u16>,
+    atlas_pos: Vec2,
 }
 
 struct State {
@@ -27,9 +52,10 @@ struct State {
 
 impl State {
     fn new() -> Result<Self, String> {
-        const W: u32 = 250;
-        const H: u32 = 250;
-        let mut font_system = FontSystem::new(); // Manages fonts and caches
+        const W: u32 = 350;
+        const H: u32 = 350;
+        // let mut font_system = FontSystem::new(); // Manages fonts and caches
+        let mut font_system = FontSystem::new();
         let tbuffer = create_text_buffer(&mut font_system);
         let atlas = AtlasAllocator::new(size2(W as _, H as _));
         let tex = draw::create_sprite()
@@ -56,22 +82,26 @@ fn main() {
         .unwrap()
 }
 
+fn measure(buffer: &TBuffer) -> Vec2 {
+    let (width, total_lines) = buffer
+        .layout_runs()
+        .fold((0.0, 0usize), |(width, total_lines), run| {
+            (run.line_w.max(width), total_lines + 1)
+        });
+
+    vec2(width, total_lines as f32 * buffer.metrics().line_height)
+}
+
 fn update(s: &mut State) {
     let mut draw = draw_2d();
     draw.clear(Color::WHITE);
     let mut pos = vec2(10.0, 300.0);
 
-    for run in s.tbuffer.layout_runs() {
-        println!("GLYPHS -> {} {} {}", run.glyphs.len(), run.text, run.line_i);
-        for glyph in run.glyphs {
-            let mut n = 0;
+    let block_size = measure(&s.tbuffer);
 
-            let physical_glyph = glyph.physical((0.0, 0.0), 2.0);
-            println!(
-                "{:?} {:?}",
-                physical_glyph.cache_key.glyph_id,
-                s.images.contains_key(&physical_glyph.cache_key)
-            );
+    for run in s.tbuffer.layout_runs() {
+        for glyph in run.glyphs {
+            let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
             if !s.images.contains_key(&physical_glyph.cache_key) {
                 if let Some(image) = s
                     .cache
@@ -107,20 +137,16 @@ fn update(s: &mut State) {
                                 .unwrap();
 
                             let info = GlyphInfo {
-                                pos: Rect::new(
-                                    vec2(image.placement.left as _, image.placement.top as _),
-                                    vec2(image.placement.width as _, image.placement.height as _),
+                                pos: Pos::new(image.placement.left as _, -image.placement.top as _),
+                                size: Pos::new(
+                                    image.placement.width as _,
+                                    image.placement.height as _,
                                 ),
-                                atlas: Rect::new(
-                                    vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _),
-                                    vec2(
-                                        alloc.rectangle.width() as _,
-                                        alloc.rectangle.height() as _,
-                                    ),
+                                atlas_pos: vec2(
+                                    alloc.rectangle.min.x as _,
+                                    alloc.rectangle.min.y as _,
                                 ),
                             };
-
-                            println!("info: {:?}", info);
 
                             s.images.insert(physical_glyph.cache_key, (tex, info));
                         }
@@ -135,19 +161,16 @@ fn update(s: &mut State) {
             }
 
             if let Some((sprite, info)) = s.images.get(&physical_glyph.cache_key) {
-                println!("N: {}", n);
-                n += 1;
-                let p = info.atlas.min();
+                let p = info.atlas_pos;
                 draw.image(sprite).position(p);
                 draw.image(&s.tex).position(vec2(400.0, 0.0));
 
+                let offset = vec2(block_size.x - run.line_w, 0.0) * 0.5;
+
                 let glyph_pos = vec2(physical_glyph.x as _, physical_glyph.y as _);
-                let pp = pos
-                    + glyph_pos
-                    + info.pos.origin
-                    + vec2(0.0, run.line_i as f32 * run.line_height);
+                let pp = pos + offset + glyph_pos + info.pos.as_vec2() + vec2(0.0, run.line_y);
                 draw.image(&s.tex)
-                    .crop(info.atlas.min(), info.pos.size)
+                    .crop(info.atlas_pos, info.size.as_vec2())
                     .position(pp);
                 // .crop(crop_origin, crop_size);
 
@@ -166,21 +189,39 @@ fn update(s: &mut State) {
 }
 
 fn create_text_buffer(font_system: &mut FontSystem) -> TBuffer {
-    font_system
-        .db_mut()
-        .load_font_data(include_bytes!("assets/Ubuntu-B.ttf").to_vec());
+    // font_system
+    //     .db_mut()
+    //     .load_font_data(include_bytes!("assets/Ubuntu-B.ttf").to_vec());
 
-    let metrics = Metrics::new(16.0, 20.0); // Font size and line height
+    let metrics = Metrics::new(32.0, 32.0); // Font size and line height
     let mut buffer = TBuffer::new(font_system, metrics); // Create the buffer for text
 
-    let attrs = Attrs::new(); //.family(Family::Name("Utu")); //.family(Family::SansSerif).weight(Weight::BOLD);
+    let attrs = Attrs::new()
+        .family(Family::Name("JetBrains Mono"))
+        .weight(Weight::BOLD); //.family(Family::Name("Utu")); //.family(Family::SansSerif).weight(Weight::BOLD);
     buffer.set_text(
         font_system,
-        "Kanji (漢字, Japanese pronunciation: [kaɲdʑi])",
+        "😂 Kanji 漢字, Japanese\n pronunciation: [kaɲdʑi])",
         attrs,
         Shaping::Advanced,
     ); // Set the text
     buffer.shape_until_scroll(font_system, false);
 
+    list_fonts(font_system);
+
     buffer
+}
+
+fn list_fonts(font_system: &FontSystem) {
+    let db = font_system.db(); // Get the font database
+    for (index, font) in db.faces().enumerate() {
+        let family = &font.families;
+        let weight = font.weight;
+        let style = font.style;
+
+        println!(
+            "Font {}: Family: {:?}, Weight: {:?}, Style: {:?}",
+            index, family, weight, style
+        );
+    }
 }
