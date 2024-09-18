@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -5,6 +6,12 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct DropObserver {
     inner: Arc<InnerSignal>,
+}
+
+impl Debug for DropObserver {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DropObserver{{}}")
+    }
 }
 
 impl DropObserver {
@@ -30,6 +37,12 @@ pub struct DropSignal(Arc<AtomicBool>);
 impl DropSignal {
     pub fn is_expired(&self) -> bool {
         self.0.load(Ordering::Relaxed)
+    }
+}
+
+impl Debug for DropSignal {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DropSignal({})", self.is_expired())
     }
 }
 
