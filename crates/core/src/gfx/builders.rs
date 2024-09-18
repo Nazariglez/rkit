@@ -261,7 +261,10 @@ impl<'a> SamplerBuilder<'a> {
 }
 
 enum TextureRawData<'a> {
-    Empty,
+    Empty {
+        width: u32,
+        height: u32,
+    },
     Image(&'a [u8]),
     Raw {
         bytes: &'a [u8],
@@ -324,7 +327,10 @@ pub struct TextureBuilder<'a> {
 impl<'a> TextureBuilder<'a> {
     pub fn new() -> Self {
         let desc = TextureDescriptor::default();
-        let data = TextureRawData::Empty;
+        let data = TextureRawData::Empty {
+            width: 1,
+            height: 1,
+        };
         Self { desc, data }
     }
 
@@ -339,6 +345,13 @@ impl<'a> TextureBuilder<'a> {
             width,
             height,
         };
+        self
+    }
+
+    pub fn with_empty_size(mut self, width: u32, height: u32) -> Self {
+        if matches!(self.data, TextureRawData::Empty { .. }) {
+            self.data = TextureRawData::Empty { width, height };
+        }
         self
     }
 
@@ -360,7 +373,19 @@ impl<'a> TextureBuilder<'a> {
     pub fn build(self) -> Result<Texture, String> {
         let Self { desc, data } = self;
         match data {
-            TextureRawData::Empty => get_mut_backend().gfx().create_texture(desc, None),
+            TextureRawData::Empty { width, height } => {
+                let channels = desc.format.channels();
+                let size = (width * height) * channels as u32;
+                let data = vec![0; size as _];
+                get_mut_backend().gfx().create_texture(
+                    desc,
+                    Some(TextureData {
+                        bytes: &data,
+                        width,
+                        height,
+                    }),
+                )
+            }
             TextureRawData::Image(bytes) => {
                 let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
                 let rgba = img.to_rgba8();

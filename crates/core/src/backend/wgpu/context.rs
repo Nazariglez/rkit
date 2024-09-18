@@ -67,7 +67,7 @@ async fn generate_wgpu_ctx(
     let limits = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
         wgpu::Limits::downlevel_webgl2_defaults()
     } else {
-        wgpu::Limits::default()
+        adapter.limits()
     };
 
     let (device, queue) = adapter

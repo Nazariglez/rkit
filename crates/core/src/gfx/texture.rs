@@ -123,6 +123,61 @@ pub enum TextureFormat {
     Depth32FloatStencil8, // WebGL2: GL_DEPTH32F_STENCIL8 (via WEBGL_depth_texture extension)
 }
 
+impl TextureFormat {
+    pub fn channels(&self) -> u8 {
+        match self {
+            TextureFormat::R8UNorm
+            | TextureFormat::R8INorm
+            | TextureFormat::R8UInt
+            | TextureFormat::R8Int
+            | TextureFormat::R16UNorm
+            | TextureFormat::R16INorm
+            | TextureFormat::R16UInt
+            | TextureFormat::R16Int
+            | TextureFormat::R16Float
+            | TextureFormat::R32UInt
+            | TextureFormat::R32Int
+            | TextureFormat::R32Float => 1,
+
+            TextureFormat::Rg8UNorm
+            | TextureFormat::Rg8INorm
+            | TextureFormat::Rg8UInt
+            | TextureFormat::Rg8Int
+            | TextureFormat::Rg16UNorm
+            | TextureFormat::Rg16INorm
+            | TextureFormat::Rg16UInt
+            | TextureFormat::Rg16Int
+            | TextureFormat::Rg16Float
+            | TextureFormat::Rg32UInt
+            | TextureFormat::Rg32Int
+            | TextureFormat::Rg32Float => 2,
+
+            TextureFormat::Rgba8UNorm
+            | TextureFormat::Rgba8UNormSrgb
+            | TextureFormat::Rgba8INorm
+            | TextureFormat::Rgba8UInt
+            | TextureFormat::Rgba8Int
+            | TextureFormat::Bgra8UNorm
+            | TextureFormat::Bgra8UNormSrgb
+            | TextureFormat::Rgba16UNorm
+            | TextureFormat::Rgba16INorm
+            | TextureFormat::Rgba16UInt
+            | TextureFormat::Rgba16Int
+            | TextureFormat::Rgba16Float
+            | TextureFormat::Rgba32UInt
+            | TextureFormat::Rgba32Int
+            | TextureFormat::Rgba32Float => 4,
+
+            // TODO, is this right? depth textures will ever need to know how many channels?
+            TextureFormat::Depth16
+            | TextureFormat::Depth24
+            | TextureFormat::Depth32Float
+            | TextureFormat::Depth24Stencil8
+            | TextureFormat::Depth32FloatStencil8 => 0,
+        }
+    }
+}
+
 impl Default for TextureFormat {
     fn default() -> Self {
         // TODO this could be different depending on platforms (webgl2?)

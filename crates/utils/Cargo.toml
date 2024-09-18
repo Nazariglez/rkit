@@ -3,3 +3,5 @@ name = "utils"
 edition = "2021"
 
 [dependencies]
+hashbrown.workspace = true
+rustc-hash = "2.0.0"

@@ -1,5 +1,5 @@
 use crate::gfx::{
-    BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, RenderPipeline,
+    BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, Limits, RenderPipeline,
     RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
     SamplerDescriptor, Texture, TextureData, TextureDescriptor,
 };
@@ -87,4 +87,5 @@ pub(crate) trait GfxBackendImpl {
         &mut self,
         desc: RenderTextureDescriptor,
     ) -> Result<RenderTexture, String>;
+    fn limits(&self) -> Limits;
 }

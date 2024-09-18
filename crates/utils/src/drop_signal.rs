@@ -8,7 +8,7 @@ pub struct DropObserver {
 }
 
 impl DropObserver {
-    // Returns a signal struct to check if the object was dropped
+    /// Returns a signal struct to check if the object was dropped
     pub fn signal(&self) -> DropSignal {
         self.inner.flag.clone()
     }

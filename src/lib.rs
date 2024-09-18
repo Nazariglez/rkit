@@ -6,5 +6,3 @@ pub use utils::*;
 
 #[cfg(feature = "draw")]
 pub use draw;
-
-pub use text::*;

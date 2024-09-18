@@ -633,12 +633,16 @@ dependencies = [
  "arrayvec",
  "atomic_refcell",
  "core",
+ "cosmic-text",
+ "etagere",
  "heapless",
  "internment",
  "log",
+ "lru",
  "lyon",
  "once_cell",
  "rayon",
+ "rustc-hash 2.0.0",
  "smallvec 2.0.0-alpha.7",
  "utils",
 ]
@@ -1983,7 +1987,6 @@ dependencies = [
  "etagere",
  "fastrand",
  "log",
- "text",
  "utils",
 ]
 
@@ -2301,17 +2304,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "text"
-version = "0.0.0"
-dependencies = [
- "core",
- "cosmic-text",
- "etagere",
- "lru",
- "rustc-hash 2.0.0",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2491,6 +2483,10 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.0.0"
+dependencies = [
+ "hashbrown",
+ "rustc-hash 2.0.0",
+]
 
 [[package]]
 name = "uuid"

@@ -1,10 +1,13 @@
 use rkit::draw::{self, Sprite};
 use rkit::gfx::{self, Color, Texture, TextureFormat};
 use std::collections::HashMap;
+use std::process::id;
+use std::sync::Arc;
 
+use cosmic_text::fontdb::Source;
 use cosmic_text::{
     Align, Attrs, Buffer as TBuffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch,
-    SwashCache, SwashContent, Weight, Wrap,
+    Style, SwashCache, SwashContent, Weight, Wrap,
 };
 use draw::draw_2d;
 use etagere::*;
@@ -54,8 +57,7 @@ impl State {
     fn new() -> Result<Self, String> {
         const W: u32 = 350;
         const H: u32 = 350;
-        // let mut font_system = FontSystem::new(); // Manages fonts and caches
-        let mut font_system = FontSystem::new();
+        let mut font_system = FontSystem::new(); // Manages fonts and caches
         let tbuffer = create_text_buffer(&mut font_system);
         let atlas = AtlasAllocator::new(size2(W as _, H as _));
         let tex = draw::create_sprite()
@@ -180,24 +182,55 @@ fn update(s: &mut State) {
     gfx::render_to_frame(&draw).unwrap();
 }
 
+#[derive(Clone)]
+struct Font {
+    family: Arc<String>,
+    weight: Weight,
+    style: Style,
+    stretch: Stretch,
+}
+
+fn create_font(font_system: &mut FontSystem, data: &'static [u8]) -> Result<Font, String> {
+    let ids = font_system
+        .db_mut()
+        .load_font_source(Source::Binary(Arc::new(data)));
+    let id = ids
+        .get(0)
+        .ok_or_else(|| "Cannot create the font".to_string())?
+        .clone();
+    let face = font_system
+        .db()
+        .face(id)
+        .ok_or_else(|| "Invalid font type".to_string())?;
+    Ok(Font {
+        family: Arc::new(face.families[0].0.to_string()),
+        weight: face.weight,
+        style: face.style,
+        stretch: face.stretch,
+    })
+}
+
 fn create_text_buffer(font_system: &mut FontSystem) -> TBuffer {
     // font_system
     //     .db_mut()
     //     .load_font_data(include_bytes!("assets/Ubuntu-B.ttf").to_vec());
 
+    let font = create_font(
+        font_system,
+        include_bytes!("assets/kenney_pixel-webfont.ttf"),
+    )
+    .unwrap();
+    let attrs = Attrs::new()
+        .family(Family::Name(&font.family))
+        .weight(font.weight)
+        .style(font.style)
+        .stretch(font.stretch);
+
     let metrics = Metrics::new(32.0, 32.0); // Font size and line height
     let mut buffer = TBuffer::new(font_system, metrics); // Create the buffer for text
 
-    let attrs = Attrs::new()
-        // .family(Family::Name("JetBrains Mono"));
-        .family(Family::Name("FiraCode Nerd Font"));
-    // .weight(Weight::BOLD); //.family(Family::Name("Utu")); //.family(Family::SansSerif).weight(Weight::BOLD);
-    buffer.set_text(
-        font_system,
-        "Kanji 漢字, Japanese 😂-👍 pronunciation: [kaɲdʑi]) >= != 󱎌 󱘗󱘗󱘗󱘗󱘗",
-        attrs,
-        Shaping::Advanced,
-    ); // Set the text
+    buffer.set_text(font_system, "ベクトルテキスト🎉", attrs, Shaping::Advanced); // Set the text
+                                                                                  // buffer.set_rich_text()
     buffer.set_wrap(font_system, Wrap::Word);
     buffer.set_size(font_system, Some(250.0), None);
     buffer.shape_until_scroll(font_system, false);

@@ -33,7 +33,6 @@ members = ["crates/*"]
 core = { path = "crates/core" }
 utils = { path = "crates/utils" }
 draw = { path = "crates/draw" }
-text = { path = "crates/text" }
 
 ## common deps
 log = "0.4.22"
@@ -50,11 +49,11 @@ bytemuck = "1.17.1"
 smallvec = "2.0.0-alpha.7"
 once_cell = "1.19.0"
 rayon = "1.10.0"
+hashbrown = "0.14.5"
 
 [dependencies]
 core.workspace = true
 utils.workspace = true
-text.workspace = true
 draw = { workspace = true, optional = true }
 
 fastrand = { version = "2.1.1", optional = true }
