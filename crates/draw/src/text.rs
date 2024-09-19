@@ -2,12 +2,11 @@ use core::gfx::{self, Sampler, Texture, TextureFilter, TextureFormat};
 use core::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::{Source, ID};
 use cosmic_text::{
-    Buffer, CacheKey, FontSystem, LayoutGlyph, LayoutRun, PhysicalGlyph, Stretch, Style,
-    SwashCache, SwashContent, Weight,
+    Attrs, Buffer, CacheKey, Family, FontSystem, LayoutGlyph, LayoutRun, Metrics, PhysicalGlyph,
+    Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
 };
 use etagere::{size2, BucketedAtlasAllocator};
 use std::sync::Arc;
-use utils::drop_signal::DropObserver;
 use utils::fast_cache::FastCache;
 
 const DEFAULT_TEXTURE_SIZE: u32 = 256;
@@ -24,7 +23,16 @@ pub struct Font {
     weight: Weight,
     style: Style,
     stretch: Stretch,
-    drop_observer: DropObserver,
+    // TODO DropObserver, however seems that cosmic-text doesn't have a way to remove fonts right now
+}
+
+pub struct TextInfo<'a> {
+    font: Option<&'a Font>,
+    text: &'a str,
+    wrap_width: Option<f32>,
+    font_size: f32,
+    line_height: Option<f32>,
+    scale: f32,
 }
 
 pub struct TextSystem {
@@ -34,8 +42,10 @@ pub struct TextSystem {
     cache: FastCache<CacheKey, GlyphInfo>,
     font_system: FontSystem,
     swash: SwashCache,
+    buffer: Buffer,
     max_texture_size: u32,
     font_ids: u64,
+    default_font: Option<Font>,
 }
 
 impl TextSystem {
@@ -80,22 +90,36 @@ impl TextSystem {
 
         let cache = FastCache::default();
 
-        let font_system = FontSystem::new();
+        let mut font_system = FontSystem::new();
         let swash = SwashCache::new();
 
-        Ok(Self {
+        let buffer = Buffer::new(&mut font_system, Metrics::default());
+
+        let mut sys = Self {
             mask,
             color,
             sampler,
             cache,
             font_system,
             swash,
+            buffer,
             max_texture_size,
             font_ids: 0,
-        })
+            default_font: None,
+        };
+
+        #[cfg(feature = "default-font")]
+        {
+            let font = sys.create_font(include_bytes!(
+                "./resources/arcade-legacy/arcade-legacy.ttf"
+            ))?;
+            sys.default_font = Some(font);
+        }
+
+        Ok(sys)
     }
 
-    fn create_font(&mut self, data: &'static [u8]) -> Result<Font, String> {
+    pub fn create_font(&mut self, data: &'static [u8]) -> Result<Font, String> {
         let id = self.font_ids;
         self.font_ids += 1;
         let ids = self
@@ -118,7 +142,6 @@ impl TextSystem {
             weight: face.weight,
             style: face.style,
             stretch: face.stretch,
-            drop_observer: Default::default(),
         })
     }
 
@@ -126,42 +149,70 @@ impl TextSystem {
     // in case we need to re-start because we rebuild the textures we can show all
     // glyphs instead of only some (think of rebuilding tex in the middle of the buffer)
 
-    fn prepare(&mut self, glyph: PhysicalGlyph) {
-        if self.cache.contains_key(&glyph.cache_key) {
-            return;
+    pub fn prepare_text(&mut self, text: &TextInfo) {
+        let font = text.font.or(self.default_font.as_ref());
+        let attrs = match font {
+            Some(f) => Attrs::new()
+                .family(Family::Name(&f.family))
+                .weight(f.weight)
+                .style(f.style)
+                .stretch(f.stretch),
+            None => Attrs::new(),
+        };
+
+        let line_height = text.line_height.unwrap_or(text.font_size * 1.2);
+        let metrics = Metrics::new(text.font_size, line_height);
+        self.buffer.set_metrics(&mut self.font_system, metrics);
+        self.buffer
+            .set_size(&mut self.font_system, text.wrap_width, None);
+        self.buffer
+            .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
+        self.buffer.shape_until_scroll(&mut self.font_system, false);
+
+        self.process(text.scale);
+    }
+
+    fn process(&mut self, scale: f32) {
+        for run in self.buffer.layout_runs() {
+            for layout in run.glyphs {
+                let glyph = layout.physical((0.0, 0.0), scale);
+                if self.cache.contains_key(&glyph.cache_key) {
+                    continue;
+                }
+
+                let Some(image) = self
+                    .swash
+                    .get_image_uncached(&mut self.font_system, glyph.cache_key)
+                else {
+                    continue;
+                };
+
+                let width = image.placement.width;
+                let height = image.placement.height;
+                if width == 0 || height == 0 {
+                    continue;
+                }
+
+                let typ = match image.content {
+                    SwashContent::Mask => AtlasType::Mask,
+                    SwashContent::Color => AtlasType::Color,
+                    SwashContent::SubpixelMask => continue, // not supported by cosmic-text yet
+                };
+
+                let atlas = match typ {
+                    AtlasType::Mask => &mut self.mask,
+                    AtlasType::Color => &mut self.color,
+                };
+
+                let atlas_pos = atlas.store(uvec2(width, height), &image.data).unwrap();
+                let info = GlyphInfo {
+                    pos: Pos::new(image.placement.left as _, -image.placement.top as _),
+                    size: Pos::new(image.placement.width as _, image.placement.height as _),
+                    atlas_pos,
+                };
+                self.cache.insert(glyph.cache_key, info);
+            }
         }
-
-        let Some(image) = self
-            .swash
-            .get_image_uncached(&mut self.font_system, glyph.cache_key)
-        else {
-            return;
-        };
-
-        let width = image.placement.width;
-        let height = image.placement.height;
-        if width == 0 || height == 0 {
-            return;
-        }
-
-        let typ = match image.content {
-            SwashContent::Mask => AtlasType::Mask,
-            SwashContent::Color => AtlasType::Color,
-            SwashContent::SubpixelMask => return, // not supported by cosmic-text yet
-        };
-
-        let atlas = match typ {
-            AtlasType::Mask => &mut self.mask,
-            AtlasType::Color => &mut self.color,
-        };
-
-        let atlas_pos = atlas.store(uvec2(width, height), &image.data).unwrap();
-        let info = GlyphInfo {
-            pos: Pos::new(image.placement.left as _, -image.placement.top as _),
-            size: Pos::new(image.placement.width as _, image.placement.height as _),
-            atlas_pos,
-        };
-        self.cache.insert(glyph.cache_key, info);
     }
 }
 

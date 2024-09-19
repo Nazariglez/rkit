@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use cosmic_text::fontdb::Source;
 use cosmic_text::{
-    Align, Attrs, Buffer as TBuffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch,
-    Style, SwashCache, SwashContent, Weight, Wrap,
+    Align, Attrs, AttrsList, Buffer as TBuffer, BufferLine, CacheKey, Family, FontSystem,
+    LineEnding, Metrics, Shaping, Stretch, Style, SwashCache, SwashContent, Weight, Wrap,
 };
 use draw::draw_2d;
 use etagere::*;
@@ -217,7 +217,7 @@ fn create_text_buffer(font_system: &mut FontSystem) -> TBuffer {
 
     let font = create_font(
         font_system,
-        include_bytes!("assets/kenney_pixel-webfont.ttf"),
+        include_bytes!("assets/arcade-legacy/arcade-legacy.ttf"),
     )
     .unwrap();
     let attrs = Attrs::new()
@@ -226,13 +226,19 @@ fn create_text_buffer(font_system: &mut FontSystem) -> TBuffer {
         .style(font.style)
         .stretch(font.stretch);
 
-    let metrics = Metrics::new(32.0, 32.0); // Font size and line height
+    let metrics = Metrics::new(16.0, 32.0 * 1.2); // Font size and line height
     let mut buffer = TBuffer::new(font_system, metrics); // Create the buffer for text
 
     buffer.set_text(font_system, "ベクトルテキスト🎉", attrs, Shaping::Advanced); // Set the text
-                                                                                  // buffer.set_rich_text()
+    buffer.lines.push(BufferLine::new(
+        "Super Text --- Super Text\nSuuuuuup",
+        LineEnding::default(),
+        AttrsList::new(attrs),
+        Shaping::Advanced,
+    ));
+    // buffer.set_rich_text()
     buffer.set_wrap(font_system, Wrap::Word);
-    buffer.set_size(font_system, Some(250.0), None);
+    // buffer.set_size(font_system, Some(250.0), None);
     buffer.shape_until_scroll(font_system, false);
 
     list_fonts(font_system);

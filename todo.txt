@@ -16,3 +16,8 @@
     * stencil must be done in one pass
     * resize doesn't update the surface/offscreen
     * gfx_render_texture looks a bit weird when textures overlap, like darker colors?
+
+* License section
+We need to include the licence of any asset on the readme or somewhere, and make it clear
+that if the user uses it then it should includes the licence along with the final binary
+    * arcade-legacy font

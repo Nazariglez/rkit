@@ -65,7 +65,7 @@ cosmic-text = "0.12.1"
 etagere = "0.2.13"
 
 [features]
-default = ["random", "draw"]
+default = ["random", "draw", "draw-default-font"]
 # enable clipboard
 clipboard = ["core/clipboard"]
 # enable dropping files to window
@@ -78,3 +78,5 @@ webgl = ["core/webgl"]
 random = ["dep:fastrand"]
 # enables draw API
 draw = ["dep:draw"]
+# included a default font
+draw-default-font = ["draw?/default-font"]
