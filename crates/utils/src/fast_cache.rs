@@ -1,3 +1,4 @@
+use hashbrown::hash_map::{Iter, IterMut};
 use hashbrown::HashMap;
 use rustc_hash::FxHasher;
 use std::hash::{BuildHasherDefault, Hash};
@@ -60,5 +61,17 @@ where
     #[inline]
     pub fn clear(&mut self) {
         self.inner.clear();
+    }
+
+    // Implementing iter for immutable iteration
+    #[inline]
+    pub fn iter(&self) -> Iter<K, V> {
+        self.inner.iter()
+    }
+
+    // Implementing iter_mut for mutable iteration
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<K, V> {
+        self.inner.iter_mut()
     }
 }

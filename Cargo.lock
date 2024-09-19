@@ -635,6 +635,7 @@ dependencies = [
  "core",
  "cosmic-text",
  "etagere",
+ "hashbrown",
  "heapless",
  "internment",
  "log",

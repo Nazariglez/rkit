@@ -1,7 +1,7 @@
 use rkit::draw::{self, Sprite};
 use rkit::gfx::{self, Color, Texture, TextureFormat};
+use rkit::input;
 use std::collections::HashMap;
-use std::process::id;
 use std::sync::Arc;
 
 use cosmic_text::fontdb::Source;
@@ -108,17 +108,9 @@ fn measure(buffer: &TBuffer) -> Vec2 {
 fn update(s: &mut State) {
     s.sys.prepare_text(&text::TextInfo {
         font: None,
-        text: r#"
-        ベクトルテキスト🎉
-àèìòùáéíóúäëïöüñ;:!"·$%&/()=
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at tellus libero. Vivamus convallis libero eget tincidunt volutpat. In nisl ex, pretium aliquet libero vitae, posuere aliquam mi. Duis tempus consectetur mauris, eget eleifend eros consequat in. Interdum et malesuada fames ac ante ipsum primis in faucibus. Nunc vitae elit ullamcorper, auctor tortor quis, faucibus risus. Maecenas risus elit, egestas et enim in, commodo pretium felis. Morbi ultrices justo vel lacinia pellentesque. Nulla elementum, neque id rhoncus tincidunt, mauris lorem vulputate justo, rutrum egestas risus leo a sem. Nam ipsum leo, cursus et viverra quis, tempor vitae velit. Suspendisse porta ipsum vel orci dictum, vel malesuada massa interdum. Ut posuere orci ac volutpat ultricies.
-Nunc varius, diam ac cursus dapibus, tortor quam dapibus massa, ut sodales ex velit non libero. Pellentesque commodo eros tristique porttitor fermentum. Vivamus vel arcu elit. Morbi vitae erat enim. Mauris dui mi, faucibus vehicula placerat id, ullamcorper eget tellus. In laoreet lectus pulvinar, tempor turpis id, imperdiet est. Maecenas sed tincidunt quam. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Etiam vel euismod nisi. Praesent euismod nibh mauris, non tempor lectus ornare at. Quisque finibus id orci id fringilla. Curabitur nec urna vitae mi tincidunt auctor. Donec pulvinar ex a volutpat eleifend.
-Praesent dapibus diam a lacinia fermentum. Sed venenatis tellus non tristique venenatis. Vestibulum id euismod nisi. Proin at enim quis orci malesuada varius vitae et massa. Nunc sit amet dolor erat. Donec vel ipsum ipsum. Maecenas at maximus ante, et sagittis risus. Sed convallis commodo ipsum, quis sodales nulla tincidunt at. Etiam condimentum elementum ipsum molestie cursus. Proin viverra nibh vitae dictum interdum. Nullam eleifend nisl a turpis finibus congue. Duis cursus turpis ex, eget feugiat lorem hendrerit nec. Praesent at suscipit dui, nec ultrices nunc. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Ut risus est, ultricies non luctus sed, vehicula ac quam.
-Fusce auctor sem purus. Morbi venenatis neque id tempor elementum. Quisque fringilla arcu vitae ante imperdiet viverra. Sed vel ante augue. Phasellus tempus diam et ligula tempor iaculis. Integer elementum maximus lorem sed dictum. Nunc leo odio, blandit eget vestibulum ut, venenatis non eros. Nullam volutpat bibendum tristique. Maecenas eu maximus mi. Pellentesque gravida eros eget mi lacinia, placerat dapibus nibh sagittis. Pellentesque interdum lobortis vulputate. Etiam eget metus eget velit ullamcorper porta at et velit. Nam sed congue sem. Nunc vestibulum augue ex, at gravida nulla gravida at. In eget placerat metus, vitae vestibulum elit. Suspendisse non arcu eget eros porttitor vehicula.
-Sed sed accumsan augue. Nulla semper semper volutpat. Aliquam erat volutpat. Nullam bibendum ac nisi eu posuere. Quisque ac erat erat. Sed commodo massa nisi, in suscipit justo ultricies quis. Nulla vitae lectus non leo tristique egestas. Nulla est sapien, aliquam at sagittis nec, maximus non risus. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Cras placerat, leo sed laoreet egestas, erat quam ullamcorper nisl, sit amet ornare quam eros id sem. In in enim tempus, interdum mauris a, varius sem.
-        "#,
+        text: r#"🤪ベクトルテキスト🎉"#,
         wrap_width: None,
-        font_size: 14.0,
+        font_size: 24.0,
         line_height: None,
         scale: 1.0,
     });
@@ -128,6 +120,18 @@ Sed sed accumsan augue. Nulla semper semper volutpat. Aliquam erat volutpat. Nul
 
     draw.image(&s.mask);
     draw.image(&s.color).position(vec2(400.0, 0.0));
+
+    let text_list = input::text_pressed();
+    text_list.iter().for_each(|t| {
+        s.sys.prepare_text(&text::TextInfo {
+            font: None,
+            text: t,
+            wrap_width: None,
+            font_size: 28.0,
+            line_height: None,
+            scale: 1.0,
+        });
+    });
 
     // let mut pos = vec2(10.0, 300.0);
     //

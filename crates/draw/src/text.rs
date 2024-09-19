@@ -7,10 +7,13 @@ use cosmic_text::{
     Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
 };
 use etagere::{size2, Allocation, BucketedAtlasAllocator};
+use hashbrown::HashSet;
+use rustc_hash::FxHasher;
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use utils::fast_cache::FastCache;
 
-const DEFAULT_TEXTURE_SIZE: u32 = 64;
+const DEFAULT_TEXTURE_SIZE: u32 = 256;
 const ATLAS_OFFSET: u32 = 1;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -164,11 +167,7 @@ impl TextSystem {
         })
     }
 
-    // TODO FRAME STARTS so we know what glyphs needs to be renders this frame?
-    // in case we need to re-start because we rebuild the textures we can show all
-    // glyphs instead of only some (think of rebuilding tex in the middle of the buffer)
-
-    pub fn prepare_text(&mut self, text: &TextInfo) {
+    pub fn prepare_text(&mut self, text: &TextInfo) -> Result<(), String> {
         let font = text.font.or(self.default_font.as_ref());
         let attrs = match font {
             Some(f) => Attrs::new()
@@ -188,13 +187,46 @@ impl TextSystem {
             .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
-        self.process(text.scale);
+        match self.process(text.scale)? {
+            PostAction::Restore => {
+                self.restore();
+                self.prepare_text(text)
+            }
+            PostAction::Clear => {
+                self.clear()?;
+                self.prepare_text(text)
+            }
+            _ => Ok(()),
+        }
     }
 
-    fn process(&mut self, scale: f32) {
+    fn restore(&mut self) {
+        log::info!("Restoring TextAtlas glyphs.",);
+
+        // TODO eventually add gfx::copy_texture_to_texture should be more efficient
+        for (key, glyph) in self.cache.iter() {
+            let atlas = match glyph.typ {
+                AtlasType::Mask => &mut self.mask,
+                AtlasType::Color => &mut self.color,
+                AtlasType::None => continue,
+            };
+
+            let Some(image) = self.swash.get_image_uncached(&mut self.font_system, *key) else {
+                continue;
+            };
+
+            let offset = uvec2(glyph.atlas_pos.x as _, glyph.atlas_pos.y as _);
+            let size = uvec2(glyph.size.x as _, glyph.size.y as _);
+            atlas.upload(size, offset, &image.data).unwrap();
+        }
+    }
+
+    fn process(&mut self, scale: f32) -> Result<PostAction, String> {
         for run in self.buffer.layout_runs() {
             for layout in run.glyphs {
                 let glyph = layout.physical((0.0, 0.0), scale);
+
+                // if it's already in the main cache just skip it
                 if self.cache.contains_key(&glyph.cache_key) {
                     continue;
                 }
@@ -209,6 +241,16 @@ impl TextSystem {
                 let width = image.placement.width;
                 let height = image.placement.height;
                 if width == 0 || height == 0 {
+                    // if there is nothing to rasterize, then cache it to avoid getting the image but mark it as skipable
+                    self.cache.insert(
+                        glyph.cache_key,
+                        GlyphInfo {
+                            pos: Pos::new(0, 0),
+                            size: Pos::new(0, 0),
+                            atlas_pos: Default::default(),
+                            typ: AtlasType::None,
+                        },
+                    );
                     continue;
                 }
 
@@ -221,20 +263,18 @@ impl TextSystem {
                 let atlas = match typ {
                     AtlasType::Mask => &mut self.mask,
                     AtlasType::Color => &mut self.color,
+                    AtlasType::None => unreachable!("This should never happen"),
                 };
 
                 let atlas_pos = match atlas.store(uvec2(width, height), &image.data).unwrap() {
                     Some(pos) => pos,
                     None => {
-                        let grow = atlas.grow().unwrap();
-                        if !grow {
-                            log::info!("Max text atlas texture reached, reseting...");
+                        let grow = atlas.grow()?;
+                        if grow {
+                            return Ok(PostAction::Restore);
+                        } else {
+                            return Ok(PostAction::Clear);
                         }
-
-                        // we clear the atlas no matter if it grows or not, so next frame we get all the glyps again
-                        // TODO we may want a way to redraw all glyph on this frame to avoid a one frame visual glitch
-                        self.clear();
-                        return;
                     }
                 };
 
@@ -242,17 +282,33 @@ impl TextSystem {
                     pos: Pos::new(image.placement.left as _, -image.placement.top as _),
                     size: Pos::new(image.placement.width as _, image.placement.height as _),
                     atlas_pos,
+                    typ,
                 };
                 self.cache.insert(glyph.cache_key, info);
             }
         }
+
+        Ok(PostAction::None)
     }
 
-    fn clear(&mut self) {
+    fn clear(&mut self) -> Result<(), String> {
+        self.color
+            .clear()
+            .map_err(|e| format!("Cannot clear Color text atlas: {}", e))?;
+        self.mask
+            .clear()
+            .map_err(|e| format!("Cannot clear Mask text atlas: {}", e))?;
+
         self.cache.clear();
-        self.color.clear();
-        self.mask.clear();
+
+        Ok(())
     }
+}
+
+enum PostAction {
+    None,
+    Restore,
+    Clear,
 }
 
 enum AtlasGrowError {
@@ -260,7 +316,9 @@ enum AtlasGrowError {
     Gfx(String),
 }
 
+#[derive(Copy, Clone, Debug)]
 enum AtlasType {
+    None,
     Mask,
     Color,
 }
@@ -287,12 +345,7 @@ impl AtlasData {
         };
 
         let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
-
-        gfx::write_texture(&self.texture)
-            .from_data(&data)
-            .with_offset(offset)
-            .with_size(size)
-            .build()?;
+        self.upload(size, offset, data)?;
 
         Ok(Some(vec2(
             alloc.rectangle.min.x as _,
@@ -300,13 +353,27 @@ impl AtlasData {
         )))
     }
 
+    fn upload(&self, size: UVec2, offset: UVec2, data: &[u8]) -> Result<(), String> {
+        log::info!("Uploading new glyph to texture");
+        gfx::write_texture(&self.texture)
+            .from_data(&data)
+            .with_offset(offset)
+            .with_size(size)
+            .build()
+    }
+
     fn grow(&mut self) -> Result<bool, String> {
         let next_size = self.current_size * 2;
         if next_size > self.max_texture_size {
+            log::info!("Max text atlas size reached.");
             return Ok(false);
         }
 
-        self.allocator.clear();
+        log::info!(
+            "Growing text atlas from {} to {}",
+            self.current_size,
+            next_size
+        );
         self.allocator.grow(size2(next_size as _, next_size as _));
 
         self.texture = gfx::create_texture()
@@ -320,8 +387,18 @@ impl AtlasData {
         Ok(true)
     }
 
-    fn clear(&mut self) {
+    fn clear(&mut self) -> Result<(), String> {
+        let channels = self.texture.format().channels();
+        let len = self.texture.size().element_product() as usize * channels as usize;
+        let empty = vec![0; len];
+
+        gfx::write_texture(&self.texture)
+            .from_data(&empty)
+            .build()?;
+
         self.allocator.clear();
+
+        Ok(())
     }
 }
 
@@ -354,4 +431,5 @@ struct GlyphInfo {
     pos: Pos<i16>,
     size: Pos<u16>,
     atlas_pos: Vec2,
+    typ: AtlasType,
 }
