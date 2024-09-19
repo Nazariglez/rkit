@@ -104,8 +104,8 @@ impl<'a> SpriteBuilder<'a> {
         self
     }
 
-    pub fn with_sampler(mut self, sampler: Sampler) -> Self {
-        self.sampler = Some(sampler);
+    pub fn with_sampler(mut self, sampler: &Sampler) -> Self {
+        self.sampler = Some(sampler.clone());
         self
     }
 

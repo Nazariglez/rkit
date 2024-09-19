@@ -1,6 +1,6 @@
 mod m2d;
 mod sprite;
-mod text;
+pub mod text;
 
 pub use m2d::*;
 pub use sprite::*;

@@ -13,6 +13,8 @@ use draw::draw_2d;
 use etagere::*;
 use rkit::math::{uvec2, vec2, Rect, Vec2};
 
+use rkit::draw::text;
+
 #[derive(Copy, Clone, Debug)]
 struct Pos<N> {
     x: N,
@@ -45,12 +47,15 @@ struct GlyphInfo {
 }
 
 struct State {
+    sys: text::TextSystem,
     tbuffer: TBuffer,
     cache: SwashCache,
     font_system: FontSystem,
     glyphs: HashMap<CacheKey, GlyphInfo>,
     atlas_allocator: AtlasAllocator,
     tex: Sprite,
+    mask: Sprite,
+    color: Sprite,
 }
 
 impl State {
@@ -66,13 +71,19 @@ impl State {
             .with_write_flag(true)
             .build()?;
 
+        let sys = text::TextSystem::new()?;
+        let mask = sys.mask_texture();
+        let color = sys.color_texture();
         Ok(Self {
+            sys,
             font_system,
             tbuffer,
             cache: SwashCache::new(),
             glyphs: HashMap::default(),
             atlas_allocator: atlas,
             tex,
+            mask,
+            color,
         })
     }
 }
@@ -95,89 +106,113 @@ fn measure(buffer: &TBuffer) -> Vec2 {
 }
 
 fn update(s: &mut State) {
+    s.sys.prepare_text(&text::TextInfo {
+        font: None,
+        text: r#"
+        ベクトルテキスト🎉
+àèìòùáéíóúäëïöüñ;:!"·$%&/()=
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at tellus libero. Vivamus convallis libero eget tincidunt volutpat. In nisl ex, pretium aliquet libero vitae, posuere aliquam mi. Duis tempus consectetur mauris, eget eleifend eros consequat in. Interdum et malesuada fames ac ante ipsum primis in faucibus. Nunc vitae elit ullamcorper, auctor tortor quis, faucibus risus. Maecenas risus elit, egestas et enim in, commodo pretium felis. Morbi ultrices justo vel lacinia pellentesque. Nulla elementum, neque id rhoncus tincidunt, mauris lorem vulputate justo, rutrum egestas risus leo a sem. Nam ipsum leo, cursus et viverra quis, tempor vitae velit. Suspendisse porta ipsum vel orci dictum, vel malesuada massa interdum. Ut posuere orci ac volutpat ultricies.
+Nunc varius, diam ac cursus dapibus, tortor quam dapibus massa, ut sodales ex velit non libero. Pellentesque commodo eros tristique porttitor fermentum. Vivamus vel arcu elit. Morbi vitae erat enim. Mauris dui mi, faucibus vehicula placerat id, ullamcorper eget tellus. In laoreet lectus pulvinar, tempor turpis id, imperdiet est. Maecenas sed tincidunt quam. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Etiam vel euismod nisi. Praesent euismod nibh mauris, non tempor lectus ornare at. Quisque finibus id orci id fringilla. Curabitur nec urna vitae mi tincidunt auctor. Donec pulvinar ex a volutpat eleifend.
+Praesent dapibus diam a lacinia fermentum. Sed venenatis tellus non tristique venenatis. Vestibulum id euismod nisi. Proin at enim quis orci malesuada varius vitae et massa. Nunc sit amet dolor erat. Donec vel ipsum ipsum. Maecenas at maximus ante, et sagittis risus. Sed convallis commodo ipsum, quis sodales nulla tincidunt at. Etiam condimentum elementum ipsum molestie cursus. Proin viverra nibh vitae dictum interdum. Nullam eleifend nisl a turpis finibus congue. Duis cursus turpis ex, eget feugiat lorem hendrerit nec. Praesent at suscipit dui, nec ultrices nunc. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Ut risus est, ultricies non luctus sed, vehicula ac quam.
+Fusce auctor sem purus. Morbi venenatis neque id tempor elementum. Quisque fringilla arcu vitae ante imperdiet viverra. Sed vel ante augue. Phasellus tempus diam et ligula tempor iaculis. Integer elementum maximus lorem sed dictum. Nunc leo odio, blandit eget vestibulum ut, venenatis non eros. Nullam volutpat bibendum tristique. Maecenas eu maximus mi. Pellentesque gravida eros eget mi lacinia, placerat dapibus nibh sagittis. Pellentesque interdum lobortis vulputate. Etiam eget metus eget velit ullamcorper porta at et velit. Nam sed congue sem. Nunc vestibulum augue ex, at gravida nulla gravida at. In eget placerat metus, vitae vestibulum elit. Suspendisse non arcu eget eros porttitor vehicula.
+Sed sed accumsan augue. Nulla semper semper volutpat. Aliquam erat volutpat. Nullam bibendum ac nisi eu posuere. Quisque ac erat erat. Sed commodo massa nisi, in suscipit justo ultricies quis. Nulla vitae lectus non leo tristique egestas. Nulla est sapien, aliquam at sagittis nec, maximus non risus. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Cras placerat, leo sed laoreet egestas, erat quam ullamcorper nisl, sit amet ornare quam eros id sem. In in enim tempus, interdum mauris a, varius sem.
+        "#,
+        wrap_width: None,
+        font_size: 14.0,
+        line_height: None,
+        scale: 1.0,
+    });
+
     let mut draw = draw_2d();
-    draw.clear(Color::BLACK);
-    let mut pos = vec2(10.0, 300.0);
+    draw.clear(Color::WHITE);
 
-    let block_size = measure(&s.tbuffer);
+    draw.image(&s.mask);
+    draw.image(&s.color).position(vec2(400.0, 0.0));
 
-    for run in s.tbuffer.layout_runs() {
-        for glyph in run.glyphs {
-            let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-            if !s.glyphs.contains_key(&physical_glyph.cache_key) {
-                if let Some(image) = s
-                    .cache
-                    .get_image_uncached(&mut s.font_system, physical_glyph.cache_key)
-                {
-                    let width = image.placement.width;
-                    let height = image.placement.height;
-
-                    if width == 0 || height == 0 {
-                        continue;
-                    }
-
-                    let alloc = s
-                        .atlas_allocator
-                        .allocate(size2((width + 1) as _, (height + 1) as _))
-                        .unwrap();
-
-                    let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
-                    let size = uvec2(width, height);
-
-                    let mut store = |bytes: &[u8]| {
-                        gfx::write_texture(&s.tex.texture())
-                            .from_data(&bytes)
-                            .with_offset(offset)
-                            .with_size(size)
-                            .build()
-                            .unwrap();
-
-                        let info = GlyphInfo {
-                            pos: Pos::new(image.placement.left as _, -image.placement.top as _),
-                            size: Pos::new(image.placement.width as _, image.placement.height as _),
-                            atlas_pos: vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _),
-                        };
-
-                        s.glyphs.insert(physical_glyph.cache_key, info);
-                    };
-
-                    match image.content {
-                        SwashContent::Mask => {
-                            let bytes = image
-                                .data
-                                .iter()
-                                .flat_map(|v| Color::rgba_u8(255, 255, 255, *v).to_rgba_u8())
-                                .collect::<Vec<_>>();
-                            store(&bytes);
-                        }
-                        SwashContent::SubpixelMask => {
-                            println!("|||||||||||||| HERE?");
-                        }
-                        SwashContent::Color => {
-                            // println!("|||||||||||||||||||||here?");
-                            store(&image.data);
-                        }
-                    }
-                }
-            }
-
-            if let Some(info) = s.glyphs.get(&physical_glyph.cache_key) {
-                let p = info.atlas_pos;
-                draw.image(&s.tex).position(vec2(400.0, 0.0));
-
-                let offset = vec2(block_size.x - run.line_w, 0.0) * 0.5;
-
-                let glyph_pos = vec2(physical_glyph.x as _, physical_glyph.y as _);
-                let pp = pos + offset + glyph_pos + info.pos.as_vec2() + vec2(0.0, run.line_y);
-                draw.image(&s.tex)
-                    .crop(info.atlas_pos, info.size.as_vec2())
-                    // .color(Color::RED)
-                    .position(pp);
-            }
-        }
-    }
-
+    // let mut pos = vec2(10.0, 300.0);
+    //
+    // let block_size = measure(&s.tbuffer);
+    //
+    // for run in s.tbuffer.layout_runs() {
+    //     for glyph in run.glyphs {
+    //         let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
+    //         if !s.glyphs.contains_key(&physical_glyph.cache_key) {
+    //             if let Some(image) = s
+    //                 .cache
+    //                 .get_image_uncached(&mut s.font_system, physical_glyph.cache_key)
+    //             {
+    //                 let width = image.placement.width;
+    //                 let height = image.placement.height;
+    //
+    //                 if width == 0 || height == 0 {
+    //                     continue;
+    //                 }
+    //
+    //                 let alloc = s
+    //                     .atlas_allocator
+    //                     .allocate(size2((width + 1) as _, (height + 1) as _))
+    //                     .unwrap();
+    //
+    //                 let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
+    //                 let size = uvec2(width, height);
+    //
+    //                 let mut store = |bytes: &[u8]| {
+    //                     gfx::write_texture(&s.tex.texture())
+    //                         .from_data(&bytes)
+    //                         .with_offset(offset)
+    //                         .with_size(size)
+    //                         .build()
+    //                         .unwrap();
+    //
+    //                     let info = GlyphInfo {
+    //                         pos: Pos::new(image.placement.left as _, -image.placement.top as _),
+    //                         size: Pos::new(image.placement.width as _, image.placement.height as _),
+    //                         atlas_pos: vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _),
+    //                     };
+    //
+    //                     s.glyphs.insert(physical_glyph.cache_key, info);
+    //                 };
+    //
+    //                 match image.content {
+    //                     SwashContent::Mask => {
+    //                         let bytes = image
+    //                             .data
+    //                             .iter()
+    //                             .flat_map(|v| Color::rgba_u8(255, 255, 255, *v).to_rgba_u8())
+    //                             .collect::<Vec<_>>();
+    //                         store(&bytes);
+    //                     }
+    //                     SwashContent::SubpixelMask => {
+    //                         println!("|||||||||||||| HERE?");
+    //                     }
+    //                     SwashContent::Color => {
+    //                         // println!("|||||||||||||||||||||here?");
+    //                         store(&image.data);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //
+    //         if let Some(info) = s.glyphs.get(&physical_glyph.cache_key) {
+    //             let p = info.atlas_pos;
+    //             draw.image(&s.tex).position(vec2(400.0, 0.0));
+    //
+    //             let offset = vec2(block_size.x - run.line_w, 0.0) * 0.5;
+    //
+    //             let glyph_pos = vec2(physical_glyph.x as _, physical_glyph.y as _);
+    //             let pp = pos + offset + glyph_pos + info.pos.as_vec2() + vec2(0.0, run.line_y);
+    //             draw.image(&s.tex)
+    //                 .crop(info.atlas_pos, info.size.as_vec2())
+    //                 // .color(Color::RED)
+    //                 .position(pp);
+    //         }
+    //     }
+    // }
+    //
     println!("--------------");
+
+    s.mask = s.sys.mask_texture();
+    s.color = s.sys.color_texture();
 
     gfx::render_to_frame(&draw).unwrap();
 }

@@ -1,3 +1,4 @@
+use crate::{Sprite, SpriteBuilder};
 use core::gfx::{self, Sampler, Texture, TextureFilter, TextureFormat};
 use core::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::{Source, ID};
@@ -5,11 +6,11 @@ use cosmic_text::{
     Attrs, Buffer, CacheKey, Family, FontSystem, LayoutGlyph, LayoutRun, Metrics, PhysicalGlyph,
     Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
 };
-use etagere::{size2, BucketedAtlasAllocator};
+use etagere::{size2, Allocation, BucketedAtlasAllocator};
 use std::sync::Arc;
 use utils::fast_cache::FastCache;
 
-const DEFAULT_TEXTURE_SIZE: u32 = 256;
+const DEFAULT_TEXTURE_SIZE: u32 = 64;
 const ATLAS_OFFSET: u32 = 1;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -27,12 +28,12 @@ pub struct Font {
 }
 
 pub struct TextInfo<'a> {
-    font: Option<&'a Font>,
-    text: &'a str,
-    wrap_width: Option<f32>,
-    font_size: f32,
-    line_height: Option<f32>,
-    scale: f32,
+    pub font: Option<&'a Font>,
+    pub text: &'a str,
+    pub wrap_width: Option<f32>,
+    pub font_size: f32,
+    pub line_height: Option<f32>,
+    pub scale: f32,
 }
 
 pub struct TextSystem {
@@ -43,7 +44,6 @@ pub struct TextSystem {
     font_system: FontSystem,
     swash: SwashCache,
     buffer: Buffer,
-    max_texture_size: u32,
     font_ids: u64,
     default_font: Option<Font>,
 }
@@ -65,11 +65,13 @@ impl TextSystem {
         let texture = gfx::create_texture()
             .with_empty_size(DEFAULT_TEXTURE_SIZE, DEFAULT_TEXTURE_SIZE)
             .with_format(TextureFormat::R8UNorm)
+            .with_write_flag(true)
             .build()?;
 
         let mask = AtlasData {
             allocator,
             texture,
+            max_texture_size,
             current_size: DEFAULT_TEXTURE_SIZE,
         };
 
@@ -80,11 +82,13 @@ impl TextSystem {
         ));
         let texture = gfx::create_texture()
             .with_empty_size(DEFAULT_TEXTURE_SIZE, DEFAULT_TEXTURE_SIZE)
+            .with_write_flag(true)
             .build()?;
 
         let color = AtlasData {
             allocator,
             texture,
+            max_texture_size,
             current_size: DEFAULT_TEXTURE_SIZE,
         };
 
@@ -93,7 +97,7 @@ impl TextSystem {
         let mut font_system = FontSystem::new();
         let swash = SwashCache::new();
 
-        let buffer = Buffer::new(&mut font_system, Metrics::default());
+        let buffer = Buffer::new(&mut font_system, Metrics::new(1.0, 1.0));
 
         let mut sys = Self {
             mask,
@@ -103,7 +107,6 @@ impl TextSystem {
             font_system,
             swash,
             buffer,
-            max_texture_size,
             font_ids: 0,
             default_font: None,
         };
@@ -117,6 +120,22 @@ impl TextSystem {
         }
 
         Ok(sys)
+    }
+
+    pub fn mask_texture(&self) -> Sprite {
+        SpriteBuilder::new()
+            .from_texture(&self.mask.texture)
+            .with_sampler(&self.sampler)
+            .build()
+            .unwrap()
+    }
+
+    pub fn color_texture(&self) -> Sprite {
+        SpriteBuilder::new()
+            .from_texture(&self.color.texture)
+            .with_sampler(&self.sampler)
+            .build()
+            .unwrap()
     }
 
     pub fn create_font(&mut self, data: &'static [u8]) -> Result<Font, String> {
@@ -204,7 +223,21 @@ impl TextSystem {
                     AtlasType::Color => &mut self.color,
                 };
 
-                let atlas_pos = atlas.store(uvec2(width, height), &image.data).unwrap();
+                let atlas_pos = match atlas.store(uvec2(width, height), &image.data).unwrap() {
+                    Some(pos) => pos,
+                    None => {
+                        let grow = atlas.grow().unwrap();
+                        if !grow {
+                            log::info!("Max text atlas texture reached, reseting...");
+                        }
+
+                        // we clear the atlas no matter if it grows or not, so next frame we get all the glyps again
+                        // TODO we may want a way to redraw all glyph on this frame to avoid a one frame visual glitch
+                        self.clear();
+                        return;
+                    }
+                };
+
                 let info = GlyphInfo {
                     pos: Pos::new(image.placement.left as _, -image.placement.top as _),
                     size: Pos::new(image.placement.width as _, image.placement.height as _),
@@ -214,6 +247,17 @@ impl TextSystem {
             }
         }
     }
+
+    fn clear(&mut self) {
+        self.cache.clear();
+        self.color.clear();
+        self.mask.clear();
+    }
+}
+
+enum AtlasGrowError {
+    MaxSizeReached,
+    Gfx(String),
 }
 
 enum AtlasType {
@@ -224,19 +268,23 @@ enum AtlasType {
 struct AtlasData {
     allocator: BucketedAtlasAllocator,
     texture: Texture,
+    max_texture_size: u32,
     current_size: u32,
 }
 
 impl AtlasData {
-    fn store(&mut self, size: UVec2, data: &[u8]) -> Result<Vec2, String> {
-        // TODO if alloc fails, we need to grow
-        let alloc = self
-            .allocator
-            .allocate(size2(
-                (size.x + ATLAS_OFFSET) as _,
-                (size.y + ATLAS_OFFSET) as _,
-            ))
-            .ok_or_else(|| "Not enough space on atlas".to_string())?;
+    fn store(&mut self, size: UVec2, data: &[u8]) -> Result<Option<Vec2>, String> {
+        let alloc = self.allocator.allocate(size2(
+            (size.x + ATLAS_OFFSET) as _,
+            (size.y + ATLAS_OFFSET) as _,
+        ));
+
+        let alloc = match alloc {
+            Some(alloc) => alloc,
+            None => {
+                return Ok(None);
+            }
+        };
 
         let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
 
@@ -246,7 +294,34 @@ impl AtlasData {
             .with_size(size)
             .build()?;
 
-        Ok(vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _))
+        Ok(Some(vec2(
+            alloc.rectangle.min.x as _,
+            alloc.rectangle.min.y as _,
+        )))
+    }
+
+    fn grow(&mut self) -> Result<bool, String> {
+        let next_size = self.current_size * 2;
+        if next_size > self.max_texture_size {
+            return Ok(false);
+        }
+
+        self.allocator.clear();
+        self.allocator.grow(size2(next_size as _, next_size as _));
+
+        self.texture = gfx::create_texture()
+            .with_empty_size(next_size, next_size)
+            .with_format(self.texture.format())
+            .with_write_flag(true)
+            .build()?;
+
+        self.current_size = next_size;
+
+        Ok(true)
+    }
+
+    fn clear(&mut self) {
+        self.allocator.clear();
     }
 }
 
