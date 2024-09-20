@@ -7,8 +7,6 @@ use core::math::Mat4;
 use internment::Intern;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use utils::drop_signal::DropSignal;
 
 pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =

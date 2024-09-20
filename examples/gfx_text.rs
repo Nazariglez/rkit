@@ -1,6 +1,6 @@
 use rkit::draw::{self, Sprite};
 use rkit::gfx::{self, Color, Texture, TextureFormat};
-use rkit::input;
+use rkit::{input, time};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -10,10 +10,13 @@ use cosmic_text::{
     LineEnding, Metrics, Shaping, Stretch, Style, SwashCache, SwashContent, Weight, Wrap,
 };
 use draw::draw_2d;
+use draw::text::get_text_system;
 use etagere::*;
+use rkit::app::set_window_title;
 use rkit::math::{uvec2, vec2, Rect, Vec2};
 
 use rkit::draw::text;
+use rkit::input::{is_key_down, is_key_pressed, KeyCode};
 
 #[derive(Copy, Clone, Debug)]
 struct Pos<N> {
@@ -47,43 +50,18 @@ struct GlyphInfo {
 }
 
 struct State {
-    sys: text::TextSystem,
-    tbuffer: TBuffer,
-    cache: SwashCache,
-    font_system: FontSystem,
-    glyphs: HashMap<CacheKey, GlyphInfo>,
-    atlas_allocator: AtlasAllocator,
-    tex: Sprite,
     mask: Sprite,
     color: Sprite,
+    font_size: f32,
 }
 
 impl State {
     fn new() -> Result<Self, String> {
-        const W: u32 = 350;
-        const H: u32 = 350;
-        let mut font_system = FontSystem::new(); // Manages fonts and caches
-        let tbuffer = create_text_buffer(&mut font_system);
-        let atlas = AtlasAllocator::new(size2(W as _, H as _));
-        let tex = draw::create_sprite()
-            .from_bytes(&[0; (W * H * 4) as _], W, H)
-            // .with_format(TextureFormat::R8UNorm)
-            .with_write_flag(true)
-            .build()?;
-
-        let sys = text::TextSystem::new()?;
-        let mask = sys.mask_texture();
-        let color = sys.color_texture();
+        let sys = get_text_system();
         Ok(Self {
-            sys,
-            font_system,
-            tbuffer,
-            cache: SwashCache::new(),
-            glyphs: HashMap::default(),
-            atlas_allocator: atlas,
-            tex,
-            mask,
-            color,
+            mask: sys.mask_texture(),
+            color: sys.color_texture(),
+            font_size: 14.0,
         })
     }
 }
@@ -106,14 +84,23 @@ fn measure(buffer: &TBuffer) -> Vec2 {
 }
 
 fn update(s: &mut State) {
-    s.sys.prepare_text(&text::TextInfo {
-        font: None,
-        text: r#"🤪ベクトルテキスト🎉"#,
-        wrap_width: None,
-        font_size: 24.0,
-        line_height: None,
-        scale: 1.0,
-    });
+    // s.sys.prepare_text(&text::TextInfo {
+    //     font: None,
+    //     text: r#"🤪ベクトルテキスト🎉"#,
+    //     wrap_width: None,
+    //     font_size: 24.0,
+    //     line_height: None,
+    //     scale: 1.0,
+    // });
+
+    if is_key_down(KeyCode::ShiftLeft)
+        && is_key_pressed(KeyCode::Space)
+        && is_key_down(KeyCode::SuperLeft)
+    {
+        s.font_size -= 1.0;
+    } else if is_key_down(KeyCode::ShiftLeft) && is_key_pressed(KeyCode::Space) {
+        s.font_size += 1.0;
+    }
 
     let mut draw = draw_2d();
     draw.clear(Color::WHITE);
@@ -121,17 +108,22 @@ fn update(s: &mut State) {
     draw.image(&s.mask);
     draw.image(&s.color).position(vec2(400.0, 0.0));
 
+    draw.text("🤪ベクトルテキスト🎉").size(24.0);
+
     let text_list = input::text_pressed();
     text_list.iter().for_each(|t| {
-        s.sys.prepare_text(&text::TextInfo {
-            font: None,
-            text: t,
-            wrap_width: None,
-            font_size: 28.0,
-            line_height: None,
-            scale: 1.0,
-        });
+        draw.text(t).size(s.font_size);
     });
+    // text_list.iter().for_each(|t| {
+    //     s.sys.prepare_text(&text::TextInfo {
+    //         font: None,
+    //         text: t,
+    //         wrap_width: None,
+    //         font_size: 28.0,
+    //         line_height: None,
+    //         scale: 1.0,
+    //     });
+    // });
 
     // let mut pos = vec2(10.0, 300.0);
     //
@@ -215,10 +207,13 @@ fn update(s: &mut State) {
     //
     println!("--------------");
 
-    s.mask = s.sys.mask_texture();
-    s.color = s.sys.color_texture();
+    let sys = get_text_system();
+    s.mask = sys.mask_texture();
+    s.color = sys.color_texture();
 
     gfx::render_to_frame(&draw).unwrap();
+
+    set_window_title(&format!("{:.0}", time::fps()));
 }
 
 #[derive(Clone)]

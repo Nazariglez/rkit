@@ -1,6 +1,7 @@
 use super::{get_2d_painter, get_mut_2d_painter, Pixel, Triangle};
 use crate::m2d::images_2d::Image;
 use crate::m2d::painter_2d::DrawPipeline;
+use crate::m2d::text_2d::Text2D;
 use crate::sprite::Sprite;
 use arrayvec::ArrayVec;
 use core::app::window_size;
@@ -259,6 +260,10 @@ impl Draw2D {
 
     pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image> {
         Drawing::new(self, Image::new(sprite))
+    }
+
+    pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D> {
+        Drawing::new(self, Text2D::new(text))
     }
 }
 

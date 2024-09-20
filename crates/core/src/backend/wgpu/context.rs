@@ -63,7 +63,6 @@ async fn generate_wgpu_ctx(
 
     log::info!("WGPU Adapter {:?}", adapter.get_info());
 
-    // TODO depending on adapter here, require limits for it.
     let limits = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
         wgpu::Limits::downlevel_webgl2_defaults()
     } else {

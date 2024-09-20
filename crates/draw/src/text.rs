@@ -1,4 +1,6 @@
+use crate::m2d::Painter2D;
 use crate::{Sprite, SpriteBuilder};
+use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, Sampler, Texture, TextureFilter, TextureFormat};
 use core::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::{Source, ID};
@@ -8,10 +10,22 @@ use cosmic_text::{
 };
 use etagere::{size2, Allocation, BucketedAtlasAllocator};
 use hashbrown::HashSet;
+use once_cell::sync::Lazy;
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use utils::fast_cache::FastCache;
+
+pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
+    Lazy::new(|| AtomicRefCell::new(TextSystem::new().unwrap()));
+
+pub fn get_text_system() -> AtomicRef<'static, TextSystem> {
+    TEXT_SYSTEM.borrow()
+}
+
+pub fn get_mut_text_system() -> AtomicRefMut<'static, TextSystem> {
+    TEXT_SYSTEM.borrow_mut()
+}
 
 const DEFAULT_TEXTURE_SIZE: u32 = 256;
 const ATLAS_OFFSET: u32 = 1;
@@ -27,16 +41,36 @@ pub struct Font {
     weight: Weight,
     style: Style,
     stretch: Stretch,
-    // TODO DropObserver, however seems that cosmic-text doesn't have a way to remove fonts right now
+    // TODO DropObserver, seems that cosmic-text doesn't have a way to remove fonts right now
+}
+
+pub struct GlyphData {
+    pub xy: Vec2,
+    pub size: Vec2,
+    pub uvs_xy: Vec2,
+    pub typ: AtlasType,
+}
+
+pub struct BlockInfo<'a> {
+    pub size: Vec2,
+    pub data: &'a [GlyphData],
 }
 
 pub struct TextInfo<'a> {
+    pub pos: Vec2,
     pub font: Option<&'a Font>,
     pub text: &'a str,
     pub wrap_width: Option<f32>,
     pub font_size: f32,
     pub line_height: Option<f32>,
     pub scale: f32,
+}
+
+struct ProcessData {
+    key: CacheKey,
+    pos: Vec2,
+    line_w: f32,
+    line_y: f32,
 }
 
 pub struct TextSystem {
@@ -49,6 +83,14 @@ pub struct TextSystem {
     buffer: Buffer,
     font_ids: u64,
     default_font: Option<Font>,
+
+    // used to calculate rendering data
+    process_data: Vec<ProcessData>,
+    temp_data: Vec<GlyphData>,
+
+    // rendering helpers to avoid allocations
+    pub render_vertices: Vec<f32>,
+    pub render_indices: Vec<u32>,
 }
 
 impl TextSystem {
@@ -112,6 +154,12 @@ impl TextSystem {
             buffer,
             font_ids: 0,
             default_font: None,
+
+            process_data: vec![],
+            temp_data: vec![],
+
+            render_vertices: vec![],
+            render_indices: vec![],
         };
 
         #[cfg(feature = "default-font")]
@@ -167,7 +215,11 @@ impl TextSystem {
         })
     }
 
-    pub fn prepare_text(&mut self, text: &TextInfo) -> Result<(), String> {
+    pub fn prepare_text(&mut self, text: &TextInfo) -> Result<BlockInfo, String> {
+        // clean the keys before we process a new text
+        self.process_data.clear();
+
+        // start processing the new text with the data provided by the user
         let font = text.font.or(self.default_font.as_ref());
         let attrs = match font {
             Some(f) => Attrs::new()
@@ -185,6 +237,7 @@ impl TextSystem {
             .set_size(&mut self.font_system, text.wrap_width, None);
         self.buffer
             .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
+        // lines text align?
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
         match self.process(text.scale)? {
@@ -196,7 +249,37 @@ impl TextSystem {
                 self.clear()?;
                 self.prepare_text(text)
             }
-            _ => Ok(()),
+            PostAction::End { size } => {
+                // cleaning the temporal data shared with the user at the end
+                self.temp_data.clear();
+
+                let processed = self.process_data.iter().filter_map(|data| {
+                    let Some(info) = self.cache.get(&data.key) else {
+                        return None;
+                    };
+
+                    if matches!(info.typ, AtlasType::None) {
+                        return None;
+                    }
+
+                    let pos = text.pos + data.pos + info.pos.as_vec2();
+                    let offset = vec2(size.x - data.line_w, 0.0);
+                    let xy = pos + offset + vec2(0.0, data.line_y);
+
+                    Some(GlyphData {
+                        xy,
+                        size,
+                        uvs_xy: info.atlas_pos,
+                        typ: info.typ,
+                    })
+                });
+                self.temp_data.extend(processed);
+
+                Ok(BlockInfo {
+                    size,
+                    data: &self.temp_data,
+                })
+            }
         }
     }
 
@@ -222,9 +305,23 @@ impl TextSystem {
     }
 
     fn process(&mut self, scale: f32) -> Result<PostAction, String> {
+        let mut width: f32 = 0.0;
+        let mut total_lines: usize = 0;
+
         for run in self.buffer.layout_runs() {
+            width = run.line_w.max(width);
+            total_lines += 1;
+
             for layout in run.glyphs {
                 let glyph = layout.physical((0.0, 0.0), scale);
+
+                // store to get rendering data later
+                self.process_data.push(ProcessData {
+                    key: glyph.cache_key,
+                    pos: vec2(glyph.x as _, glyph.y as _),
+                    line_w: run.line_w,
+                    line_y: run.line_y,
+                });
 
                 // if it's already in the main cache just skip it
                 if self.cache.contains_key(&glyph.cache_key) {
@@ -288,7 +385,11 @@ impl TextSystem {
             }
         }
 
-        Ok(PostAction::None)
+        let size = vec2(
+            width,
+            total_lines as f32 * self.buffer.metrics().line_height,
+        );
+        Ok(PostAction::End { size })
     }
 
     fn clear(&mut self) -> Result<(), String> {
@@ -300,13 +401,14 @@ impl TextSystem {
             .map_err(|e| format!("Cannot clear Mask text atlas: {}", e))?;
 
         self.cache.clear();
+        self.temp_data.clear();
 
         Ok(())
     }
 }
 
 enum PostAction {
-    None,
+    End { size: Vec2 },
     Restore,
     Clear,
 }
