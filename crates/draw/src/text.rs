@@ -87,10 +87,6 @@ pub struct TextSystem {
     // used to calculate rendering data
     process_data: Vec<ProcessData>,
     temp_data: Vec<GlyphData>,
-
-    // rendering helpers to avoid allocations
-    pub render_vertices: Vec<f32>,
-    pub render_indices: Vec<u32>,
 }
 
 impl TextSystem {
@@ -157,9 +153,6 @@ impl TextSystem {
 
             process_data: vec![],
             temp_data: vec![],
-
-            render_vertices: vec![],
-            render_indices: vec![],
         };
 
         #[cfg(feature = "default-font")]
@@ -419,7 +412,7 @@ enum AtlasGrowError {
 }
 
 #[derive(Copy, Clone, Debug)]
-enum AtlasType {
+pub(crate) enum AtlasType {
     None,
     Mask,
     Color,

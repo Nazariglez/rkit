@@ -10,3 +10,4 @@ pub use images_2d::*;
 pub use painter_2d::*;
 pub use pixel::*;
 pub use shapes_2d::*;
+pub use text_2d::*;

@@ -78,7 +78,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         vertex_offset: 8,
         x_pos: 0,
         y_pos: 1,
-        alpha_pos: Some(5),
+        alpha_pos: Some(7),
     })
 }
 

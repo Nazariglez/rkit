@@ -1,6 +1,6 @@
 use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
 use crate::sprite::SpriteId;
-use crate::{create_images_2d_pipeline_ctx, Sprite};
+use crate::{create_images_2d_pipeline_ctx, create_text_2d_pipeline_ctx, Sprite};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, Buffer, RenderPass, RenderPipeline, SamplerId, TextureId};
 use core::math::Mat4;
@@ -21,6 +21,7 @@ pub enum DrawPipeline {
     Pixel,
     Shapes,
     Images,
+    Text,
     Custom(Intern<str>),
 }
 
@@ -30,6 +31,7 @@ impl DrawPipeline {
             DrawPipeline::Pixel => "gk_pixel",
             DrawPipeline::Shapes => "gk_shapes",
             DrawPipeline::Images => "gk_images",
+            DrawPipeline::Text => "gk_text",
             DrawPipeline::Custom(inner) => inner,
         }
     }
@@ -39,6 +41,7 @@ impl DrawPipeline {
             DrawPipeline::Pixel => "gk_pixel".into(),
             DrawPipeline::Shapes => "gk_shapes".into(),
             DrawPipeline::Images => "gk_images".into(),
+            DrawPipeline::Text => "gk_text".into(),
             DrawPipeline::Custom(inner) => *inner,
         }
     }
@@ -97,7 +100,6 @@ impl Default for Painter2D {
             sprites_cache: Default::default(),
         };
 
-        // painter.add_pipeline(DrawPipeline::Pixel.id(), create_pixel_pipeline_ctx().unwrap());
         painter.add_pipeline(
             DrawPipeline::Shapes.id(),
             create_shapes_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
@@ -106,6 +108,11 @@ impl Default for Painter2D {
         painter.add_pipeline(
             DrawPipeline::Images.id(),
             create_images_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+        );
+
+        painter.add_pipeline(
+            DrawPipeline::Text.id(),
+            create_text_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
         );
 
         painter
