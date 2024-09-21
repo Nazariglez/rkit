@@ -208,7 +208,6 @@ impl GfxBackendImpl for GfxBackend {
                         BufferUsage::Index => {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
-                            println!("INDEX: {} {:?}", buff.0.len(), buff.1);
                             rpass.set_index_buffer(
                                 buff.0.inner.borrow().raw.slice(buff.1.clone()),
                                 pip.index_format,
@@ -229,10 +228,8 @@ impl GfxBackendImpl for GfxBackend {
                         if !vertices.range.is_empty() {
                             let instances = 0..vertices.instances.unwrap_or(1);
                             if indexed {
-                                println!("HERE1 {:?}", vertices);
                                 rpass.draw_indexed(vertices.range.clone(), 0, instances);
                             } else {
-                                println!("HERE2");
                                 rpass.draw(vertices.range.clone(), instances);
                             }
                         }
@@ -638,13 +635,6 @@ impl GfxBackendImpl for GfxBackend {
             texture.id()
         );
         let channels = data.len() as u32 / (size.element_product());
-        println!(
-            "channels: {} ({} / {}) ({:?})",
-            channels,
-            data.len(),
-            size.element_product(),
-            size
-        );
         self.ctx.queue.write_texture(
             ImageCopyTexture {
                 texture: &texture.raw,

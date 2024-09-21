@@ -236,7 +236,7 @@ impl<'a> Element2D for Text2D<'a> {
 
                     let block_size = block.size;
 
-                    println!("blocks {}", block.data.len());
+                    // println!("blocks {}", block.data.len());
                     block.data.iter().enumerate().for_each(|(i, data)| {
                         let Vec2 { x: x1, y: y1 } = data.xy;
                         let Vec2 { x: x2, y: y2 } = data.xy + data.size;
@@ -264,18 +264,11 @@ impl<'a> Element2D for Text2D<'a> {
                             n + 2, n + 1,   n + 3
                         ];
 
-                        println!("{vertices:?} -> {indices:?}");
-
                         temp_vertices.extend_from_slice(vertices.as_slice());
                         temp_indices.extend_from_slice(indices.as_slice());
                     });
                 }
 
-                println!(
-                    "total: \n{temp_vertices:?} {} - {temp_indices:?} {}",
-                    temp_vertices.len(),
-                    temp_indices.len()
-                );
                 draw.add_to_batch(DrawingInfo {
                     pipeline: DrawPipeline::Text,
                     vertices: temp_vertices,

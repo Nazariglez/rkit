@@ -109,9 +109,13 @@ fn update(s: &mut State) {
 
     draw.triangle(vec2(400.0, 100.0), vec2(100.0, 500.0), vec2(700.0, 500.0));
     draw.image(&s.mask).position(vec2(200.0, 10.0));
-    draw.image(&s.color).position(vec2(400.0, 0.0));
-
-    // draw.text("🤪ベクトルテキスト🎉")
+    draw.image(&s.mask).position(vec2(210.0, 20.0));
+    draw.image(&s.mask).position(vec2(220.0, 30.0));
+    draw.image(&s.mask).position(vec2(230.0, 40.0));
+    draw.image(&s.mask).position(vec2(240.0, 50.0));
+    // draw.image(&s.color).position(vec2(400.0, 0.0));
+    //
+    draw.text("🤪ベクトルテキスト🎉");
     draw.text("HELLO")
         .size(24.0)
         // .position(vec2(400.0, 300.0))
