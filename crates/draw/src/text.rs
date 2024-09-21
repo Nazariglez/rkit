@@ -19,6 +19,11 @@ use utils::fast_cache::FastCache;
 pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
     Lazy::new(|| AtomicRefCell::new(TextSystem::new().unwrap()));
 
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for TextSystem {}
+#[cfg(target_arch = "wasm32")]
+unsafe impl Send for TextSystem {}
+
 pub fn get_text_system() -> AtomicRef<'static, TextSystem> {
     TEXT_SYSTEM.borrow()
 }
@@ -173,6 +178,7 @@ impl TextSystem {
 
     pub fn bind_group(&mut self, pip: &RenderPipeline) -> &BindGroup {
         if self.bind_group.is_none() {
+            log::info!("New text atlas bind_group created");
             let bg = gfx::create_bind_group()
                 .with_sampler(0, &self.sampler)
                 .with_texture(1, &self.mask.texture)

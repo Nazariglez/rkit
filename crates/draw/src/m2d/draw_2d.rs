@@ -12,7 +12,7 @@ use core::gfx::{
 };
 use core::math::{vec3, Mat3, Mat4, Vec2};
 use smallvec::SmallVec;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Range};
 
 // TODO Cached elements is a must
 // TODO Camera2D
@@ -31,6 +31,9 @@ pub struct PipelineContext {
 }
 
 struct BatchInfo {
+    count: u32,
+    vbo_range: Range<u64>,
+    ebo_range: Range<u64>,
     start_idx: usize,
     end_idx: usize,
     pipeline: RenderPipeline,
@@ -41,6 +44,9 @@ struct BatchInfo {
 impl Clone for BatchInfo {
     fn clone(&self) -> Self {
         Self {
+            count: self.count,
+            vbo_range: self.vbo_range.clone(),
+            ebo_range: self.ebo_range.clone(),
             start_idx: self.start_idx,
             end_idx: self.end_idx,
             pipeline: self.pipeline.clone(),
@@ -187,12 +193,16 @@ impl Draw2D {
         }
 
         if matches!(info.pipeline, DrawPipeline::Text) {
-            println!("here");
             groups.push(get_mut_text_system().bind_group(&pipeline).clone());
-            println!("here2");
         }
 
+        let vbo_start = (self.vertices.len() as u64 * 4);
+        let ebo_start = (self.indices.len() as u64 * 4);
+
         let batch = BatchInfo {
+            count: self.indices.len() as _,
+            vbo_range: vbo_start..vbo_start,
+            ebo_range: ebo_start..ebo_start,
             start_idx,
             end_idx,
             pipeline,
@@ -206,11 +216,26 @@ impl Draw2D {
         };
 
         if new_batch {
+            self.indices_offset = 0;
             self.batches.push(batch);
         }
 
         let current = self.batches.last_mut().unwrap();
         current.end_idx = end_idx;
+
+        let vbo_count = (info.vertices.len() as u64 * 4); // f32=4bytes
+        let ebo_count = (info.indices.len() as u64 * 4); // u32=4bytes
+        println!(
+            "1. vc: {vbo_count} ec: {ebo_count} (vv: {:?}, ee:{:?})",
+            current.vbo_range, current.ebo_range
+        );
+        current.vbo_range.end = current.vbo_range.end + vbo_count;
+        current.ebo_range.end = current.ebo_range.end + ebo_count;
+
+        println!(
+            "2. vc: {vbo_count} ec: {ebo_count} (vv: {:?}, ee:{:?})",
+            current.vbo_range, current.ebo_range
+        );
 
         // the indices must use an offset
         self.indices.extend(
@@ -218,6 +243,7 @@ impl Draw2D {
                 .iter()
                 .map(|idx| idx + self.indices_offset as u32),
         );
+
         self.indices_offset += info.vertices.len() / vertex_offset;
 
         let matrix = self.matrix() * info.transform;
@@ -313,11 +339,22 @@ impl AsRenderer for Draw2D {
         let mut cleared = false;
         let mut renderer = Renderer::new();
         self.batches.iter().for_each(|b| {
+            // if b.start_idx == 0 {
+            //     return;
+            // }
+
+            println!(
+                "Rendering batch {:?} s:{} e:{}",
+                b.pipeline.id(),
+                b.start_idx,
+                b.end_idx
+            );
             let mut pass = renderer.begin_pass();
 
             // clear only once
             if !cleared {
                 if let Some(color) = self.clear_color {
+                    println!("clear!");
                     pass.clear_color(color);
                     cleared = true;
                 }
@@ -327,14 +364,22 @@ impl AsRenderer for Draw2D {
                 b.bind_groups.iter().collect();
 
             pass.pipeline(&b.pipeline)
-                .buffers(&[vbo, ebo])
+                // .buffers(&[vbo, ebo])
+                .buffers_with_offset(&[(&vbo, b.vbo_range.clone()), (&ebo, b.ebo_range.clone())])
                 .bindings(&binds);
 
             let start = b.start_idx as u32;
             let end = b.end_idx as u32;
-            pass.draw(start..end);
+            // pass.draw(0..b.count);
+            let e = end - start;
+            println!(
+                "start:{start}, end:{end}, count:{} ediff: {e} (v: {:?}, i: {:?})",
+                b.count, b.vbo_range, b.ebo_range
+            );
+            pass.draw(0..e);
         });
 
+        println!("{:?} ---- {:?}", self.vertices, self.indices);
         self.flush(&renderer, target)
     }
 }

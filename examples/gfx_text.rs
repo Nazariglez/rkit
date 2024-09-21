@@ -85,6 +85,7 @@ fn measure(buffer: &TBuffer) -> Vec2 {
 }
 
 fn update(s: &mut State) {
+    println!("frame init");
     // s.sys.prepare_text(&text::TextInfo {
     //     font: None,
     //     text: r#"🤪ベクトルテキスト🎉"#,
@@ -94,31 +95,32 @@ fn update(s: &mut State) {
     //     scale: 1.0,
     // });
 
-    if is_key_down(KeyCode::ShiftLeft)
-        && is_key_pressed(KeyCode::Space)
-        && is_key_down(KeyCode::SuperLeft)
-    {
-        s.font_size -= 1.0;
-    } else if is_key_down(KeyCode::ShiftLeft) && is_key_pressed(KeyCode::Space) {
-        s.font_size += 1.0;
-    }
-
+    // if is_key_down(KeyCode::ShiftLeft)
+    //     && is_key_pressed(KeyCode::Space)
+    //     && is_key_down(KeyCode::SuperLeft)
+    // {
+    //     s.font_size -= 1.0;
+    // } else if is_key_down(KeyCode::ShiftLeft) && is_key_pressed(KeyCode::Space) {
+    //     s.font_size += 1.0;
+    // }
+    //
     let mut draw = draw_2d();
     draw.clear(Color::ORANGE);
 
-    // draw.image(&s.mask);
-    // draw.image(&s.color).position(vec2(400.0, 0.0));
+    draw.triangle(vec2(400.0, 100.0), vec2(100.0, 500.0), vec2(700.0, 500.0));
+    draw.image(&s.mask).position(vec2(200.0, 10.0));
+    draw.image(&s.color).position(vec2(400.0, 0.0));
 
     // draw.text("🤪ベクトルテキスト🎉")
-    draw.text("Hello")
+    draw.text("HELLO")
         .size(24.0)
-        .position(vec2(400.0, 300.0))
+        // .position(vec2(400.0, 300.0))
         .color(Color::BLACK);
 
-    let text_list = input::text_pressed();
-    text_list.iter().for_each(|t| {
-        // draw.text(t).size(s.font_size);
-    });
+    // let text_list = input::text_pressed();
+    // text_list.iter().for_each(|t| {
+    //     // draw.text(t).size(s.font_size);
+    // });
     // text_list.iter().for_each(|t| {
     //     s.sys.prepare_text(&text::TextInfo {
     //         font: None,
@@ -211,14 +213,14 @@ fn update(s: &mut State) {
     // }
     //
     println!("--------------");
-
+    //
     let sys = get_text_system();
     s.mask = sys.mask_texture();
     s.color = sys.color_texture();
 
     gfx::render_to_frame(&draw).unwrap();
 
-    set_window_title(&format!("{:.0}", time::fps()));
+    // set_window_title(&format!("{:.0}", time::fps()));
 }
 
 #[derive(Clone)]

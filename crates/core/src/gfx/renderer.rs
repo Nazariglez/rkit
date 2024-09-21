@@ -7,11 +7,13 @@ use crate::gfx::pipeline::ClearOptions;
 use crate::gfx::{Buffer, Color, RenderPipeline, RenderTexture};
 use arrayvec::ArrayVec;
 use glam::{vec2, Vec2};
-use std::ops::Range;
+use smallvec::SmallVec;
+use std::collections::Bound;
+use std::ops::{Range, RangeBounds};
 
 const MAX_BUFFERS: usize = MAX_VERTEX_BUFFERS + MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE + 1;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct RPassVertices {
     pub(crate) range: Range<u32>,
     pub(crate) instances: Option<u32>,
@@ -21,9 +23,9 @@ pub(crate) struct RPassVertices {
 pub struct RenderPass<'a> {
     pub(crate) size: Option<Vec2>,
     pub(crate) pipeline: Option<&'a RenderPipeline>,
-    pub(crate) buffers: ArrayVec<&'a Buffer, MAX_BUFFERS>,
+    pub(crate) buffers: ArrayVec<(&'a Buffer, Range<u64>), MAX_BUFFERS>,
     pub(crate) clear_options: ClearOptions,
-    pub(crate) vertices: Vec<RPassVertices>,
+    pub(crate) vertices: SmallVec<RPassVertices, 10>,
     pub(crate) bind_groups: ArrayVec<&'a BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
     pub(crate) stencil_ref: Option<u8>,
 }
@@ -63,8 +65,44 @@ impl<'a> RenderPass<'a> {
         self
     }
 
+    // pub fn buffer_offsets<S: RangeBounds<u32>>(&mut self, offsets: &[S]) -> &mut Self {
+    //     offsets
+    //         .iter()
+    //         .map(|r| {
+    //             let start = match r.start_bound() {
+    //                 Bound::Included(_) => {}
+    //                 Bound::Excluded(_) => {}
+    //                 Bound::Unbounded => {}
+    //             };
+    //             self.buffer_offsets.push(r.clone())
+    //         });
+    //     self
+    // }
+
+    pub fn buffers_with_offset<S: RangeBounds<u64>>(
+        &mut self,
+        buffers: &[(&'a Buffer, S)],
+    ) -> &mut Self {
+        self.buffers.extend(buffers.iter().map(|(b, r)| {
+            let start = match r.start_bound() {
+                Bound::Included(n) => *n,
+                Bound::Excluded(n) => *n + 1,
+                Bound::Unbounded => 0,
+            };
+            let end = match r.end_bound() {
+                Bound::Included(n) => *n + 1,
+                Bound::Excluded(n) => *n,
+                Bound::Unbounded => b.len() as _,
+            };
+
+            (*b, start..end)
+        }));
+        self
+    }
+
     pub fn buffers(&mut self, buffers: &[&'a Buffer]) -> &mut Self {
-        self.buffers.try_extend_from_slice(buffers).unwrap();
+        self.buffers
+            .extend(buffers.iter().map(|b| (*b, 0..b.len() as _)));
         self
     }
 
@@ -100,7 +138,7 @@ impl<'a> RenderPass<'a> {
 
 #[derive(Default, Clone)]
 pub struct Renderer<'a> {
-    pub(crate) passes: Vec<RenderPass<'a>>,
+    pub(crate) passes: SmallVec<RenderPass<'a>, 20>,
 }
 
 impl<'a> Renderer<'a> {

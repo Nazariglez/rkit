@@ -55,16 +55,16 @@ fn init() -> State {
 }
 
 fn update(state: &mut State) {
-    // set_window_title(&format!(
-    //     "Bunnies: {} - FPS: {:.2}",
-    //     state.bunnies.len(),
-    //     time::fps()
-    // ));
-    //
+    set_window_title(&format!(
+        "Bunnies: {} - FPS: {:.2}",
+        state.bunnies.len(),
+        time::fps()
+    ));
+
     // add bunnies to our vector
-    // if is_mouse_btn_down(MouseButton::Left) {
-    //     state.spawn(50);
-    // }
+    if is_mouse_btn_down(MouseButton::Left) {
+        state.spawn(50);
+    }
 
     // update positions
     let rng = &mut state.rng;

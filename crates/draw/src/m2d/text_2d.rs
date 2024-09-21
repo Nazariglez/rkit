@@ -30,7 +30,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uvs: vec2<f32>,
-    @location(1) tex: u32,
+    @location(1) @interpolate(flat) tex: u32,
     @location(2) color: vec4<f32>,
 };
 
@@ -55,20 +55,21 @@ var t_color: texture_2d<f32>;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    switch in.tex {
-        case 0u: {
-            var color: vec4<f32> = vec4(in.color.rgb, textureSample(t_mask, s_texture, in.uvs).r * in.color.a);
-            if color.a <= 0.0 {
-                discard;
-            }
-            return color;
+    // Sample both textures in uniform control flow
+    let mask_sample = textureSample(t_mask, s_texture, in.uvs);
+    let color_sample = textureSample(t_color, s_texture, in.uvs);
+
+    // Use branching based on in.tex after texture sampling
+    if (in.tex == 0u) {
+        var color: vec4<f32> = vec4(in.color.rgb, mask_sample.r * in.color.a);
+        if color.a <= 0.0 {
+            discard;
         }
-        case 1u: {
-            return textureSample(t_color, s_texture, in.uvs) * in.color;
-        }
-        default: {
-            return vec4(0.0);
-        }
+        return color;
+    } else if (in.tex == 1u) {
+        return color_sample * in.color;
+    } else {
+        return vec4(0.0);
     }
 }
 "#;
@@ -235,6 +236,7 @@ impl<'a> Element2D for Text2D<'a> {
 
                     let block_size = block.size;
 
+                    println!("blocks {}", block.data.len());
                     block.data.iter().enumerate().for_each(|(i, data)| {
                         let Vec2 { x: x1, y: y1 } = data.xy;
                         let Vec2 { x: x2, y: y2 } = data.xy + data.size;
@@ -258,16 +260,22 @@ impl<'a> Element2D for Text2D<'a> {
 
                         #[rustfmt::skip]
                         let indices = [
-                            n, n + 1, n + 2,
-                            n + 2, n + 1, n + 3
+                            n,     n + 1,   n + 2,
+                            n + 2, n + 1,   n + 3
                         ];
+
+                        println!("{vertices:?} -> {indices:?}");
 
                         temp_vertices.extend_from_slice(vertices.as_slice());
                         temp_indices.extend_from_slice(indices.as_slice());
                     });
                 }
 
-                println!("{temp_vertices:?} - {temp_indices:?}");
+                println!(
+                    "total: \n{temp_vertices:?} {} - {temp_indices:?} {}",
+                    temp_vertices.len(),
+                    temp_indices.len()
+                );
                 draw.add_to_batch(DrawingInfo {
                     pipeline: DrawPipeline::Text,
                     vertices: temp_vertices,

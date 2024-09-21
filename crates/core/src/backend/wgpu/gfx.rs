@@ -197,19 +197,20 @@ impl GfxBackendImpl for GfxBackend {
 
                     let mut vertex_buffers_slot = 0;
                     let mut indexed = false;
-                    rp.buffers.iter().for_each(|buff| match buff.usage {
+                    rp.buffers.iter().for_each(|buff| match buff.0.usage {
                         BufferUsage::Vertex => {
                             rpass.set_vertex_buffer(
                                 vertex_buffers_slot,
-                                buff.inner.borrow().raw.slice(..),
+                                buff.0.inner.borrow().raw.slice(buff.1.clone()),
                             );
                             vertex_buffers_slot += 1;
                         }
                         BufferUsage::Index => {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
+                            println!("INDEX: {} {:?}", buff.0.len(), buff.1);
                             rpass.set_index_buffer(
-                                buff.inner.borrow().raw.slice(..),
+                                buff.0.inner.borrow().raw.slice(buff.1.clone()),
                                 pip.index_format,
                             )
                         }
@@ -228,8 +229,10 @@ impl GfxBackendImpl for GfxBackend {
                         if !vertices.range.is_empty() {
                             let instances = 0..vertices.instances.unwrap_or(1);
                             if indexed {
+                                println!("HERE1 {:?}", vertices);
                                 rpass.draw_indexed(vertices.range.clone(), 0, instances);
                             } else {
+                                println!("HERE2");
                                 rpass.draw(vertices.range.clone(), instances);
                             }
                         }
@@ -869,11 +872,11 @@ impl GfxBackend {
 
                     let mut vertex_buffers_slot = 0;
                     let mut indexed = false;
-                    rp.buffers.iter().for_each(|buff| match buff.usage {
+                    rp.buffers.iter().for_each(|buff| match buff.0.usage {
                         BufferUsage::Vertex => {
                             rpass.set_vertex_buffer(
                                 vertex_buffers_slot,
-                                buff.inner.borrow().raw.slice(..),
+                                buff.0.inner.borrow().raw.slice(buff.1.clone()),
                             );
                             vertex_buffers_slot += 1;
                         }
@@ -881,7 +884,7 @@ impl GfxBackend {
                             debug_assert!(!indexed, "Cannot bind more than one Index buffer");
                             indexed = true;
                             rpass.set_index_buffer(
-                                buff.inner.borrow().raw.slice(..),
+                                buff.0.inner.borrow().raw.slice(buff.1.clone()),
                                 pip.index_format,
                             )
                         }
