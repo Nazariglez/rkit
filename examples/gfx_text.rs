@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use cosmic_text::fontdb::Source;
+use cosmic_text::Wrap::Word;
 use cosmic_text::{
     Align, Attrs, AttrsList, Buffer as TBuffer, BufferLine, CacheKey, Family, FontSystem,
     LineEnding, Metrics, Shaping, Stretch, Style, SwashCache, SwashContent, Weight, Wrap,
@@ -103,16 +104,20 @@ fn update(s: &mut State) {
     }
 
     let mut draw = draw_2d();
-    draw.clear(Color::WHITE);
+    draw.clear(Color::ORANGE);
 
-    draw.image(&s.mask);
-    draw.image(&s.color).position(vec2(400.0, 0.0));
+    // draw.image(&s.mask);
+    // draw.image(&s.color).position(vec2(400.0, 0.0));
 
-    draw.text("🤪ベクトルテキスト🎉").size(24.0);
+    // draw.text("🤪ベクトルテキスト🎉")
+    draw.text("Hello")
+        .size(24.0)
+        .position(vec2(400.0, 300.0))
+        .color(Color::BLACK);
 
     let text_list = input::text_pressed();
     text_list.iter().for_each(|t| {
-        draw.text(t).size(s.font_size);
+        // draw.text(t).size(s.font_size);
     });
     // text_list.iter().for_each(|t| {
     //     s.sys.prepare_text(&text::TextInfo {

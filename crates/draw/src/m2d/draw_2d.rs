@@ -3,6 +3,7 @@ use crate::m2d::images_2d::Image;
 use crate::m2d::painter_2d::DrawPipeline;
 use crate::m2d::text_2d::Text2D;
 use crate::sprite::Sprite;
+use crate::text::get_mut_text_system;
 use arrayvec::ArrayVec;
 use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
@@ -183,6 +184,12 @@ impl Draw2D {
             let bind_group = painter.cached_bind_group_for(&pipeline, sp);
             // FIXME this is wrong, it should be bind_groups[1] = bind_group
             groups.push(bind_group);
+        }
+
+        if matches!(info.pipeline, DrawPipeline::Text) {
+            println!("here");
+            groups.push(get_mut_text_system().bind_group(&pipeline).clone());
+            println!("here2");
         }
 
         let batch = BatchInfo {

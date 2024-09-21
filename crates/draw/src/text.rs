@@ -1,7 +1,7 @@
 use crate::m2d::Painter2D;
 use crate::{Sprite, SpriteBuilder};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::{self, Sampler, Texture, TextureFilter, TextureFormat};
+use core::gfx::{self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat};
 use core::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::{Source, ID};
 use cosmic_text::{
@@ -47,7 +47,8 @@ pub struct Font {
 pub struct GlyphData {
     pub xy: Vec2,
     pub size: Vec2,
-    pub uvs_xy: Vec2,
+    pub uvs1: Vec2,
+    pub uvs2: Vec2,
     pub typ: AtlasType,
 }
 
@@ -83,6 +84,8 @@ pub struct TextSystem {
     buffer: Buffer,
     font_ids: u64,
     default_font: Option<Font>,
+
+    bind_group: Option<BindGroup>,
 
     // used to calculate rendering data
     process_data: Vec<ProcessData>,
@@ -151,6 +154,8 @@ impl TextSystem {
             font_ids: 0,
             default_font: None,
 
+            bind_group: None,
+
             process_data: vec![],
             temp_data: vec![],
         };
@@ -164,6 +169,22 @@ impl TextSystem {
         }
 
         Ok(sys)
+    }
+
+    pub fn bind_group(&mut self, pip: &RenderPipeline) -> &BindGroup {
+        if self.bind_group.is_none() {
+            let bg = gfx::create_bind_group()
+                .with_sampler(0, &self.sampler)
+                .with_texture(1, &self.mask.texture)
+                .with_texture(2, &self.mask.texture)
+                .with_layout(pip.bind_group_layout_ref(1).unwrap())
+                .build()
+                .unwrap();
+
+            self.bind_group = Some(bg);
+        }
+
+        self.bind_group.as_ref().unwrap()
     }
 
     pub fn mask_texture(&self) -> Sprite {
@@ -254,6 +275,11 @@ impl TextSystem {
                     if matches!(info.typ, AtlasType::None) {
                         return None;
                     }
+                    let tex_size = match info.typ {
+                        AtlasType::None => return None,
+                        AtlasType::Mask => self.mask.texture.size(),
+                        AtlasType::Color => self.color.texture.size(),
+                    };
 
                     let pos = text.pos + data.pos + info.pos.as_vec2();
                     let offset = vec2(size.x - data.line_w, 0.0);
@@ -262,7 +288,8 @@ impl TextSystem {
                     Some(GlyphData {
                         xy,
                         size,
-                        uvs_xy: info.atlas_pos,
+                        uvs1: info.atlas_pos / tex_size,
+                        uvs2: (info.atlas_pos + size) / tex_size,
                         typ: info.typ,
                     })
                 });
@@ -295,6 +322,8 @@ impl TextSystem {
             let size = uvec2(glyph.size.x as _, glyph.size.y as _);
             atlas.upload(size, offset, &image.data).unwrap();
         }
+
+        self.bind_group = None;
     }
 
     fn process(&mut self, scale: f32) -> Result<PostAction, String> {

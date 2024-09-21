@@ -209,7 +209,6 @@ impl<'a> Text2D<'a> {
 
 impl<'a> Element2D for Text2D<'a> {
     fn process(&self, draw: &mut Draw2D) {
-        // TODO
         let info = TextInfo {
             pos: self.position,
             font: self.font.clone(),
@@ -222,46 +221,53 @@ impl<'a> Element2D for Text2D<'a> {
 
         let c = self.color;
 
-        let mut sys = get_mut_text_system();
-        let block = sys.prepare_text(&info).unwrap();
-        if block.data.is_empty() {
-            return;
-        }
-
         TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
             TEMP_INDICES.with_borrow_mut(|temp_indices| {
-                let block_size = block.size;
-                block.data.iter().enumerate().for_each(|(i, data)| {
-                    let Vec2 { x: x1, y: y1 } = data.xy;
-                    let Vec2 { x: x2, y: y2 } = data.xy + data.size;
-                    let Vec2 { x: u1, y: v1 } = data.uvs_xy;
-                    let Vec2 { x: u2, y: v2 } = data.uvs_xy + data.size;
-                    let t: f32 = if matches!(data.typ, AtlasType::Mask) {
-                        0.0
-                    } else {
-                        1.0
-                    };
+                temp_vertices.clear();
+                temp_indices.clear();
 
-                    #[rustfmt::skip]
-                    let vertices = [
-                        x1, y1, u1, v1, t, c.r, c.g, c.b, c.a,
-                        x2, y1, u2, v1, t, c.r, c.g, c.b, c.a,
-                        x1, y2, u1, v2, t, c.r, c.g, c.b, c.a,
-                        x2, y2, u2, v2, t, c.r, c.g, c.b, c.a,
-                    ];
+                {
+                    let mut sys = get_mut_text_system();
+                    let block = sys.prepare_text(&info).unwrap();
+                    if block.data.is_empty() {
+                        return;
+                    }
 
-                    let n = (i * 4) as u32;
+                    let block_size = block.size;
 
-                    #[rustfmt::skip]
-                    let indices = [
-                        n, n + 1, n + 2,
-                        n + 2, n + 1, n + 3
-                    ];
+                    block.data.iter().enumerate().for_each(|(i, data)| {
+                        let Vec2 { x: x1, y: y1 } = data.xy;
+                        let Vec2 { x: x2, y: y2 } = data.xy + data.size;
+                        let Vec2 { x: u1, y: v1 } = data.uvs1;
+                        let Vec2 { x: u2, y: v2 } = data.uvs2;
+                        let t: f32 = if matches!(data.typ, AtlasType::Mask) {
+                            0.0
+                        } else {
+                            1.0
+                        };
 
-                    temp_vertices.extend_from_slice(vertices.as_slice());
-                    temp_indices.extend_from_slice(indices.as_slice());
-                });
+                        #[rustfmt::skip]
+                        let vertices = [
+                            x1, y1, u1, v1, t, c.r, c.g, c.b, c.a,
+                            x2, y1, u2, v1, t, c.r, c.g, c.b, c.a,
+                            x1, y2, u1, v2, t, c.r, c.g, c.b, c.a,
+                            x2, y2, u2, v2, t, c.r, c.g, c.b, c.a,
+                        ];
 
+                        let n = (i * 4) as u32;
+
+                        #[rustfmt::skip]
+                        let indices = [
+                            n, n + 1, n + 2,
+                            n + 2, n + 1, n + 3
+                        ];
+
+                        temp_vertices.extend_from_slice(vertices.as_slice());
+                        temp_indices.extend_from_slice(indices.as_slice());
+                    });
+                }
+
+                println!("{temp_vertices:?} - {temp_indices:?}");
                 draw.add_to_batch(DrawingInfo {
                     pipeline: DrawPipeline::Text,
                     vertices: temp_vertices,
