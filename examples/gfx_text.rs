@@ -1,23 +1,17 @@
 use rkit::draw::{self, Sprite};
 use rkit::gfx::{self, Color, Texture, TextureFormat};
 use rkit::{input, time};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use cosmic_text::fontdb::Source;
-use cosmic_text::Wrap::Word;
 use cosmic_text::{
     Align, Attrs, AttrsList, Buffer as TBuffer, BufferLine, CacheKey, Family, FontSystem,
     LineEnding, Metrics, Shaping, Stretch, Style, SwashCache, SwashContent, Weight, Wrap,
 };
 use draw::draw_2d;
 use draw::text::get_text_system;
-use etagere::*;
-use rkit::app::set_window_title;
+use rkit::app::{set_window_title, window_width};
 use rkit::math::{uvec2, vec2, Rect, Vec2};
-
-use rkit::draw::text;
-use rkit::input::{is_key_down, is_key_pressed, KeyCode};
 
 #[derive(Copy, Clone, Debug)]
 struct Pos<N> {
@@ -54,6 +48,7 @@ struct State {
     mask: Sprite,
     color: Sprite,
     font_size: f32,
+    text: String,
 }
 
 impl State {
@@ -63,6 +58,7 @@ impl State {
             mask: sys.mask_texture(),
             color: sys.color_texture(),
             font_size: 14.0,
+            text: "".to_string(),
         })
     }
 }
@@ -86,15 +82,6 @@ fn measure(buffer: &TBuffer) -> Vec2 {
 
 fn update(s: &mut State) {
     println!("frame init");
-    // s.sys.prepare_text(&text::TextInfo {
-    //     font: None,
-    //     text: r#"🤪ベクトルテキスト🎉"#,
-    //     wrap_width: None,
-    //     font_size: 24.0,
-    //     line_height: None,
-    //     scale: 1.0,
-    // });
-
     // if is_key_down(KeyCode::ShiftLeft)
     //     && is_key_pressed(KeyCode::Space)
     //     && is_key_down(KeyCode::SuperLeft)
@@ -107,115 +94,30 @@ fn update(s: &mut State) {
     let mut draw = draw_2d();
     draw.clear(Color::ORANGE);
 
-    draw.triangle(vec2(400.0, 100.0), vec2(100.0, 500.0), vec2(700.0, 500.0));
-    draw.image(&s.mask).position(vec2(200.0, 10.0));
-    draw.image(&s.mask).position(vec2(210.0, 20.0));
-    draw.image(&s.mask).position(vec2(220.0, 30.0));
-    draw.image(&s.mask).position(vec2(230.0, 40.0));
-    draw.image(&s.mask).position(vec2(240.0, 50.0));
+    // draw.image(&s.mask).position(vec2(200.0, 10.0));
     // draw.image(&s.color).position(vec2(400.0, 0.0));
-    //
-    draw.text("🤪ベクトルテキスト🎉");
-    draw.text("HELLO")
-        .size(24.0)
+    // //
+    // draw.text("🤪ベクトルテキスト🎉")
+    //     // draw.text("🤪🎉")
+    //     .size(48.0)
+    //     .color(Color::BLUE);
+
+    draw.text(&format!("FPS: {:.2}", time::fps()))
+        .position(vec2(10.0, 10.0));
+
+    draw.text(&s.text)
+        .position(vec2(200.0, 200.0))
+        .size(12.0)
+        .max_width(window_width())
+        .h_align_center()
         // .position(vec2(400.0, 300.0))
         .color(Color::BLACK);
 
-    // let text_list = input::text_pressed();
-    // text_list.iter().for_each(|t| {
-    //     // draw.text(t).size(s.font_size);
-    // });
-    // text_list.iter().for_each(|t| {
-    //     s.sys.prepare_text(&text::TextInfo {
-    //         font: None,
-    //         text: t,
-    //         wrap_width: None,
-    //         font_size: 28.0,
-    //         line_height: None,
-    //         scale: 1.0,
-    //     });
-    // });
-
-    // let mut pos = vec2(10.0, 300.0);
-    //
-    // let block_size = measure(&s.tbuffer);
-    //
-    // for run in s.tbuffer.layout_runs() {
-    //     for glyph in run.glyphs {
-    //         let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-    //         if !s.glyphs.contains_key(&physical_glyph.cache_key) {
-    //             if let Some(image) = s
-    //                 .cache
-    //                 .get_image_uncached(&mut s.font_system, physical_glyph.cache_key)
-    //             {
-    //                 let width = image.placement.width;
-    //                 let height = image.placement.height;
-    //
-    //                 if width == 0 || height == 0 {
-    //                     continue;
-    //                 }
-    //
-    //                 let alloc = s
-    //                     .atlas_allocator
-    //                     .allocate(size2((width + 1) as _, (height + 1) as _))
-    //                     .unwrap();
-    //
-    //                 let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
-    //                 let size = uvec2(width, height);
-    //
-    //                 let mut store = |bytes: &[u8]| {
-    //                     gfx::write_texture(&s.tex.texture())
-    //                         .from_data(&bytes)
-    //                         .with_offset(offset)
-    //                         .with_size(size)
-    //                         .build()
-    //                         .unwrap();
-    //
-    //                     let info = GlyphInfo {
-    //                         pos: Pos::new(image.placement.left as _, -image.placement.top as _),
-    //                         size: Pos::new(image.placement.width as _, image.placement.height as _),
-    //                         atlas_pos: vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _),
-    //                     };
-    //
-    //                     s.glyphs.insert(physical_glyph.cache_key, info);
-    //                 };
-    //
-    //                 match image.content {
-    //                     SwashContent::Mask => {
-    //                         let bytes = image
-    //                             .data
-    //                             .iter()
-    //                             .flat_map(|v| Color::rgba_u8(255, 255, 255, *v).to_rgba_u8())
-    //                             .collect::<Vec<_>>();
-    //                         store(&bytes);
-    //                     }
-    //                     SwashContent::SubpixelMask => {
-    //                         println!("|||||||||||||| HERE?");
-    //                     }
-    //                     SwashContent::Color => {
-    //                         // println!("|||||||||||||||||||||here?");
-    //                         store(&image.data);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //
-    //         if let Some(info) = s.glyphs.get(&physical_glyph.cache_key) {
-    //             let p = info.atlas_pos;
-    //             draw.image(&s.tex).position(vec2(400.0, 0.0));
-    //
-    //             let offset = vec2(block_size.x - run.line_w, 0.0) * 0.5;
-    //
-    //             let glyph_pos = vec2(physical_glyph.x as _, physical_glyph.y as _);
-    //             let pp = pos + offset + glyph_pos + info.pos.as_vec2() + vec2(0.0, run.line_y);
-    //             draw.image(&s.tex)
-    //                 .crop(info.atlas_pos, info.size.as_vec2())
-    //                 // .color(Color::RED)
-    //                 .position(pp);
-    //         }
-    //     }
-    // }
-    //
+    let text_list = input::text_pressed();
+    text_list.iter().for_each(|t| {
+        s.text.push_str(t);
+        // draw.text(t).size(s.font_size);
+    });
     println!("--------------");
     //
     let sys = get_text_system();

@@ -11,6 +11,7 @@ use core::gfx::{
     self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer, Texture,
 };
 use core::math::{vec3, Mat3, Mat4, Vec2};
+use core::time;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
 
@@ -289,6 +290,10 @@ impl Draw2D {
 
     pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D> {
         Drawing::new(self, Text2D::new(text))
+    }
+
+    pub fn fps(&mut self) -> Drawing<'_, Text2D> {
+        Drawing::new(self, Text2D::new(""))
     }
 }
 

@@ -1,5 +1,5 @@
 - todo:
-    * text rendering (draw.text and draw.rich_text)
+    * text rendering alignment, fps? clean textures, expose set_default_font, etc...
     * gamepad for wasm32
     * input wasm32
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen

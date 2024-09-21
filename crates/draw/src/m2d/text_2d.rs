@@ -1,4 +1,4 @@
-use crate::text::{get_mut_text_system, get_text_system, AtlasType, Font, TextInfo};
+use crate::text::{get_mut_text_system, get_text_system, AtlasType, Font, HAlign, TextInfo};
 use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext};
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
@@ -55,21 +55,17 @@ var t_color: texture_2d<f32>;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Sample both textures in uniform control flow
-    let mask_sample = textureSample(t_mask, s_texture, in.uvs);
-    let color_sample = textureSample(t_color, s_texture, in.uvs);
-
     // Use branching based on in.tex after texture sampling
     if (in.tex == 0u) {
+        let mask_sample = textureSampleLevel(t_mask, s_texture, in.uvs, 0.0);
         var color: vec4<f32> = vec4(in.color.rgb, mask_sample.r * in.color.a);
         if color.a <= 0.0 {
             discard;
         }
         return color;
-    } else if (in.tex == 1u) {
-        return color_sample * in.color;
     } else {
-        return vec4(0.0);
+        let color_sample = textureSampleLevel(t_color, s_texture, in.uvs, 0.0);
+        return color_sample * in.color;
     }
 }
 "#;
@@ -120,7 +116,7 @@ pub struct Text2D<'a> {
     size: f32,
     line_height: Option<f32>,
     max_width: Option<f32>,
-    h_align: (),
+    h_align: HAlign,
     v_align: (),
     transform: Mat3,
 }
@@ -136,7 +132,7 @@ impl<'a> Text2D<'a> {
             size: 14.0,
             line_height: None,
             max_width: None,
-            h_align: (),
+            h_align: HAlign::default(),
             v_align: (),
             transform: Mat3::IDENTITY,
         }
@@ -178,17 +174,17 @@ impl<'a> Text2D<'a> {
     }
 
     pub fn h_align_left(&mut self) -> &mut Self {
-        // self.h_align = HorizontalAlign::Left;
+        self.h_align = HAlign::Left;
         self
     }
 
     pub fn h_align_center(&mut self) -> &mut Self {
-        // self.h_align = HorizontalAlign::Center;
+        self.h_align = HAlign::Center;
         self
     }
 
     pub fn h_align_right(&mut self) -> &mut Self {
-        // self.h_align = HorizontalAlign::Right;
+        self.h_align = HAlign::Right;
         self
     }
 
@@ -218,6 +214,7 @@ impl<'a> Element2D for Text2D<'a> {
             font_size: self.size,
             line_height: self.line_height,
             scale: 1.0,
+            h_align: self.h_align,
         };
 
         let c = self.color;
@@ -235,8 +232,6 @@ impl<'a> Element2D for Text2D<'a> {
                     }
 
                     let block_size = block.size;
-
-                    // println!("blocks {}", block.data.len());
                     block.data.iter().enumerate().for_each(|(i, data)| {
                         let Vec2 { x: x1, y: y1 } = data.xy;
                         let Vec2 { x: x2, y: y2 } = data.xy + data.size;

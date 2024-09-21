@@ -5,8 +5,8 @@ use core::gfx::{self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter
 use core::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::{Source, ID};
 use cosmic_text::{
-    Attrs, Buffer, CacheKey, Family, FontSystem, LayoutGlyph, LayoutRun, Metrics, PhysicalGlyph,
-    Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
+    Align, Attrs, Buffer, CacheKey, Family, FontSystem, LayoutGlyph, LayoutRun, Metrics,
+    PhysicalGlyph, Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
 };
 use etagere::{size2, Allocation, BucketedAtlasAllocator};
 use hashbrown::HashSet;
@@ -32,7 +32,7 @@ pub fn get_mut_text_system() -> AtomicRefMut<'static, TextSystem> {
     TEXT_SYSTEM.borrow_mut()
 }
 
-const DEFAULT_TEXTURE_SIZE: u32 = 256;
+const DEFAULT_TEXTURE_SIZE: u32 = 32;
 const ATLAS_OFFSET: u32 = 1;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -49,6 +49,7 @@ pub struct Font {
     // TODO DropObserver, seems that cosmic-text doesn't have a way to remove fonts right now
 }
 
+#[derive(Debug)]
 pub struct GlyphData {
     pub xy: Vec2,
     pub size: Vec2,
@@ -62,6 +63,24 @@ pub struct BlockInfo<'a> {
     pub data: &'a [GlyphData],
 }
 
+#[derive(Copy, Clone, Debug, Default)]
+pub enum HAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+impl HAlign {
+    fn to_cosmic(&self) -> Align {
+        match self {
+            HAlign::Left => Align::Left,
+            HAlign::Center => Align::Center,
+            HAlign::Right => Align::Right,
+        }
+    }
+}
+
 pub struct TextInfo<'a> {
     pub pos: Vec2,
     pub font: Option<&'a Font>,
@@ -70,6 +89,7 @@ pub struct TextInfo<'a> {
     pub font_size: f32,
     pub line_height: Option<f32>,
     pub scale: f32,
+    pub h_align: HAlign,
 }
 
 struct ProcessData {
@@ -182,7 +202,7 @@ impl TextSystem {
             let bg = gfx::create_bind_group()
                 .with_sampler(0, &self.sampler)
                 .with_texture(1, &self.mask.texture)
-                .with_texture(2, &self.mask.texture)
+                .with_texture(2, &self.color.texture)
                 .with_layout(pip.bind_group_layout_ref(1).unwrap())
                 .build()
                 .unwrap();
@@ -257,6 +277,13 @@ impl TextSystem {
             .set_size(&mut self.font_system, text.wrap_width, None);
         self.buffer
             .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
+
+        let align = text.h_align.to_cosmic();
+        if matches!(align, Align::Left) {
+            self.buffer.lines.iter_mut().for_each(|l| {
+                l.set_align(Some(align));
+            });
+        }
         // lines text align?
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
@@ -269,7 +296,7 @@ impl TextSystem {
                 self.clear()?;
                 self.prepare_text(text)
             }
-            PostAction::End { size } => {
+            PostAction::End { block_size: size } => {
                 // cleaning the temporal data shared with the user at the end
                 self.temp_data.clear();
 
@@ -288,14 +315,15 @@ impl TextSystem {
                     };
 
                     let pos = text.pos + data.pos + info.pos.as_vec2();
-                    let offset = vec2(size.x - data.line_w, 0.0);
+                    let offset = vec2(0.0, 0.0); //vec2(size.x - data.line_w, 0.0);
                     let xy = pos + offset + vec2(0.0, data.line_y);
+                    let glyph_size = info.size.as_vec2();
 
                     Some(GlyphData {
                         xy,
-                        size,
+                        size: glyph_size,
                         uvs1: info.atlas_pos / tex_size,
-                        uvs2: (info.atlas_pos + size) / tex_size,
+                        uvs2: (info.atlas_pos + glyph_size) / tex_size,
                         typ: info.typ,
                     })
                 });
@@ -417,7 +445,7 @@ impl TextSystem {
             width,
             total_lines as f32 * self.buffer.metrics().line_height,
         );
-        Ok(PostAction::End { size })
+        Ok(PostAction::End { block_size: size })
     }
 
     fn clear(&mut self) -> Result<(), String> {
@@ -436,7 +464,7 @@ impl TextSystem {
 }
 
 enum PostAction {
-    End { size: Vec2 },
+    End { block_size: Vec2 },
     Restore,
     Clear,
 }

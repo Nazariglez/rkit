@@ -1,4 +1,3 @@
-use rkit::app::set_window_title;
 use rkit::draw::{draw_2d, Sprite};
 use rkit::gfx::{self, Color};
 use rkit::input::{is_mouse_btn_down, MouseButton};
@@ -55,12 +54,6 @@ fn init() -> State {
 }
 
 fn update(state: &mut State) {
-    set_window_title(&format!(
-        "Bunnies: {} - FPS: {:.2}",
-        state.bunnies.len(),
-        time::fps()
-    ));
-
     // add bunnies to our vector
     if is_mouse_btn_down(MouseButton::Left) {
         state.spawn(50);
@@ -95,8 +88,18 @@ fn update(state: &mut State) {
     // draw
     let mut draw = draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
+
     state.bunnies.iter().for_each(|b| {
         draw.image(&state.sprite).position(b.pos).color(b.color);
     });
+
+    draw.text(&format!(
+        "Bunnies: {}\nFPS: {:.2}",
+        state.bunnies.len(),
+        time::fps()
+    ))
+    .size(10.0)
+    .position(vec2(10.0, 10.0));
+
     gfx::render_to_frame(&draw).unwrap();
 }
