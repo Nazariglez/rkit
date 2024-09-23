@@ -43,27 +43,25 @@ fn update(state: &mut State) {
 }
 
 fn draw_size(draw: &mut Draw2D, bounds: Rect) {
-    // TODO lines
-
     // show height
-    // draw.line(
-    //     (bounds.max_x() + 10.0, bounds.y),
-    //     (bounds.max_x() + 10.0, bounds.max_y()),
-    // )
-    //     .width(2.0)
-    //     .color(Color::WHITE);
+    draw.line(
+        vec2(bounds.max().x + 10.0, bounds.y()),
+        vec2(bounds.max().x + 10.0, bounds.max().y),
+    )
+    .width(2.0)
+    .color(Color::GRAY);
 
     draw.text(&format!("{}px", bounds.height()))
         .position(vec2(bounds.max().x + 20.0, bounds.center().y))
         .v_align_middle();
 
     // show width
-    // draw.line(
-    //     (bounds.x, bounds.max_y() + 10.0),
-    //     (bounds.max_x(), bounds.max_y() + 10.0),
-    // )
-    //     .width(2.0)
-    //     .color(Color::WHITE);
+    draw.line(
+        vec2(bounds.x(), bounds.max().y + 10.0),
+        vec2(bounds.max().x, bounds.max().y + 10.0),
+    )
+    .width(2.0)
+    .color(Color::GRAY);
 
     draw.text(&format!("{:.2}px", bounds.width()))
         .position(vec2(bounds.center().x, bounds.max().y + 20.0))

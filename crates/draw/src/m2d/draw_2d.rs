@@ -1,17 +1,16 @@
-use super::{get_2d_painter, get_mut_2d_painter, Pixel, Triangle};
+use super::{get_2d_painter, get_mut_2d_painter, Pixel};
 use crate::m2d::images_2d::Image;
 use crate::m2d::painter_2d::DrawPipeline;
+use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text_2d::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
+use crate::{Circle2D, Ellipse2D, Star2D};
 use arrayvec::ArrayVec;
 use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
-use core::gfx::{
-    self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer, Texture,
-};
+use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
 use core::math::{vec3, Mat3, Mat4, Rect, Vec2};
-use core::time;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
 
@@ -286,8 +285,37 @@ impl Draw2D {
         Drawing::new(self, Pixel::new(pos))
     }
 
-    pub fn triangle(&mut self, p1: Vec2, p2: Vec2, p3: Vec2) -> Drawing<'_, Triangle> {
-        Drawing::new(self, Triangle::new(p1, p2, p3))
+    pub fn path(&mut self) -> Drawing<'_, Path2D> {
+        Drawing::new(self, Path2D::new())
+    }
+
+    pub fn line(&mut self, p1: Vec2, p2: Vec2) -> Drawing<'_, Line2D> {
+        Drawing::new(self, Line2D::new(p1, p2))
+    }
+
+    pub fn triangle(&mut self, p1: Vec2, p2: Vec2, p3: Vec2) -> Drawing<'_, Triangle2D> {
+        Drawing::new(self, Triangle2D::new(p1, p2, p3))
+    }
+
+    pub fn rect(&mut self, pos: Vec2, size: Vec2) -> Drawing<'_, Rectangle2D> {
+        Drawing::new(self, Rectangle2D::new(pos, size))
+    }
+
+    pub fn circle(&mut self, radius: f32) -> Drawing<'_, Circle2D> {
+        Drawing::new(self, Circle2D::new(radius))
+    }
+
+    pub fn ellipse(&mut self, pos: Vec2, size: Vec2) -> Drawing<'_, Ellipse2D> {
+        Drawing::new(self, Ellipse2D::new(pos, size))
+    }
+
+    pub fn star(
+        &mut self,
+        spikes: u8,
+        outer_radius: f32,
+        inner_radius: f32,
+    ) -> Drawing<'_, Star2D> {
+        Drawing::new(self, Star2D::new(spikes, outer_radius, inner_radius))
     }
 
     pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image> {
@@ -298,9 +326,9 @@ impl Draw2D {
         Drawing::new(self, Text2D::new(text))
     }
 
-    pub fn fps(&mut self) -> Drawing<'_, Text2D> {
-        Drawing::new(self, Text2D::new(""))
-    }
+    // pub fn fps(&mut self) -> Drawing<'_, Text2D> {
+    //     Drawing::new(self, Text2D::new(""))
+    // }
 }
 
 pub struct DrawingInfo<'a> {

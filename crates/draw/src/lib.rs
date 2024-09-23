@@ -1,10 +1,12 @@
 mod m2d;
+mod shapes;
 mod sprite;
 pub mod text;
 
 pub use m2d::*;
 pub use sprite::*;
 
+pub use shapes::*;
 pub use text::*;
 
 // -- Draw API
