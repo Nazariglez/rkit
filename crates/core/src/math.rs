@@ -40,6 +40,26 @@ impl Rect {
             || self_max.y < other_min.y
             || self_min.y > other_max.y)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.size.x <= 0.0 || self.size.y <= 0.0
+    }
+
+    pub fn width(&self) -> f32 {
+        self.size.x
+    }
+
+    pub fn height(&self) -> f32 {
+        self.size.y
+    }
+
+    pub fn x(&self) -> f32 {
+        self.origin.x
+    }
+
+    pub fn y(&self) -> f32 {
+        self.origin.y
+    }
 }
 
 #[cfg(test)]

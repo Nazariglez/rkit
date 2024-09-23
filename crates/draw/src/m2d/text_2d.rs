@@ -1,9 +1,9 @@
 use crate::text::{get_mut_text_system, get_text_system, AtlasType, Font, HAlign, TextInfo};
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext};
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, VAlign};
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{vec2, Mat3, Vec2};
+use core::math::{vec2, Mat3, Rect, Vec2};
 use std::cell::RefCell;
 
 thread_local! {
@@ -55,7 +55,6 @@ var t_color: texture_2d<f32>;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Use branching based on in.tex after texture sampling
     if (in.tex == 0u) {
         let mask_sample = textureSampleLevel(t_mask, s_texture, in.uvs, 0.0);
         var color: vec4<f32> = vec4(in.color.rgb, mask_sample.r * in.color.a);
@@ -117,7 +116,7 @@ pub struct Text2D<'a> {
     line_height: Option<f32>,
     max_width: Option<f32>,
     h_align: HAlign,
-    v_align: (),
+    v_align: VAlign,
     transform: Mat3,
 }
 
@@ -133,7 +132,7 @@ impl<'a> Text2D<'a> {
             line_height: None,
             max_width: None,
             h_align: HAlign::default(),
-            v_align: (),
+            v_align: VAlign::default(),
             transform: Mat3::IDENTITY,
         }
     }
@@ -189,17 +188,17 @@ impl<'a> Text2D<'a> {
     }
 
     pub fn v_align_top(&mut self) -> &mut Self {
-        // self.v_align = VerticalAlign::Top;
+        self.v_align = VAlign::Top;
         self
     }
 
     pub fn v_align_middle(&mut self) -> &mut Self {
-        // self.v_align = VerticalAlign::Center;
+        self.v_align = VAlign::Middle;
         self
     }
 
     pub fn v_align_bottom(&mut self) -> &mut Self {
-        // self.v_align = VerticalAlign::Bottom;
+        self.v_align = VAlign::Bottom;
         self
     }
 }
@@ -215,6 +214,7 @@ impl<'a> Element2D for Text2D<'a> {
             line_height: self.line_height,
             scale: 1.0,
             h_align: self.h_align,
+            v_align: self.v_align,
         };
 
         let c = self.color;
@@ -224,14 +224,13 @@ impl<'a> Element2D for Text2D<'a> {
                 temp_vertices.clear();
                 temp_indices.clear();
 
-                {
+                let block_size = {
                     let mut sys = get_mut_text_system();
                     let block = sys.prepare_text(&info).unwrap();
                     if block.data.is_empty() {
                         return;
                     }
 
-                    let block_size = block.size;
                     block.data.iter().enumerate().for_each(|(i, data)| {
                         let Vec2 { x: x1, y: y1 } = data.xy;
                         let Vec2 { x: x2, y: y2 } = data.xy + data.size;
@@ -262,7 +261,9 @@ impl<'a> Element2D for Text2D<'a> {
                         temp_vertices.extend_from_slice(vertices.as_slice());
                         temp_indices.extend_from_slice(indices.as_slice());
                     });
-                }
+
+                    block.size
+                };
 
                 draw.add_to_batch(DrawingInfo {
                     pipeline: DrawPipeline::Text,
@@ -271,6 +272,25 @@ impl<'a> Element2D for Text2D<'a> {
                     transform: self.transform,
                     sprite: None,
                 });
+
+                // TODO iterate over vertices instead to get min_x and min_y?
+                let offset = {
+                    let xx = match self.h_align {
+                        HAlign::Left => 0.0,
+                        HAlign::Center => 0.5,
+                        HAlign::Right => 1.0,
+                    };
+
+                    let yy = match self.v_align {
+                        VAlign::Top => 0.0,
+                        VAlign::Middle => 0.5,
+                        VAlign::Bottom => 1.0,
+                    };
+
+                    block_size * vec2(xx, yy)
+                };
+
+                draw.last_text_bounds = Rect::new(self.position - offset, block_size);
             });
         });
     }

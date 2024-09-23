@@ -10,7 +10,7 @@ use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{
     self, AsRenderer, BindGroup, Buffer, Color, RenderPipeline, RenderTexture, Renderer, Texture,
 };
-use core::math::{vec3, Mat3, Mat4, Vec2};
+use core::math::{vec3, Mat3, Mat4, Rect, Vec2};
 use core::time;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
@@ -139,6 +139,8 @@ pub struct Draw2D {
     batches: SmallVec<BatchInfo, STACK_ALLOCATED_QUADS>,
     vertices: SmallVec<f32, { STACK_ALLOCATED_QUADS * 12 }>,
     indices: SmallVec<u32, { STACK_ALLOCATED_QUADS * 6 }>,
+
+    pub(crate) last_text_bounds: Rect,
 }
 
 impl Draw2D {
@@ -258,6 +260,10 @@ impl Draw2D {
                 }
             });
         self.vertices.extend_from_slice(info.vertices);
+    }
+
+    pub fn last_text_bounds(&self) -> Rect {
+        self.last_text_bounds
     }
 
     // - Transform TODO

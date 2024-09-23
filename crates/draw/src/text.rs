@@ -60,15 +60,24 @@ pub struct GlyphData {
 
 pub struct BlockInfo<'a> {
     pub size: Vec2,
+    pub lines: usize,
     pub data: &'a [GlyphData],
 }
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub enum HAlign {
     #[default]
     Left,
     Center,
     Right,
+}
+
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
+pub enum VAlign {
+    #[default]
+    Top,
+    Middle,
+    Bottom,
 }
 
 impl HAlign {
@@ -90,6 +99,7 @@ pub struct TextInfo<'a> {
     pub line_height: Option<f32>,
     pub scale: f32,
     pub h_align: HAlign,
+    pub v_align: VAlign,
 }
 
 struct ProcessData {
@@ -213,20 +223,8 @@ impl TextSystem {
         self.bind_group.as_ref().unwrap()
     }
 
-    pub fn mask_texture(&self) -> Sprite {
-        SpriteBuilder::new()
-            .from_texture(&self.mask.texture)
-            .with_sampler(&self.sampler)
-            .build()
-            .unwrap()
-    }
-
-    pub fn color_texture(&self) -> Sprite {
-        SpriteBuilder::new()
-            .from_texture(&self.color.texture)
-            .with_sampler(&self.sampler)
-            .build()
-            .unwrap()
+    pub fn set_default_font(&mut self, font: &Font) {
+        self.default_font = Some(font.clone());
     }
 
     pub fn create_font(&mut self, data: &'static [u8]) -> Result<Font, String> {
@@ -278,13 +276,6 @@ impl TextSystem {
         self.buffer
             .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
 
-        let align = text.h_align.to_cosmic();
-        if matches!(align, Align::Left) {
-            self.buffer.lines.iter_mut().for_each(|l| {
-                l.set_align(Some(align));
-            });
-        }
-        // lines text align?
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
         match self.process(text.scale)? {
@@ -296,7 +287,7 @@ impl TextSystem {
                 self.clear()?;
                 self.prepare_text(text)
             }
-            PostAction::End { block_size: size } => {
+            PostAction::End { block_size, lines } => {
                 // cleaning the temporal data shared with the user at the end
                 self.temp_data.clear();
 
@@ -314,9 +305,24 @@ impl TextSystem {
                         AtlasType::Color => self.color.texture.size(),
                     };
 
+                    let offset = {
+                        let x = match text.h_align {
+                            HAlign::Left => 0.0,
+                            HAlign::Center => 0.5,
+                            HAlign::Right => 1.0,
+                        };
+
+                        let y = match text.v_align {
+                            VAlign::Top => 0.0,
+                            VAlign::Middle => 0.5,
+                            VAlign::Bottom => 1.0,
+                        };
+                        let ww = (block_size.x - data.line_w) * -x;
+                        block_size * vec2(x, y) + vec2(ww, 0.0)
+                    };
+
                     let pos = text.pos + data.pos + info.pos.as_vec2();
-                    let offset = vec2(0.0, 0.0); //vec2(size.x - data.line_w, 0.0);
-                    let xy = pos + offset + vec2(0.0, data.line_y);
+                    let xy = pos - offset + vec2(0.0, data.line_y);
                     let glyph_size = info.size.as_vec2();
 
                     Some(GlyphData {
@@ -330,7 +336,8 @@ impl TextSystem {
                 self.temp_data.extend(processed);
 
                 Ok(BlockInfo {
-                    size,
+                    size: block_size,
+                    lines,
                     data: &self.temp_data,
                 })
             }
@@ -445,7 +452,11 @@ impl TextSystem {
             width,
             total_lines as f32 * self.buffer.metrics().line_height,
         );
-        Ok(PostAction::End { block_size: size })
+
+        Ok(PostAction::End {
+            block_size: size,
+            lines: total_lines,
+        })
     }
 
     fn clear(&mut self) -> Result<(), String> {
@@ -464,7 +475,7 @@ impl TextSystem {
 }
 
 enum PostAction {
-    End { block_size: Vec2 },
+    End { block_size: Vec2, lines: usize },
     Restore,
     Clear,
 }
