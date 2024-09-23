@@ -1,3 +1,5 @@
+#![cfg(feature = "gamepad")]
+
 use crate::input::{GamepadAxis, GamepadButton, GamepadState};
 use atomic_refcell::AtomicRefCell;
 use crossbeam_channel::{unbounded, Receiver, Sender};

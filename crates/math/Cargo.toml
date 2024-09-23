@@ -1,6 +1,0 @@
-[package]
-name = "math"
-edition = "2021"
-
-[dependencies]
-glam = "0.28.0"

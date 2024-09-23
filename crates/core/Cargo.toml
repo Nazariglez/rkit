@@ -5,7 +5,7 @@ build = "build.rs"
 
 [dependencies]
 # gk dependencies
-math.workspace = true
+utils.workspace = true
 
 # external common deps
 log.workspace = true
@@ -14,20 +14,84 @@ heapless.workspace = true
 atomic_refcell.workspace = true
 arrayvec.workspace = true
 smol_str.workspace = true
+lazy_static.workspace = true
+bytemuck.workspace = true
+smallvec.workspace = true
+once_cell.workspace = true
+
+# app/windowing
+winit = "0.30.5"
+raw-window-handle = "0.6.2"
+
+# math
+glam = { version = "0.29.0", features = ["bytemuck"] }
+
+# gfx
+pollster = "0.3.0"
+wgpu = "22.1.0"
+
+# gamepad
+gilrs = { version = "0.10.9", optional = true }
+
+# Instant compatible with wasm
+instant = { version = "0.1.13", features = ["wasm-bindgen"] }
+
+# Process images
+image = { version = "0.25.2", default-features = false, features = ["png", "jpeg", "webp", "rayon"] }
+
 
 ## deps only for this crate
-winit = "0.30.5"
-once_cell = "1.19.0"
 bitflags = "2.6.0"
 strum = "0.26.3"
 strum_macros = "0.26.4"
-smallvec = "2.0.0-alpha.7"
-gilrs = "0.10.9"
 crossbeam-channel = "0.5.13"
+env_logger = "0.11.5"
+
+# wasm deps
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1.7"
+wasm-bindgen = "0.2.93"
+wasm-bindgen-futures = "0.4.43"
+console_log = "1.0.0"
+js-sys = "0.3.70"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3.70"
+features = [
+    "Screen",
+    "Document",
+    "Window",
+    "Element",
+    "HtmlElement",
+    "Node",
+    "DomRect",
+    "DomRectReadOnly",
+    "HtmlCanvasElement",
+    "XmlHttpRequest",
+    "XmlHttpRequestEventTarget",
+    "XmlHttpRequestResponseType",
+    "Event",
+    "EventListener",
+    "EventTarget",
+    "MouseEvent",
+    "WheelEvent",
+    "KeyboardEvent",
+    "PointerEvent",
+    "CssStyleDeclaration",
+]
+
 
 [features]
 # Hackish, to add environment variables for test builds
 test-env = []
+# WebGL instead of WebGPU on WASM
+webgl = ["wgpu/webgl"]
+# Enable clipboard features
+clipboard = ["web-sys/Clipboard", "web-sys/ClipboardEvent"]
+# Enable dropping files on the window
+drop_files = ["web-sys/DragEvent", "web-sys/DataTransfer", "web-sys/FileList", "web-sys/File", "web-sys/DataTransferItemList", "web-sys/DataTransferItem"]
+# Enable Gamepad API
+gamepad = ["dep:gilrs"]
 
 [dev-dependencies]
 # Hackish, to add environment variables for test builds

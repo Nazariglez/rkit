@@ -1,3 +1,4 @@
+#![cfg(feature = "gamepad")]
 // TODO gamepad (web and native must have same API, also events onConnect, etc...)
 
 // pub enum GamepadType {
@@ -266,7 +267,7 @@ impl GamepadList {
     }
 
     pub fn clear(&mut self) {
-        self.clear();
+        self.ids.clear();
     }
 }
 
@@ -318,3 +319,111 @@ impl GamepadState {
         self.gamepads.iter_mut().for_each(|info| info.tick());
     }
 }
+
+// FIXME strum FromRepr seems to not work fine with test, it fails compiling because it cannot find option...
+// #[cfg(test)]
+// mod tests {
+// use super::*;
+//
+// #[test]
+// fn test_add_remove_gamepads() {
+//     let mut gamepad_state = GamepadState::default();
+//     gamepad_state.add(1);
+//     gamepad_state.add(2);
+//
+//     assert_eq!(gamepad_state.gamepads.len(), 2);
+//
+//     gamepad_state.remove(1);
+//     assert_eq!(gamepad_state.gamepads.len(), 1);
+//
+//     assert!(gamepad_state.get(1).is_none());
+//     assert!(gamepad_state.get(2).is_some());
+// }
+//
+// #[test]
+// fn test_press_release_buttons() {
+//     let mut gamepad_info = GamepadInfo::default();
+//
+//     gamepad_info.press(GamepadButton::North);
+//     assert!(gamepad_info.is_pressed(GamepadButton::North));
+//     assert!(gamepad_info.is_down(GamepadButton::North));
+//     assert!(!gamepad_info.is_released(GamepadButton::North));
+//
+//     gamepad_info.release(GamepadButton::North);
+//     assert!(!gamepad_info.is_pressed(GamepadButton::North));
+//     assert!(!gamepad_info.is_down(GamepadButton::North));
+//     assert!(gamepad_info.is_released(GamepadButton::North));
+// }
+//
+// #[test]
+// fn test_axis_strength() {
+//     let mut gamepad_info = GamepadInfo::default();
+//
+//     gamepad_info.set_axis_strength(GamepadAxis::LeftX, 0.5);
+//     assert_eq!(gamepad_info.axis_strength(GamepadAxis::LeftX), 0.5);
+//
+//     gamepad_info.set_axis_strength(GamepadAxis::RightY, -1.0);
+//     assert_eq!(gamepad_info.axis_strength(GamepadAxis::RightY), -1.0);
+//
+//     // Test default value (should be 0.0 for uninitialized axis)
+//     assert_eq!(gamepad_info.axis_strength(GamepadAxis::LeftY), 0.0);
+// }
+//
+// #[test]
+// fn test_multiple_buttons() {
+//     let mut gamepad_info = GamepadInfo::default();
+//
+//     gamepad_info.press(GamepadButton::South);
+//     gamepad_info.press(GamepadButton::East);
+//
+//     assert!(gamepad_info.is_pressed(GamepadButton::South));
+//     assert!(gamepad_info.is_pressed(GamepadButton::East));
+//     assert!(gamepad_info.is_down(GamepadButton::South));
+//     assert!(gamepad_info.is_down(GamepadButton::East));
+//
+//     gamepad_info.release(GamepadButton::South);
+//     assert!(!gamepad_info.is_pressed(GamepadButton::South));
+//     assert!(gamepad_info.is_pressed(GamepadButton::East));
+//
+//     gamepad_info.tick();
+//     assert!(!gamepad_info.is_pressed(GamepadButton::South));
+//     assert!(!gamepad_info.is_pressed(GamepadButton::East));
+//     assert!(gamepad_info.is_down(GamepadButton::East));
+//     assert!(gamepad_info.is_released(GamepadButton::South));
+// }
+//
+// #[test]
+// fn test_unknown_buttons_axes() {
+//     let mut gamepad_info = GamepadInfo::default();
+//
+//     gamepad_info.press(GamepadButton::Unknown);
+//     assert!(gamepad_info.is_pressed(GamepadButton::Unknown));
+//
+//     gamepad_info.set_axis_strength(GamepadAxis::Unknown, 0.7);
+//     assert_eq!(gamepad_info.axis_strength(GamepadAxis::Unknown), 0.7);
+// }
+//
+// #[test]
+// fn test_clear_gamepad_state() {
+//     let mut gamepad_info = GamepadInfo::default();
+//
+//     gamepad_info.press(GamepadButton::North);
+//     gamepad_info.set_axis_strength(GamepadAxis::LeftX, 0.5);
+//     gamepad_info.tick(); // Simulate a frame tick to clear state
+//
+//     assert!(!gamepad_info.is_pressed(GamepadButton::North));
+//     assert_eq!(gamepad_info.axis_strength(GamepadAxis::LeftX), 0.5);
+// }
+//
+// #[test]
+// fn test_iterate_gamepads() {
+//     let mut gamepad_state = GamepadState::default();
+//     gamepad_state.add(1);
+//     gamepad_state.add(2);
+//
+//     let gamepad_list = gamepad_state.available();
+//     let ids: Vec<usize> = gamepad_list.iter().map(|id| id.raw()).collect();
+//
+//     assert_eq!(ids, vec![1, 2]);
+// }
+// }

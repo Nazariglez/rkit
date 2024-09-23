@@ -1,2 +1,8 @@
+#[cfg(feature = "random")]
+pub mod random;
+
 pub use core::*;
-pub use math;
+pub use utils::*;
+
+#[cfg(feature = "draw")]
+pub use draw;

@@ -1,7 +1,17 @@
-use crate::input::{GamepadState, KeyboardState, MouseState};
-use math::Vec2;
+use crate::gfx::{
+    BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, Limits, RenderPipeline,
+    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
+    SamplerDescriptor, Texture, TextureData, TextureDescriptor,
+};
+use crate::input::{KeyboardState, MouseState};
+use crate::math::UVec2;
+use crate::math::Vec2;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-pub(crate) trait BackendImpl {
+#[cfg(feature = "gamepad")]
+use crate::input::GamepadState;
+
+pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     // Window
     fn set_title(&mut self, title: &str);
     fn title(&self) -> String;
@@ -23,5 +33,59 @@ pub(crate) trait BackendImpl {
     // input
     fn mouse_state(&self) -> &MouseState;
     fn keyboard_state(&self) -> &KeyboardState;
+
+    #[cfg(feature = "gamepad")]
     fn gamepad_state(&self) -> &GamepadState;
+
+    // gfx
+    fn gfx(&mut self) -> &mut G;
+}
+
+pub(crate) trait GfxBackendImpl {
+    async fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    where
+        Self: Sized,
+        W: HasDisplayHandle + HasWindowHandle;
+
+    async fn update_surface<W>(
+        &mut self,
+        window: &W,
+        vsync: bool,
+        win_size: UVec2,
+    ) -> Result<(), String>
+    where
+        Self: Sized,
+        W: HasDisplayHandle + HasWindowHandle;
+
+    fn prepare_frame(&mut self);
+    fn present_frame(&mut self);
+
+    fn render(&mut self, renderer: &Renderer) -> Result<(), String>;
+    fn render_to(&mut self, texture: &RenderTexture, renderer: &Renderer) -> Result<(), String>;
+
+    fn create_render_pipeline(
+        &mut self,
+        desc: RenderPipelineDescriptor,
+    ) -> Result<RenderPipeline, String>;
+    fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String>;
+    fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String>;
+    fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String>;
+    fn create_sampler(&mut self, desc: SamplerDescriptor) -> Result<Sampler, String>;
+    fn create_texture(
+        &mut self,
+        desc: TextureDescriptor,
+        data: Option<TextureData>,
+    ) -> Result<Texture, String>;
+    fn write_texture(
+        &mut self,
+        texture: &Texture,
+        offset: UVec2,
+        size: UVec2,
+        data: &[u8],
+    ) -> Result<(), String>;
+    fn create_render_texture(
+        &mut self,
+        desc: RenderTextureDescriptor,
+    ) -> Result<RenderTexture, String>;
+    fn limits(&self) -> Limits;
 }

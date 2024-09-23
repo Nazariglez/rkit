@@ -1,7 +1,25 @@
-* time: fps(), delta_time(), elapsed_time()?
-* rand: set_seed(), current_seed(), etc...
-* add teesting for keyboards and mouse inputs (down state is important because is never cleaned)
-* hide behind features?: mouse, keyboard, gamepad, ime/chars, etc...
-* change is_down to is_pressed, and is_pressed to is_just_pressed, same for is_released
-* SDL backend (sdl2? sdl3 seems to be a wip and pretty behind in the rust bindings)
-* gamepad for wasm32, (check gamepad current impl with different gamepads)
+- todo:
+    * Shapes: POINTS and ARCS are must, to_owned/cache
+    * Drawing transform!!!
+    * multisampling? mipmapping?
+    * gamepad for wasm32
+    * input wasm32
+    * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
+    * transform_2d (scale, flip, etc...) and mouse check against global + local
+
+- questions:
+    * is it better `mouse::is_btn_pressed` or `is_mouse_btn_pressed`, `is_window_fullscreen` or `window::is_fullscreen`, etc..
+    * do we need an sdl backend, sdl2 or sdl3?
+    * do we want to hide keyboard, mouse and ime under features?
+
+- know issues:
+    * linux not working because issues with surface size? (fix asap)
+    * webgl not working
+    * stencil must be done in one pass
+    * resize doesn't update the surface/offscreen
+    * gfx_render_texture looks a bit weird when textures overlap, like darker colors?
+
+* License section
+We need to include the licence of any asset on the readme or somewhere, and make it clear
+that if the user uses it then it should includes the licence along with the final binary
+    * arcade-legacy font

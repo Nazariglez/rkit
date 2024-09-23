@@ -1,0 +1,7 @@
+[package]
+name = "utils"
+edition = "2021"
+
+[dependencies]
+hashbrown.workspace = true
+rustc-hash.workspace = true

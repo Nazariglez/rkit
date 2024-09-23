@@ -1,3 +1,6 @@
+#![cfg(not(target_arch = "wasm32"))]
+
+use crate::math::uvec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
 use winit::application::ApplicationHandler;
@@ -10,13 +13,19 @@ use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
 
-use super::backend::BackendImpl;
+use super::backend::{BackendImpl, GfxBackendImpl};
 use crate::app::WindowConfig;
-use crate::backend::gamepad_gilrs::GilrsBackend;
+use crate::backend::wgpu::GfxBackend;
 use crate::builder::AppBuilder;
-use crate::input::{GamepadState, KeyCode, KeyboardState, MouseButton, MouseState};
-use math::{vec2, Vec2};
+use crate::input::{KeyCode, KeyboardState, MouseButton, MouseState};
+use crate::math::{vec2, Vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
+
+#[cfg(feature = "gamepad")]
+use crate::backend::gamepad_gilrs::GilrsBackend;
+#[cfg(feature = "gamepad")]
+use crate::input::GamepadState;
+use crate::time;
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));
@@ -28,11 +37,13 @@ pub(crate) struct WinitBackend {
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
-    // gamepad_state: GamepadState,
+
+    #[cfg(feature = "gamepad")]
     gilrs: GilrsBackend,
+    gfx: Option<GfxBackend>,
 }
 
-impl BackendImpl for WinitBackend {
+impl BackendImpl<GfxBackend> for WinitBackend {
     #[inline]
     fn set_title(&mut self, title: &str) {
         debug_assert!(self.window.is_some(), "Window must be present");
@@ -173,9 +184,15 @@ impl BackendImpl for WinitBackend {
         &self.keyboard_state
     }
 
+    #[cfg(feature = "gamepad")]
     #[inline]
     fn gamepad_state(&self) -> &GamepadState {
         &self.gilrs.state
+    }
+
+    #[inline]
+    fn gfx(&mut self) -> &mut GfxBackend {
+        self.gfx.as_mut().unwrap()
     }
 }
 
@@ -184,6 +201,7 @@ struct Runner<S> {
     init: Option<Box<dyn FnOnce() -> S>>,
     state: Option<S>,
     update: Box<dyn FnMut(&mut S)>,
+    vsync: bool,
 }
 
 impl<S> ApplicationHandler for Runner<S> {
@@ -197,6 +215,41 @@ impl<S> ApplicationHandler for Runner<S> {
 
         let mut win = event_loop.create_window(attrs).unwrap();
         win.set_ime_allowed(true); // allow for chars
+
+        let win_size = win.inner_size();
+        let gfx_initiated = get_backend().gfx.is_some();
+        if gfx_initiated {
+            let res = pollster::block_on(get_mut_backend().gfx.as_mut().unwrap().update_surface(
+                &win,
+                self.vsync,
+                uvec2(win_size.width, win_size.height),
+            ));
+            match res {
+                Ok(_) => {
+                    log::trace!("Surface updated");
+                }
+                Err(e) => {
+                    log::error!("Error updating surface on Gfx backend: {}", e);
+                }
+            }
+        } else {
+            let gfx = pollster::block_on(GfxBackend::init(
+                &win,
+                self.vsync,
+                uvec2(win_size.width, win_size.height),
+            ));
+            match gfx {
+                Ok(gfx) => {
+                    get_mut_backend().gfx = Some(gfx);
+                    log::trace!("Surface initiated");
+                }
+                Err(e) => {
+                    log::error!("Error initiating Gfx backend: {}", e);
+                }
+            }
+        }
+
+        win.request_redraw();
         get_mut_backend().window = Some(win);
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
@@ -276,11 +329,18 @@ impl<S> ApplicationHandler for Runner<S> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // gamepad must be updated before the update cb
-                get_mut_backend().gilrs.tick();
+                time::tick();
+
+                #[cfg(feature = "gamepad")]
+                {
+                    // gamepad must be updated before the update cb
+                    get_mut_backend().gilrs.tick();
+                }
 
                 // app's update cb
+                get_mut_backend().gfx().prepare_frame();
                 (*self.update)(self.state.as_mut().unwrap());
+                get_mut_backend().gfx().present_frame();
 
                 // post-update
                 let mut bck = get_mut_backend();
@@ -312,11 +372,14 @@ where
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
 
+    let vsync = window.vsync;
+
     let mut runner = Runner {
         window_attrs: window_attrs(window),
         init: Some(init_cb),
         state: None,
         update: update_cb,
+        vsync,
     };
 
     event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;
@@ -344,6 +407,7 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         min_size,
         max_size,
         resizable,
+        vsync: _,
     } = config;
 
     let mut attrs = WindowAttributes::default()
