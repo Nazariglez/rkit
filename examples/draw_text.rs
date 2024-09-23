@@ -9,7 +9,7 @@ fn main() -> Result<(), String> {
 fn update(s: &mut ()) {
     let mut draw = draw_2d();
     draw.clear(Color::BLACK);
-    draw.text("hello world")
+    draw.text("Hello world")
         .position(window_size() * 0.5)
         .color(Color::ORANGE)
         .size(48.0)

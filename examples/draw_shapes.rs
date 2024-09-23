@@ -26,7 +26,7 @@ fn update(s: &mut ()) {
 
     draw.ellipse(vec2(400.0, 300.0), vec2(50.0, 100.0))
         .color(Color::RED)
-        .rotate(-45.0f32.to_degrees());
+        .rotate(45.0f32.to_degrees());
 
     draw.circle(40.0)
         .position(vec2(600.0, 450.0))
@@ -44,8 +44,20 @@ fn update(s: &mut ()) {
         .position(vec2(150.0, 480.0))
         .fill_color(Color::PINK)
         .fill()
-        .stroke_color(Color::RED)
+        .stroke_color(Color::MAGENTA)
         .stroke(6.0);
+
+    draw.polygon(5, 50.0)
+        .position(vec2(350.0, 150.0))
+        .color(Color::WHITE)
+        .stroke(8.0);
+
+    draw.polygon(8, 80.0)
+        .position(vec2(350.0, 450.0))
+        .fill_color(Color::WHITE)
+        .fill()
+        .stroke_color(Color::ORANGE)
+        .stroke(8.0);
 
     gfx::render_to_frame(&draw).unwrap();
 }

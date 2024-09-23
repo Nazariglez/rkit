@@ -5,7 +5,7 @@ use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text_2d::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
-use crate::{Circle2D, Ellipse2D, Star2D};
+use crate::{Circle2D, Ellipse2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
 use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
@@ -316,6 +316,10 @@ impl Draw2D {
         inner_radius: f32,
     ) -> Drawing<'_, Star2D> {
         Drawing::new(self, Star2D::new(spikes, outer_radius, inner_radius))
+    }
+
+    pub fn polygon(&mut self, sides: u8, radius: f32) -> Drawing<'_, Polygon2D> {
+        Drawing::new(self, Polygon2D::new(sides, radius))
     }
 
     pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image> {

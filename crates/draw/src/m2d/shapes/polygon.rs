@@ -4,7 +4,7 @@ use core::gfx::Color;
 use core::math::{vec2, Mat3, Vec2};
 use std::f32::consts::PI;
 
-pub struct Star2D {
+pub struct Polygon2D {
     color: Color,
     pos: Vec2,
     stroke_width: f32,
@@ -14,13 +14,12 @@ pub struct Star2D {
     mode_index: usize,
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
-    spikes: u8,
-    outer_radius: f32,
-    inner_radius: f32,
+    sides: u8,
+    radius: f32,
 }
 
-impl Star2D {
-    pub fn new(spikes: u8, outer_radius: f32, inner_radius: f32) -> Self {
+impl Polygon2D {
+    pub fn new(sides: u8, radius: f32) -> Self {
         Self {
             color: Color::WHITE,
             stroke_width: 1.0,
@@ -31,9 +30,8 @@ impl Star2D {
             mode_index: 0,
             fill_color: None,
             stroke_color: None,
-            spikes,
-            outer_radius,
-            inner_radius,
+            sides,
+            radius,
         }
     }
 
@@ -76,16 +74,10 @@ impl Star2D {
     }
 }
 
-impl Element2D for Star2D {
+impl Element2D for Polygon2D {
     fn process(&self, draw: &mut Draw2D) {
         let mut path_builder = draw.path();
-        draw_star(
-            &mut path_builder,
-            self.pos,
-            self.spikes as _,
-            self.outer_radius,
-            self.inner_radius,
-        );
+        draw_polygon(&mut path_builder, self.pos, self.sides as _, self.radius);
         path_builder.color(self.color).alpha(self.alpha);
 
         let first_mode = self.modes[0].unwrap_or(TessMode::Fill);
@@ -123,30 +115,23 @@ impl Element2D for Star2D {
     }
 }
 
-fn draw_star(
-    path_builder: &mut Drawing<Path2D>,
-    center: Vec2,
-    spikes: usize,
-    outer_radius: f32,
-    inner_radius: f32,
-) {
-    let step = PI / spikes as f32;
+fn draw_polygon(path_builder: &mut Drawing<Path2D>, center: Vec2, sides: usize, radius: f32) {
+    for n in 0..sides {
+        let i = n as f32;
 
-    let start_pos = center - vec2(0.0, outer_radius);
-    path_builder.move_to(start_pos);
+        let pi_sides = PI / sides as f32;
+        let is_even = sides % 2 == 0;
+        let offset = if is_even { pi_sides } else { pi_sides * 0.5 };
 
-    let mut rot = PI / 2.0 * 3.0;
-    for _ in 0..spikes {
-        let pos = center + vec2(rot.cos(), rot.sin()) * outer_radius;
-        rot += step;
+        let angle = i * 2.0 * pi_sides - offset;
+        let pos = center + radius * vec2(angle.cos(), angle.sin());
 
-        path_builder.line_to(pos);
-
-        let pos = center + vec2(rot.cos(), rot.sin()) * inner_radius;
-        rot += step;
-
-        path_builder.line_to(pos);
+        if n == 0 {
+            path_builder.move_to(pos);
+        } else {
+            path_builder.line_to(pos);
+        }
     }
 
-    path_builder.line_to(start_pos).close();
+    path_builder.close();
 }

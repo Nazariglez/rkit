@@ -182,7 +182,7 @@ impl Element2D for Path2D {
         }
 
         if let Some(mode) = self.modes[1] {
-            match first_mode {
+            match mode {
                 TessMode::Fill => fill(self, draw),
                 TessMode::Stroke => stroke(self, draw),
             }
