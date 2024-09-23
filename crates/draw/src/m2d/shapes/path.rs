@@ -2,7 +2,8 @@ use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
 use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D};
 use core::gfx::Color;
 use core::math::{Mat3, Vec2};
-use lyon::math::point;
+use lyon::geom::Arc;
+use lyon::math::{point, Angle};
 use lyon::path::path::Builder;
 use lyon::tessellation::*;
 use std::cell::RefCell;
@@ -83,6 +84,35 @@ impl Path2D {
             point(ctrl2.x, ctrl2.y),
             point(to.x, to.y),
         );
+        self
+    }
+
+    pub fn arc(
+        &mut self,
+        center: Vec2,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> &mut Self {
+        debug_assert!(self.initialized, "You should use move_to first");
+
+        let start = Angle::radians(start_angle);
+        let end = Angle::radians(end_angle);
+
+        let arc = Arc {
+            center: point(center.x, center.y),
+            radii: lyon::math::vector(radius, radius),
+            start_angle: start,
+            sweep_angle: end - start,
+            x_rotation: Angle::radians(0.0),
+        };
+
+        arc.for_each_quadratic_bezier(&mut |segment| {
+            let ctrl = segment.ctrl;
+            let to = segment.to;
+            self.builder.borrow_mut().quadratic_bezier_to(ctrl, to);
+        });
+
         self
     }
 
