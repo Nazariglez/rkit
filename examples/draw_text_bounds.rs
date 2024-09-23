@@ -1,6 +1,5 @@
-use draw::Draw2D;
 use rkit::app::window_size;
-use rkit::draw::{self, draw_2d, Font};
+use rkit::draw::{self, draw_2d, Draw2D, Font};
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Rect};
 

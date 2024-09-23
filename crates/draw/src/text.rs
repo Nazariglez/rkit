@@ -32,8 +32,8 @@ pub fn get_mut_text_system() -> AtomicRefMut<'static, TextSystem> {
     TEXT_SYSTEM.borrow_mut()
 }
 
-const DEFAULT_TEXTURE_SIZE: u32 = 32;
-const ATLAS_OFFSET: u32 = 1;
+const DEFAULT_TEXTURE_SIZE: u32 = 256;
+const ATLAS_PIXEL_OFFSET: u32 = 1;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FontId(pub(crate) u64);
@@ -502,8 +502,8 @@ struct AtlasData {
 impl AtlasData {
     fn store(&mut self, size: UVec2, data: &[u8]) -> Result<Option<Vec2>, String> {
         let alloc = self.allocator.allocate(size2(
-            (size.x + ATLAS_OFFSET) as _,
-            (size.y + ATLAS_OFFSET) as _,
+            (size.x + ATLAS_PIXEL_OFFSET) as _,
+            (size.y + ATLAS_PIXEL_OFFSET) as _,
         ));
 
         let alloc = match alloc {
