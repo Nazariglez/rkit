@@ -2,6 +2,7 @@ use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
 use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D};
 use core::gfx::Color;
 use core::math::{Mat3, Vec2};
+use log::warn;
 use lyon::geom::Arc;
 use lyon::math::{point, Angle};
 use lyon::path::path::Builder;
@@ -107,10 +108,9 @@ impl Path2D {
             x_rotation: Angle::radians(0.0),
         };
 
-        arc.for_each_quadratic_bezier(&mut |segment| {
-            let ctrl = segment.ctrl;
-            let to = segment.to;
-            self.builder.borrow_mut().quadratic_bezier_to(ctrl, to);
+        let tolerance = StrokeOptions::DEFAULT_TOLERANCE;
+        arc.for_each_flattened(tolerance, &mut |point| {
+            self.builder.borrow_mut().line_to(point.to);
         });
 
         self

@@ -197,23 +197,35 @@ impl GfxBackendImpl for GfxBackend {
 
                     let mut vertex_buffers_slot = 0;
                     let mut indexed = false;
-                    rp.buffers.iter().for_each(|buff| match buff.0.usage {
-                        BufferUsage::Vertex => {
-                            rpass.set_vertex_buffer(
-                                vertex_buffers_slot,
-                                buff.0.inner.borrow().raw.slice(buff.1.clone()),
+                    rp.buffers.iter().for_each(|buff| {
+                        // debug_assert!(!buff.1.is_empty(), "Buffer offsets cannot be empty");
+                        if buff.1.is_empty() {
+                            log::warn!(
+                                "Buffer '{} - ({:?})' offset is empty. Skipping...",
+                                buff.0.inner_label,
+                                buff.0.id
                             );
-                            vertex_buffers_slot += 1;
+                            return;
                         }
-                        BufferUsage::Index => {
-                            debug_assert!(!indexed, "Cannot bind more than one Index buffer");
-                            indexed = true;
-                            rpass.set_index_buffer(
-                                buff.0.inner.borrow().raw.slice(buff.1.clone()),
-                                pip.index_format,
-                            )
+
+                        match buff.0.usage {
+                            BufferUsage::Vertex => {
+                                rpass.set_vertex_buffer(
+                                    vertex_buffers_slot,
+                                    buff.0.inner.borrow().raw.slice(buff.1.clone()),
+                                );
+                                vertex_buffers_slot += 1;
+                            }
+                            BufferUsage::Index => {
+                                debug_assert!(!indexed, "Cannot bind more than one Index buffer");
+                                indexed = true;
+                                rpass.set_index_buffer(
+                                    buff.0.inner.borrow().raw.slice(buff.1.clone()),
+                                    pip.index_format,
+                                )
+                            }
+                            BufferUsage::Uniform => {}
                         }
-                        BufferUsage::Uniform => {}
                     });
 
                     rp.bind_groups.iter().enumerate().for_each(|(i, bg)| {

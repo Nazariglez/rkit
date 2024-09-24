@@ -1,5 +1,5 @@
 - todo:
-    * Shapes: POINTS and ARCS are must, to_owned/cache
+    * Shapes: POINTS and ARcs, to_owned/cache
     * Drawing transform!!!
     * multisampling? mipmapping?
     * gamepad for wasm32
