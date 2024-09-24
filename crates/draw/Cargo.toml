@@ -15,6 +15,7 @@ arrayvec.workspace = true
 rayon.workspace = true
 hashbrown.workspace = true
 rustc-hash.workspace = true
+num.workspace = true
 
 internment = "0.8.4"
 lyon = "1.0.1"

@@ -1,5 +1,6 @@
 use super::{get_2d_painter, get_mut_2d_painter, Pixel};
 use crate::m2d::images_2d::Image;
+use crate::m2d::mat3_stack::Mat3Stack;
 use crate::m2d::painter_2d::DrawPipeline;
 use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text_2d::Text2D;
@@ -133,6 +134,8 @@ pub struct Draw2D {
     projection: Mat4,
     clear_color: Option<Color>,
     alpha: f32,
+
+    matrix_stack: Mat3Stack,
 
     indices_offset: usize,
     batches: SmallVec<BatchInfo, STACK_ALLOCATED_QUADS>,
@@ -270,21 +273,28 @@ impl Draw2D {
         Mat4::IDENTITY
     }
 
-    pub fn push_transform(&mut self) {}
+    pub fn push_matrix(&mut self, m: Mat3) {
+        self.matrix_stack.push(m);
+    }
 
-    pub fn set_matrix(&mut self) {}
+    pub fn set_matrix(&mut self, m: Mat3) {
+        self.matrix_stack.set_matrix(m);
+    }
 
     pub fn matrix(&self) -> Mat3 {
-        Mat3::IDENTITY
+        self.matrix_stack.matrix()
     }
 
-    pub fn pop_transform(&mut self) {}
-
-    // - included methods
-    pub fn pixel(&mut self, pos: Vec2) -> Drawing<'_, Pixel> {
-        Drawing::new(self, Pixel::new(pos))
+    pub fn pop_matrix(&mut self) {
+        self.matrix_stack.pop();
     }
 
+    // // - included methods
+    // pub fn pixel(&mut self, pos: Vec2) -> Drawing<'_, Pixel> {
+    //     Drawing::new(self, Pixel::new(pos))
+    // }
+
+    // - shapes
     pub fn path(&mut self) -> Drawing<'_, Path2D> {
         Drawing::new(self, Path2D::new())
     }
@@ -322,10 +332,12 @@ impl Draw2D {
         Drawing::new(self, Polygon2D::new(sides, radius))
     }
 
+    // - images
     pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image> {
         Drawing::new(self, Image::new(sprite))
     }
 
+    // - text
     pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D> {
         Drawing::new(self, Text2D::new(text))
     }
