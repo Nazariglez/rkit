@@ -118,6 +118,8 @@ impl GilrsBackend {
                     }
                 }
                 EventType::Dropped => {}
+                EventType::ForceFeedbackEffectCompleted => {}
+                _ => {}
             }
         }
     }
