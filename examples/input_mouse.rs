@@ -41,26 +41,23 @@ fn draw_ui(state: &mut State) {
     let mut draw = draw_2d();
     draw.clear(Color::BLACK);
 
-    // TODO
     // Draw cursor
-    // draw.circle(8.0)
-    //     .position(state.x, state.y)
-    //     .color(Color::ORANGE);
-    //
-    // // Draw left clicks
-    // state.left.iter().for_each(|(x, y)| {
-    //     draw.circle(4.0).position(*x, *y).color(Color::RED);
-    // });
-    //
-    // // Draw middle clicks
-    // state.middle.iter().for_each(|(x, y)| {
-    //     draw.circle(4.0).position(*x, *y).color(Color::GREEN);
-    // });
-    //
-    // // Draw right clicks
-    // state.right.iter().for_each(|(x, y)| {
-    //     draw.circle(4.0).position(*x, *y).color(Color::BLUE);
-    // });
+    draw.circle(8.0).position(state.pos).color(Color::ORANGE);
+
+    // Draw left clicks
+    state.left.iter().for_each(|pos| {
+        draw.circle(4.0).position(*pos).color(Color::RED);
+    });
+
+    // Draw middle clicks
+    state.middle.iter().for_each(|pos| {
+        draw.circle(4.0).position(*pos).color(Color::GREEN);
+    });
+
+    // Draw right clicks
+    state.right.iter().for_each(|pos| {
+        draw.circle(4.0).position(*pos).color(Color::BLUE);
+    });
 
     // Draw position
     let text = format!("x: {:.0} - y: {:.0}", state.pos.x, state.pos.y);
