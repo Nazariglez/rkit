@@ -1,8 +1,9 @@
-// This is the same as 'examples/draw_transform_2d.rs' but using raw matrices (Mat3)
+// This is the same as 'examples/draw_transform.rs' but using the Transform2D helper
 
+use draw::Transform2D;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Mat3, Vec2};
+use rkit::math::{vec2, Vec2};
 use rkit::time;
 use std::ops::Rem;
 
@@ -33,12 +34,17 @@ fn update(state: &mut State) {
     draw.clear(Color::BLACK);
 
     // Push to the transformation stack a translation matrix
-    draw.push_matrix(Mat3::from_translation(Vec2::new(350.0, 250.0)));
+    draw.push_matrix(
+        Transform2D::new()
+            .set_translation(vec2(350.0, 250.0))
+            .as_mat3(),
+    );
 
     // Calculate the matrix that we use for each object
-    let translation = Mat3::from_translation(Vec2::new(30.0, 20.0));
-    let rotation = Mat3::from_angle(state.rot.to_radians());
-    let matrix = translation * rotation;
+    let matrix = Transform2D::new()
+        .set_translation(vec2(30.0, 20.0))
+        .set_rotation(state.rot.to_radians())
+        .as_mat3();
 
     for (i, c) in COLORS.iter().enumerate() {
         let n = (i * 7) as f32;

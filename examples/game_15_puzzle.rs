@@ -1,5 +1,5 @@
 use rkit::app::{window_size, WindowConfig};
-use rkit::draw::{draw_2d, Draw2D};
+use rkit::draw::{create_draw_2d, Draw2D};
 use rkit::gfx::{self, Color};
 use rkit::input::{is_mouse_btn_pressed, mouse_position, MouseButton};
 use rkit::math::{ivec2, uvec2, vec2, IVec2, UVec2, Vec2};
@@ -65,7 +65,7 @@ fn mouse_pos_to_point() -> Option<UVec2> {
 }
 
 fn draw(state: &mut State) {
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
     for y in 0..COLS {

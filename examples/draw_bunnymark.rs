@@ -1,4 +1,4 @@
-use rkit::draw::{draw_2d, Sprite};
+use rkit::draw::{create_draw_2d, Sprite};
 use rkit::gfx::{self, Color};
 use rkit::input::{is_mouse_btn_down, MouseButton};
 use rkit::math::{vec2, Vec2};
@@ -86,7 +86,7 @@ fn update(state: &mut State) {
     });
 
     // draw
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
     state.bunnies.iter().for_each(|b| {

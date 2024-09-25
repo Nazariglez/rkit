@@ -1,4 +1,4 @@
-use rkit::draw::draw_2d;
+use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::math::vec2;
 
@@ -7,7 +7,7 @@ fn main() -> Result<(), String> {
 }
 
 fn update(s: &mut ()) {
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.path()
         .move_to(vec2(10.0, 10.0))

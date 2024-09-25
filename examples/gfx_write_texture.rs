@@ -1,4 +1,4 @@
-use draw::draw_2d;
+use draw::create_draw_2d;
 use rkit::app::window_size;
 use rkit::draw::{self, Sprite};
 use rkit::gfx::{self, Color};
@@ -60,7 +60,7 @@ fn update(state: &mut State) {
         .unwrap();
 
     // Draw the texture using the draw 2d API for convenience
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.image(&state.sprite);
     gfx::render_to_frame(&draw);

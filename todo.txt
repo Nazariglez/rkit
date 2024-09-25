@@ -1,15 +1,17 @@
 - todo:
-    * Shapes: POINTS and ARcs, to_owned/cache
+    * Camera2D
+    * points and to_owned/cache
     * Drawing transform!!!
+    * transform_2d (scale, flip, etc...) and mouse check against global + local
     * multisampling? mipmapping?
     * gamepad for wasm32
     * input wasm32
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
-    * transform_2d (scale, flip, etc...) and mouse check against global + local
 
 - questions:
+    * should we use `offset` instead of `position` to set elements in the screen and `position` instead of `translate`?
     * is it better `mouse::is_btn_pressed` or `is_mouse_btn_pressed`, `is_window_fullscreen` or `window::is_fullscreen`, etc..
-    * do we need an sdl backend, sdl2 or sdl3?
+    * do we need a sdl backend, sdl2 or sdl3?
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
@@ -23,3 +25,4 @@
 We need to include the licence of any asset on the readme or somewhere, and make it clear
 that if the user uses it then it should includes the licence along with the final binary
     * arcade-legacy font
+    * ferris by Esther Arzola -> https://www.behance.net/gallery/89117181/Ferris-the-professional

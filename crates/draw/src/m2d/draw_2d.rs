@@ -1,5 +1,5 @@
 use super::{get_2d_painter, get_mut_2d_painter, Pixel};
-use crate::m2d::images_2d::Image;
+use crate::m2d::images_2d::Image2D;
 use crate::m2d::mat3_stack::Mat3Stack;
 use crate::m2d::painter_2d::DrawPipeline;
 use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
@@ -289,6 +289,10 @@ impl Draw2D {
         self.matrix_stack.pop();
     }
 
+    pub fn clear_matrix_stack(&mut self) {
+        self.matrix_stack.clear();
+    }
+
     // // - included methods
     // pub fn pixel(&mut self, pos: Vec2) -> Drawing<'_, Pixel> {
     //     Drawing::new(self, Pixel::new(pos))
@@ -333,8 +337,8 @@ impl Draw2D {
     }
 
     // - images
-    pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image> {
-        Drawing::new(self, Image::new(sprite))
+    pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image2D> {
+        Drawing::new(self, Image2D::new(sprite))
     }
 
     // - text

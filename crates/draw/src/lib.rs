@@ -26,7 +26,7 @@ pub fn remove_2d_pipeline(id: &str) -> Option<PipelineContext> {
 }
 
 #[inline]
-pub fn draw_2d() -> Draw2D {
+pub fn create_draw_2d() -> Draw2D {
     Draw2D::new()
 }
 

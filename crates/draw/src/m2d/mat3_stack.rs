@@ -47,7 +47,7 @@ impl Mat3Stack {
 
 #[derive(Copy, Clone)]
 pub struct Transform2D {
-    position: Vec2,
+    translation: Vec2,
     size: Vec2,
     scale: Vec2,
     anchor: Vec2,
@@ -72,7 +72,7 @@ impl Default for Transform2D {
 impl Transform2D {
     pub fn new() -> Self {
         Self {
-            position: Default::default(),
+            translation: Default::default(),
             size: Default::default(),
             scale: Vec2::splat(1.0),
             anchor: Default::default(),
@@ -97,7 +97,7 @@ impl Transform2D {
     }
 
     pub fn position(&self) -> Vec2 {
-        self.position
+        self.translation
     }
     pub fn rotation(&self) -> f32 {
         self.rotation
@@ -117,9 +117,12 @@ impl Transform2D {
     pub fn scale(&self) -> Vec2 {
         self.scale
     }
+    pub fn flip(&self) -> BVec2 {
+        self.flip
+    }
 
-    pub fn set_position(&mut self, position: Vec2) -> &mut Self {
-        self.position = position;
+    pub fn set_translation(&mut self, position: Vec2) -> &mut Self {
+        self.translation = position;
         self.dirty = true;
         self
     }
@@ -185,7 +188,7 @@ fn update_transform(t: &mut Transform2D) -> Mat3 {
     let anchor = anchor * t.size;
     let pivot = pivot * t.size;
 
-    let mut row_2 = t.position - anchor * scale + pivot * scale;
+    let mut row_2 = t.translation - anchor * scale + pivot * scale;
     if !pivot.x.is_zero() || !pivot.y.is_zero() {
         row_2 -= vec2(pivot.dot(col_0), pivot.dot(col_1));
     }
@@ -254,7 +257,7 @@ mod tests {
     #[test]
     fn test_transform2d_default() {
         let transform = Transform2D::default();
-        assert_eq!(transform.position, Vec2::ZERO);
+        assert_eq!(transform.translation, Vec2::ZERO);
         assert_eq!(transform.size, Vec2::ZERO);
         assert_eq!(transform.scale, Vec2::splat(1.0));
         assert_eq!(transform.rotation, 0.0);
@@ -266,8 +269,8 @@ mod tests {
     #[test]
     fn test_transform2d_set_position() {
         let mut transform = Transform2D::default();
-        transform.set_position(vec2(10.0, 20.0));
-        assert_eq!(transform.position, vec2(10.0, 20.0));
+        transform.set_translation(vec2(10.0, 20.0));
+        assert_eq!(transform.translation, vec2(10.0, 20.0));
     }
 
     #[test]
@@ -289,7 +292,7 @@ mod tests {
     #[test]
     fn test_transform2d_as_mat3() {
         let mut transform = Transform2D::default();
-        transform.set_position(vec2(10.0, 20.0));
+        transform.set_translation(vec2(10.0, 20.0));
         transform.set_rotation(0.0);
         transform.set_scale(vec2(1.0, 1.0));
 

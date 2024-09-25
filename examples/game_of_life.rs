@@ -1,5 +1,5 @@
 use rkit::app::WindowConfig;
-use rkit::draw::{self, draw_2d, Sprite};
+use rkit::draw::{self, create_draw_2d, Sprite};
 use rkit::gfx::{self, Color};
 use rkit::math::{uvec2, vec2};
 use rkit::{random, time};
@@ -138,7 +138,7 @@ fn update(state: &mut State) {
         state.dirty = false;
     }
 
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.image(&state.sprite); // TODO scale x 4
     gfx::render_to_frame(&draw).unwrap();

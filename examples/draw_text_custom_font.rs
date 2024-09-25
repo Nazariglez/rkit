@@ -1,5 +1,5 @@
 use rkit::app::window_size;
-use rkit::draw::{self, draw_2d, Font};
+use rkit::draw::{self, create_draw_2d, Font};
 use rkit::gfx::{self, Color};
 use rkit::math::vec2;
 
@@ -19,7 +19,7 @@ fn init() -> State {
 }
 
 fn update(s: &mut State) {
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
     let pos = window_size() * 0.5;

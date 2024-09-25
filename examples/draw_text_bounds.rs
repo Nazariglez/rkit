@@ -1,5 +1,5 @@
 use rkit::app::window_size;
-use rkit::draw::{self, draw_2d, Draw2D, Font};
+use rkit::draw::{self, create_draw_2d, Draw2D, Font};
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Rect};
 
@@ -22,7 +22,7 @@ fn main() -> Result<(), String> {
 }
 
 fn update(state: &mut State) {
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
     draw.text("Let's measure this text...")

@@ -1,5 +1,5 @@
 use rkit::app::window_size;
-use rkit::draw::draw_2d;
+use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::math::vec2;
 
@@ -13,7 +13,7 @@ fn main() -> Result<(), String> {
 }
 
 fn update(s: &mut ()) {
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.text(LOREM_IPSUM)
         .position(vec2(250.0, 300.0))

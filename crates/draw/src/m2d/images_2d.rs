@@ -1,8 +1,8 @@
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite};
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite, Transform2D};
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{Mat3, Rect, Vec2};
+use core::math::{bvec2, BVec2, Mat3, Rect, Vec2};
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -82,17 +82,17 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     })
 }
 
-pub struct Image {
+pub struct Image2D {
     sprite: Sprite,
     position: Vec2,
     color: Color,
     alpha: f32,
     size: Option<Vec2>,
     crop: Option<Rect>,
-    transform: Mat3,
+    transform: Option<Transform2D>,
 }
 
-impl Image {
+impl Image2D {
     pub fn new(sprite: &Sprite) -> Self {
         Self {
             sprite: sprite.clone(),
@@ -101,7 +101,7 @@ impl Image {
             alpha: 1.0,
             crop: None,
             size: None,
-            transform: Mat3::IDENTITY,
+            transform: None,
         }
     }
 
@@ -129,13 +129,63 @@ impl Image {
         self.crop = Some(Rect::new(origin, size));
         self.size(size)
     }
+
+    // - Transform
+    pub fn translate(&mut self, pos: Vec2) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_translation(pos);
+        self
+    }
+
+    pub fn anchor(&mut self, point: Vec2) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_anchor(point);
+        self
+    }
+
+    pub fn pivot(&mut self, point: Vec2) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_pivot(point);
+        self
+    }
+
+    pub fn flip_x(&mut self, flip: bool) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_flip(bvec2(flip, t.flip().y));
+        self
+    }
+
+    pub fn flip_y(&mut self, flip: bool) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_flip(bvec2(t.flip().x, flip));
+        self
+    }
+
+    pub fn skew(&mut self, skew: Vec2) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_skew(skew);
+        self
+    }
+
+    pub fn scale(&mut self, scale: Vec2) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_scale(scale);
+        self
+    }
+
+    pub fn rotation(&mut self, rot: f32) -> &mut Self {
+        let t = self.transform.get_or_insert_with(|| Transform2D::default());
+        t.set_rotation(rot);
+        self
+    }
 }
 
-impl Element2D for Image {
+impl Element2D for Image2D {
     fn process(&self, draw: &mut Draw2D) {
         let c = self.color.with_alpha(self.color.a * self.alpha);
+        let size = self.size.unwrap_or(self.sprite.size());
         let Vec2 { x: x1, y: y1 } = self.position;
-        let Vec2 { x: x2, y: y2 } = self.size.unwrap_or(self.sprite.size());
+        let Vec2 { x: x2, y: y2 } = size;
         let (x2, y2) = (x1 + x2, y1 + y2);
 
         let frame = self.sprite.frame();
@@ -167,11 +217,15 @@ impl Element2D for Image {
 
         let indices = [0, 1, 2, 2, 1, 3];
 
+        let matrix = self
+            .transform
+            .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).as_mat3());
+
         draw.add_to_batch(DrawingInfo {
             pipeline: DrawPipeline::Images,
             vertices: &mut vertices,
             indices: &indices,
-            transform: self.transform,
+            transform: matrix,
             sprite: Some(&self.sprite),
         })
     }

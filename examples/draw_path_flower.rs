@@ -2,7 +2,7 @@
 // https://codepen.io/hyperandroid/full/yLyRQmw
 
 use draw::{Drawing, Path2D};
-use rkit::draw::draw_2d;
+use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::math::vec2;
 use rkit::time;
@@ -24,7 +24,7 @@ fn main() -> Result<(), String> {
 fn update(s: &mut ()) {
     let t = time::elapsed_f32() * 1000.0;
 
-    let mut draw = draw_2d();
+    let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
     let mut count = 0.0;
