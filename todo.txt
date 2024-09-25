@@ -1,15 +1,15 @@
 - todo:
-    * Camera2D
     * points and to_owned/cache
     * Drawing transform!!!
     * transform_2d (scale, flip, etc...) and mouse check against global + local
     * multisampling? mipmapping?
+    * Camera2D
     * gamepad for wasm32
     * input wasm32
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
 
 - questions:
-    * should we use `offset` instead of `position` to set elements in the screen and `position` instead of `translate`?
+    * should we use `offset` or `origin` instead of `position` to set elements in the screen and `position` instead of `translate`?
     * is it better `mouse::is_btn_pressed` or `is_mouse_btn_pressed`, `is_window_fullscreen` or `window::is_fullscreen`, etc..
     * do we need a sdl backend, sdl2 or sdl3?
     * do we want to hide keyboard, mouse and ime under features?

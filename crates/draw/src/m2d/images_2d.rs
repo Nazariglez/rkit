@@ -2,7 +2,8 @@ use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprit
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{bvec2, BVec2, Mat3, Rect, Vec2};
+use core::math::{bvec2, Mat3, Rect, Vec2};
+use macros::Transform2D;
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -82,6 +83,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     })
 }
 
+#[derive(Transform2D)]
 pub struct Image2D {
     sprite: Sprite,
     position: Vec2,
@@ -89,6 +91,8 @@ pub struct Image2D {
     alpha: f32,
     size: Option<Vec2>,
     crop: Option<Rect>,
+
+    #[transform_2d]
     transform: Option<Transform2D>,
 }
 
@@ -128,55 +132,6 @@ impl Image2D {
     pub fn crop(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
         self.crop = Some(Rect::new(origin, size));
         self.size(size)
-    }
-
-    // - Transform
-    pub fn translate(&mut self, pos: Vec2) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_translation(pos);
-        self
-    }
-
-    pub fn anchor(&mut self, point: Vec2) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_anchor(point);
-        self
-    }
-
-    pub fn pivot(&mut self, point: Vec2) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_pivot(point);
-        self
-    }
-
-    pub fn flip_x(&mut self, flip: bool) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_flip(bvec2(flip, t.flip().y));
-        self
-    }
-
-    pub fn flip_y(&mut self, flip: bool) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_flip(bvec2(t.flip().x, flip));
-        self
-    }
-
-    pub fn skew(&mut self, skew: Vec2) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_skew(skew);
-        self
-    }
-
-    pub fn scale(&mut self, scale: Vec2) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_scale(scale);
-        self
-    }
-
-    pub fn rotation(&mut self, rot: f32) -> &mut Self {
-        let t = self.transform.get_or_insert_with(|| Transform2D::default());
-        t.set_rotation(rot);
-        self
     }
 }
 

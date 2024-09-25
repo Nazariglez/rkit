@@ -33,6 +33,7 @@ members = ["crates/*"]
 core = { path = "crates/core" }
 utils = { path = "crates/utils" }
 draw = { path = "crates/draw" }
+macros = { path = "crates/macros" }
 
 ## common deps
 log = "0.4.22"

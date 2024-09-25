@@ -651,6 +651,7 @@ dependencies = [
  "log",
  "lru",
  "lyon",
+ "macros",
  "num",
  "once_cell",
  "rayon",
@@ -1327,6 +1328,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b955cdeb2a02b9117f121ce63aa52d08ade45de53e48fe6a38b39c10f6f709"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "macros"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.77",
 ]
 
 [[package]]

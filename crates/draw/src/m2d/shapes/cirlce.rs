@@ -1,23 +1,27 @@
 use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Triangle2D};
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Transform2D, Triangle2D};
 use core::gfx::Color;
-use core::math::{Mat3, Vec2};
+use core::math::{bvec2, Mat3, Vec2};
 use lyon::math::point;
 use lyon::path::{Path, Winding};
 use lyon::tessellation::*;
+use macros::Transform2D;
 
+#[derive(Transform2D)]
 pub struct Circle2D {
     color: Color,
     pos: Vec2,
     radius: f32,
     stroke_width: f32,
     alpha: f32,
-    transform: Mat3,
     tolerance: f32,
     modes: [Option<TessMode>; 2],
     mode_index: usize,
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
+
+    #[transform_2d]
+    transform: Option<Transform2D>,
 }
 
 impl Circle2D {
@@ -28,12 +32,13 @@ impl Circle2D {
             radius,
             stroke_width: 1.0,
             alpha: 1.0,
-            transform: Mat3::IDENTITY,
             tolerance: StrokeOptions::DEFAULT_TOLERANCE,
             modes: [None; 2],
             mode_index: 0,
             fill_color: None,
             stroke_color: None,
+
+            transform: None,
         }
     }
 
@@ -113,11 +118,15 @@ fn stroke(circle: &Circle2D, draw: &mut Draw2D) {
             .stroke_lyon_path(&raw, color, &stroke_options)
     });
 
+    let matrix = circle.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(Vec2::splat(circle.radius * 2.0)).as_mat3()
+    });
+
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
         vertices: &mut vertices,
         indices: &indices,
-        transform: circle.transform,
+        transform: matrix,
         sprite: None,
     });
 }
@@ -132,11 +141,15 @@ fn fill(circle: &Circle2D, draw: &mut Draw2D) {
     let (mut vertices, indices) =
         SHAPE_TESSELLATOR.with(|st| st.borrow_mut().fill_lyon_path(&raw, color, &fill_options));
 
+    let matrix = circle.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(Vec2::splat(circle.radius * 2.0)).as_mat3()
+    });
+
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
         vertices: &mut vertices,
         indices: &indices,
-        transform: circle.transform,
+        transform: matrix,
         sprite: None,
     });
 }
