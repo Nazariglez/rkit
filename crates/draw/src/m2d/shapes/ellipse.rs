@@ -128,9 +128,9 @@ fn stroke(ellipse: &Ellipse2D, draw: &mut Draw2D) {
             .stroke_lyon_path(&raw, color, &stroke_options)
     });
 
-    let matrix = ellipse
-        .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(ellipse.size).updated_mat3());
+    let matrix = ellipse.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(ellipse.size).updated_mat3()
+    });
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
@@ -154,9 +154,9 @@ fn fill(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     let (mut vertices, indices) =
         SHAPE_TESSELLATOR.with(|st| st.borrow_mut().fill_lyon_path(&raw, color, &fill_options));
 
-    let matrix = ellipse
-        .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(ellipse.size).updated_mat3());
+    let matrix = ellipse.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(ellipse.size).updated_mat3()
+    });
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,

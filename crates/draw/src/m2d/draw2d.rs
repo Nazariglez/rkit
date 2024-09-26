@@ -372,16 +372,9 @@ impl AsRenderer for Draw2D {
         let vbo = &painter.vbo;
         let ebo = &painter.ebo;
 
-        let win_size = window_size();
-        let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
-
-        println!("a: {:?}", projection);
-
-        println!("b: {:?}", self.camera.projection());
-
         // TODO check dirty transform flag to avoid update all the time this
         gfx::write_buffer(ubo_transform)
-            .with_data(projection.as_ref())
+            .with_data(self.camera.projection().as_ref())
             .build()
             .unwrap();
 
