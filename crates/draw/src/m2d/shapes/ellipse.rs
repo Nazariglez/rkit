@@ -12,7 +12,7 @@ pub struct Ellipse2D {
     color: Color,
     pos: Vec2,
     size: Vec2,
-    rotation: f32,
+    angle: f32,
     stroke_width: f32,
     alpha: f32,
     tolerance: f32,
@@ -31,7 +31,7 @@ impl Ellipse2D {
             color: Color::WHITE,
             pos,
             size,
-            rotation: 0.0,
+            angle: 0.0,
             stroke_width: 1.0,
             alpha: 1.0,
             tolerance: StrokeOptions::DEFAULT_TOLERANCE,
@@ -44,8 +44,8 @@ impl Ellipse2D {
         }
     }
 
-    pub fn rotate(&mut self, radians: f32) -> &mut Self {
-        self.rotation = radians;
+    pub fn angle(&mut self, radians: f32) -> &mut Self {
+        self.angle = radians;
         self
     }
 
@@ -119,13 +119,10 @@ fn stroke(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     let color = ellipse.stroke_color.unwrap_or(ellipse.color);
     let color = color.with_alpha(color.a * ellipse.alpha);
 
-    let raw = tess_ellipse(
-        ellipse.pos.x,
-        ellipse.pos.y,
-        ellipse.size.x,
-        ellipse.size.y,
-        ellipse.rotation,
-    );
+    let size = ellipse.size * 0.5;
+    let Vec2 { x, y } = ellipse.pos + size;
+
+    let raw = tess_ellipse(x, y, size.x, size.y, ellipse.angle);
     let (mut vertices, indices) = SHAPE_TESSELLATOR.with(|st| {
         st.borrow_mut()
             .stroke_lyon_path(&raw, color, &stroke_options)
@@ -150,13 +147,10 @@ fn fill(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     let color = ellipse.fill_color.unwrap_or(ellipse.color);
     let color = color.with_alpha(color.a * ellipse.alpha);
 
-    let raw = tess_ellipse(
-        ellipse.pos.x,
-        ellipse.pos.y,
-        ellipse.size.x,
-        ellipse.size.y,
-        ellipse.rotation,
-    );
+    let size = ellipse.size * 0.5;
+    let Vec2 { x, y } = ellipse.pos + size;
+
+    let raw = tess_ellipse(x, y, size.x, size.y, ellipse.angle);
     let (mut vertices, indices) =
         SHAPE_TESSELLATOR.with(|st| st.borrow_mut().fill_lyon_path(&raw, color, &fill_options));
 

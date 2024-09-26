@@ -112,15 +112,18 @@ fn stroke(circle: &Circle2D, draw: &mut Draw2D) {
     let color = circle.stroke_color.unwrap_or(circle.color);
     let color = color.with_alpha(color.a * circle.alpha);
 
-    let raw = tess_circle(circle.pos.x, circle.pos.y, circle.radius);
+    let size = Vec2::splat(circle.radius * 2.0);
+    let pos = circle.pos + size * 0.5;
+
+    let raw = tess_circle(pos.x, pos.y, circle.radius);
     let (mut vertices, indices) = SHAPE_TESSELLATOR.with(|st| {
         st.borrow_mut()
             .stroke_lyon_path(&raw, color, &stroke_options)
     });
 
-    let matrix = circle.transform.map_or(Mat3::IDENTITY, |mut t| {
-        t.set_size(Vec2::splat(circle.radius * 2.0)).as_mat3()
-    });
+    let matrix = circle
+        .transform
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).as_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
@@ -137,13 +140,16 @@ fn fill(circle: &Circle2D, draw: &mut Draw2D) {
     let color = circle.fill_color.unwrap_or(circle.color);
     let color = color.with_alpha(color.a * circle.alpha);
 
-    let raw = tess_circle(circle.pos.x, circle.pos.y, circle.radius);
+    let size = Vec2::splat(circle.radius * 2.0);
+    let pos = circle.pos + size * 0.5;
+
+    let raw = tess_circle(pos.x, pos.y, circle.radius);
     let (mut vertices, indices) =
         SHAPE_TESSELLATOR.with(|st| st.borrow_mut().fill_lyon_path(&raw, color, &fill_options));
 
-    let matrix = circle.transform.map_or(Mat3::IDENTITY, |mut t| {
-        t.set_size(Vec2::splat(circle.radius * 2.0)).as_mat3()
-    });
+    let matrix = circle
+        .transform
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).as_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,

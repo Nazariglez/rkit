@@ -1,19 +1,24 @@
+use super::size_from_vertices;
 use crate::m2d::shapes::Path2D;
 use crate::shapes::TessMode;
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D};
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Transform2D};
 use core::gfx::Color;
-use core::math::{Mat3, Vec2};
+use core::math::{bvec2, Mat3, Vec2};
+use macros::Transform2D;
 
+#[derive(Transform2D)]
 pub struct Triangle2D {
     points: [Vec2; 3],
     color: Color,
     alpha: f32,
-    transform: Mat3,
     stroke_width: f32,
     modes: [Option<TessMode>; 2],
     mode_index: usize,
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
+
+    #[transform_2d]
+    transform: Option<Transform2D>,
 }
 
 impl Triangle2D {
@@ -22,12 +27,12 @@ impl Triangle2D {
             points: [p1, p2, p3],
             color: Color::WHITE,
             alpha: 1.0,
-            transform: Mat3::IDENTITY,
             stroke_width: 1.0,
             modes: [None; 2],
             mode_index: 0,
             fill_color: None,
             stroke_color: None,
+            transform: None,
         }
     }
 
@@ -43,6 +48,11 @@ impl Triangle2D {
 
     pub fn color(&mut self, color: Color) -> &mut Self {
         self.color = color;
+        self
+    }
+
+    pub fn alpha(&mut self, alpha: f32) -> &mut Self {
+        self.alpha = alpha;
         self
     }
 
@@ -92,11 +102,16 @@ fn fill(triangle: &Triangle2D, draw: &mut Draw2D) {
 
     let indices = [0, 1, 2];
 
+    let matrix = triangle.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(size_from_vertices(&vertices));
+        t.as_mat3()
+    });
+
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
         vertices: &mut vertices,
         indices: &indices,
-        transform: triangle.transform,
+        transform: matrix,
         sprite: None,
     });
 }
@@ -107,6 +122,7 @@ fn stroke(triangle: &Triangle2D, draw: &mut Draw2D) {
     let alpha = triangle.alpha;
 
     let mut path = Path2D::new();
+    path.transform = triangle.transform;
     path.move_to(a)
         .line_to(b)
         .line_to(c)
@@ -114,11 +130,6 @@ fn stroke(triangle: &Triangle2D, draw: &mut Draw2D) {
         .stroke_color(color)
         .alpha(alpha)
         .close();
-
-    // TODO apply transform
-    // if let Some(m) = matrix {
-    //     path.transform(m);
-    // }
 
     path.process(draw)
 }

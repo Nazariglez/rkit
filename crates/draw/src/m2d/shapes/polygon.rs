@@ -1,21 +1,25 @@
 use crate::shapes::TessMode;
-use crate::{Draw2D, Drawing, Element2D, Path2D};
+use crate::{Draw2D, Drawing, Element2D, Path2D, Transform2D};
 use core::gfx::Color;
-use core::math::{vec2, Mat3, Vec2};
+use core::math::{bvec2, vec2, Mat3, Vec2};
+use macros::Transform2D;
 use std::f32::consts::PI;
 
+#[derive(Transform2D)]
 pub struct Polygon2D {
     color: Color,
     pos: Vec2,
     stroke_width: f32,
     alpha: f32,
-    transform: Mat3,
     modes: [Option<TessMode>; 2],
     mode_index: usize,
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
     sides: u8,
     radius: f32,
+
+    #[transform_2d]
+    transform: Option<Transform2D>,
 }
 
 impl Polygon2D {
@@ -25,13 +29,13 @@ impl Polygon2D {
             stroke_width: 1.0,
             pos: Vec2::splat(0.0),
             alpha: 1.0,
-            transform: Mat3::IDENTITY,
             modes: [None; 2],
             mode_index: 0,
             fill_color: None,
             stroke_color: None,
             sides,
             radius,
+            transform: None,
         }
     }
 
@@ -77,6 +81,7 @@ impl Polygon2D {
 impl Element2D for Polygon2D {
     fn process(&self, draw: &mut Draw2D) {
         let mut path_builder = draw.path();
+        path_builder.transform = self.transform;
         draw_polygon(&mut path_builder, self.pos, self.sides as _, self.radius);
         path_builder.color(self.color).alpha(self.alpha);
 

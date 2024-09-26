@@ -1,44 +1,48 @@
-use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Sprite};
+use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Vec2};
 use rkit::time;
-use std::ops::Rem;
 
+#[derive(Default)]
 struct State {
-    sprite: Sprite,
-}
-
-impl State {
-    fn new() -> Result<Self, String> {
-        let sprite = draw::create_sprite()
-            .from_image(include_bytes!("assets/ferris.png"))
-            .build()?;
-
-        Ok(Self { sprite })
-    }
+    rot: f32,
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(|| State::new().unwrap())
-        .on_update(update)
-        .run()
+    rkit::init_with(State::default).on_update(update).run()
 }
 
-fn update(s: &mut State) {
-    let mut draw = create_draw_2d();
-    draw.clear(Color::rgb(0.1, 0.2, 0.3));
+fn update(state: &mut State) {
+    state.rot += time::delta_f32() * 25.0;
 
-    let t = time::elapsed_f32();
-    let dt = time::delta_f32();
-    draw.image(&s.sprite) // draw the sprite
-        .translate(window_size() * 0.5) // change position
-        .anchor(Vec2::splat(0.5)) // set position anchor to center
-        .pivot(Vec2::splat(0.5)) // set scale/rotation pivot point to center
-        .flip_x(true) // flip the image horizontally
-        .skew(vec2(t.sin(), t.cos())) // skew the image
-        .scale(Vec2::splat(1.5 + t.sin() * 0.3)) // scale the image
-        .rotation(t.rem(360.0).to_radians() * 10.0 * dt); // rotate the image from the pivot point
+    let mut draw = create_draw_2d();
+    draw.clear(Color::BLACK);
+
+    let n = state.rot * 0.1;
+
+    draw.rect(Vec2::ZERO, Vec2::splat(100.0))
+        .translate(vec2(110.0 + n.sin() * 100.0, 10.0));
+
+    draw.rect(Vec2::ZERO, Vec2::splat(100.0))
+        .color(Color::AQUA)
+        .pivot(Vec2::splat(0.5))
+        // Helper to pivot from a point using degrees
+        .rotation(state.rot.to_radians())
+        // Matrix translation
+        .translate(Vec2::splat(200.0));
+
+    draw.circle(20.0)
+        .color(Color::ORANGE)
+        // Matrix translation
+        .translate(vec2(500.0, 320.0))
+        // Helper to scale from a point
+        .anchor(Vec2::splat(0.5))
+        .scale(vec2(2.0 + n.sin(), 2.0 + n.cos()));
+
+    draw.rect(Vec2::ZERO, Vec2::splat(100.0))
+        .color(Color::MAGENTA)
+        .translate(vec2(200.0, 400.0))
+        .rotation(state.rot * 0.5f32.to_radians());
 
     gfx::render_to_frame(&draw).unwrap();
 }

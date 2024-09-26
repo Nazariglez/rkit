@@ -1,6 +1,9 @@
+use etagere::euclid::Trig;
+use log::warn;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::vec2;
+use rkit::math::{vec2, Vec2};
+use rkit::time;
 
 fn main() -> Result<(), String> {
     rkit::init().on_update(update).run()
@@ -24,16 +27,16 @@ fn update(s: &mut ()) {
         .stroke_color(Color::WHITE)
         .stroke(15.0);
 
-    draw.ellipse(vec2(400.0, 300.0), vec2(50.0, 100.0))
+    draw.ellipse(vec2(350.0, 200.0), vec2(100.0, 200.0))
         .color(Color::RED)
-        .rotate(45.0f32.to_degrees());
+        .angle(-45f32.to_radians());
 
-    draw.circle(40.0)
-        .position(vec2(600.0, 450.0))
+    draw.circle(80.0)
+        .position(vec2(560.0, 350.0))
         .fill_color(Color::BLUE)
         .fill()
         .stroke_color(Color::WHITE)
-        .stroke(5.0);
+        .stroke(8.0);
 
     draw.rect(vec2(100.0, 250.0), vec2(150.0, 100.0))
         .corner_radius(20.0)

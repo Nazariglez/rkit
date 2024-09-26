@@ -15,6 +15,7 @@
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
+    * local transform2d is not working right for star (or/and path2d?)
     * linux not working because issues with surface size? (fix asap)
     * webgl not working
     * stencil must be done in one pass

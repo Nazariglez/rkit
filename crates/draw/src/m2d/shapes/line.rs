@@ -1,15 +1,19 @@
 use crate::m2d::shapes::Path2D;
-use crate::{Draw2D, Element2D};
+use crate::{Draw2D, Element2D, Transform2D};
 use core::gfx::Color;
-use core::math::{Mat3, Vec2};
+use core::math::{bvec2, Mat3, Vec2};
+use macros::Transform2D;
 
+#[derive(Transform2D)]
 pub struct Line2D {
     p1: Vec2,
     p2: Vec2,
     color: Color,
     stroke_width: f32,
     alpha: f32,
-    transform: Mat3,
+
+    #[transform_2d]
+    transform: Option<Transform2D>,
 }
 
 impl Line2D {
@@ -20,7 +24,7 @@ impl Line2D {
             color: Color::WHITE,
             stroke_width: 1.0,
             alpha: 1.0,
-            transform: Mat3::IDENTITY,
+            transform: None,
         }
     }
 
@@ -43,15 +47,13 @@ impl Line2D {
 impl Element2D for Line2D {
     fn process(&self, draw: &mut Draw2D) {
         let mut path = Path2D::new();
+        path.transform = self.transform;
+
         path.move_to(self.p1)
             .line_to(self.p2)
             .stroke(self.stroke_width)
             .color(self.color.with_alpha(self.color.a * self.alpha))
             .close();
-
-        // if let Some(m) = matrix {
-        //     path.transform(m);
-        // }
 
         path.process(draw)
     }

@@ -1,14 +1,16 @@
+use super::size_from_vertices;
 use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D};
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Transform2D};
 use core::gfx::Color;
-use core::math::{Mat3, Vec2};
-use log::warn;
+use core::math::{bvec2, Mat3, Vec2};
 use lyon::geom::Arc;
 use lyon::math::{point, Angle};
 use lyon::path::path::Builder;
 use lyon::tessellation::*;
+use macros::Transform2D;
 use std::cell::RefCell;
 
+#[derive(Transform2D)]
 pub struct Path2D {
     stroke_options: StrokeOptions,
     fill_options: FillOptions,
@@ -16,11 +18,13 @@ pub struct Path2D {
     initialized: bool,
     color: Color,
     alpha: f32,
-    transform: Mat3,
     modes: [Option<TessMode>; 2],
     mode_index: usize,
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
+
+    #[transform_2d]
+    pub(crate) transform: Option<Transform2D>,
 }
 
 impl Default for Path2D {
@@ -40,11 +44,12 @@ impl Path2D {
             initialized: false,
             color: Color::WHITE,
             alpha: 1.0,
-            transform: Mat3::IDENTITY,
             modes: [None; 2],
             mode_index: 0,
             fill_color: None,
             stroke_color: None,
+
+            transform: None,
         }
     }
 
@@ -230,11 +235,16 @@ fn fill(path: &Path2D, draw: &mut Draw2D) {
             .fill_lyon_path(&raw, color, &path.fill_options)
     });
 
+    let matrix = path.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(size_from_vertices(&vertices));
+        t.as_mat3()
+    });
+
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
         vertices: &mut vertices,
         indices: &indices,
-        transform: path.transform,
+        transform: matrix,
         sprite: None,
     });
 }
@@ -249,11 +259,16 @@ fn stroke(path: &Path2D, draw: &mut Draw2D) {
             .stroke_lyon_path(&raw, color, &path.stroke_options)
     });
 
+    let matrix = path.transform.map_or(Mat3::IDENTITY, |mut t| {
+        t.set_size(size_from_vertices(&vertices));
+        t.as_mat3()
+    });
+
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
         vertices: &mut vertices,
         indices: &indices,
-        transform: path.transform,
+        transform: matrix,
         sprite: None,
     });
 }
