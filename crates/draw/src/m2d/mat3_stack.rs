@@ -1,4 +1,4 @@
-use core::math::{vec2, BVec2, Mat3, Vec2};
+use core::math::{vec2, BVec2, Mat3, Rect, Vec2};
 use num::Zero;
 use smallvec::SmallVec;
 
@@ -45,7 +45,7 @@ impl Mat3Stack {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Transform2D {
     translation: Vec2,
     size: Vec2,
@@ -87,12 +87,24 @@ impl Transform2D {
         }
     }
 
-    pub fn as_mat3(&mut self) -> Mat3 {
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub fn update(&mut self) {
         if self.dirty {
             self.mat3 = update_transform(self);
             self.dirty = false
         }
+    }
 
+    pub fn updated_mat3(&mut self) -> Mat3 {
+        self.update();
+        self.mat3
+    }
+
+    pub fn as_mat3(&self) -> Mat3 {
+        debug_assert!(!self.is_dirty(), "Transformation is dirty.");
         self.mat3
     }
 
@@ -296,7 +308,7 @@ mod tests {
         transform.set_rotation(0.0);
         transform.set_scale(vec2(1.0, 1.0));
 
-        let mat = transform.as_mat3();
+        let mat = transform.updated_mat3();
         assert_eq!(mat, Mat3::from_translation(vec2(10.0, 20.0)));
     }
 

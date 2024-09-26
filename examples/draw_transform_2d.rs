@@ -37,14 +37,14 @@ fn update(state: &mut State) {
     draw.push_matrix(
         Transform2D::new()
             .set_translation(vec2(350.0, 250.0))
-            .as_mat3(),
+            .updated_mat3(),
     );
 
     // Calculate the matrix that we use for each object
     let matrix = Transform2D::new()
         .set_translation(vec2(30.0, 20.0))
         .set_rotation(state.rot.to_radians())
-        .as_mat3();
+        .updated_mat3();
 
     for (i, c) in COLORS.iter().enumerate() {
         let n = (i * 7) as f32;

@@ -256,7 +256,7 @@ impl<'a> Element2D for Text2D<'a> {
                     self.transform
                         .map_or((Mat3::IDENTITY, Vec2::ZERO, Vec2::ZERO), |mut t| {
                             t.set_size(block_size);
-                            (t.as_mat3(), t.position(), t.anchor())
+                            (t.updated_mat3(), t.position(), t.anchor())
                         });
 
                 draw.add_to_batch(DrawingInfo {

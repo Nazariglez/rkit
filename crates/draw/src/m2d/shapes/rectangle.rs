@@ -158,7 +158,7 @@ fn stroke(quad: &Rectangle2D, draw: &mut Draw2D) {
 
     let matrix = quad
         .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(quad.size).as_mat3());
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(quad.size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
@@ -173,7 +173,7 @@ fn fill(quad: &Rectangle2D, draw: &mut Draw2D) {
     let mut draw_shape = |mut vertices: &mut [f32], indices: &[u32]| {
         let matrix = quad
             .transform
-            .map_or(Mat3::IDENTITY, |mut t| t.set_size(quad.size).as_mat3());
+            .map_or(Mat3::IDENTITY, |mut t| t.set_size(quad.size).updated_mat3());
 
         draw.add_to_batch(DrawingInfo {
             pipeline: DrawPipeline::Shapes,

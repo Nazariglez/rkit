@@ -123,7 +123,7 @@ fn stroke(circle: &Circle2D, draw: &mut Draw2D) {
 
     let matrix = circle
         .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).as_mat3());
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
@@ -149,7 +149,7 @@ fn fill(circle: &Circle2D, draw: &mut Draw2D) {
 
     let matrix = circle
         .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).as_mat3());
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,

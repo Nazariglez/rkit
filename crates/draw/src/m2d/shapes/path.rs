@@ -237,7 +237,7 @@ fn fill(path: &Path2D, draw: &mut Draw2D) {
 
     let matrix = path.transform.map_or(Mat3::IDENTITY, |mut t| {
         t.set_size(size_from_vertices(&vertices));
-        t.as_mat3()
+        t.updated_mat3()
     });
 
     draw.add_to_batch(DrawingInfo {
@@ -261,7 +261,7 @@ fn stroke(path: &Path2D, draw: &mut Draw2D) {
 
     let matrix = path.transform.map_or(Mat3::IDENTITY, |mut t| {
         t.set_size(size_from_vertices(&vertices));
-        t.as_mat3()
+        t.updated_mat3()
     });
 
     draw.add_to_batch(DrawingInfo {

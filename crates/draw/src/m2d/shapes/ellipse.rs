@@ -130,7 +130,7 @@ fn stroke(ellipse: &Ellipse2D, draw: &mut Draw2D) {
 
     let matrix = ellipse
         .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(ellipse.size).as_mat3());
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(ellipse.size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,
@@ -156,7 +156,7 @@ fn fill(ellipse: &Ellipse2D, draw: &mut Draw2D) {
 
     let matrix = ellipse
         .transform
-        .map_or(Mat3::IDENTITY, |mut t| t.set_size(ellipse.size).as_mat3());
+        .map_or(Mat3::IDENTITY, |mut t| t.set_size(ellipse.size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
         pipeline: DrawPipeline::Shapes,

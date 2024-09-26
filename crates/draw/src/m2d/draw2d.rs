@@ -6,7 +6,7 @@ use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
-use crate::{Circle2D, Ellipse2D, Polygon2D, Star2D};
+use crate::{Camera2D, Circle2D, Ellipse2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
 use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
@@ -131,7 +131,7 @@ where
 
 #[derive(Default, Clone)]
 pub struct Draw2D {
-    projection: Mat4,
+    pub camera: Camera2D,
     clear_color: Option<Color>,
     alpha: f32,
 
@@ -147,10 +147,10 @@ pub struct Draw2D {
 
 impl Draw2D {
     pub fn new() -> Self {
-        let size = window_size();
-        let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
+        let mut camera = Camera2D::new(window_size());
+        camera.update();
         Self {
-            projection,
+            camera,
             alpha: 1.0,
             ..Default::default()
         }
@@ -243,7 +243,8 @@ impl Draw2D {
 
         self.indices_offset += info.vertices.len() / vertex_offset;
 
-        let matrix = self.matrix() * info.transform;
+        self.camera.update();
+        let matrix = self.camera.transform() * self.matrix() * info.transform;
         info.vertices
             .chunks_exact_mut(vertex_offset)
             .for_each(|chunk| {
@@ -371,9 +372,16 @@ impl AsRenderer for Draw2D {
         let vbo = &painter.vbo;
         let ebo = &painter.ebo;
 
+        let win_size = window_size();
+        let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
+
+        println!("a: {:?}", projection);
+
+        println!("b: {:?}", self.camera.projection());
+
         // TODO check dirty transform flag to avoid update all the time this
         gfx::write_buffer(ubo_transform)
-            .with_data(self.projection.as_ref())
+            .with_data(projection.as_ref())
             .build()
             .unwrap();
 

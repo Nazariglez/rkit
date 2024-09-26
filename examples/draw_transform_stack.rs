@@ -137,7 +137,7 @@ fn draw_container<F: FnMut(&mut Draw2D, &mut Container)>(
     mut f: F,
 ) {
     // Push the matrix to the stack
-    draw.push_matrix(container.transform.as_mat3());
+    draw.push_matrix(container.transform.updated_mat3());
 
     draw.rect(Vec2::ZERO, container.transform.size())
         .color(container.color)
