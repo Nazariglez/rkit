@@ -1,9 +1,10 @@
-use crate::text::{get_mut_text_system, get_text_system, AtlasType, Font, HAlign, TextInfo};
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, VAlign};
+use crate::text::{get_mut_text_system, AtlasType, Font, HAlign, TextInfo};
+use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Transform2D};
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{vec2, Mat3, Rect, Vec2};
+use core::math::{bvec2, Mat3, Rect, Vec2};
+use macros::Transform2D;
 use std::cell::RefCell;
 
 thread_local! {
@@ -106,6 +107,7 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
     })
 }
 
+#[derive(Transform2D)]
 pub struct Text2D<'a> {
     text: &'a str,
     font: Option<&'a Font>,
@@ -116,8 +118,9 @@ pub struct Text2D<'a> {
     line_height: Option<f32>,
     max_width: Option<f32>,
     h_align: HAlign,
-    v_align: VAlign,
-    transform: Mat3,
+
+    #[transform_2d]
+    transform: Option<Transform2D>,
 }
 
 impl<'a> Text2D<'a> {
@@ -132,8 +135,8 @@ impl<'a> Text2D<'a> {
             line_height: None,
             max_width: None,
             h_align: HAlign::default(),
-            v_align: VAlign::default(),
-            transform: Mat3::IDENTITY,
+
+            transform: None,
         }
     }
 
@@ -186,21 +189,6 @@ impl<'a> Text2D<'a> {
         self.h_align = HAlign::Right;
         self
     }
-
-    pub fn v_align_top(&mut self) -> &mut Self {
-        self.v_align = VAlign::Top;
-        self
-    }
-
-    pub fn v_align_middle(&mut self) -> &mut Self {
-        self.v_align = VAlign::Middle;
-        self
-    }
-
-    pub fn v_align_bottom(&mut self) -> &mut Self {
-        self.v_align = VAlign::Bottom;
-        self
-    }
 }
 
 impl<'a> Element2D for Text2D<'a> {
@@ -214,7 +202,6 @@ impl<'a> Element2D for Text2D<'a> {
             line_height: self.line_height,
             scale: 1.0,
             h_align: self.h_align,
-            v_align: self.v_align,
         };
 
         let c = self.color;
@@ -265,32 +252,23 @@ impl<'a> Element2D for Text2D<'a> {
                     block.size
                 };
 
+                let (matrix, pos, anchor) =
+                    self.transform
+                        .map_or((Mat3::IDENTITY, Vec2::ZERO, Vec2::ZERO), |mut t| {
+                            t.set_size(block_size);
+                            (t.as_mat3(), t.position(), t.anchor())
+                        });
+
                 draw.add_to_batch(DrawingInfo {
                     pipeline: DrawPipeline::Text,
                     vertices: temp_vertices,
                     indices: temp_indices,
-                    transform: self.transform,
+                    transform: matrix,
                     sprite: None,
                 });
 
-                // TODO iterate over vertices instead to get min_x and min_y?
-                let offset = {
-                    let xx = match self.h_align {
-                        HAlign::Left => 0.0,
-                        HAlign::Center => 0.5,
-                        HAlign::Right => 1.0,
-                    };
-
-                    let yy = match self.v_align {
-                        VAlign::Top => 0.0,
-                        VAlign::Middle => 0.5,
-                        VAlign::Bottom => 1.0,
-                    };
-
-                    block_size * vec2(xx, yy)
-                };
-
-                draw.last_text_bounds = Rect::new(self.position - offset, block_size);
+                let origin = pos - anchor * block_size;
+                draw.last_text_bounds = Rect::new(origin, block_size);
             });
         });
     }

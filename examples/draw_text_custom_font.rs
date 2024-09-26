@@ -29,15 +29,13 @@ fn update(s: &mut State) {
         .position(pos - offset)
         .color(Color::ORANGE)
         .size(48.0)
-        .h_align_center()
-        .v_align_bottom();
+        .anchor(vec2(0.5, 1.0));
 
     draw.text("Using Arcade-Legacy (default) font.")
         .position(pos + offset)
         .color(Color::YELLOW)
         .size(10.0)
-        .h_align_center()
-        .v_align_top();
+        .anchor(vec2(0.5, 0.0));
 
     gfx::render_to_frame(&draw).unwrap();
 }

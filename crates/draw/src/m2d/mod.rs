@@ -1,15 +1,15 @@
-mod draw_2d;
-mod images_2d;
+mod draw2d;
+mod images;
 mod mat3_stack;
-mod painter_2d;
+mod painter;
 mod pixel;
 mod shapes;
-mod text_2d;
+mod text;
 
-pub use draw_2d::*;
-pub use images_2d::*;
+pub use draw2d::*;
+pub use images::*;
 pub use mat3_stack::*;
-pub use painter_2d::*;
+pub use painter::*;
 pub use pixel::*;
 pub use shapes::*;
-pub use text_2d::*;
+pub use text::*;

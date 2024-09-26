@@ -1,4 +1,4 @@
-use super::draw_2d::Element2D;
+use super::draw2d::Element2D;
 use crate::{Draw2D, DrawPipeline, DrawingInfo};
 use core::gfx::{Color, RenderPipeline};
 use core::math::{Mat3, Vec2};

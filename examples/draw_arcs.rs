@@ -17,9 +17,8 @@ fn update(s: &mut ()) {
     let angle = (time::elapsed_f32() * 45.0).rem(360.0).to_radians();
 
     draw.text(&format!("{:.0}º", angle.to_degrees()))
-        .position(window_size() * 0.5)
-        .v_align_middle()
-        .h_align_center();
+        .anchor(window_size() * 0.5)
+        .anchor(Vec2::splat(0.5));
 
     // draw arc
     let center = vec2(200.0, 300.0);

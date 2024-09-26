@@ -85,16 +85,14 @@ fn draw(state: &mut State) {
         draw.text("Done!")
             .color(Color::ORANGE)
             .size(74.0)
-            .position(size * 0.5)
-            .h_align_center()
-            .v_align_bottom();
+            .translate(size * 0.5)
+            .anchor(vec2(0.5, 1.0));
 
         draw.text("Tap to reset")
             .color(Color::GRAY)
             .size(54.0)
-            .v_align_top()
-            .h_align_center()
-            .position(size * 0.5 + Vec2::Y * 20.0);
+            .anchor(vec2(0.5, 0.0))
+            .translate(size * 0.5 + Vec2::Y * 20.0);
     }
 
     gfx::render_to_frame(&draw).unwrap();
@@ -117,9 +115,8 @@ fn draw_tile(draw: &mut Draw2D, x: usize, y: usize, value: u8) {
     draw.text(&format!("{value}"))
         .color(Color::BLACK)
         .size(34.0)
-        .position(vec2(xx + TILE_SIZE * 0.5, yy + TILE_SIZE * 0.5))
-        .h_align_center()
-        .v_align_middle();
+        .translate(vec2(xx + TILE_SIZE * 0.5, yy + TILE_SIZE * 0.5))
+        .anchor(Vec2::splat(0.5));
 }
 
 struct State {

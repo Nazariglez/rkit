@@ -1,9 +1,9 @@
 use super::{get_2d_painter, get_mut_2d_painter, Pixel};
-use crate::m2d::images_2d::Image2D;
+use crate::m2d::images::Image2D;
 use crate::m2d::mat3_stack::Mat3Stack;
-use crate::m2d::painter_2d::DrawPipeline;
+use crate::m2d::painter::DrawPipeline;
 use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
-use crate::m2d::text_2d::Text2D;
+use crate::m2d::text::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
 use crate::{Circle2D, Ellipse2D, Polygon2D, Star2D};

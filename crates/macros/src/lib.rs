@@ -6,6 +6,8 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields};
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let generics = &input.generics;
+    let where_clause = &input.generics.where_clause;
 
     let mut transform_opt = None;
 
@@ -27,7 +29,7 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
 
     // Generate the implementation using the detected field
     let expanded = quote! {
-        impl #name {
+        impl #generics #name #generics #where_clause {
             // - Transform
             pub fn translate(&mut self, pos: Vec2) -> &mut Self {
                 let t = self.#t.get_or_insert_with(|| Transform2D::default());

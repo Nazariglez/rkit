@@ -62,10 +62,9 @@ fn draw_ui(state: &mut State) {
     // Draw position
     let text = format!("x: {:.0} - y: {:.0}", state.pos.x, state.pos.y);
     draw.text(&text)
-        .position(window_size() * 0.5)
-        .size(20.0)
-        .h_align_center()
-        .v_align_middle();
+        .translate(window_size() * 0.5)
+        .anchor(Vec2::splat(0.5))
+        .size(20.0);
 
     gfx::render_to_frame(&draw).unwrap();
 }

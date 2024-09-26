@@ -72,14 +72,6 @@ pub enum HAlign {
     Right,
 }
 
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
-pub enum VAlign {
-    #[default]
-    Top,
-    Middle,
-    Bottom,
-}
-
 impl HAlign {
     fn to_cosmic(&self) -> Align {
         match self {
@@ -99,7 +91,6 @@ pub struct TextInfo<'a> {
     pub line_height: Option<f32>,
     pub scale: f32,
     pub h_align: HAlign,
-    pub v_align: VAlign,
 }
 
 struct ProcessData {
@@ -312,13 +303,8 @@ impl TextSystem {
                             HAlign::Right => 1.0,
                         };
 
-                        let y = match text.v_align {
-                            VAlign::Top => 0.0,
-                            VAlign::Middle => 0.5,
-                            VAlign::Bottom => 1.0,
-                        };
                         let ww = (block_size.x - data.line_w) * -x;
-                        block_size * vec2(x, y) + vec2(ww, 0.0)
+                        vec2(ww, 0.0)
                     };
 
                     let pos = text.pos + data.pos + info.pos.as_vec2();

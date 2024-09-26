@@ -1,7 +1,7 @@
 use rkit::app::window_size;
 use rkit::draw::{self, create_draw_2d, Draw2D, Font};
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Rect};
+use rkit::math::{vec2, Rect, Vec2};
 
 struct State {
     font: Font,
@@ -27,11 +27,10 @@ fn update(state: &mut State) {
 
     draw.text("Let's measure this text...")
         .font(&state.font)
-        .position(window_size() * 0.5)
+        .translate(window_size() * 0.5)
         .size(40.0)
         .color(Color::ORANGE)
-        .h_align_center()
-        .v_align_middle();
+        .anchor(Vec2::splat(0.5));
 
     // get text bounds
     let bounds = draw.last_text_bounds();
@@ -51,9 +50,9 @@ fn draw_size(draw: &mut Draw2D, bounds: Rect) {
     .width(2.0)
     .color(Color::GRAY);
 
-    draw.text(&format!("{}px", bounds.height()))
-        .position(vec2(bounds.max().x + 20.0, bounds.center().y))
-        .v_align_middle();
+    draw.text(&format!("{:.1}px", bounds.height()))
+        .translate(vec2(bounds.max().x + 20.0, bounds.center().y))
+        .anchor(vec2(0.0, 0.5));
 
     // show width
     draw.line(
@@ -63,7 +62,7 @@ fn draw_size(draw: &mut Draw2D, bounds: Rect) {
     .width(2.0)
     .color(Color::GRAY);
 
-    draw.text(&format!("{:.2}px", bounds.width()))
-        .position(vec2(bounds.center().x, bounds.max().y + 20.0))
-        .h_align_center();
+    draw.text(&format!("{:.1}px", bounds.width()))
+        .translate(vec2(bounds.center().x, bounds.max().y + 20.0))
+        .anchor(vec2(0.5, 0.0));
 }
