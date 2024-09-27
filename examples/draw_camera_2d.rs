@@ -10,7 +10,7 @@ use std::ops::Rem;
 
 const WORK_SIZE: Vec2 = Vec2::splat(400.0);
 const MODES: [ScreenMode; 4] = [
-    ScreenMode::Basic,
+    ScreenMode::Normal,
     ScreenMode::Fill(WORK_SIZE),
     ScreenMode::AspectFill(WORK_SIZE),
     ScreenMode::AspectFit(WORK_SIZE),

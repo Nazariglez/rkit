@@ -10,8 +10,7 @@ use crate::{Camera2D, Circle2D, Ellipse2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
-use core::math::{vec3, Mat3, Mat4, Rect, Vec2};
-use lyon::geom::size;
+use core::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
 
@@ -133,6 +132,9 @@ pub struct Draw2D {
     size: Vec2,
 
     projection: Mat4,
+    inverse_projection: Mat4,
+    inverse_transform: Option<Mat3>,
+
     clear_color: Option<Color>,
     alpha: f32,
 
@@ -149,8 +151,10 @@ pub struct Draw2D {
 impl Draw2D {
     pub fn new(size: Vec2) -> Self {
         let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
+        let inverse_projection = projection.inverse();
         Self {
             projection,
+            inverse_projection,
             alpha: 1.0,
             ..Default::default()
         }
@@ -275,6 +279,7 @@ impl Draw2D {
             "The Draw2D projection must be set before any drawing."
         );
         self.projection = projection;
+        self.inverse_projection = self.projection.inverse();
     }
 
     pub fn set_size(&mut self, size: Vec2) {
@@ -285,7 +290,7 @@ impl Draw2D {
 
         if self.size != size {
             self.size = size;
-            self.projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
+            self.set_projection(Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0));
         }
     }
 
@@ -299,7 +304,9 @@ impl Draw2D {
             "The Camera2D must be set before any drawing."
         );
         self.projection = cam.projection();
+        self.inverse_projection = cam.inverse_projection;
         self.matrix_stack.set_matrix(cam.transform());
+        self.inverse_transform = None;
         self.size = cam.size();
     }
 
@@ -309,10 +316,12 @@ impl Draw2D {
 
     pub fn push_matrix(&mut self, m: Mat3) {
         self.matrix_stack.push(m);
+        self.inverse_transform = None;
     }
 
     pub fn set_matrix(&mut self, m: Mat3) {
         self.matrix_stack.set_matrix(m);
+        self.inverse_transform = None;
     }
 
     pub fn matrix(&self) -> Mat3 {
@@ -321,10 +330,40 @@ impl Draw2D {
 
     pub fn pop_matrix(&mut self) {
         self.matrix_stack.pop();
+        self.inverse_transform = None;
     }
 
     pub fn clear_matrix_stack(&mut self) {
         self.matrix_stack.clear();
+        self.inverse_transform = None;
+    }
+
+    /// Translate a local point to screen coordinates
+    pub fn local_to_screen(&self, point: Vec2) -> Vec2 {
+        let half = self.size * 0.5;
+        let pos = self.matrix() * vec3(point.x, point.y, 1.0);
+        let pos = self.projection * vec4(pos.x, pos.y, pos.z, 1.0);
+        vec2(half.x + (half.x * pos.x), half.y + (half.y * -pos.y))
+    }
+
+    /// Translates a screen point to local coordinates
+    pub fn screen_to_local(&mut self, point: Vec2) -> Vec2 {
+        let transform = self.matrix();
+        let inverse_transform = *self
+            .inverse_transform
+            .get_or_insert_with(|| transform.inverse());
+
+        // normalized coordinates
+        let norm = point / self.size;
+        let pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
+
+        // projected position
+        let pos = self
+            .inverse_projection
+            .project_point3(vec3(pos.x, pos.y, 1.0));
+
+        // local position
+        inverse_transform.transform_point2(vec2(pos.x, pos.y))
     }
 
     // // - included methods

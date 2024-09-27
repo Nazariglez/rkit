@@ -3,7 +3,7 @@ use core::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum ScreenMode {
     #[default]
-    Basic,
+    Normal,
     Fill(Vec2),
     AspectFit(Vec2),
     AspectFill(Vec2),
@@ -17,7 +17,7 @@ pub struct Camera2D {
     size: Vec2,
 
     projection: Mat4,
-    inverse_projection: Mat4,
+    pub(crate) inverse_projection: Mat4,
     dirty_projection: bool,
 
     transform: Mat3,
@@ -45,7 +45,7 @@ impl Default for Camera2D {
             transform: Mat3::IDENTITY,
             inverse_transform: Mat3::IDENTITY.inverse(),
 
-            mode: ScreenMode::Basic,
+            mode: ScreenMode::Normal,
             dirty_transform: true,
         }
     }
@@ -155,7 +155,7 @@ impl Camera2D {
 
     pub fn resolution(&self) -> Vec2 {
         match self.mode {
-            ScreenMode::Basic => self.size,
+            ScreenMode::Normal => self.size,
             ScreenMode::Fill(r) => r,
             ScreenMode::AspectFit(r) => r,
             ScreenMode::AspectFill(r) => r,
@@ -171,8 +171,7 @@ impl Camera2D {
         debug_assert!(!self.dirty_projection);
         debug_assert!(!self.dirty_transform);
         let half = self.size * 0.5;
-        let transform = self.transform;
-        let pos = transform * vec3(point.x, point.y, 1.0);
+        let pos = self.transform * vec3(point.x, point.y, 1.0);
         let pos = self.projection * vec4(pos.x, pos.y, pos.z, 1.0);
         vec2(half.x + (half.x * pos.x), half.y + (half.y * -pos.y))
     }
@@ -203,7 +202,7 @@ impl Camera2D {
 
     fn calculate_projection(&mut self) {
         let (projection, ratio) = match self.mode {
-            ScreenMode::Basic => calculate_ortho_projection(self.size),
+            ScreenMode::Normal => calculate_ortho_projection(self.size),
             ScreenMode::Fill(work_size) => calculate_fill_projection(self.size, work_size),
             ScreenMode::AspectFit(work_size) => {
                 calculate_aspect_fit_projection(self.size, work_size)

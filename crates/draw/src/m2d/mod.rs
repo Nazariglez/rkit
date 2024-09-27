@@ -1,5 +1,5 @@
 mod camera;
-mod draw2d;
+mod draw_2d;
 mod images;
 mod mat3_stack;
 mod painter;
@@ -8,7 +8,7 @@ mod shapes;
 mod text;
 
 pub use camera::*;
-pub use draw2d::*;
+pub use draw_2d::*;
 pub use images::*;
 pub use mat3_stack::*;
 pub use painter::*;
