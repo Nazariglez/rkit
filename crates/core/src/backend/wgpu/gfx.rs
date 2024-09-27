@@ -939,6 +939,13 @@ impl GfxBackend {
             }
         }
     }
+
+    pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        self.surface.resize(&self.ctx.device, width, height);
+        let mut offscreen = self.offscreen.take().unwrap();
+        offscreen.update(self).unwrap();
+        self.offscreen = Some(offscreen);
+    }
 }
 
 async fn init_surface<W>(

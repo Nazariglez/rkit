@@ -129,7 +129,6 @@ impl Camera2D {
 
     pub fn update(&mut self) {
         if self.dirty_projection {
-            println!("--> {:?}", self.size);
             self.calculate_projection();
             self.inverse_projection = self.projection.inverse();
             self.dirty_projection = false;
@@ -183,26 +182,20 @@ impl Camera2D {
         self.projection = projection;
         self.inverse_projection = projection.inverse();
         self.ratio = ratio;
+        self.transform.set_size(self.size * self.ratio);
     }
 }
 
 fn calculate_ortho_projection(win_size: Vec2) -> (Mat4, Vec2) {
-    // TODO position
     let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
-    let pos = win_size * 0.5;
-    let position = Mat4::from_translation(vec3(pos.x, pos.y, 1.0));
-    let final_projection = projection; // * position;
-    (final_projection, vec2(1.0, 1.0))
+    (projection, vec2(1.0, 1.0))
 }
 
 fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2) -> Mat4 {
     let scale = Mat4::from_scale(vec3(ratio.x, ratio.y, 1.0));
-    let pos = win_size * 0.5;
-    let position = vec3(pos.x, pos.y, 1.0);
-    let translation = Mat4::from_translation(position);
-    let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, -1.0, 1.0);
+    let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
 
-    projection * translation * scale
+    projection * scale
 }
 
 fn calculate_fill_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {

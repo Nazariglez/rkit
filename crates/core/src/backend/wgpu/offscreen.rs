@@ -202,6 +202,14 @@ impl OffscreenSurfaceData {
             return Ok(());
         }
 
+        println!(
+            "updated texture {},{} -> {},{}",
+            gfx.surface.config.width,
+            gfx.surface.config.height,
+            self.texture.width(),
+            self.texture.height()
+        );
+
         let texture = gfx.create_render_texture(RenderTextureDescriptor {
             label: Some("Offscreen Surface"),
             depth: false,
@@ -210,6 +218,23 @@ impl OffscreenSurfaceData {
             format: TextureFormat::Rgba8UNormSrgb, // compatible with all platforms even web
         })?;
         self.texture = texture;
+
+        self.bind_group = gfx.create_bind_group(BindGroupDescriptor {
+            label: Some("Offscreen Surface BindGroup"),
+            layout: Some(self.pip.bind_group_layout_ref(0)?),
+            entry: (&[
+                BindGroupEntry::Texture {
+                    location: 0,
+                    texture: &self.texture,
+                },
+                BindGroupEntry::Sampler {
+                    location: 1,
+                    sampler: &self.sampler,
+                },
+            ] as &[_])
+                .try_into()
+                .unwrap(),
+        })?;
 
         Ok(())
     }

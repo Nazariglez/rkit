@@ -22,7 +22,7 @@ where
     console_log::init_with_level(Level::Info);
 
     #[cfg(not(target_arch = "wasm32"))]
-    env_logger::builder().filter_level(LevelFilter::Info).init();
+    env_logger::builder().filter_level(LevelFilter::Warn).init();
 
     builder(callback)
 }
