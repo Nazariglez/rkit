@@ -48,13 +48,18 @@ impl Default for Camera2D {
 impl Camera2D {
     pub fn new(size: Vec2) -> Self {
         let mut t = Transform2D::default();
-        t.set_size(size);
+        t.set_size(size)
+            .set_anchor(Vec2::splat(0.5))
+            .set_pivot(Vec2::splat(0.5))
+            .set_translation(size * 0.5);
 
-        Self {
+        let mut cam = Self {
             size,
             transform: t,
             ..Default::default()
-        }
+        };
+        cam.update();
+        cam
     }
 
     pub fn set_screen_mode(&mut self, mode: ScreenMode) {

@@ -9,6 +9,9 @@ pub use sprite::*;
 pub use shapes::*;
 pub use text::*;
 
+use core::app::window_size;
+use core::math::Vec2;
+
 // -- Draw API
 #[inline]
 pub fn create_sprite<'a>() -> SpriteBuilder<'a> {
@@ -27,7 +30,7 @@ pub fn remove_2d_pipeline(id: &str) -> Option<PipelineContext> {
 
 #[inline]
 pub fn create_draw_2d() -> Draw2D {
-    Draw2D::new()
+    Draw2D::new(window_size())
 }
 
 // TODO execute this somehow at the end of the frame

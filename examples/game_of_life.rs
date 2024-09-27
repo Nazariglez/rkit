@@ -1,7 +1,7 @@
 use rkit::app::WindowConfig;
 use rkit::draw::{self, create_draw_2d, Sprite};
-use rkit::gfx::{self, Color};
-use rkit::math::{uvec2, vec2};
+use rkit::gfx::{self, Color, TextureFilter};
+use rkit::math::{uvec2, vec2, Vec2};
 use rkit::{random, time};
 
 const WIDTH: usize = 100;
@@ -24,6 +24,8 @@ impl State {
         let sprite = draw::create_sprite()
             .from_bytes(&current_bytes, WIDTH as _, HEIGHT as _)
             .with_write_flag(true)
+            .with_mag_filter(TextureFilter::Nearest)
+            .with_min_filter(TextureFilter::Nearest)
             .build()
             .unwrap();
 
@@ -140,7 +142,7 @@ fn update(state: &mut State) {
 
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
-    draw.image(&state.sprite); // TODO scale x 4
+    draw.image(&state.sprite).scale(Vec2::splat(4.0));
     gfx::render_to_frame(&draw).unwrap();
 }
 

@@ -8,15 +8,14 @@ use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
 use crate::{Camera2D, Circle2D, Ellipse2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
-use core::app::window_size;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
 use core::math::{vec3, Mat3, Mat4, Rect, Vec2};
+use lyon::geom::size;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
 
 // TODO Cached elements is a must
-// TODO Camera2D
 
 // This is used to avoid heap allocations when doing small number of drawcalls
 const STACK_ALLOCATED_QUADS: usize = 200;
@@ -131,7 +130,9 @@ where
 
 #[derive(Default, Clone)]
 pub struct Draw2D {
-    pub camera: Camera2D,
+    size: Vec2,
+
+    projection: Mat4,
     clear_color: Option<Color>,
     alpha: f32,
 
@@ -146,11 +147,10 @@ pub struct Draw2D {
 }
 
 impl Draw2D {
-    pub fn new() -> Self {
-        let mut camera = Camera2D::new(window_size());
-        camera.update();
+    pub fn new(size: Vec2) -> Self {
+        let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
         Self {
-            camera,
+            projection,
             alpha: 1.0,
             ..Default::default()
         }
@@ -243,8 +243,7 @@ impl Draw2D {
 
         self.indices_offset += info.vertices.len() / vertex_offset;
 
-        self.camera.update();
-        let matrix = self.camera.transform() * self.matrix() * info.transform;
+        let matrix = self.matrix() * info.transform;
         info.vertices
             .chunks_exact_mut(vertex_offset)
             .for_each(|chunk| {
@@ -269,9 +268,43 @@ impl Draw2D {
         self.last_text_bounds
     }
 
-    // - Transform TODO
+    // - Transform
+    pub fn set_projection(&mut self, projection: Mat4) {
+        debug_assert!(
+            self.batches.is_empty(),
+            "The Draw2D projection must be set before any drawing."
+        );
+        self.projection = projection;
+    }
+
+    pub fn set_size(&mut self, size: Vec2) {
+        debug_assert!(
+            self.batches.is_empty(),
+            "The Draw2D size must be set before any drawing."
+        );
+
+        if self.size != size {
+            self.size = size;
+            self.projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
+        }
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.size
+    }
+
+    pub fn set_camera(&mut self, cam: &Camera2D) {
+        debug_assert!(
+            self.batches.is_empty(),
+            "The Camera2D must be set before any drawing."
+        );
+        self.projection = cam.projection();
+        self.matrix_stack.set_matrix(cam.transform());
+        self.size = cam.size();
+    }
+
     pub fn projection(&self) -> Mat4 {
-        Mat4::IDENTITY
+        self.projection
     }
 
     pub fn push_matrix(&mut self, m: Mat3) {
@@ -374,7 +407,7 @@ impl AsRenderer for Draw2D {
 
         // TODO check dirty transform flag to avoid update all the time this
         gfx::write_buffer(ubo_transform)
-            .with_data(self.camera.projection().as_ref())
+            .with_data(self.projection.as_ref())
             .build()
             .unwrap();
 

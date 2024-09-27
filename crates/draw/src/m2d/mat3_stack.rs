@@ -40,7 +40,6 @@ impl Mat3Stack {
     }
 
     pub fn clear(&mut self) {
-        self.base = Mat3::IDENTITY;
         self.stack.clear();
     }
 }
