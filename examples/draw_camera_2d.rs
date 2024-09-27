@@ -6,7 +6,6 @@ use rkit::gfx::{self, Color};
 use rkit::input::{is_key_down, is_key_pressed, KeyCode};
 use rkit::math::{uvec2, vec2, Vec2};
 use rkit::time;
-use std::fmt::format;
 use std::ops::Rem;
 
 const WORK_SIZE: Vec2 = Vec2::splat(400.0);
@@ -29,7 +28,7 @@ impl State {
         let cam = Camera2D::new(size);
         Self {
             cam,
-            player_pos: size * 0.5,
+            player_pos: WORK_SIZE * 0.5,
             mode_idx: 0,
         }
     }
@@ -37,7 +36,7 @@ impl State {
 
 fn main() -> Result<(), String> {
     let win = WindowConfig {
-        size: WORK_SIZE.as_uvec2() + uvec2(100, 150),
+        size: uvec2(600, 500),
         vsync: true,
         ..Default::default()
     };
@@ -48,31 +47,30 @@ fn main() -> Result<(), String> {
 }
 
 fn update(s: &mut State) {
-    // s.cam.set_position(s.cam.position() + vec2(10.0, 0.0) * time::delta_f32());
-
     let speed = 100.0;
     let dt = time::delta_f32();
-    if is_key_down(KeyCode::ArrowLeft) {
+    if is_key_down(KeyCode::KeyA) {
         s.player_pos.x -= speed * dt;
-    } else if is_key_down(KeyCode::ArrowRight) {
+    } else if is_key_down(KeyCode::KeyD) {
         s.player_pos.x += speed * dt;
     }
 
-    if is_key_down(KeyCode::ArrowUp) {
+    if is_key_down(KeyCode::KeyW) {
         s.player_pos.y -= speed * dt;
-    } else if is_key_down(KeyCode::ArrowDown) {
+    } else if is_key_down(KeyCode::KeyS) {
         s.player_pos.y += speed * dt;
     }
 
     if is_key_pressed(KeyCode::Space) {
         s.mode_idx = (s.mode_idx + 1).rem(MODES.len());
         s.cam.set_screen_mode(MODES[s.mode_idx]);
-        println!("HERE {:?}", s.cam.screen_mode());
     }
 
+    // Update camera size to the window's size and position to player's size
     s.cam.set_size(window_size());
-    // s.cam.set_position(s.player_pos);
+    s.cam.set_position(s.player_pos);
     s.cam.update();
+
     draw(s);
 }
 
@@ -98,9 +96,13 @@ fn draw(s: &mut State) {
         .anchor(vec2(0.5, 1.0))
         .size(8.0);
 
+    draw.rect(Vec2::ZERO, WORK_SIZE)
+        .color(Color::GRAY)
+        .stroke(2.0);
+
     gfx::render_to_frame(&draw).unwrap();
 
-    // UI
+    // UI - pass
     let mut draw = create_draw_2d();
     draw.text("The working resolution is 400x400. Depending on the screen mode the content of the window should adapt to that. Try changing the mode and resizing the window.")
         .anchor(vec2(1.0, 0.0))
@@ -109,7 +111,7 @@ fn draw(s: &mut State) {
         .max_width(300.0)
         .size(9.0);
 
-    draw.text("Arrows to move character.\nSPACE to change mode")
+    draw.text("WASD to move character.\nSPACE to change mode")
         .translate(Vec2::splat(10.0))
         .size(10.0);
 
@@ -117,6 +119,18 @@ fn draw(s: &mut State) {
     draw.text(&format!("Mode: {:?}", s.cam.screen_mode()))
         .translate(vec2(bounds.min().x, bounds.max().y + 10.0))
         .size(10.0);
+
+    let cam_bounds = s.cam.bounds();
+    draw.text(&format!(
+        "Visible area: min({:.0},{:.0}) max({:.0},{:.0})",
+        cam_bounds.min().x,
+        cam_bounds.min().y,
+        cam_bounds.max().x,
+        cam_bounds.max().y
+    ))
+    .translate(vec2(10.0, window_size().y - 10.0))
+    .anchor(vec2(0.0, 1.0))
+    .size(10.0);
 
     gfx::render_to_frame(&draw).unwrap();
 }
