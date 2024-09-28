@@ -1,6 +1,9 @@
 use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
 use crate::sprite::SpriteId;
-use crate::{create_images_2d_pipeline_ctx, create_text_2d_pipeline_ctx, Sprite};
+use crate::{
+    create_images_2d_pipeline_ctx, create_pattern_2d_pipeline_ctx, create_text_2d_pipeline_ctx,
+    Sprite,
+};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, Buffer, RenderPass, RenderPipeline, SamplerId, TextureId};
 use core::math::Mat4;
@@ -22,6 +25,7 @@ pub enum DrawPipeline {
     Shapes,
     Images,
     Text,
+    Pattern,
     Custom(Intern<str>),
 }
 
@@ -32,6 +36,7 @@ impl DrawPipeline {
             DrawPipeline::Shapes => "gk_shapes",
             DrawPipeline::Images => "gk_images",
             DrawPipeline::Text => "gk_text",
+            DrawPipeline::Pattern => "gk_pattern",
             DrawPipeline::Custom(inner) => inner,
         }
     }
@@ -42,6 +47,7 @@ impl DrawPipeline {
             DrawPipeline::Shapes => "gk_shapes".into(),
             DrawPipeline::Images => "gk_images".into(),
             DrawPipeline::Text => "gk_text".into(),
+            DrawPipeline::Pattern => "gk_pattern".into(),
             DrawPipeline::Custom(inner) => *inner,
         }
     }
@@ -113,6 +119,11 @@ impl Default for Painter2D {
         painter.add_pipeline(
             DrawPipeline::Text.id(),
             create_text_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+        );
+
+        painter.add_pipeline(
+            DrawPipeline::Pattern.id(),
+            create_pattern_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
         );
 
         painter

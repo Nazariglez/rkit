@@ -6,7 +6,7 @@ use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
-use crate::{Camera2D, Circle2D, Ellipse2D, Polygon2D, Star2D};
+use crate::{Camera2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
@@ -412,6 +412,11 @@ impl Draw2D {
 
     pub fn polygon(&mut self, sides: u8, radius: f32) -> Drawing<'_, Polygon2D> {
         Drawing::new(self, Polygon2D::new(sides, radius))
+    }
+
+    // - pattern
+    pub fn pattern(&mut self, sprite: &Sprite) -> Drawing<'_, Pattern2D> {
+        Drawing::new(self, Pattern2D::new(sprite))
     }
 
     // - images

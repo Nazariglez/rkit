@@ -10,7 +10,6 @@ pub use shapes::*;
 pub use text::*;
 
 use core::app::window_size;
-use core::math::Vec2;
 
 // -- Draw API
 #[inline]

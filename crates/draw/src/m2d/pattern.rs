@@ -4,6 +4,7 @@ use core::gfx::{
 };
 use core::math::{bvec2, Mat3, Rect, Vec2};
 use macros::Transform2D;
+use num::Zero;
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -17,13 +18,15 @@ var<uniform> transform: Transform;
 struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) uvs: vec2<f32>,
-    @location(2) color: vec4<f32>,
+    @location(2) frame: vec4<f32>,
+    @location(3) color: vec4<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uvs: vec2<f32>,
-    @location(1) color: vec4<f32>,
+    @location(1) frame: vec4<f32>,
+    @location(2) color: vec4<f32>,
 };
 
 @vertex
@@ -31,6 +34,7 @@ fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
+    out.frame = model.frame;
     out.color = model.color;
     out.uvs = model.uvs;
     out.position = transform.mvp * vec4(model.position, 0.0, 1.0);
@@ -44,18 +48,20 @@ var s_texture: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_texture, s_texture, in.uvs) * in.color;
+    let coords = in.frame.xy + fract(in.uvs) * in.frame.zw;
+    return textureSample(t_texture, s_texture, coords) * in.color;
 }
 "#;
 
-pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
+pub fn create_pattern_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
     let pip = gfx::create_render_pipeline(SHADER)
-        .with_label("Draw2D images default pipeline")
+        .with_label("Draw2D pattern default pipeline")
         .with_vertex_layout(
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)
-                .with_attr(2, VertexFormat::Float32x4),
+                .with_attr(2, VertexFormat::Float32x4)
+                .with_attr(3, VertexFormat::Float32x4),
         )
         .with_bind_group_layout(
             BindGroupLayout::new().with_entry(BindingType::uniform(0).with_vertex_visibility(true)),
@@ -76,34 +82,36 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     Ok(PipelineContext {
         pipeline: pip,
         groups: (&[bind_group] as &[_]).try_into().unwrap(),
-        vertex_offset: 8,
+        vertex_offset: 12,
         x_pos: 0,
         y_pos: 1,
-        alpha_pos: Some(7),
+        alpha_pos: Some(11),
     })
 }
 
 #[derive(Transform2D)]
-pub struct Image2D {
+pub struct Pattern2D {
     sprite: Sprite,
     position: Vec2,
+    img_offset: Vec2,
+    img_scale: Vec2,
     color: Color,
     alpha: f32,
     size: Option<Vec2>,
-    crop: Option<Rect>,
 
     #[transform_2d]
     transform: Option<Transform2D>,
 }
 
-impl Image2D {
+impl Pattern2D {
     pub fn new(sprite: &Sprite) -> Self {
         Self {
             sprite: sprite.clone(),
             position: Vec2::ZERO,
+            img_offset: Vec2::ZERO,
+            img_scale: Vec2::ONE,
             color: Color::WHITE,
             alpha: 1.0,
-            crop: None,
             size: None,
             transform: None,
         }
@@ -129,13 +137,18 @@ impl Image2D {
         self
     }
 
-    pub fn crop(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
-        self.crop = Some(Rect::new(origin, size));
-        self.size(size)
+    pub fn image_scale(&mut self, scale: Vec2) -> &mut Self {
+        self.img_scale = scale;
+        self
+    }
+
+    pub fn image_offset(&mut self, offset: Vec2) -> &mut Self {
+        self.img_offset = offset;
+        self
     }
 }
 
-impl Element2D for Image2D {
+impl Element2D for Pattern2D {
     fn process(&self, draw: &mut Draw2D) {
         let c = self.color.with_alpha(self.color.a * self.alpha);
         let size = self.size.unwrap_or(self.sprite.size());
@@ -143,30 +156,27 @@ impl Element2D for Image2D {
         let Vec2 { x: x2, y: y2 } = self.position + size;
 
         let frame = self.sprite.frame();
-        let Rect {
-            origin: Vec2 { x: sx, y: sy },
-            size: Vec2 { x: sw, y: sh },
-        } = self.crop.map_or(frame, |mut r| {
-            r.origin += frame.origin;
-            r
-        });
+        let scaled_size = self.img_scale * frame.size;
+        debug_assert!(
+            !scaled_size.x.is_zero() && !scaled_size.y.is_zero(),
+            "Pattern scaled size should not be 0"
+        );
+        let offset = ((self.img_offset * self.img_scale) / scaled_size).fract();
+        let uv_size = size / scaled_size;
 
-        let (u1, v1, u2, v2) = {
-            let Vec2 { x: tw, y: th } = self.sprite.texture().size();
-            let u1 = sx / tw;
-            let v1 = sy / th;
-            let u2 = (sx + sw) / tw;
-            let v2 = (sy + sh) / th;
+        let Vec2 { x: u1, y: v1 } = offset;
+        let Vec2 { x: u2, y: v2 } = uv_size + offset;
 
-            (u1, v1, u2, v2)
-        };
+        let base_size = self.sprite.texture().size();
+        let Vec2 { x: fx, y: fy } = frame.origin / base_size;
+        let Vec2 { x: fw, y: fh } = frame.size / base_size;
 
         #[rustfmt::skip]
         let mut vertices = [
-            x1, y1, u1, v1, c.r, c.g, c.b, c.a,
-            x2, y1, u2, v1, c.r, c.g, c.b, c.a,
-            x1, y2, u1, v2, c.r, c.g, c.b, c.a,
-            x2, y2, u2, v2, c.r, c.g, c.b, c.a,
+            x1, y1, u1, v1, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
+            x2, y1, u2, v1, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
+            x1, y2, u1, v2, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
+            x2, y2, u2, v2, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
         ];
 
         let indices = [0, 1, 2, 2, 1, 3];
@@ -176,7 +186,7 @@ impl Element2D for Image2D {
             .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
         draw.add_to_batch(DrawingInfo {
-            pipeline: DrawPipeline::Images,
+            pipeline: DrawPipeline::Pattern,
             vertices: &mut vertices,
             indices: &indices,
             transform: matrix,
