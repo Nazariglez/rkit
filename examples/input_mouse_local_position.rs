@@ -22,6 +22,7 @@ fn update(state: &mut State) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
+    // Matrix for a rotating rectangle
     draw.push_matrix(
         Transform2D::new()
             .set_size(RECT_SIZE)
@@ -31,10 +32,12 @@ fn update(state: &mut State) {
             .updated_mat3(),
     );
 
+    // local position from mouse position
     let local_pos = draw.screen_to_local(mouse_position());
-    println!("{:?}, {local_pos:?}", mouse_position());
+    // assign the red color if the mouse is on top
     let color = rect_color(local_pos, RECT_SIZE);
 
+    // draw the rectangle
     draw.rect(Vec2::ZERO, RECT_SIZE).color(color);
 
     draw.pop_matrix();

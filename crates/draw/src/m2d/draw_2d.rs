@@ -153,6 +153,7 @@ impl Draw2D {
         let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
         let inverse_projection = projection.inverse();
         Self {
+            size,
             projection,
             inverse_projection,
             alpha: 1.0,
@@ -354,6 +355,10 @@ impl Draw2D {
             .get_or_insert_with(|| transform.inverse());
 
         // normalized coordinates
+        debug_assert!(
+            self.size.x != 0.0 && self.size.y != 0.0,
+            "Draw2D size cannot be 0"
+        );
         let norm = point / self.size;
         let pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
 
