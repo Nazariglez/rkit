@@ -349,7 +349,6 @@ impl<S> ApplicationHandler for Runner<S> {
                 bck.keyboard_state.tick();
             }
             WindowEvent::Resized(size) => {
-                println!("# resize: {size:?}");
                 let mut bck = get_mut_backend();
                 bck.gfx.as_mut().unwrap().resize(size.width, size.height);
             }
@@ -357,7 +356,7 @@ impl<S> ApplicationHandler for Runner<S> {
                 scale_factor,
                 inner_size_writer,
             } => {
-                println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
+                // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
             }
             _ => (),
         }

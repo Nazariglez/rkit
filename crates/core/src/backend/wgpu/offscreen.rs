@@ -202,14 +202,6 @@ impl OffscreenSurfaceData {
             return Ok(());
         }
 
-        println!(
-            "updated texture {},{} -> {},{}",
-            gfx.surface.config.width,
-            gfx.surface.config.height,
-            self.texture.width(),
-            self.texture.height()
-        );
-
         let texture = gfx.create_render_texture(RenderTextureDescriptor {
             label: Some("Offscreen Surface"),
             depth: false,

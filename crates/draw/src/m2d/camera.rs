@@ -227,20 +227,6 @@ impl Camera2D {
     }
 }
 
-// Mat4 {
-//      x_axis: Vec4(0.004, 0.0, 0.0, 0.0),
-//      y_axis: Vec4(0.0, -0.0036363637, 0.0, 0.0),
-//      z_axis: Vec4(0.0, 0.0, -1.0, 0.0),
-//      w_axis: Vec4(-1.0, 1.0, -0.0, 1.0)
-// }
-
-// Mat4 {
-//      x_axis: Vec4(0.004, 0.0, 0.0, 0.0),
-//      y_axis: Vec4(0.0, -0.0036363637, 0.0, 0.0),
-//      z_axis: Vec4(0.0, 0.0, -1.0, 0.0),
-//      w_axis: Vec4(0.0, 0.0, -1.0, 1.0)
-// }
-
 fn calculate_ortho_projection(win_size: Vec2) -> (Mat4, Vec2) {
     let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
     let pos = win_size * 0.5;
@@ -250,7 +236,7 @@ fn calculate_ortho_projection(win_size: Vec2) -> (Mat4, Vec2) {
 }
 
 fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2) -> Mat4 {
-    let scale = Mat4::from_scale(vec3(ratio.x, ratio.y, 0.0));
+    let scale = Mat4::from_scale(vec3(ratio.x, ratio.y, 1.0));
     let pos = win_size * 0.5;
     let position = vec3(pos.x, pos.y, 0.0);
     let translation = Mat4::from_translation(position);
@@ -260,20 +246,20 @@ fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2) -> Mat4 {
 }
 
 fn calculate_fill_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {
-    let ratio = vec2(win_size.x / work_size.x, win_size.y / work_size.y);
+    let ratio = win_size / work_size;
     let projection = calculate_scaled_projection(win_size, ratio);
     (projection, ratio)
 }
 
 fn calculate_aspect_fit_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {
-    let ratio = (win_size.x / work_size.x).min(win_size.y / work_size.y);
+    let ratio = (win_size / work_size).min_element();
     let ratio = Vec2::splat(ratio);
     let projection = calculate_scaled_projection(win_size, ratio);
     (projection, ratio)
 }
 
 fn calculate_aspect_fill_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {
-    let ratio = (win_size.x / work_size.x).max(win_size.y / work_size.y);
+    let ratio = (win_size / work_size).max_element();
     let ratio = Vec2::splat(ratio);
     let projection = calculate_scaled_projection(win_size, ratio);
     (projection, ratio)
