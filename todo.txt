@@ -1,13 +1,11 @@
 - todo:
+    * custom shaders, blending, and masking, uniforms?
+    * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)
     * points and to_owned/cache
-    * transform_2d (scale, flip, etc...) and mouse check against global + local
     * multisampling? mipmapping?
-    * Camera2D
-    * pattern
     * audio
     * egui
     * lazy, drop file, open links?
-    * custom shaders, blending, and masking, uniforms?
     * fix event callbacks (s: &mut state), split update and draw?
     * Assets/resources loading
     * gamepad for wasm32
@@ -15,7 +13,6 @@
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
     * puffin profiling?
     * create_font should have a ".pixelated()" option to use a second mask_texture with Nearest filter
-    * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)
 
 - questions:
     * should we use `offset` or `origin` instead of `position` to set elements in the screen and `position` instead of `translate`?
