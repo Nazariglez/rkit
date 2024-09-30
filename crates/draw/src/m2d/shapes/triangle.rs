@@ -1,7 +1,7 @@
 use super::size_from_vertices;
 use crate::m2d::shapes::Path2D;
 use crate::shapes::TessMode;
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Transform2D};
+use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, Mat3, Vec2};
 use macros::Transform2D;
@@ -108,7 +108,7 @@ fn fill(triangle: &Triangle2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipeline::Shapes,
+        pipeline: DrawPipelineId::Shapes,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,

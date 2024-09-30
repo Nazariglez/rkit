@@ -1,7 +1,7 @@
-use super::{get_2d_painter, get_mut_2d_painter, Pixel};
+use super::get_mut_2d_painter;
 use crate::m2d::images::Image2D;
 use crate::m2d::mat3_stack::Mat3Stack;
-use crate::m2d::painter::DrawPipeline;
+use crate::m2d::painter::DrawPipelineId;
 use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text::Text2D;
 use crate::sprite::Sprite;
@@ -208,8 +208,8 @@ impl Draw2D {
             alpha_pos,
         } = painter
             .pipelines
-            .get(&info.pipeline.id_intern())
-            .ok_or_else(|| "Missing Pipeline")
+            .get(&info.pipeline)
+            .ok_or_else(|| format!("Missing pipeline '{:?}'", info.pipeline))
             .unwrap()
             .clone();
 
@@ -223,7 +223,7 @@ impl Draw2D {
             }
         }
 
-        if matches!(info.pipeline, DrawPipeline::Text) {
+        if matches!(info.pipeline, DrawPipelineId::Text) {
             groups.push(get_mut_text_system().bind_group(&pipeline).clone());
         }
 
@@ -454,7 +454,7 @@ impl Draw2D {
 }
 
 pub struct DrawingInfo<'a> {
-    pub pipeline: DrawPipeline,
+    pub pipeline: DrawPipelineId,
     pub vertices: &'a mut [f32],
     pub indices: &'a [u32],
     pub transform: Mat3,

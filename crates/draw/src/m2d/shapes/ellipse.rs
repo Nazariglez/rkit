@@ -1,5 +1,5 @@
 use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, Transform2D, Triangle2D};
+use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D, Triangle2D};
 use core::gfx::Color;
 use core::math::{bvec2, Mat3, Vec2};
 use lyon::math::{point, vector, Angle};
@@ -133,7 +133,7 @@ fn stroke(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipeline::Shapes,
+        pipeline: DrawPipelineId::Shapes,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,
@@ -159,7 +159,7 @@ fn fill(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipeline::Shapes,
+        pipeline: DrawPipelineId::Shapes,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,

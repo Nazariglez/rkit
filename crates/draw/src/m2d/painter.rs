@@ -1,4 +1,4 @@
-use super::{create_pixel_pipeline, create_shapes_2d_pipeline_ctx, PipelineContext};
+use super::{create_shapes_2d_pipeline_ctx, PipelineContext};
 use crate::sprite::SpriteId;
 use crate::{
     create_images_2d_pipeline_ctx, create_pattern_2d_pipeline_ctx, create_text_2d_pipeline_ctx,
@@ -9,6 +9,7 @@ use core::gfx::{self, BindGroup, Buffer, RenderPass, RenderPipeline, SamplerId, 
 use core::math::Mat4;
 use internment::Intern;
 use once_cell::sync::Lazy;
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 use utils::drop_signal::DropSignal;
 
@@ -26,44 +27,13 @@ pub struct PipelineResources<'a> {
     pub sprite_bind_group: &'a BindGroup,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum DrawPipeline {
-    Pixel,
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum DrawPipelineId {
     Shapes,
     Images,
     Text,
     Pattern,
-    Custom(Intern<String>),
-}
-
-impl DrawPipeline {
-    pub fn id(&self) -> &str {
-        match self {
-            DrawPipeline::Pixel => "gk_pixel",
-            DrawPipeline::Shapes => "gk_shapes",
-            DrawPipeline::Images => "gk_images",
-            DrawPipeline::Text => "gk_text",
-            DrawPipeline::Pattern => "gk_pattern",
-            DrawPipeline::Custom(inner) => inner.as_str(),
-        }
-    }
-
-    pub(crate) fn id_intern(&self) -> Intern<String> {
-        match self {
-            DrawPipeline::Pixel => "gk_pixel".to_string().into(),
-            DrawPipeline::Shapes => "gk_shapes".to_string().into(),
-            DrawPipeline::Images => "gk_images".to_string().into(),
-            DrawPipeline::Text => "gk_text".to_string().into(),
-            DrawPipeline::Pattern => "gk_pattern".to_string().into(),
-            DrawPipeline::Custom(inner) => *inner,
-        }
-    }
-}
-
-impl From<&str> for DrawPipeline {
-    fn from(value: &str) -> Self {
-        Self::Custom(Intern::new(value.to_string()))
-    }
+    Custom(u64),
 }
 
 struct CachedBindGroup {
@@ -78,12 +48,14 @@ impl CachedBindGroup {
 }
 
 pub(crate) struct Painter2D {
-    pub pipelines: HashMap<Intern<String>, PipelineContext>,
+    pub pipelines: FxHashMap<DrawPipelineId, PipelineContext>,
+    pip_ctx_id: u64,
+
     pub ubo: Buffer,
     pub vbo: Buffer,
     pub ebo: Buffer,
     pub dummy_sprite_bg: Option<BindGroup>,
-    pub sprites_cache: HashMap<SpriteId, CachedBindGroup>,
+    pub sprites_cache: FxHashMap<SpriteId, CachedBindGroup>,
 }
 
 impl Default for Painter2D {
@@ -108,6 +80,7 @@ impl Default for Painter2D {
 
         let mut painter = Self {
             pipelines: Default::default(),
+            pip_ctx_id: 0,
             ubo,
             vbo,
             ebo,
@@ -115,23 +88,23 @@ impl Default for Painter2D {
             sprites_cache: Default::default(),
         };
 
-        painter.add_pipeline(
-            DrawPipeline::Shapes.id(),
+        painter.set_pipeline(
+            &DrawPipelineId::Shapes,
             create_shapes_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
-        painter.add_pipeline(
-            DrawPipeline::Images.id(),
+        painter.set_pipeline(
+            &DrawPipelineId::Images,
             create_images_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
-        painter.add_pipeline(
-            DrawPipeline::Text.id(),
+        painter.set_pipeline(
+            &DrawPipelineId::Text,
             create_text_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
-        painter.add_pipeline(
-            DrawPipeline::Pattern.id(),
+        painter.set_pipeline(
+            &DrawPipelineId::Pattern,
             create_pattern_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
@@ -139,7 +112,7 @@ impl Default for Painter2D {
         let dummy_sprite_bg = {
             let layout = painter
                 .pipelines
-                .get(&Intern::new(DrawPipeline::Images.id().to_string()))
+                .get(&DrawPipelineId::Images)
                 .map(|ctx| ctx.pipeline.bind_group_layout_ref(1).unwrap())
                 .unwrap();
 
@@ -173,15 +146,26 @@ impl Painter2D {
             sprite_bind_group: self.dummy_sprite_bg.as_ref().unwrap(),
         }
     }
-    pub fn add_pipeline(&mut self, id: &str, pip: PipelineContext) -> Option<PipelineContext> {
-        self.pipelines.insert(id.to_string().into(), pip)
+    pub fn add_pipeline(&mut self, pip: PipelineContext) -> DrawPipelineId {
+        let id = DrawPipelineId::Custom(self.pip_ctx_id);
+        self.pip_ctx_id += 1;
+        self.pipelines.insert(id, pip);
+        id
     }
 
-    pub fn remove_pipeline(&mut self, id: &str) -> Option<PipelineContext> {
-        self.pipelines.remove(&id.to_string().into())
+    pub fn set_pipeline(
+        &mut self,
+        id: &DrawPipelineId,
+        pip: PipelineContext,
+    ) -> Option<PipelineContext> {
+        self.pipelines.insert(*id, pip)
     }
 
-    pub fn ctx(&self, id: &Intern<String>) -> Option<&PipelineContext> {
+    pub fn remove_pipeline(&mut self, id: &DrawPipelineId) -> Option<PipelineContext> {
+        self.pipelines.remove(id)
+    }
+
+    pub fn ctx(&self, id: &DrawPipelineId) -> Option<&PipelineContext> {
         self.pipelines.get(id)
     }
 

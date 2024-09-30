@@ -1,5 +1,5 @@
 use crate::{
-    AsBindGroups, Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite,
+    AsBindGroups, Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Sprite,
     Transform2D,
 };
 use core::gfx::{
@@ -96,7 +96,7 @@ pub struct Image2D {
     size: Option<Vec2>,
     crop: Option<Rect>,
 
-    pip: DrawPipeline,
+    pip: DrawPipelineId,
 
     #[transform_2d]
     transform: Option<Transform2D>,
@@ -111,7 +111,7 @@ impl Image2D {
             alpha: 1.0,
             crop: None,
             size: None,
-            pip: DrawPipeline::Images,
+            pip: DrawPipelineId::Images,
             transform: None,
         }
     }
@@ -141,8 +141,8 @@ impl Image2D {
         self.size(size)
     }
 
-    pub fn pip(&mut self, pip: &str) -> &mut Self {
-        self.pip = DrawPipeline::Custom(Intern::new(pip.to_string()));
+    pub fn pipeline(&mut self, pip: &DrawPipelineId) -> &mut Self {
+        self.pip = *pip;
         self
     }
 }

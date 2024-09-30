@@ -4,7 +4,6 @@ mod images;
 mod mat3_stack;
 mod painter;
 pub mod pattern;
-mod pixel;
 mod shapes;
 mod text;
 
@@ -14,6 +13,5 @@ pub use images::*;
 pub use mat3_stack::*;
 pub use painter::*;
 pub use pattern::*;
-pub use pixel::*;
 pub use shapes::*;
 pub use text::*;

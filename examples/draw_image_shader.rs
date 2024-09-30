@@ -1,4 +1,4 @@
-use draw::{AsBindGroups, DrawPipeline, PipelineContext, PipelineResources};
+use draw::{AsBindGroups, DrawPipelineId, PipelineContext, PipelineResources};
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
@@ -121,6 +121,7 @@ pub fn pixelated_pipeline(
 struct State {
     sprite: Sprite,
     pixel_ubo: Buffer,
+    pip_id: DrawPipelineId,
 }
 
 impl State {
@@ -129,15 +130,19 @@ impl State {
             .from_image(include_bytes!("assets/ferris.png"))
             .build()?;
 
+        // This buffer contains the size of the pixels
         let pixel_ubo = gfx::create_uniform_buffer(&[8.0f32])
             .with_write_flag(true)
             .build()?;
 
-        let _ = draw::add_2d_pipeline("pixel_pip", |res| {
-            pixelated_pipeline(res, &pixel_ubo).unwrap()
-        });
+        // register the custom pipeline and get an id for the context in the batching system
+        let pip_id = draw::add_pipeline_2d(|res| pixelated_pipeline(res, &pixel_ubo).unwrap());
 
-        Ok(Self { sprite, pixel_ubo })
+        Ok(Self {
+            sprite,
+            pixel_ubo,
+            pip_id,
+        })
     }
 }
 
@@ -164,11 +169,7 @@ fn update(s: &mut State) {
     draw.image(&s.sprite)
         .translate(vec2(600.0, 300.0))
         .anchor(Vec2::splat(0.5))
-        .pip("pixel_pip");
-
-    draw.image(&s.sprite)
-        .translate(vec2(400.0, 400.0))
-        .anchor(Vec2::splat(0.5));
+        .pipeline(&s.pip_id); // use the custom pipeline
 
     gfx::render_to_frame(&draw).unwrap();
 }

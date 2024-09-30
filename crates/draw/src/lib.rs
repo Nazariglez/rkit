@@ -18,17 +18,26 @@ pub fn create_sprite<'a>() -> SpriteBuilder<'a> {
 }
 
 #[inline]
-pub fn add_2d_pipeline<F: FnOnce(PipelineResources<'_>) -> PipelineContext>(
-    id: &str,
+pub fn add_pipeline_2d<F: FnOnce(PipelineResources<'_>) -> PipelineContext>(
+    cb: F,
+) -> DrawPipelineId {
+    let mut painter = get_mut_2d_painter();
+    let ctx = cb(painter.pip_resources());
+    painter.add_pipeline(ctx)
+}
+
+#[inline]
+pub fn set_pipeline_2d<F: FnOnce(PipelineResources<'_>) -> PipelineContext>(
+    id: &DrawPipelineId,
     cb: F,
 ) -> Option<PipelineContext> {
     let mut painter = get_mut_2d_painter();
     let ctx = cb(painter.pip_resources());
-    painter.add_pipeline(id, ctx)
+    painter.set_pipeline(id, ctx)
 }
 
 #[inline]
-pub fn remove_2d_pipeline(id: &str) -> Option<PipelineContext> {
+pub fn remove_pipeline_2d(id: &DrawPipelineId) -> Option<PipelineContext> {
     get_mut_2d_painter().remove_pipeline(id)
 }
 

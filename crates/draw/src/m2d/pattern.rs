@@ -1,4 +1,4 @@
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite, Transform2D};
+use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Sprite, Transform2D};
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
@@ -186,7 +186,7 @@ impl Element2D for Pattern2D {
             .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
         draw.add_to_batch(DrawingInfo {
-            pipeline: DrawPipeline::Pattern,
+            pipeline: DrawPipelineId::Pattern,
             vertices: &mut vertices,
             indices: &indices,
             transform: matrix,
