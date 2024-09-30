@@ -29,6 +29,21 @@ pub struct PipelineContext {
     pub alpha_pos: Option<usize>,
 }
 
+pub trait AsBindGroups {
+    fn as_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>;
+}
+
+impl<'a> AsBindGroups for &'a [BindGroup] {
+    fn as_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> {
+        debug_assert!(
+            self.len() <= MAX_BIND_GROUPS_PER_PIPELINE,
+            "Bind Groups must be less than {}",
+            MAX_BIND_GROUPS_PER_PIPELINE
+        );
+        (self as &[_]).try_into().unwrap()
+    }
+}
+
 struct BatchInfo {
     vbo_range: Range<u64>,
     ebo_range: Range<u64>,
@@ -198,10 +213,14 @@ impl Draw2D {
             .unwrap()
             .clone();
 
+        // assign in spot 1 the texture/sampler binding group
         if let Some(sp) = info.sprite {
             let bind_group = painter.cached_bind_group_for(&pipeline, sp);
-            // FIXME this is wrong, it should be bind_groups[1] = bind_group
-            groups.push(bind_group);
+            if groups.len() > 1 {
+                groups[1] = bind_group;
+            } else {
+                groups.push(bind_group);
+            }
         }
 
         if matches!(info.pipeline, DrawPipeline::Text) {
@@ -450,7 +469,7 @@ impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
         let mut painter = get_mut_2d_painter();
 
-        let ubo_transform = &painter.ubo_transform;
+        let ubo_transform = &painter.ubo;
         let vbo = &painter.vbo;
         let ebo = &painter.ebo;
 

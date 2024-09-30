@@ -19,6 +19,13 @@ pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =
 unsafe impl Sync for Painter2D {}
 unsafe impl Send for Painter2D {}
 
+pub struct PipelineResources<'a> {
+    pub ubo: &'a Buffer,
+    pub vbo: &'a Buffer,
+    pub ebo: &'a Buffer,
+    pub sprite_bind_group: &'a BindGroup,
+}
+
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum DrawPipeline {
     Pixel,
@@ -26,7 +33,7 @@ pub enum DrawPipeline {
     Images,
     Text,
     Pattern,
-    Custom(Intern<str>),
+    Custom(Intern<String>),
 }
 
 impl DrawPipeline {
@@ -37,17 +44,17 @@ impl DrawPipeline {
             DrawPipeline::Images => "gk_images",
             DrawPipeline::Text => "gk_text",
             DrawPipeline::Pattern => "gk_pattern",
-            DrawPipeline::Custom(inner) => inner,
+            DrawPipeline::Custom(inner) => inner.as_str(),
         }
     }
 
-    pub(crate) fn id_intern(&self) -> Intern<str> {
+    pub(crate) fn id_intern(&self) -> Intern<String> {
         match self {
-            DrawPipeline::Pixel => "gk_pixel".into(),
-            DrawPipeline::Shapes => "gk_shapes".into(),
-            DrawPipeline::Images => "gk_images".into(),
-            DrawPipeline::Text => "gk_text".into(),
-            DrawPipeline::Pattern => "gk_pattern".into(),
+            DrawPipeline::Pixel => "gk_pixel".to_string().into(),
+            DrawPipeline::Shapes => "gk_shapes".to_string().into(),
+            DrawPipeline::Images => "gk_images".to_string().into(),
+            DrawPipeline::Text => "gk_text".to_string().into(),
+            DrawPipeline::Pattern => "gk_pattern".to_string().into(),
             DrawPipeline::Custom(inner) => *inner,
         }
     }
@@ -55,7 +62,7 @@ impl DrawPipeline {
 
 impl From<&str> for DrawPipeline {
     fn from(value: &str) -> Self {
-        Self::Custom(value.into())
+        Self::Custom(Intern::new(value.to_string()))
     }
 }
 
@@ -71,10 +78,11 @@ impl CachedBindGroup {
 }
 
 pub(crate) struct Painter2D {
-    pub pipelines: HashMap<Intern<str>, PipelineContext>,
-    pub ubo_transform: Buffer,
+    pub pipelines: HashMap<Intern<String>, PipelineContext>,
+    pub ubo: Buffer,
     pub vbo: Buffer,
     pub ebo: Buffer,
+    pub dummy_sprite_bg: Option<BindGroup>,
     pub sprites_cache: HashMap<SpriteId, CachedBindGroup>,
 }
 
@@ -100,46 +108,80 @@ impl Default for Painter2D {
 
         let mut painter = Self {
             pipelines: Default::default(),
-            ubo_transform: ubo,
+            ubo,
             vbo,
             ebo,
+            dummy_sprite_bg: None,
             sprites_cache: Default::default(),
         };
 
         painter.add_pipeline(
             DrawPipeline::Shapes.id(),
-            create_shapes_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+            create_shapes_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
         painter.add_pipeline(
             DrawPipeline::Images.id(),
-            create_images_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+            create_images_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
         painter.add_pipeline(
             DrawPipeline::Text.id(),
-            create_text_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+            create_text_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
 
         painter.add_pipeline(
             DrawPipeline::Pattern.id(),
-            create_pattern_2d_pipeline_ctx(&painter.ubo_transform).unwrap(),
+            create_pattern_2d_pipeline_ctx(&painter.ubo).unwrap(),
         );
+
+        // we need this to create custom shaders
+        let dummy_sprite_bg = {
+            let layout = painter
+                .pipelines
+                .get(&Intern::new(DrawPipeline::Images.id().to_string()))
+                .map(|ctx| ctx.pipeline.bind_group_layout_ref(1).unwrap())
+                .unwrap();
+
+            let texture = gfx::create_texture().with_empty_size(1, 1).build().unwrap();
+
+            let sampler = gfx::create_sampler().build().unwrap();
+
+            gfx::create_bind_group()
+                .with_label("Dummy Sprite Bind Group")
+                .with_layout(layout)
+                .with_texture(0, &texture)
+                .with_sampler(1, &sampler)
+                .build()
+                .unwrap()
+        };
+
+        painter.dummy_sprite_bg = Some(dummy_sprite_bg);
 
         painter
     }
 }
 
 impl Painter2D {
+    pub fn pip_resources(&self) -> PipelineResources {
+        PipelineResources {
+            ubo: &self.ubo,
+            vbo: &self.vbo,
+            ebo: &self.ebo,
+
+            // this should be there
+            sprite_bind_group: self.dummy_sprite_bg.as_ref().unwrap(),
+        }
+    }
     pub fn add_pipeline(&mut self, id: &str, pip: PipelineContext) -> Option<PipelineContext> {
-        self.pipelines.insert(id.into(), pip)
+        self.pipelines.insert(id.to_string().into(), pip)
     }
 
     pub fn remove_pipeline(&mut self, id: &str) -> Option<PipelineContext> {
-        self.pipelines.remove(&id.into())
+        self.pipelines.remove(&id.to_string().into())
     }
 
-    pub fn ctx(&self, id: &Intern<str>) -> Option<&PipelineContext> {
+    pub fn ctx(&self, id: &Intern<String>) -> Option<&PipelineContext> {
         self.pipelines.get(id)
     }
 

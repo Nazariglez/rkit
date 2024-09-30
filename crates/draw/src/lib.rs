@@ -18,8 +18,13 @@ pub fn create_sprite<'a>() -> SpriteBuilder<'a> {
 }
 
 #[inline]
-pub fn add_2d_pipeline(id: &str, pip: PipelineContext) -> Option<PipelineContext> {
-    get_mut_2d_painter().add_pipeline(id, pip)
+pub fn add_2d_pipeline<F: FnOnce(PipelineResources<'_>) -> PipelineContext>(
+    id: &str,
+    cb: F,
+) -> Option<PipelineContext> {
+    let mut painter = get_mut_2d_painter();
+    let ctx = cb(painter.pip_resources());
+    painter.add_pipeline(id, ctx)
 }
 
 #[inline]

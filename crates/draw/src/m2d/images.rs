@@ -1,8 +1,12 @@
-use crate::{Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite, Transform2D};
+use crate::{
+    AsBindGroups, Draw2D, DrawPipeline, DrawingInfo, Element2D, PipelineContext, Sprite,
+    Transform2D,
+};
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
 use core::math::{bvec2, Mat3, Rect, Vec2};
+use internment::Intern;
 use macros::Transform2D;
 
 // language=wgsl
@@ -75,7 +79,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
 
     Ok(PipelineContext {
         pipeline: pip,
-        groups: (&[bind_group] as &[_]).try_into().unwrap(),
+        groups: (&[bind_group]).as_bind_groups(),
         vertex_offset: 8,
         x_pos: 0,
         y_pos: 1,
@@ -92,6 +96,8 @@ pub struct Image2D {
     size: Option<Vec2>,
     crop: Option<Rect>,
 
+    pip: DrawPipeline,
+
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -105,6 +111,7 @@ impl Image2D {
             alpha: 1.0,
             crop: None,
             size: None,
+            pip: DrawPipeline::Images,
             transform: None,
         }
     }
@@ -132,6 +139,11 @@ impl Image2D {
     pub fn crop(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
         self.crop = Some(Rect::new(origin, size));
         self.size(size)
+    }
+
+    pub fn pip(&mut self, pip: &str) -> &mut Self {
+        self.pip = DrawPipeline::Custom(Intern::new(pip.to_string()));
+        self
     }
 }
 
@@ -176,7 +188,7 @@ impl Element2D for Image2D {
             .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
         draw.add_to_batch(DrawingInfo {
-            pipeline: DrawPipeline::Images,
+            pipeline: self.pip,
             vertices: &mut vertices,
             indices: &indices,
             transform: matrix,

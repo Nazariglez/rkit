@@ -136,6 +136,11 @@ impl<'a> BindGroupBuilder<'a> {
         Self { desc }
     }
 
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.desc.label = Some(label);
+        self
+    }
+
     pub fn with_layout(mut self, layout: &'a BindGroupLayoutRef) -> Self {
         self.desc.layout = Some(layout);
         self
