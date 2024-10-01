@@ -99,6 +99,9 @@ pub struct Pattern2D {
     alpha: f32,
     size: Option<Vec2>,
 
+    #[pipeline_id]
+    pip: DrawPipelineId,
+
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -113,6 +116,7 @@ impl Pattern2D {
             color: Color::WHITE,
             alpha: 1.0,
             size: None,
+            pip: DrawPipelineId::Pattern,
             transform: None,
         }
     }
@@ -186,7 +190,7 @@ impl Element2D for Pattern2D {
             .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
         draw.add_to_batch(DrawingInfo {
-            pipeline: DrawPipelineId::Pattern,
+            pipeline: self.pip,
             vertices: &mut vertices,
             indices: &indices,
             transform: matrix,

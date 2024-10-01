@@ -52,10 +52,11 @@ var<uniform> pixel_data: PixelData;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let tex_size = vec2<f32>(textureDimensions(t_texture));
+let tex_size = vec2<f32>(textureDimensions(t_texture));
     let pixel_size = vec2<f32>(pixel_data.size);
-    let coords = floor((fract(in.uvs) * tex_size) / pixel_size) * pixel_size;
-    let uvs = coords / tex_size;
+    let shifted_uvs = in.uvs - 0.5;
+    let coords = floor((shifted_uvs * tex_size) / pixel_size) * pixel_size;
+    let uvs = (coords / tex_size) + 0.5;
     return textureSample(t_texture, s_texture, uvs) * in.color;
 }
 "#;
@@ -153,7 +154,7 @@ fn main() -> Result<(), String> {
 }
 
 fn update(s: &mut State) {
-    let pixel_size = 8.0 + time::elapsed_f32().sin() * 1.0;
+    let pixel_size = 8.0 + time::elapsed_f32().sin();
     gfx::write_buffer(&s.pixel_ubo)
         .with_data(&[pixel_size])
         .build()

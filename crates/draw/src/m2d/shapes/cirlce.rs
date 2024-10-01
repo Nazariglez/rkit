@@ -20,6 +20,9 @@ pub struct Circle2D {
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
 
+    #[pipeline_id]
+    pip: DrawPipelineId,
+
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -38,6 +41,7 @@ impl Circle2D {
             fill_color: None,
             stroke_color: None,
 
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -126,7 +130,7 @@ fn stroke(circle: &Circle2D, draw: &mut Draw2D) {
         .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: circle.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,
@@ -152,7 +156,7 @@ fn fill(circle: &Circle2D, draw: &mut Draw2D) {
         .map_or(Mat3::IDENTITY, |mut t| t.set_size(size).updated_mat3());
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: circle.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,

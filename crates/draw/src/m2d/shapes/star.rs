@@ -1,5 +1,5 @@
 use crate::shapes::TessMode;
-use crate::{Draw2D, Drawing, Element2D, Path2D, Transform2D};
+use crate::{Draw2D, DrawPipelineId, Drawing, Element2D, Path2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, vec2, Mat3, Vec2};
 use macros::Drawable2D;
@@ -18,6 +18,9 @@ pub struct Star2D {
     spikes: u8,
     outer_radius: f32,
     inner_radius: f32,
+
+    #[pipeline_id]
+    pip: DrawPipelineId,
 
     #[transform_2d]
     transform: Option<Transform2D>,
@@ -38,6 +41,7 @@ impl Star2D {
             outer_radius,
             inner_radius,
 
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -85,6 +89,7 @@ impl Element2D for Star2D {
     fn process(&self, draw: &mut Draw2D) {
         let mut path_builder = draw.path();
         path_builder.transform = self.transform;
+        path_builder.pip = self.pip;
         draw_star(
             &mut path_builder,
             self.pos,

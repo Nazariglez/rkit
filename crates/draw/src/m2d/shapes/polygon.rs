@@ -1,5 +1,5 @@
 use crate::shapes::TessMode;
-use crate::{Draw2D, Drawing, Element2D, Path2D, Transform2D};
+use crate::{Draw2D, DrawPipelineId, Drawing, Element2D, Path2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, vec2, Mat3, Vec2};
 use macros::Drawable2D;
@@ -18,6 +18,8 @@ pub struct Polygon2D {
     sides: u8,
     radius: f32,
 
+    #[pipeline_id]
+    pip: DrawPipelineId,
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -35,6 +37,7 @@ impl Polygon2D {
             stroke_color: None,
             sides,
             radius,
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -82,6 +85,7 @@ impl Element2D for Polygon2D {
     fn process(&self, draw: &mut Draw2D) {
         let mut path_builder = draw.path();
         path_builder.transform = self.transform;
+        path_builder.pip = self.pip;
         draw_polygon(&mut path_builder, self.pos, self.sides as _, self.radius);
         path_builder.color(self.color).alpha(self.alpha);
 

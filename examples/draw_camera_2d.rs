@@ -25,7 +25,7 @@ struct State {
 impl State {
     fn new() -> Self {
         let size = window_size();
-        let cam = Camera2D::new(size);
+        let cam = Camera2D::new(size, ScreenMode::Normal);
         Self {
             cam,
             player_pos: WORK_SIZE * 0.5,

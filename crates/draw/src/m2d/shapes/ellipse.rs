@@ -21,6 +21,9 @@ pub struct Ellipse2D {
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
 
+    #[pipeline_id]
+    pip: DrawPipelineId,
+
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -40,6 +43,7 @@ impl Ellipse2D {
             fill_color: None,
             stroke_color: None,
 
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -133,7 +137,7 @@ fn stroke(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: ellipse.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,
@@ -159,7 +163,7 @@ fn fill(ellipse: &Ellipse2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: ellipse.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,

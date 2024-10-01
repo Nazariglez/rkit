@@ -1,5 +1,13 @@
 use core::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
 
+pub trait BaseCam2D {
+    fn projection(&self) -> Mat4;
+    fn inverse_projection(&self) -> Mat4;
+    fn transform(&self) -> Mat3;
+    fn inverse_transform(&self) -> Mat3;
+    fn size(&self) -> Vec2;
+}
+
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum ScreenMode {
     #[default]
@@ -51,10 +59,49 @@ impl Default for Camera2D {
     }
 }
 
+impl BaseCam2D for Camera2D {
+    fn projection(&self) -> Mat4 {
+        debug_assert!(
+            !self.dirty_projection,
+            "You must call camera.update first to get an updated projection"
+        );
+        self.projection
+    }
+
+    fn inverse_projection(&self) -> Mat4 {
+        debug_assert!(
+            !self.dirty_projection,
+            "You must call camera.update first to get an updated inverse_projection"
+        );
+        self.inverse_projection
+    }
+
+    fn transform(&self) -> Mat3 {
+        debug_assert!(
+            !self.dirty_transform,
+            "You must call camera.update first to get an updated transform"
+        );
+        self.transform
+    }
+
+    fn inverse_transform(&self) -> Mat3 {
+        debug_assert!(
+            !self.dirty_transform,
+            "You must call camera.update first to get an updated inverse_transform"
+        );
+        self.inverse_transform
+    }
+
+    fn size(&self) -> Vec2 {
+        self.size
+    }
+}
+
 impl Camera2D {
-    pub fn new(size: Vec2) -> Self {
+    pub fn new(size: Vec2, mode: ScreenMode) -> Self {
         let mut cam = Self {
             size,
+            mode,
             ..Default::default()
         };
 
@@ -78,10 +125,6 @@ impl Camera2D {
             self.size = size;
             self.dirty_projection = true;
         }
-    }
-
-    pub fn size(&self) -> Vec2 {
-        self.size
     }
 
     pub fn set_position(&mut self, pos: Vec2) {
@@ -123,22 +166,6 @@ impl Camera2D {
 
     pub fn zoom(&self) -> f32 {
         self.scale.x
-    }
-
-    pub fn transform(&self) -> Mat3 {
-        debug_assert!(
-            !self.dirty_transform,
-            "You must call camera.update first to get an updated transform"
-        );
-        self.transform
-    }
-
-    pub fn projection(&self) -> Mat4 {
-        debug_assert!(
-            !self.dirty_projection,
-            "You must call camera.update first to get an updated projection"
-        );
-        self.projection
     }
 
     pub fn update(&mut self) {

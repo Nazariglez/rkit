@@ -1,5 +1,5 @@
 use crate::m2d::shapes::Path2D;
-use crate::{Draw2D, Element2D, Transform2D};
+use crate::{Draw2D, DrawPipelineId, Element2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, Mat3, Vec2};
 use macros::Drawable2D;
@@ -11,6 +11,9 @@ pub struct Line2D {
     color: Color,
     stroke_width: f32,
     alpha: f32,
+
+    #[pipeline_id]
+    pip: DrawPipelineId,
 
     #[transform_2d]
     transform: Option<Transform2D>,
@@ -24,6 +27,7 @@ impl Line2D {
             color: Color::WHITE,
             stroke_width: 1.0,
             alpha: 1.0,
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -48,6 +52,7 @@ impl Element2D for Line2D {
     fn process(&self, draw: &mut Draw2D) {
         let mut path = Path2D::new();
         path.transform = self.transform;
+        path.pip = self.pip;
 
         path.move_to(self.p1)
             .line_to(self.p2)

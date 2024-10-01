@@ -6,7 +6,7 @@ use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
-use crate::{Camera2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
+use crate::{BaseCam2D, Camera2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
@@ -318,16 +318,23 @@ impl Draw2D {
         self.size
     }
 
-    pub fn set_camera(&mut self, cam: &Camera2D) {
+    pub fn set_camera(&mut self, cam: &dyn BaseCam2D) {
         debug_assert!(
             self.batches.is_empty(),
             "The Camera2D must be set before any drawing."
         );
-        self.projection = cam.projection();
-        self.inverse_projection = cam.inverse_projection;
-        self.matrix_stack.set_matrix(cam.transform());
-        self.inverse_transform = None;
+
         self.size = cam.size();
+
+        // projection
+        self.projection = cam.projection();
+        self.inverse_projection = cam.inverse_projection();
+
+        // transform
+        self.matrix_stack.set_matrix(cam.transform());
+
+        // do not assign inverse_transform, it will be calculated and cached when needed
+        self.inverse_transform = None;
     }
 
     pub fn projection(&self) -> Mat4 {

@@ -17,6 +17,9 @@ pub struct Triangle2D {
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
 
+    #[pipeline_id]
+    pip: DrawPipelineId,
+
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -32,6 +35,7 @@ impl Triangle2D {
             mode_index: 0,
             fill_color: None,
             stroke_color: None,
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -108,7 +112,7 @@ fn fill(triangle: &Triangle2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: triangle.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,
@@ -123,6 +127,7 @@ fn stroke(triangle: &Triangle2D, draw: &mut Draw2D) {
 
     let mut path = Path2D::new();
     path.transform = triangle.transform;
+    path.pip = triangle.pip;
     path.move_to(a)
         .line_to(b)
         .line_to(c)

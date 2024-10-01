@@ -119,6 +119,9 @@ pub struct Text2D<'a> {
     max_width: Option<f32>,
     h_align: HAlign,
 
+    #[pipeline_id]
+    pip: DrawPipelineId,
+
     #[transform_2d]
     transform: Option<Transform2D>,
 }
@@ -136,6 +139,7 @@ impl<'a> Text2D<'a> {
             max_width: None,
             h_align: HAlign::default(),
 
+            pip: DrawPipelineId::Text,
             transform: None,
         }
     }
@@ -260,7 +264,7 @@ impl<'a> Element2D for Text2D<'a> {
                         });
 
                 draw.add_to_batch(DrawingInfo {
-                    pipeline: DrawPipelineId::Text,
+                    pipeline: self.pip,
                     vertices: temp_vertices,
                     indices: temp_indices,
                     transform: matrix,

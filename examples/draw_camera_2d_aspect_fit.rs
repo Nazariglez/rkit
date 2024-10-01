@@ -16,10 +16,7 @@ struct State {
 impl State {
     fn new() -> Self {
         let size = window_size();
-        let mut cam = Camera2D::new(size);
-        cam.set_screen_mode(ScreenMode::AspectFit(WORK_SIZE));
-        cam.update();
-
+        let cam = Camera2D::new(size, ScreenMode::AspectFit(WORK_SIZE));
         Self { cam }
     }
 }

@@ -1,6 +1,6 @@
 use crate::math::{uvec2, UVec2};
 
-// TODO set target FPS? delta_time, elapsed_time?
+// TODO set target FPS?
 #[derive(Debug)]
 pub struct WindowConfig {
     pub title: String,
@@ -19,7 +19,7 @@ impl Default for WindowConfig {
             min_size: None,
             max_size: None,
             resizable: true,
-            vsync: false,
+            vsync: true,
         }
     }
 }

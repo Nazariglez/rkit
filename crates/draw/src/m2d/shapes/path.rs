@@ -23,6 +23,9 @@ pub struct Path2D {
     fill_color: Option<Color>,
     stroke_color: Option<Color>,
 
+    #[pipeline_id]
+    pub(crate) pip: DrawPipelineId,
+
     #[transform_2d]
     pub(crate) transform: Option<Transform2D>,
 }
@@ -49,6 +52,7 @@ impl Path2D {
             fill_color: None,
             stroke_color: None,
 
+            pip: DrawPipelineId::Shapes,
             transform: None,
         }
     }
@@ -241,7 +245,7 @@ fn fill(path: &Path2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: path.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,
@@ -265,7 +269,7 @@ fn stroke(path: &Path2D, draw: &mut Draw2D) {
     });
 
     draw.add_to_batch(DrawingInfo {
-        pipeline: DrawPipelineId::Shapes,
+        pipeline: path.pip,
         vertices: &mut vertices,
         indices: &indices,
         transform: matrix,
