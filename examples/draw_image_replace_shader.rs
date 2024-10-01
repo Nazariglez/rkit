@@ -1,10 +1,7 @@
 use draw::{AsBindGroups, DrawPipelineId, PipelineContext, PipelineResources};
 use rkit::draw::{create_draw_2d, Sprite};
-use rkit::gfx::{
-    self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
-};
+use rkit::gfx::{self, BindGroupLayout, BindingType, BlendMode, Color, VertexFormat, VertexLayout};
 use rkit::math::{vec2, Vec2};
-use rkit::time;
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -81,7 +78,7 @@ pub fn pixelated_pipeline(res: PipelineResources) -> Result<PipelineContext, Str
     let transform_bind_group = gfx::create_bind_group()
         .with_label("Transform")
         .with_layout(pip.bind_group_layout_ref(0)?)
-        .with_uniform(0, &res.ubo)
+        .with_uniform(0, res.ubo)
         .build()?;
 
     Ok(PipelineContext {

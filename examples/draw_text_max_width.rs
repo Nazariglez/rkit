@@ -1,4 +1,3 @@
-use rkit::app::window_size;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Vec2};

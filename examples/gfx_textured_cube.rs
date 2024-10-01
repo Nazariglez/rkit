@@ -1,5 +1,5 @@
 use rkit::gfx::{
-    self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, CullMode, IndexFormat,
+    self, BindGroup, BindGroupLayout, BindingType, Buffer, Color, CullMode, IndexFormat,
     RenderPipeline, Renderer, VertexFormat, VertexLayout,
 };
 use rkit::math::{vec3, Mat4};

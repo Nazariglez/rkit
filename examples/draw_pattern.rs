@@ -2,7 +2,7 @@ use etagere::euclid::Trig;
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Vec2};
+use rkit::math::vec2;
 use rkit::time;
 
 struct State {

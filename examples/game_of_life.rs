@@ -1,7 +1,7 @@
 use rkit::app::WindowConfig;
 use rkit::draw::{self, create_draw_2d, Sprite};
 use rkit::gfx::{self, Color, TextureFilter};
-use rkit::math::{uvec2, vec2, Vec2};
+use rkit::math::{uvec2, Vec2};
 use rkit::{random, time};
 
 const WIDTH: usize = 100;

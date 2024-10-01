@@ -91,7 +91,7 @@ pub fn custom_pipeline(
 
     let transform_bg = gfx::create_bind_group()
         .with_layout(pip.bind_group_layout_ref(0)?)
-        .with_uniform(0, &res.ubo)
+        .with_uniform(0, res.ubo)
         .build()?;
 
     let effect_bg = gfx::create_bind_group()

@@ -1,9 +1,6 @@
-use etagere::euclid::Trig;
-use log::warn;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Vec2};
-use rkit::time;
+use rkit::math::vec2;
 
 fn main() -> Result<(), String> {
     rkit::init().on_update(update).run()

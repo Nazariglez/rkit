@@ -40,7 +40,7 @@ pub(crate) fn enable_mouse(
             e.stop_propagation();
             e.prevent_default();
             let pos = get_mouse_xy(
-                &canvas, e, // *captured.borrow(),
+                &canvas, e,     // *captured.borrow(),
                 false, // TODO captured mouse
                 last_pos,
             );
@@ -57,7 +57,7 @@ pub(crate) fn enable_mouse(
             e.prevent_default();
             let btn = mouse_btn_cast(e.button());
             let pos = get_mouse_xy(
-                &canvas, e, // *captured.borrow(),
+                &canvas, e,     // *captured.borrow(),
                 false, // TODO captured mouse
                 last_pos,
             );
@@ -75,7 +75,7 @@ pub(crate) fn enable_mouse(
             e.prevent_default();
             let btn = mouse_btn_cast(e.button());
             let pos = get_mouse_xy(
-                &canvas, e, // *captured.borrow(),
+                &canvas, e,     // *captured.borrow(),
                 false, // TODO captured mouse
                 last_pos,
             );

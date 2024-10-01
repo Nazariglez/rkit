@@ -52,6 +52,12 @@ pub struct Rng {
     raw: RawRng,
 }
 
+impl Default for Rng {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Rng {
     /// New instance
     pub fn new() -> Self {
@@ -222,7 +228,7 @@ mod test {
     #[test]
     fn test_pick() {
         let mut rng = Rng::new();
-        let data = vec![10, 20, 30, 40, 50];
+        let data = [10, 20, 30, 40, 50];
         let picked = rng.pick(data.iter());
         assert!(picked.is_some());
         assert!(data.contains(picked.unwrap()));

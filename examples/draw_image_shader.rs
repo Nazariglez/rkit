@@ -95,13 +95,13 @@ pub fn pixelated_pipeline(
     let transform_bind_group = gfx::create_bind_group()
         .with_label("Transform")
         .with_layout(pip.bind_group_layout_ref(0)?)
-        .with_uniform(0, &res.ubo)
+        .with_uniform(0, res.ubo)
         .build()?;
 
     let pixel_bind_group = gfx::create_bind_group()
         .with_label("Pixelated")
         .with_layout(pip.bind_group_layout_ref(2)?)
-        .with_uniform(0, &pixel_ubo)
+        .with_uniform(0, pixel_ubo)
         .build()?;
 
     Ok(PipelineContext {
