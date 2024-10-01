@@ -1,5 +1,7 @@
 #![cfg(target_arch = "wasm32")]
 
+mod events;
+mod input;
 mod utils;
 mod window;
 
@@ -50,7 +52,8 @@ where
     let vsync = config.vsync;
     let size = config.size;
 
-    let win = WebWindow::new(config).unwrap();
+    let callback = Rc::new(RefCell::new(None));
+    let win = WebWindow::new(config, callback.clone()).unwrap();
     let gfx = GfxBackend::init(&win, vsync, size).await.unwrap();
     {
         let mut bck = get_mut_backend();
@@ -63,7 +66,6 @@ where
         update: update_cb,
     };
 
-    let callback = Rc::new(RefCell::new(None));
     let inner_callback = callback.clone();
     let win = web_sys::window().unwrap();
     *callback.borrow_mut() = Some(Closure::wrap(Box::new(move || {
@@ -97,6 +99,8 @@ impl<S> Runner<S> {
 pub(crate) struct WebBackend {
     win: Option<WebWindow>,
     gfx: Option<GfxBackend>,
+
+    mouse_state: MouseState,
 }
 
 // hackish to allow the Lazy<T>, this is fine because wasm32 is not multithread
@@ -105,16 +109,19 @@ unsafe impl Send for WebBackend {}
 
 impl BackendImpl<GfxBackend> for WebBackend {
     fn set_title(&mut self, title: &str) {
-        todo!()
+        self.win.as_mut().unwrap().set_title(title);
     }
     fn title(&self) -> String {
-        todo!()
+        self.win.as_ref().unwrap().title().to_owned()
     }
     fn size(&self) -> Vec2 {
         self.win.as_ref().map_or(Vec2::ZERO, |w| w.size())
     }
     fn set_size(&mut self, size: Vec2) {
-        todo!()
+        self.win
+            .as_mut()
+            .unwrap()
+            .set_size(size.x as _, size.y as _);
     }
     fn set_min_size(&mut self, size: Vec2) {
         todo!()
@@ -155,7 +162,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
 
     // input
     fn mouse_state(&self) -> &MouseState {
-        todo!()
+        &self.mouse_state
     }
     fn keyboard_state(&self) -> &KeyboardState {
         todo!()

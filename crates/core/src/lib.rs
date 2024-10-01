@@ -19,7 +19,7 @@ where
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     #[cfg(target_arch = "wasm32")]
-    console_log::init_with_level(Level::Info);
+    console_log::init_with_level(Level::Warn);
 
     #[cfg(not(target_arch = "wasm32"))]
     env_logger::builder().filter_level(LevelFilter::Warn).init();

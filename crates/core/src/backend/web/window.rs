@@ -1,3 +1,5 @@
+use super::events::{Event, EventIterator};
+use super::input::*;
 use super::utils::{canvas_add_event_listener, get_gk_size, set_size_dpi};
 use crate::app::WindowConfig;
 use crate::math::{uvec2, UVec2};
@@ -7,10 +9,15 @@ use raw_window_handle::{
     DisplayHandle, HasDisplayHandle, RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle,
     WebDisplayHandle,
 };
+use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
+use std::rc::Rc;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, Event as WebEvent, HtmlCanvasElement, Window};
 use wgpu::rwh::{HandleError, HasWindowHandle, WebWindowHandle, WindowHandle};
+
+type RafType = Rc<RefCell<Option<Closure<dyn FnMut()>>>>;
 
 pub(crate) struct WebWindow {
     pub canvas: HtmlCanvasElement,
@@ -20,6 +27,8 @@ pub(crate) struct WebWindow {
     pub dpi: f32,
 
     pub config: WindowConfig,
+    pub raf: RafType,
+    pub events: Rc<RefCell<EventIterator>>,
 }
 
 impl HasWindowHandle for WebWindow {
@@ -37,7 +46,7 @@ impl HasDisplayHandle for WebWindow {
 }
 
 impl WebWindow {
-    pub fn new(config: WindowConfig) -> Result<Self, String> {
+    pub fn new(config: WindowConfig, raf: RafType) -> Result<Self, String> {
         let window =
             web_sys::window().ok_or_else(|| String::from("Can't access window dom object."))?;
         let document = window
@@ -66,14 +75,22 @@ impl WebWindow {
         } = config.size;
         set_size_dpi(&canvas, width, height);
 
-        Ok(Self {
+        let events = Rc::new(RefCell::new(EventIterator::default()));
+
+        let mut win = Self {
             canvas,
             win: window,
             document,
             parent: canvas_parent,
             dpi: dpi as f32,
             config,
-        })
+            raf,
+            events,
+        };
+
+        enable_mouse(&mut win);
+
+        Ok(win)
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
@@ -84,6 +101,14 @@ impl WebWindow {
     pub fn size(&self) -> Vec2 {
         let (w, h) = get_gk_size(&self.canvas);
         vec2(w as _, h as _)
+    }
+
+    pub fn set_title(&mut self, title: &str) {
+        self.config.title = title.to_owned();
+    }
+
+    pub fn title(&self) -> &str {
+        &self.config.title
     }
 }
 
