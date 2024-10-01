@@ -25,7 +25,6 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uvs: vec2<f32>,
     @location(1) color: vec4<f32>,
-    @location(2) frag_pos: vec2<f32>,
 };
 
 @vertex
@@ -35,7 +34,6 @@ fn vs_main(
     var out: VertexOutput;
     out.color = model.color;
     out.uvs = model.uvs;
-    out.frag_pos = model.position;
     out.position = transform.mvp * vec4(model.position, 0.0, 1.0);
     return out;
 }
@@ -49,8 +47,8 @@ var s_texture: sampler;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var base_color = textureSample(t_texture, s_texture, in.uvs) * in.color;
     let color_tint = vec4<f32>(
-        0.5 + 0.5 * sin(in.frag_pos.x * 0.1),
-        0.5 + 0.5 * cos(in.frag_pos.y * 0.1),
+        0.5 + 0.5 * sin(in.position.x * 0.1),
+        0.5 + 0.5 * cos(in.position.y * 0.1),
         1.0,
         1.0
     );
@@ -59,7 +57,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 pub fn pixelated_pipeline(res: PipelineResources) -> Result<PipelineContext, String> {
     let pip = gfx::create_render_pipeline(SHADER)
-        .with_label("Pixelated Pipeline")
+        .with_label("Custom Pipeline")
         // we must use the same vertex layout structure (at least position, uvs, and color, from there we can add)
         .with_vertex_layout(
             VertexLayout::new()
