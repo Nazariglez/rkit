@@ -46,7 +46,6 @@ where
         update_cb,
         cleanup_cb: _, // TODO cleanup
     } = builder;
-    log::debug!("Yes");
 
     let vsync = config.vsync;
     let size = config.size;
@@ -117,21 +116,28 @@ impl WebBackend {
 
         let mut events = self.win.as_mut().unwrap().events.take();
         while let Some(evt) = events.next() {
-            // log::warn!("{:?}", evt);
+            log::warn!("{:?}", evt);
             match evt {
-                MouseMove { pos } => {
+                MouseMove { pos, delta } => {
                     self.mouse_state.position = pos;
                     self.mouse_state.moving = true;
-                    // TODO motion_delta
-                    // self.mouse_state.motion_delta = N;
+                    self.mouse_state.motion_delta = delta;
                 }
                 MouseDown { btn, pos } => {
-                    self.mouse_state.position = pos;
                     self.mouse_state.press(btn);
                 }
                 MouseUp { btn, pos } => {
-                    self.mouse_state.position = pos;
                     self.mouse_state.release(btn);
+                }
+                MouseEnter { pos } => {
+                    // TODO mouse enter
+                }
+                MouseLeave { pos } => {
+                    // TODO mouse leave
+                }
+                MouseWheel { delta } => {
+                    self.mouse_state.wheel_delta = delta;
+                    self.mouse_state.scrolling = true;
                 }
                 _ => {}
             }

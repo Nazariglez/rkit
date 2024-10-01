@@ -3,9 +3,10 @@ use super::utils::{canvas_add_event_listener, canvas_position_from_global};
 use super::window::WebWindow;
 use crate::input::MouseButton;
 use crate::math::{IVec2, Vec2};
+use glam::vec2;
 use std::cell::RefCell;
 use std::rc::Rc;
-use web_sys::{HtmlCanvasElement, MouseEvent};
+use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent};
 
 pub(crate) fn add_mouse_listener<F, E>(
     win: &WebWindow,
@@ -22,7 +23,8 @@ pub(crate) fn add_mouse_listener<F, E>(
         let mut evts = events.borrow_mut();
         let mut pos = last_pos.borrow_mut();
         handler(&canvas, &mut evts, &mut pos, e);
-    });
+    })
+    .unwrap();
     std::mem::forget(evt);
 }
 
@@ -38,12 +40,14 @@ pub(crate) fn enable_mouse(
         |canvas, events, last_pos, e: MouseEvent| {
             e.stop_propagation();
             e.prevent_default();
+            let old_pos = last_pos.as_vec2();
             let pos = get_mouse_xy(
                 &canvas, e,     // *captured.borrow(),
                 false, // TODO captured mouse
                 last_pos,
             );
-            events.push(Event::MouseMove { pos });
+            let delta = pos - old_pos;
+            events.push(Event::MouseMove { pos, delta });
         },
     );
 
@@ -82,6 +86,46 @@ pub(crate) fn enable_mouse(
             events.push(Event::MouseDown { btn, pos });
         },
     );
+
+    add_mouse_listener(
+        win,
+        "mouseout",
+        last_pos.clone(),
+        |canvas, events, last_pos, e: MouseEvent| {
+            e.stop_propagation();
+            e.prevent_default();
+            let (x, y) = canvas_position_from_global(&canvas, e);
+            events.push(Event::MouseLeave {
+                pos: vec2(x as _, y as _),
+            });
+        },
+    );
+
+    add_mouse_listener(
+        win,
+        "mouseover",
+        last_pos.clone(),
+        |canvas, events, last_pos, e: MouseEvent| {
+            e.stop_propagation();
+            e.prevent_default();
+            let (x, y) = canvas_position_from_global(&canvas, e);
+            events.push(Event::MouseEnter {
+                pos: vec2(x as _, y as _),
+            });
+        },
+    );
+
+    let events = win.events.clone();
+    let wheel_evt = canvas_add_event_listener(&win.canvas, "wheel", move |e: WheelEvent| {
+        e.stop_propagation();
+        e.prevent_default();
+        let delta = vec2(e.delta_x() as _, e.delta_y() as _) * -1.0;
+        events.borrow_mut().push(Event::MouseWheel { delta });
+    })
+    .unwrap();
+    std::mem::forget(wheel_evt);
+
+    // TODO [pointerlockchange] event
 }
 
 fn get_mouse_xy(
