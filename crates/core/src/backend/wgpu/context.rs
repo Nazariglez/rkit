@@ -1,4 +1,6 @@
+use crate::backend::wgpu::surface::Surface;
 use log::warn;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use wgpu::{
     Adapter, Backends, Device, Instance, InstanceDescriptor, InstanceFlags, PowerPreference, Queue,
     Surface as RawSurface,
@@ -12,18 +14,11 @@ pub(crate) struct Context {
 }
 
 impl Context {
-    pub(crate) async fn new() -> Result<Self, String> {
-        let instance = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
-            Instance::new(InstanceDescriptor {
-                backends: Backends::GL,
-                flags: InstanceFlags::default().with_env(),
-                dx12_shader_compiler: Default::default(),
-                gles_minor_version: wgpu::util::gles_minor_version_from_env().unwrap_or_default(),
-            })
-        } else {
-            Instance::default()
-        };
-        let (adapter, device, queue) = generate_wgpu_ctx(&instance, None).await?;
+    pub(crate) async fn new(
+        instance: Instance,
+        surface: Option<&RawSurface<'static>>,
+    ) -> Result<Self, String> {
+        let (adapter, device, queue) = generate_wgpu_ctx(&instance, surface).await?;
         Ok(Self {
             instance,
             adapter,
@@ -52,6 +47,7 @@ async fn generate_wgpu_ctx(
     instance: &Instance,
     surface: Option<&RawSurface<'_>>,
 ) -> Result<(Adapter, Device, Queue), String> {
+    log::info!("COMPATIBLE SURFACE {:?}", surface.is_some());
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: PowerPreference::HighPerformance,

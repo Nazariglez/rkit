@@ -22,8 +22,9 @@ use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    Backend, BufferBinding, BufferDescriptor as WBufferDescriptor, Color as WColor, Extent3d,
-    ImageCopyTexture, ImageDataLayout, Origin3d, Queue, RenderPipeline as WRenderPipeline, StoreOp,
+    Backend, Backends, BufferBinding, BufferDescriptor as WBufferDescriptor, Color as WColor,
+    Extent3d, ImageCopyTexture, ImageDataLayout, Instance, InstanceDescriptor, InstanceFlags,
+    Origin3d, Queue, RenderPipeline as WRenderPipeline, StoreOp, Surface as RawSurface,
     TextureAspect, TextureDimension, TextureFormat as WTextureFormat,
 };
 use winit::raw_window_handle::HasDisplayHandle;
@@ -744,17 +745,49 @@ impl GfxBackend {
         W: HasWindowHandle + HasDisplayHandle,
     {
         let depth_format = SURFACE_DEFAULT_DEPTH_FORMAT; // make it configurable?
-        let mut ctx = Context::new().await?;
         let mut next_resource_id = 0;
-        let surface = init_surface(
-            resource_id(&mut next_resource_id),
-            &mut ctx,
-            window,
-            depth_format,
-            win_size,
-            vsync,
-        )
-        .await?;
+
+        let instance = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
+            Instance::new(InstanceDescriptor {
+                backends: Backends::GL,
+                flags: InstanceFlags::default().with_env(),
+                dx12_shader_compiler: Default::default(),
+                gles_minor_version: wgpu::util::gles_minor_version_from_env().unwrap_or_default(),
+            })
+        } else {
+            Instance::default()
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let (ctx, surface) = {
+            let mut ctx = Context::new(instance, None).await?;
+            let surface = init_surface(
+                resource_id(&mut next_resource_id),
+                &mut ctx,
+                window,
+                depth_format,
+                win_size,
+                vsync,
+            )
+            .await?;
+            (ctx, surface)
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        let (mut ctx, surface) = {
+            let raw = Surface::create_raw_surface(window, &instance)?;
+            let mut ctx = Context::new(instance, Some(&raw)).await?;
+            let surface = init_surface_from_raw(
+                resource_id(&mut next_resource_id),
+                &mut ctx,
+                raw,
+                depth_format,
+                win_size,
+                vsync,
+            )
+            .await?;
+            (ctx, surface)
+        };
 
         let mut bck = Self {
             next_resource_id,
@@ -976,6 +1009,34 @@ where
     )?;
 
     Surface::new(ctx, window, win_physical_size, vsync, depth_texture).await
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn init_surface_from_raw(
+    id: TextureId,
+    ctx: &mut Context,
+    raw: RawSurface<'static>,
+    depth_format: TextureFormat,
+    win_physical_size: UVec2,
+    vsync: bool,
+) -> Result<Surface, String> {
+    let depth_texture = create_texture(
+        id,
+        &ctx.device,
+        &ctx.queue,
+        TextureDescriptor {
+            label: Some("Depth Texture for Surface"),
+            format: depth_format,
+            write: true,
+        },
+        Some(TextureData {
+            bytes: &[],
+            width: win_physical_size.x,
+            height: win_physical_size.y,
+        }),
+    )?;
+
+    Surface::new_from_raw(ctx, raw, win_physical_size, vsync, depth_texture).await
 }
 
 struct InnerTextureInfo {}

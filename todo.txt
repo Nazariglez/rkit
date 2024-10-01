@@ -1,4 +1,5 @@
 - todo:
+    * use encase crate to comply with std140
     * custom shaders, blending, and masking, uniforms?
     * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)
     * points and to_owned/cache

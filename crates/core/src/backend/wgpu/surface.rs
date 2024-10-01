@@ -4,8 +4,8 @@ use crate::math::{UVec2, Vec2};
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
-    Device, RenderPipeline as WRenderPipeline, Surface as RawSurface, SurfaceCapabilities,
-    SurfaceConfiguration, SurfaceTexture, TextureFormat as RawTextureFormat,
+    Device, Instance, RenderPipeline as WRenderPipeline, Surface as RawSurface,
+    SurfaceCapabilities, SurfaceConfiguration, SurfaceTexture, TextureFormat as RawTextureFormat,
 };
 use winit::raw_window_handle::HasWindowHandle;
 
@@ -19,6 +19,22 @@ pub(crate) struct Surface {
 }
 
 impl Surface {
+    pub fn create_raw_surface<W>(
+        window: &W,
+        instance: &Instance,
+    ) -> Result<RawSurface<'static>, String>
+    where
+        W: HasDisplayHandle + HasWindowHandle,
+    {
+        unsafe {
+            instance
+                .create_surface_unsafe(
+                    wgpu::SurfaceTargetUnsafe::from_window(window).map_err(|e| e.to_string())?,
+                )
+                .map_err(|e| e.to_string())
+        }
+    }
+
     pub async fn new<W>(
         ctx: &mut Context,
         window: &W,
@@ -30,15 +46,19 @@ impl Surface {
         W: HasDisplayHandle + HasWindowHandle,
     {
         log::trace!("Generating main surface");
-        let surface = unsafe {
-            ctx.instance.create_surface_unsafe(
-                wgpu::SurfaceTargetUnsafe::from_window(window).map_err(|e| e.to_string())?,
-            )
-        }
-        .map_err(|e| e.to_string())?;
+        let surface = Self::create_raw_surface(window, &ctx.instance)?;
+        Self::new_from_raw(ctx, surface, win_physical_size, vsync, depth_texture).await
+    }
 
+    pub async fn new_from_raw(
+        ctx: &mut Context,
+        surface: RawSurface<'static>,
+        win_physical_size: UVec2,
+        vsync: bool,
+        depth_texture: Texture,
+    ) -> Result<Self, String> {
         if !ctx.is_surface_compatible(&surface) {
-            log::trace!("Generating WGPU adapter compatible surface.",);
+            log::trace!("Generating WGPU adapter compatible surface.");
             ctx.ensure_surface_compatibility(&surface).await?;
         }
 
