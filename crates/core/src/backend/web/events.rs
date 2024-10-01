@@ -1,9 +1,16 @@
+use crate::input::MouseButton;
 use crate::math::Vec2;
 use std::collections::VecDeque;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Event {
-    MouseMove(Vec2),
+    MouseMove { pos: Vec2 },
+    MouseUp { btn: MouseButton, pos: Vec2 },
+    MouseDown { btn: MouseButton, pos: Vec2 },
+    MouseWheel { delta: Vec2 },
+    MouseEnter { pos: Vec2 },
+    MouseLeave { pos: Vec2 },
+    MouseMotion { delta: Vec2 },
 }
 
 /// Event iterator queue

@@ -88,9 +88,14 @@ impl<S> Runner<S> {
     fn tick(&mut self) {
         time::tick();
 
+        // process events
+        get_mut_backend().process_events();
+
         get_mut_backend().gfx().prepare_frame();
         (*self.update)(&mut self.state);
         get_mut_backend().gfx().present_frame();
+
+        get_mut_backend().mouse_state.tick();
     }
 }
 
@@ -100,12 +105,40 @@ pub(crate) struct WebBackend {
     win: Option<WebWindow>,
     gfx: Option<GfxBackend>,
 
-    mouse_state: MouseState,
+    pub(crate) mouse_state: MouseState,
 }
 
 // hackish to allow the Lazy<T>, this is fine because wasm32 is not multithread
 unsafe impl Sync for WebBackend {}
 unsafe impl Send for WebBackend {}
+
+impl WebBackend {
+    fn process_events(&mut self) {
+        use events::Event::*;
+
+        let mut events = self.win.as_mut().unwrap().events.take();
+        while let Some(evt) = events.next() {
+            // log::warn!("{:?}", evt);
+            match evt {
+                MouseMove { pos } => {
+                    self.mouse_state.position = pos;
+                    self.mouse_state.moving = true;
+                    // TODO motion_delta
+                    // self.mouse_state.motion_delta = N;
+                }
+                MouseDown { btn, pos } => {
+                    self.mouse_state.position = pos;
+                    self.mouse_state.press(btn);
+                }
+                MouseUp { btn, pos } => {
+                    self.mouse_state.position = pos;
+                    self.mouse_state.release(btn);
+                }
+                _ => {}
+            }
+        }
+    }
+}
 
 impl BackendImpl<GfxBackend> for WebBackend {
     fn set_title(&mut self, title: &str) {
