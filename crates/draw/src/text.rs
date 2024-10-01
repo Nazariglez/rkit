@@ -9,7 +9,6 @@ use cosmic_text::{
     PhysicalGlyph, Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
 };
 use etagere::{size2, Allocation, BucketedAtlasAllocator};
-use hashbrown::HashSet;
 use once_cell::sync::Lazy;
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
@@ -49,6 +48,12 @@ pub struct Font {
     // TODO DropObserver, seems that cosmic-text doesn't have a way to remove fonts right now
 }
 
+impl Font {
+    pub fn id(&self) -> FontId {
+        self.id
+    }
+}
+
 #[derive(Debug)]
 pub struct GlyphData {
     pub xy: Vec2,
@@ -70,16 +75,6 @@ pub enum HAlign {
     Left,
     Center,
     Right,
-}
-
-impl HAlign {
-    fn to_cosmic(&self) -> Align {
-        match self {
-            HAlign::Left => Align::Left,
-            HAlign::Center => Align::Center,
-            HAlign::Right => Align::Right,
-        }
-    }
 }
 
 pub struct TextInfo<'a> {
@@ -464,11 +459,6 @@ enum PostAction {
     End { block_size: Vec2, lines: usize },
     Restore,
     Clear,
-}
-
-enum AtlasGrowError {
-    MaxSizeReached,
-    Gfx(String),
 }
 
 #[derive(Copy, Clone, Debug)]

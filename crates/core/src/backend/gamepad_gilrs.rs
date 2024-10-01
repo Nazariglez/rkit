@@ -1,13 +1,9 @@
 #![cfg(feature = "gamepad")]
 
 use crate::input::{GamepadAxis, GamepadButton, GamepadState};
-use atomic_refcell::AtomicRefCell;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use gilrs::{Axis, Button, Event, EventType, GamepadId, Gilrs};
 use heapless::FnvIndexMap;
-use once_cell::sync::Lazy;
-use smallvec::SmallVec;
-use std::sync::Mutex;
 
 use crate::input::GAMEPADS_CONNECTED_POT2;
 

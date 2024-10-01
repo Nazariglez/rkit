@@ -2,7 +2,7 @@ use crate::backend::gfx::Texture;
 use crate::gfx::consts::{
     MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE,
 };
-use crate::gfx::{BindGroupLayoutRef, Buffer, Sampler, TextureId};
+use crate::gfx::{BindGroupLayoutRef, Buffer, Sampler};
 use arrayvec::ArrayVec;
 
 pub const MAX_BINDING_ENTRIES: usize =

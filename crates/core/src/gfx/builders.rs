@@ -311,7 +311,7 @@ impl<'a> TextureWriteBuilder<'a> {
         self
     }
 
-    pub fn build(mut self) -> Result<(), String> {
+    pub fn build(self) -> Result<(), String> {
         let Self {
             offset,
             size,

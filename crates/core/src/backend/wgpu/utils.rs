@@ -1,10 +1,6 @@
 use crate::gfx::consts::SURFACE_DEFAULT_DEPTH_FORMAT;
-use crate::gfx::{
-    BlendComponent, BlendFactor, BlendMode, BlendOperation, BufferUsage, ColorMask, CompareMode,
-    CullMode, DepthStencil, IndexFormat, Primitive, Stencil, StencilAction, TextureFilter,
-    TextureFormat, TextureWrap, VertexFormat, VertexStepMode,
-};
-use wgpu::{ColorWrites, CompareFunction};
+use crate::gfx::{BlendComponent, BlendFactor, BlendMode, BlendOperation, DepthStencil, Stencil};
+use wgpu::CompareFunction;
 
 pub fn wgpu_shader_visibility(vertex: bool, fragment: bool, compute: bool) -> wgpu::ShaderStages {
     let mut v = wgpu::ShaderStages::NONE;

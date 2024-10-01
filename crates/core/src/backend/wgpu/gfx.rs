@@ -12,19 +12,17 @@ use crate::gfx::{
     TextureData, TextureDescriptor, TextureFormat, TextureId,
 };
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
-use crate::math::{vec2, UVec2, Vec2};
+use crate::math::{vec2, UVec2};
 use crate::utils::next_pot2;
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
-use glam::uvec2;
 use std::borrow::Cow;
 use std::sync::Arc;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    Backend, Backends, BufferBinding, BufferDescriptor as WBufferDescriptor, Color as WColor,
-    Extent3d, ImageCopyTexture, ImageDataLayout, Instance, InstanceDescriptor, InstanceFlags,
-    Origin3d, Queue, RenderPipeline as WRenderPipeline, StoreOp, Surface as RawSurface,
+    Backends, BufferDescriptor as WBufferDescriptor, Extent3d, ImageCopyTexture, ImageDataLayout,
+    Instance, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp, Surface as RawSurface,
     TextureAspect, TextureDimension, TextureFormat as WTextureFormat,
 };
 use winit::raw_window_handle::HasDisplayHandle;
@@ -137,7 +135,7 @@ impl GfxBackendImpl for GfxBackend {
                             store: StoreOp::Store,
                         },
                     },
-                    |color| wgpu::RenderPassColorAttachment {
+                    |_color| wgpu::RenderPassColorAttachment {
                         view: &texture.texture.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -774,7 +772,7 @@ impl GfxBackend {
         };
 
         #[cfg(target_arch = "wasm32")]
-        let (mut ctx, surface) = {
+        let (ctx, surface) = {
             let raw = Surface::create_raw_surface(window, &instance)?;
             let mut ctx = Context::new(instance, Some(&raw)).await?;
             let surface = init_surface_from_raw(
@@ -849,7 +847,7 @@ impl GfxBackend {
                             store: StoreOp::Store,
                         },
                     },
-                    |color| wgpu::RenderPassColorAttachment {
+                    |_color| wgpu::RenderPassColorAttachment {
                         view: &frame.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -885,7 +883,7 @@ impl GfxBackend {
                     None
                 };
 
-                let mut encoder = &mut frame.encoder;
+                let encoder = &mut frame.encoder;
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: None,
                     color_attachments: &[color],

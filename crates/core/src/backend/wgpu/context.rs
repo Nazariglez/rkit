@@ -1,10 +1,4 @@
-use crate::backend::wgpu::surface::Surface;
-use log::warn;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use wgpu::{
-    Adapter, Backends, Device, Instance, InstanceDescriptor, InstanceFlags, PowerPreference, Queue,
-    Surface as RawSurface,
-};
+use wgpu::{Adapter, Device, Instance, PowerPreference, Queue, Surface as RawSurface};
 
 pub(crate) struct Context {
     pub instance: Instance,
@@ -47,7 +41,6 @@ async fn generate_wgpu_ctx(
     instance: &Instance,
     surface: Option<&RawSurface<'_>>,
 ) -> Result<(Adapter, Device, Queue), String> {
-    log::info!("COMPATIBLE SURFACE {:?}", surface.is_some());
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: PowerPreference::HighPerformance,

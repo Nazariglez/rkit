@@ -10,14 +10,13 @@ mod renderer;
 mod texture;
 
 pub use crate::backend::gfx::*;
-use crate::backend::{get_backend, get_mut_backend, BackendImpl, GfxBackendImpl};
+use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
 pub use bind_group::*;
 pub use blend_mode::*;
 pub use buffer::*;
 pub use builders::*;
 pub use color::*;
 pub use limits::*;
-pub use pipeline::*;
 pub use pipeline::*;
 pub use renderer::*;
 pub use texture::*;

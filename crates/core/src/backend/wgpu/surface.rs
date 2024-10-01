@@ -1,11 +1,11 @@
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::texture::Texture;
-use crate::math::{UVec2, Vec2};
+use crate::math::UVec2;
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
-    Device, Instance, RenderPipeline as WRenderPipeline, Surface as RawSurface,
-    SurfaceCapabilities, SurfaceConfiguration, SurfaceTexture, TextureFormat as RawTextureFormat,
+    Device, Instance, Surface as RawSurface, SurfaceCapabilities, SurfaceConfiguration,
+    SurfaceTexture, TextureFormat as RawTextureFormat,
 };
 use winit::raw_window_handle::HasWindowHandle;
 

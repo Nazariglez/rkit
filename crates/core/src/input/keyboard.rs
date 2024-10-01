@@ -1,12 +1,9 @@
-use crate::input::MouseButtonList;
-use crate::math::Vec2;
 use crate::option_usize_env;
 use crate::utils::{next_pot2, EnumSet};
 use arrayvec::ArrayVec;
 use nohash_hasher::IsEnabled;
 use smol_str::SmolStr;
 use std::hash::Hasher;
-use strum::EnumCount;
 use strum_macros::EnumCount;
 
 // Passing this env variable we can control the size of the hashset to reduce memory consume.

@@ -4,7 +4,7 @@ use crate::gfx::{
 };
 use atomic_refcell::AtomicRefCell;
 use std::sync::Arc;
-use wgpu::{Buffer as RawBuffer, BufferUsages, StencilOperation};
+use wgpu::{Buffer as RawBuffer, BufferUsages};
 
 pub(crate) struct InnerBuffer {
     pub size: usize,

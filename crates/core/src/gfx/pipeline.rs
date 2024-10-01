@@ -1,9 +1,7 @@
 use super::consts::{
     MAX_BIND_GROUPS_PER_PIPELINE, MAX_PIPELINE_COMPATIBLE_TEXTURES, MAX_VERTEX_BUFFERS,
 };
-use crate::gfx::{
-    BindGroupLayout, BlendMode, Color, IndexFormat, TextureFormat, TextureId, VertexLayout,
-};
+use crate::gfx::{BindGroupLayout, BlendMode, Color, IndexFormat, TextureFormat, VertexLayout};
 use arrayvec::ArrayVec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]

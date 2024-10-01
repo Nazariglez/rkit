@@ -12,7 +12,6 @@ use crate::option_usize_env;
 use crate::utils::{next_pot2, EnumSet};
 use arrayvec::ArrayVec;
 use nohash_hasher::IsEnabled;
-use smallvec::SmallVec;
 use std::hash::Hasher;
 use strum::EnumCount;
 use strum_macros::{EnumCount, FromRepr};

@@ -3,9 +3,8 @@ use super::utils::{canvas_add_event_listener, canvas_position_from_global};
 use super::window::WebWindow;
 use crate::input::MouseButton;
 use crate::math::{IVec2, Vec2};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, MouseEvent};
 
 pub(crate) fn add_mouse_listener<F, E>(

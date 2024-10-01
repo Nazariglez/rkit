@@ -213,7 +213,7 @@ impl<S> ApplicationHandler for Runner<S> {
             attrs = attrs.with_append(true);
         }
 
-        let mut win = event_loop.create_window(attrs).unwrap();
+        let win = event_loop.create_window(attrs).unwrap();
         win.set_ime_allowed(true); // allow for chars
 
         let win_size = win.inner_size();

@@ -1,5 +1,4 @@
 use super::consts::MAX_VERTEX_ATTRIBUTES;
-use crate::gfx::TextureId;
 use arrayvec::ArrayVec;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

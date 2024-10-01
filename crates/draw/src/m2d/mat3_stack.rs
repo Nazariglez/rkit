@@ -18,10 +18,6 @@ impl Default for Mat3Stack {
 }
 
 impl Mat3Stack {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn matrix(&self) -> Mat3 {
         *self.stack.last().unwrap_or(&self.base)
     }

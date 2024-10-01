@@ -8,13 +8,12 @@ mod window;
 #[cfg(all(feature = "clipboard", not(web_sys_unstable_apis)))]
 compile_error!("feature \"clipboard\" requires web_sys_unstable_apis to be enabled\nsee https://rustwasm.github.io/wasm-bindgen/web-sys/unstable-apis.html");
 
-use crate::app::WindowConfig;
 use crate::backend::{BackendImpl, GfxBackendImpl};
-use crate::builder::{AppBuilder, CleanupCb, InitCb, UpdateCb};
+use crate::builder::AppBuilder;
 use crate::gfx::GfxBackend;
 use crate::input::{KeyboardState, MouseState};
+use crate::math::Vec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use glam::{vec2, Vec2};
 use once_cell::sync::Lazy;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -44,8 +43,8 @@ where
     let AppBuilder {
         window: config,
         init_cb,
-        mut update_cb,
-        cleanup_cb,
+        update_cb,
+        cleanup_cb: _, // TODO cleanup
     } = builder;
     log::debug!("Yes");
 

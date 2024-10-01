@@ -1,4 +1,4 @@
-use super::events::{Event, EventIterator};
+use super::events::EventIterator;
 use super::input::*;
 use super::utils::{canvas_add_event_listener, get_gk_size, set_size_dpi};
 use crate::app::WindowConfig;
@@ -9,13 +9,13 @@ use raw_window_handle::{
     DisplayHandle, HasDisplayHandle, RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle,
     WebDisplayHandle,
 };
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::ptr::NonNull;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, Event as WebEvent, HtmlCanvasElement, Window};
-use wgpu::rwh::{HandleError, HasWindowHandle, WebWindowHandle, WindowHandle};
+use wgpu::rwh::{HandleError, HasWindowHandle, WindowHandle};
 
 type RafType = Rc<RefCell<Option<Closure<dyn FnMut()>>>>;
 
