@@ -4,7 +4,7 @@ use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
 use core::math::{bvec2, Mat3, Rect, Vec2};
-use macros::Transform2D;
+use macros::Drawable2D;
 use std::cell::RefCell;
 
 thread_local! {
@@ -107,7 +107,7 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
     })
 }
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Text2D<'a> {
     text: &'a str,
     font: Option<&'a Font>,

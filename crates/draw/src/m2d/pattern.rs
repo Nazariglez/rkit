@@ -3,7 +3,7 @@ use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
 use core::math::{bvec2, Mat3, Rect, Vec2};
-use macros::Transform2D;
+use macros::Drawable2D;
 use num::Zero;
 
 // language=wgsl
@@ -89,7 +89,7 @@ pub fn create_pattern_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<Pipeline
     })
 }
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Pattern2D {
     sprite: Sprite,
     position: Vec2,

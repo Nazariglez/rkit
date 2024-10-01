@@ -2,10 +2,10 @@ use crate::shapes::TessMode;
 use crate::{Draw2D, Drawing, Element2D, Path2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, vec2, Mat3, Vec2};
-use macros::Transform2D;
+use macros::Drawable2D;
 use std::f32::consts::PI;
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Polygon2D {
     color: Color,
     pos: Vec2,

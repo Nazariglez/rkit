@@ -6,9 +6,9 @@ use lyon::math::{point, Box2D};
 use lyon::path::builder::BorderRadii;
 use lyon::path::{Path, Winding};
 use lyon::tessellation::*;
-use macros::Transform2D;
+use macros::Drawable2D;
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Rectangle2D {
     color: Color,
     pos: Vec2,

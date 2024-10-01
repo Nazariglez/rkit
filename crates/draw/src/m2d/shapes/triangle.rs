@@ -4,9 +4,9 @@ use crate::shapes::TessMode;
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, Mat3, Vec2};
-use macros::Transform2D;
+use macros::Drawable2D;
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Triangle2D {
     points: [Vec2; 3],
     color: Color,

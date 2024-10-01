@@ -5,9 +5,9 @@ use core::math::{bvec2, Mat3, Vec2};
 use lyon::math::point;
 use lyon::path::{Path, Winding};
 use lyon::tessellation::*;
-use macros::Transform2D;
+use macros::Drawable2D;
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Circle2D {
     color: Color,
     pos: Vec2,

@@ -7,10 +7,10 @@ use lyon::geom::Arc;
 use lyon::math::{point, Angle};
 use lyon::path::path::Builder;
 use lyon::tessellation::*;
-use macros::Transform2D;
+use macros::Drawable2D;
 use std::cell::RefCell;
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Path2D {
     stroke_options: StrokeOptions,
     fill_options: FillOptions,

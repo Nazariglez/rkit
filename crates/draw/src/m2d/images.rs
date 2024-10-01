@@ -6,8 +6,7 @@ use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
 use core::math::{bvec2, Mat3, Rect, Vec2};
-use internment::Intern;
-use macros::Transform2D;
+use macros::Drawable2D;
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -87,7 +86,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     })
 }
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Image2D {
     sprite: Sprite,
     position: Vec2,
@@ -96,6 +95,7 @@ pub struct Image2D {
     size: Option<Vec2>,
     crop: Option<Rect>,
 
+    #[pipeline_id]
     pip: DrawPipelineId,
 
     #[transform_2d]
@@ -139,11 +139,6 @@ impl Image2D {
     pub fn crop(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
         self.crop = Some(Rect::new(origin, size));
         self.size(size)
-    }
-
-    pub fn pipeline(&mut self, pip: &DrawPipelineId) -> &mut Self {
-        self.pip = *pip;
-        self
     }
 }
 

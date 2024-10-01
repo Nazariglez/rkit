@@ -2,9 +2,9 @@ use crate::m2d::shapes::Path2D;
 use crate::{Draw2D, Element2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, Mat3, Vec2};
-use macros::Transform2D;
+use macros::Drawable2D;
 
-#[derive(Transform2D)]
+#[derive(Drawable2D)]
 pub struct Line2D {
     p1: Vec2,
     p2: Vec2,
