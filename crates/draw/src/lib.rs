@@ -6,7 +6,6 @@ pub mod text;
 pub use m2d::*;
 pub use sprite::*;
 
-pub use shapes::*;
 pub use text::*;
 
 use core::app::window_size;
@@ -62,7 +61,7 @@ impl FontBuilder {
         Self { source: data }
     }
 
-    pub fn build(mut self) -> Result<Font, String> {
+    pub fn build(self) -> Result<Font, String> {
         let Self { source } = self;
         get_mut_text_system().create_font(source)
     }

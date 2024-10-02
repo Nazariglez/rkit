@@ -1,5 +1,5 @@
 use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
-use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D, Triangle2D};
+use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
 use core::gfx::Color;
 use core::math::{bvec2, Mat3, Vec2};
 use lyon::math::point;

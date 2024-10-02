@@ -2,7 +2,7 @@ use core::gfx::{
     Sampler, SamplerBuilder, SamplerId, Texture, TextureBuilder, TextureFilter, TextureFormat,
     TextureId, TextureWrap,
 };
-use core::math::{vec2, Rect, UVec2, Vec2};
+use core::math::{vec2, Rect, Vec2};
 use utils::drop_signal::DropObserver;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]

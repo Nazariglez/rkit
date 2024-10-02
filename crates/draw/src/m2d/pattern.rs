@@ -2,7 +2,7 @@ use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Spr
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{bvec2, Mat3, Rect, Vec2};
+use core::math::{bvec2, Mat3, Vec2};
 use macros::Drawable2D;
 use num::Zero;
 

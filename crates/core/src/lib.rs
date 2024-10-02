@@ -8,7 +8,12 @@ pub mod time;
 mod utils;
 
 use crate::builder::{builder, AppBuilder};
-use log::{Level, LevelFilter};
+
+#[cfg(target_arch = "wasm32")]
+use log::Level;
+
+#[cfg(not(target_arch = "wasm32"))]
+use log::LevelFilter;
 
 pub fn init_with<F, S>(callback: F) -> AppBuilder<S>
 where

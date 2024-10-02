@@ -5,12 +5,10 @@ use crate::{
     Sprite,
 };
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::{self, BindGroup, Buffer, RenderPass, RenderPipeline, SamplerId, TextureId};
+use core::gfx::{self, BindGroup, Buffer, RenderPipeline};
 use core::math::Mat4;
-use internment::Intern;
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
-use std::collections::HashMap;
 use utils::drop_signal::DropSignal;
 
 pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =

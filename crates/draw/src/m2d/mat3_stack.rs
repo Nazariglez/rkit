@@ -1,4 +1,4 @@
-use core::math::{vec2, BVec2, Mat3, Rect, Vec2};
+use core::math::{vec2, BVec2, Mat3, Vec2};
 use num::Zero;
 use smallvec::SmallVec;
 

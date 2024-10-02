@@ -1,17 +1,13 @@
-use crate::m2d::Painter2D;
-use crate::{Sprite, SpriteBuilder};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat};
 use core::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::{Source, ID};
 use cosmic_text::{
-    Align, Attrs, Buffer, CacheKey, Family, FontSystem, LayoutGlyph, LayoutRun, Metrics,
-    PhysicalGlyph, Shaping, Stretch, Style, SwashCache, SwashContent, Weight,
+    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch, Style, SwashCache,
+    SwashContent, Weight,
 };
-use etagere::{size2, Allocation, BucketedAtlasAllocator};
+use etagere::{size2, BucketedAtlasAllocator};
 use once_cell::sync::Lazy;
-use rustc_hash::FxHasher;
-use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use utils::fast_cache::FastCache;
 

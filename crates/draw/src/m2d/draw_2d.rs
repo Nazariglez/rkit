@@ -253,8 +253,8 @@ impl Draw2D {
         let current = self.batches.last_mut().unwrap();
         current.end_idx = end_idx;
 
-        let vbo_count = (info.vertices.len() as u64 * 4); // f32=4bytes
-        let ebo_count = (info.indices.len() as u64 * 4); // u32=4bytes
+        let vbo_count = info.vertices.len() as u64 * 4; // f32=4bytes
+        let ebo_count = info.indices.len() as u64 * 4; // u32=4bytes
         current.vbo_range.end = current.vbo_range.end + vbo_count;
         current.ebo_range.end = current.ebo_range.end + ebo_count;
 
@@ -474,7 +474,7 @@ pub trait Element2D {
 
 impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
-        let mut painter = get_mut_2d_painter();
+        let painter = get_mut_2d_painter();
 
         let ubo_transform = &painter.ubo;
         let vbo = &painter.vbo;
@@ -499,7 +499,7 @@ impl AsRenderer for Draw2D {
         let mut cleared = false;
         let mut renderer = Renderer::new();
         self.batches.iter().for_each(|b| {
-            let mut pass = renderer.begin_pass();
+            let pass = renderer.begin_pass();
 
             // clear only once
             if !cleared {
