@@ -78,6 +78,7 @@ pub(crate) struct MouseState {
     pub wheel_delta: Vec2,
     pub moving: bool,
     pub scrolling: bool,
+    pub cursor_on_screen: bool,
 
     pub pressed: MouseButtonList,
     pub released: MouseButtonList,
@@ -151,6 +152,10 @@ impl MouseState {
 
     pub fn is_down(&self, btn: MouseButton) -> bool {
         self.down.contains(btn)
+    }
+
+    pub fn is_cursor_on_screen(&self) -> bool {
+        self.cursor_on_screen
     }
 
     pub fn tick(&mut self) {

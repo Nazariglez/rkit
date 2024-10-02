@@ -32,6 +32,11 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
 
     // input
     fn mouse_state(&self) -> &MouseState;
+    fn set_cursor_lock(&mut self, lock: bool);
+    fn is_cursor_locked(&self) -> bool;
+    fn set_cursor_visible(&mut self, visible: bool);
+    fn is_cursor_visible(&self) -> bool;
+
     fn keyboard_state(&self) -> &KeyboardState;
 
     #[cfg(feature = "gamepad")]

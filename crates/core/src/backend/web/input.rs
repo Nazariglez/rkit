@@ -1,120 +1,81 @@
 use super::events::{Event, EventIterator};
-use super::utils::{canvas_add_event_listener, canvas_position_from_global};
+use super::utils::{
+    canvas_add_event_listener, canvas_position_from_global, document_add_event_listener,
+};
 use super::window::WebWindow;
 use crate::input::MouseButton;
 use crate::math::{IVec2, Vec2};
 use glam::vec2;
 use std::cell::RefCell;
 use std::rc::Rc;
-use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent};
+use web_sys::{Event as WEvent, HtmlCanvasElement, MouseEvent, WheelEvent};
 
-pub(crate) fn add_mouse_listener<F, E>(
-    win: &WebWindow,
-    name: &str,
-    last_pos: Rc<RefCell<IVec2>>,
-    mut handler: F,
-) where
+pub(crate) fn add_mouse_listener<F, E>(win: &WebWindow, name: &str, mut handler: F)
+where
     E: wasm_bindgen::convert::FromWasmAbi + 'static,
-    F: FnMut(&HtmlCanvasElement, &mut EventIterator, &mut IVec2, E) + 'static,
+    F: FnMut(&HtmlCanvasElement, &mut EventIterator, E) + 'static,
 {
     let events = win.events.clone();
     let canvas = win.canvas.clone();
     let evt = canvas_add_event_listener(&canvas.clone(), name, move |e: E| {
         let mut evts = events.borrow_mut();
-        let mut pos = last_pos.borrow_mut();
-        handler(&canvas, &mut evts, &mut pos, e);
+        handler(&canvas, &mut evts, e);
     })
     .unwrap();
     std::mem::forget(evt);
 }
 
-pub(crate) fn enable_mouse(
-    win: &mut WebWindow, /*, fullscreen_dispatcher: Rc<RefCell<dyn Fn()>>*/
-) {
+fn listen_mouse_move(win: &mut WebWindow) {
     let last_pos = Rc::new(RefCell::new(IVec2::ZERO));
+    let captured = win.cursor_locked.clone();
+    add_mouse_listener(win, "mousemove", move |canvas, events, e: MouseEvent| {
+        e.stop_propagation();
+        e.prevent_default();
+        let old_pos = last_pos.borrow().as_vec2();
+        let pos = get_mouse_xy(&canvas, e, *captured.borrow(), &mut last_pos.borrow_mut());
+        let delta = pos - old_pos;
+        events.push(Event::MouseMove { pos, delta });
+    });
+}
 
-    add_mouse_listener(
-        win,
-        "mousemove",
-        last_pos.clone(),
-        |canvas, events, last_pos, e: MouseEvent| {
-            e.stop_propagation();
-            e.prevent_default();
-            let old_pos = last_pos.as_vec2();
-            let pos = get_mouse_xy(
-                &canvas, e,     // *captured.borrow(),
-                false, // TODO captured mouse
-                last_pos,
-            );
-            let delta = pos - old_pos;
-            events.push(Event::MouseMove { pos, delta });
-        },
-    );
+fn listen_mouse_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
+    add_mouse_listener(win, "mouseup", move |canvas, events, e: MouseEvent| {
+        e.stop_propagation();
+        e.prevent_default();
+        (*delayed_dispatch.borrow())();
+        let btn = mouse_btn_cast(e.button());
+        events.push(Event::MouseUp { btn });
+    });
+}
 
-    add_mouse_listener(
-        win,
-        "mouseup",
-        last_pos.clone(),
-        |canvas, events, last_pos, e: MouseEvent| {
-            e.stop_propagation();
-            e.prevent_default();
-            let btn = mouse_btn_cast(e.button());
-            let pos = get_mouse_xy(
-                &canvas, e,     // *captured.borrow(),
-                false, // TODO captured mouse
-                last_pos,
-            );
-            canvas.focus();
-            events.push(Event::MouseUp { btn, pos });
-        },
-    );
+fn listen_mouse_down(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
+    add_mouse_listener(win, "mousedown", move |canvas, events, e: MouseEvent| {
+        e.stop_propagation();
+        e.prevent_default();
+        (*delayed_dispatch.borrow())();
+        canvas.focus();
+        let btn = mouse_btn_cast(e.button());
+        events.push(Event::MouseDown { btn });
+    });
+}
 
-    add_mouse_listener(
-        win,
-        "mousedown",
-        last_pos.clone(),
-        |canvas, events, last_pos, e: MouseEvent| {
-            e.stop_propagation();
-            e.prevent_default();
-            let btn = mouse_btn_cast(e.button());
-            let pos = get_mouse_xy(
-                &canvas, e,     // *captured.borrow(),
-                false, // TODO captured mouse
-                last_pos,
-            );
-            canvas.focus();
-            events.push(Event::MouseDown { btn, pos });
-        },
-    );
+fn listen_mouse_leave(win: &mut WebWindow) {
+    add_mouse_listener(win, "mouseout", |canvas, events, e: MouseEvent| {
+        e.stop_propagation();
+        e.prevent_default();
+        events.push(Event::MouseLeave);
+    });
+}
 
-    add_mouse_listener(
-        win,
-        "mouseout",
-        last_pos.clone(),
-        |canvas, events, last_pos, e: MouseEvent| {
-            e.stop_propagation();
-            e.prevent_default();
-            let (x, y) = canvas_position_from_global(&canvas, e);
-            events.push(Event::MouseLeave {
-                pos: vec2(x as _, y as _),
-            });
-        },
-    );
+fn listen_mouse_enter(win: &mut WebWindow) {
+    add_mouse_listener(win, "mouseover", |canvas, events, e: MouseEvent| {
+        e.stop_propagation();
+        e.prevent_default();
+        events.push(Event::MouseEnter);
+    });
+}
 
-    add_mouse_listener(
-        win,
-        "mouseover",
-        last_pos.clone(),
-        |canvas, events, last_pos, e: MouseEvent| {
-            e.stop_propagation();
-            e.prevent_default();
-            let (x, y) = canvas_position_from_global(&canvas, e);
-            events.push(Event::MouseEnter {
-                pos: vec2(x as _, y as _),
-            });
-        },
-    );
-
+fn listen_wheel(win: &mut WebWindow) {
     let events = win.events.clone();
     let wheel_evt = canvas_add_event_listener(&win.canvas, "wheel", move |e: WheelEvent| {
         e.stop_propagation();
@@ -124,8 +85,37 @@ pub(crate) fn enable_mouse(
     })
     .unwrap();
     std::mem::forget(wheel_evt);
+}
 
-    // TODO [pointerlockchange] event
+fn listen_cursor_captured(win: &mut WebWindow) {
+    let cursor_locked = win.cursor_locked.clone();
+    let doc = win.document.clone();
+    let canvas = win.canvas.clone();
+    let evt = document_add_event_listener("pointerlockchange", move |_: WEvent| {
+        match doc.pointer_lock_element() {
+            Some(el) => {
+                *cursor_locked.borrow_mut() = el.id() == canvas.id();
+            }
+            _ => {
+                *cursor_locked.borrow_mut() = false;
+            }
+        }
+    })
+    .unwrap();
+    std::mem::forget(evt);
+}
+
+pub(crate) fn enable_input_events(win: &mut WebWindow) {
+    let delayed_dispatch = create_delayed_event_handler(win);
+
+    // mouse and cursor
+    listen_mouse_down(win, delayed_dispatch.clone());
+    listen_mouse_up(win, delayed_dispatch.clone());
+    listen_mouse_move(win);
+    listen_mouse_enter(win);
+    listen_mouse_leave(win);
+    listen_wheel(win);
+    listen_cursor_captured(win);
 }
 
 fn get_mouse_xy(
@@ -153,4 +143,18 @@ fn mouse_btn_cast(btn: i16) -> MouseButton {
         4 => MouseButton::Forward,
         _ => MouseButton::Unknown,
     }
+}
+
+// Handle events that needs to be executed after an user's action bc browser's security
+fn create_delayed_event_handler(win: &mut WebWindow) -> Rc<RefCell<dyn Fn()>> {
+    let canvas = win.canvas.clone();
+    let doc = win.document.clone();
+    let cursor_lock_request = win.cursor_lock_request.clone();
+    Rc::new(RefCell::new(move || {
+        match cursor_lock_request.borrow_mut().take() {
+            Some(true) => canvas.request_pointer_lock(),
+            Some(false) => doc.exit_pointer_lock(),
+            _ => {}
+        }
+    }))
 }

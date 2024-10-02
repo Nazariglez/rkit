@@ -8,7 +8,7 @@ use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode as WKeyCode, PhysicalKey};
-use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
+use winit::window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId};
 
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
@@ -37,6 +37,9 @@ pub(crate) struct WinitBackend {
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
+
+    cursor_locked: bool,
+    cursor_visible: bool,
 
     #[cfg(feature = "gamepad")]
     gilrs: GilrsBackend,
@@ -178,6 +181,49 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         &self.mouse_state
     }
 
+    fn set_cursor_lock(&mut self, lock: bool) {
+        if self.cursor_locked == lock {
+            return;
+        }
+
+        let is_macos = cfg!(target_os = "macos");
+        if is_macos {
+            log::warn!("Cursor Lock is not implemented on MacOS yet.");
+            return;
+        }
+
+        let mode = if lock {
+            CursorGrabMode::Confined
+        } else {
+            CursorGrabMode::None
+        };
+
+        let res = self.window.as_mut().unwrap().set_cursor_grab(mode);
+        if let Err(err) = res {
+            log::warn!("Error locking cursor: {}", err.to_string());
+            return;
+        }
+
+        self.cursor_locked = lock;
+    }
+
+    fn is_cursor_locked(&self) -> bool {
+        self.cursor_locked
+    }
+
+    fn set_cursor_visible(&mut self, visible: bool) {
+        if self.cursor_visible == visible {
+            return;
+        }
+
+        self.window.as_mut().unwrap().set_cursor_visible(visible);
+        self.cursor_visible = visible;
+    }
+
+    fn is_cursor_visible(&self) -> bool {
+        self.cursor_visible
+    }
+
     #[inline]
     fn keyboard_state(&self) -> &KeyboardState {
         debug_assert!(self.window.is_some(), "Window must be present");
@@ -273,7 +319,16 @@ impl<S> ApplicationHandler for Runner<S> {
 
                 bck.mouse_state.position = pos;
                 bck.mouse_state.motion_delta = motion_delta;
-                bck.mouse_state.moving = true;
+                if motion_delta.x != 0.0 || motion_delta.y != 0.0 {
+                    bck.mouse_state.moving = true;
+                }
+                bck.mouse_state.cursor_on_screen = true;
+            }
+            WindowEvent::CursorEntered { .. } => {
+                get_mut_backend().mouse_state.cursor_on_screen = true;
+            }
+            WindowEvent::CursorLeft { .. } => {
+                get_mut_backend().mouse_state.cursor_on_screen = false;
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let mut bck = get_mut_backend();

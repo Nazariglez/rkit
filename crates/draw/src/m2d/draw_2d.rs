@@ -6,7 +6,7 @@ use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
 use crate::m2d::text::Text2D;
 use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
-use crate::{BaseCam2D, Camera2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
+use crate::{BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
 use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
@@ -227,8 +227,8 @@ impl Draw2D {
             groups.push(get_mut_text_system().bind_group(&pipeline).clone());
         }
 
-        let vbo_start = (self.vertices.len() as u64 * 4);
-        let ebo_start = (self.indices.len() as u64 * 4);
+        let vbo_start = self.vertices.len() as u64 * 4;
+        let ebo_start = self.indices.len() as u64 * 4;
 
         let batch = BatchInfo {
             vbo_range: vbo_start..vbo_start,

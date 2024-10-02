@@ -29,6 +29,8 @@ pub(crate) struct WebWindow {
     pub config: WindowConfig,
     pub raf: RafType,
     pub events: Rc<RefCell<EventIterator>>,
+    pub cursor_locked: Rc<RefCell<bool>>,
+    pub cursor_lock_request: Rc<RefCell<Option<bool>>>,
 }
 
 impl HasWindowHandle for WebWindow {
@@ -76,6 +78,8 @@ impl WebWindow {
         set_size_dpi(&canvas, width, height);
 
         let events = Rc::new(RefCell::new(EventIterator::default()));
+        let cursor_locked = Rc::new(RefCell::new(false));
+        let cursor_lock_request = Rc::new(RefCell::new(None));
 
         let mut win = Self {
             canvas,
@@ -86,9 +90,11 @@ impl WebWindow {
             config,
             raf,
             events,
+            cursor_locked,
+            cursor_lock_request,
         };
 
-        enable_mouse(&mut win);
+        enable_input_events(&mut win);
 
         Ok(win)
     }

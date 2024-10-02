@@ -1,4 +1,4 @@
-use crate::backend::{get_backend, BackendImpl};
+use crate::backend::{get_backend, get_mut_backend, BackendImpl};
 use crate::math::Vec2;
 
 #[cfg(feature = "gamepad")]
@@ -82,6 +82,42 @@ pub fn is_mouse_moving() -> bool {
 #[inline]
 pub fn is_mouse_scrolling() -> bool {
     get_backend().mouse_state().is_scrolling()
+}
+
+// -- Cursor
+#[inline]
+pub fn is_cursor_on_screen() -> bool {
+    get_backend().mouse_state().is_cursor_on_screen()
+}
+
+#[inline]
+pub fn is_cursor_locked() -> bool {
+    get_backend().is_cursor_locked()
+}
+
+#[inline]
+pub fn lock_cursor() {
+    get_mut_backend().set_cursor_lock(true);
+}
+
+#[inline]
+pub fn unlock_cursor() {
+    get_mut_backend().set_cursor_lock(false);
+}
+
+#[inline]
+pub fn hide_cursor() {
+    get_mut_backend().set_cursor_visible(false);
+}
+
+#[inline]
+pub fn show_cursor() {
+    get_mut_backend().set_cursor_visible(true);
+}
+
+#[inline]
+pub fn is_cursor_visible() -> bool {
+    get_backend().is_cursor_visible()
 }
 
 // -- Keyboard

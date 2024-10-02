@@ -116,24 +116,25 @@ impl WebBackend {
 
         let mut events = self.win.as_mut().unwrap().events.take();
         while let Some(evt) = events.next() {
-            log::warn!("{:?}", evt);
+            // log::warn!("{:?}", evt);
             match evt {
                 MouseMove { pos, delta } => {
                     self.mouse_state.position = pos;
                     self.mouse_state.moving = true;
                     self.mouse_state.motion_delta = delta;
+                    self.mouse_state.cursor_on_screen = true;
                 }
-                MouseDown { btn, pos } => {
+                MouseDown { btn } => {
                     self.mouse_state.press(btn);
                 }
-                MouseUp { btn, pos } => {
+                MouseUp { btn } => {
                     self.mouse_state.release(btn);
                 }
-                MouseEnter { pos } => {
-                    // TODO mouse enter
+                MouseEnter => {
+                    self.mouse_state.cursor_on_screen = true;
                 }
-                MouseLeave { pos } => {
-                    // TODO mouse leave
+                MouseLeave => {
+                    self.mouse_state.cursor_on_screen = false;
                 }
                 MouseWheel { delta } => {
                     self.mouse_state.wheel_delta = delta;
@@ -201,6 +202,45 @@ impl BackendImpl<GfxBackend> for WebBackend {
     // input
     fn mouse_state(&self) -> &MouseState {
         &self.mouse_state
+    }
+
+    fn set_cursor_lock(&mut self, lock: bool) {
+        if self.is_cursor_locked() == lock {
+            return;
+        }
+
+        self.win
+            .as_mut()
+            .unwrap()
+            .cursor_lock_request
+            .replace(Some(lock));
+    }
+
+    fn is_cursor_locked(&self) -> bool {
+        self.win
+            .as_ref()
+            .map_or(false, |w| *w.cursor_locked.borrow())
+    }
+    fn set_cursor_visible(&mut self, visible: bool) {
+        // TODO store last mode to put it back instead of default
+        let mode = if visible { "default" } else { "none" };
+        self.win
+            .as_mut()
+            .unwrap()
+            .canvas
+            .style()
+            .set_property("cursor", mode);
+    }
+    fn is_cursor_visible(&self) -> bool {
+        let current = self
+            .win
+            .as_ref()
+            .unwrap()
+            .canvas
+            .style()
+            .get_property_value("cursor")
+            .unwrap_or_default();
+        current != "none"
     }
     fn keyboard_state(&self) -> &KeyboardState {
         todo!()
