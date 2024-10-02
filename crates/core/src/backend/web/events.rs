@@ -1,8 +1,9 @@
-use crate::input::MouseButton;
+use crate::input::{KeyCode, MouseButton};
 use crate::math::Vec2;
+use smol_str::SmolStr;
 use std::collections::VecDeque;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Event {
     MouseMove { pos: Vec2, delta: Vec2 },
     MouseUp { btn: MouseButton },
@@ -10,6 +11,9 @@ pub enum Event {
     MouseWheel { delta: Vec2 },
     MouseEnter,
     MouseLeave,
+    KeyUp { key: KeyCode },
+    KeyDown { key: KeyCode },
+    CharReceived { text: SmolStr },
 }
 
 /// Event iterator queue

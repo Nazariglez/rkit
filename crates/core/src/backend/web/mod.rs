@@ -86,14 +86,22 @@ impl<S> Runner<S> {
     fn tick(&mut self) {
         time::tick();
 
-        // process events
-        get_mut_backend().process_events();
+        // pre frame
+        {
+            let mut bck = get_mut_backend();
+            bck.process_events();
+            bck.gfx().prepare_frame();
+        }
 
-        get_mut_backend().gfx().prepare_frame();
         (*self.update)(&mut self.state);
-        get_mut_backend().gfx().present_frame();
 
-        get_mut_backend().mouse_state.tick();
+        // post frame
+        {
+            let mut bck = get_mut_backend();
+            bck.gfx().present_frame();
+            bck.mouse_state.tick();
+            bck.keyboard_state.tick();
+        }
     }
 }
 
@@ -104,6 +112,7 @@ pub(crate) struct WebBackend {
     gfx: Option<GfxBackend>,
 
     pub(crate) mouse_state: MouseState,
+    pub(crate) keyboard_state: KeyboardState,
 }
 
 // hackish to allow the Lazy<T>, this is fine because wasm32 is not multithread
@@ -116,7 +125,6 @@ impl WebBackend {
 
         let mut events = self.win.as_mut().unwrap().events.take();
         while let Some(evt) = events.next() {
-            // log::warn!("{:?}", evt);
             match evt {
                 MouseMove { pos, delta } => {
                     self.mouse_state.position = pos;
@@ -140,7 +148,15 @@ impl WebBackend {
                     self.mouse_state.wheel_delta = delta;
                     self.mouse_state.scrolling = true;
                 }
-                _ => {}
+                KeyUp { key } => {
+                    self.keyboard_state.release(key);
+                }
+                KeyDown { key } => {
+                    self.keyboard_state.press(key);
+                }
+                CharReceived { text } => {
+                    self.keyboard_state.add_text(text.as_str());
+                }
             }
         }
     }
@@ -243,7 +259,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
         current != "none"
     }
     fn keyboard_state(&self) -> &KeyboardState {
-        todo!()
+        &self.keyboard_state
     }
 
     #[cfg(feature = "gamepad")]

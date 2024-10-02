@@ -1,6 +1,6 @@
 - todo:
     * use encase crate to comply with std140
-    * custom shaders, blending, and masking, uniforms?
+    * blending, and masking
     * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)
     * points and to_owned/cache
     * multisampling? mipmapping?
@@ -10,7 +10,7 @@
     * fix event callbacks (s: &mut state), split update and draw?
     * Assets/resources loading
     * gamepad for wasm32
-    * input wasm32
+    * input wasm32 (compositionend events to get ime/chars)
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
     * puffin profiling?
     * create_font should have a ".pixelated()" option to use a second mask_texture with Nearest filter
@@ -22,15 +22,17 @@
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
+    * complex chars like áéí etc... don't work on wasm, we need to use composition events on a hidden input elements
     * local transform2d is not working right for star (or/and path2d?)
     * linux not working because issues with surface size? (fix asap)
-    * webgl not working
-    * stencil must be done in one pass
+    * stencil must be done in one pass?
     * resize doesn't update the surface/offscreen
     * gfx_render_texture looks a bit weird when textures overlap, like darker colors?
+    * no clipboard support?
 
 * License section
 We need to include the licence of any asset on the readme or somewhere, and make it clear
 that if the user uses it then it should includes the licence along with the final binary
     * arcade-legacy font
-    * ferris by Esther Arzola -> https://www.behance.net/gallery/89117181/Ferris-the-professional
+    * ferris on examples by Esther Arzola -> https://www.behance.net/gallery/89117181/Ferris-the-professional
+    * Ubuntu-B font on examples

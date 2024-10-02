@@ -2,13 +2,12 @@ use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::input::{
     hide_cursor, is_cursor_locked, is_cursor_on_screen, is_cursor_visible, is_key_pressed,
-    is_mouse_btn_down, is_mouse_btn_pressed, is_mouse_moving, is_mouse_scrolling, lock_cursor,
-    mouse_btns_pressed, mouse_btns_released, mouse_motion_delta, mouse_position, mouse_wheel_delta,
-    show_cursor, unlock_cursor, KeyCode, MouseButton,
+    is_mouse_btn_down, is_mouse_moving, is_mouse_scrolling, lock_cursor, mouse_btns_pressed,
+    mouse_btns_released, mouse_motion_delta, mouse_position, mouse_wheel_delta, show_cursor,
+    unlock_cursor, KeyCode, MouseButton,
 };
-use rkit::math::vec2;
+use rkit::math::{vec2, Vec2};
 use rkit::ring_buffer::RingBuffer;
-use std::fmt::format;
 
 struct State {
     ring_buffer: RingBuffer<String, 5>,
@@ -106,16 +105,29 @@ fn update(state: &mut State) {
         text.push_str(&format!("{}. {}\n", i + 1, s));
     });
 
-    draw.text(&text).position(vec2(10.0, 10.0));
+    draw.text(&text).position(vec2(20.0, 10.0));
 
-    // TODO use Key inputs to lock/unlock cursor and to hide/show cursor
-    if is_mouse_btn_pressed(MouseButton::Right) {
+    // actions
+    if is_key_pressed(KeyCode::Space) {
         if is_cursor_visible {
             hide_cursor();
         } else {
             show_cursor();
         }
     }
+
+    if is_key_pressed(KeyCode::KeyL) {
+        if is_cursor_locked {
+            unlock_cursor();
+        } else {
+            lock_cursor();
+        }
+    }
+
+    draw.text("Press SPACE to show/hide cursor and L to lock/unlock it.")
+        .translate(vec2(400.0, 550.0))
+        .anchor(Vec2::splat(0.5))
+        .size(10.0);
 
     gfx::render_to_frame(&draw).unwrap();
 }

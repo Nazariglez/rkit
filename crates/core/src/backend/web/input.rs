@@ -3,12 +3,13 @@ use super::utils::{
     canvas_add_event_listener, canvas_position_from_global, document_add_event_listener,
 };
 use super::window::WebWindow;
-use crate::input::MouseButton;
+use crate::input::{KeyCode, MouseButton};
 use crate::math::{IVec2, Vec2};
 use glam::vec2;
+use smol_str::SmolStr;
 use std::cell::RefCell;
 use std::rc::Rc;
-use web_sys::{Event as WEvent, HtmlCanvasElement, MouseEvent, WheelEvent};
+use web_sys::{Event as WEvent, HtmlCanvasElement, KeyboardEvent, MouseEvent, WheelEvent};
 
 pub(crate) fn add_mouse_listener<F, E>(win: &WebWindow, name: &str, mut handler: F)
 where
@@ -105,6 +106,27 @@ fn listen_cursor_captured(win: &mut WebWindow) {
     std::mem::forget(evt);
 }
 
+fn listen_key_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
+    add_mouse_listener(win, "keyup", move |canvas, events, e: KeyboardEvent| {
+        (*delayed_dispatch.borrow())();
+        let key = keyboard_code_cast(&e.code());
+        events.push(Event::KeyUp { key });
+    });
+}
+
+fn listen_key_down(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
+    add_mouse_listener(win, "keydown", move |canvas, events, e: KeyboardEvent| {
+        (*delayed_dispatch.borrow())();
+        let key = keyboard_code_cast(&e.code());
+        events.push(Event::KeyDown { key });
+
+        // TODO improve this with a hidden input and composition events
+        if let Some(text) = text_from_keyboard_event(&e.key()) {
+            events.push(Event::CharReceived { text })
+        }
+    });
+}
+
 pub(crate) fn enable_input_events(win: &mut WebWindow) {
     let delayed_dispatch = create_delayed_event_handler(win);
 
@@ -116,6 +138,10 @@ pub(crate) fn enable_input_events(win: &mut WebWindow) {
     listen_mouse_leave(win);
     listen_wheel(win);
     listen_cursor_captured(win);
+
+    // keyboard
+    listen_key_down(win, delayed_dispatch.clone());
+    listen_key_up(win, delayed_dispatch.clone());
 }
 
 fn get_mouse_xy(
@@ -157,4 +183,251 @@ fn create_delayed_event_handler(win: &mut WebWindow) -> Rc<RefCell<dyn Fn()>> {
             _ => {}
         }
     }))
+}
+
+pub fn keyboard_code_cast(code: &str) -> KeyCode {
+    match code {
+        "Backquote" => KeyCode::Backquote,
+        "Backslash" => KeyCode::Backslash,
+        "BracketLeft" => KeyCode::BracketLeft,
+        "BracketRight" => KeyCode::BracketRight,
+        "Comma" => KeyCode::Comma,
+        "Digit0" => KeyCode::Digit0,
+        "Digit1" => KeyCode::Digit1,
+        "Digit2" => KeyCode::Digit2,
+        "Digit3" => KeyCode::Digit3,
+        "Digit4" => KeyCode::Digit4,
+        "Digit5" => KeyCode::Digit5,
+        "Digit6" => KeyCode::Digit6,
+        "Digit7" => KeyCode::Digit7,
+        "Digit8" => KeyCode::Digit8,
+        "Digit9" => KeyCode::Digit9,
+        "Equal" => KeyCode::Equal,
+        "IntlBackslash" => KeyCode::IntlBackslash,
+        "IntlRo" => KeyCode::IntlRo,
+        "IntlYen" => KeyCode::IntlYen,
+        "KeyA" => KeyCode::KeyA,
+        "KeyB" => KeyCode::KeyB,
+        "KeyC" => KeyCode::KeyC,
+        "KeyD" => KeyCode::KeyD,
+        "KeyE" => KeyCode::KeyE,
+        "KeyF" => KeyCode::KeyF,
+        "KeyG" => KeyCode::KeyG,
+        "KeyH" => KeyCode::KeyH,
+        "KeyI" => KeyCode::KeyI,
+        "KeyJ" => KeyCode::KeyJ,
+        "KeyK" => KeyCode::KeyK,
+        "KeyL" => KeyCode::KeyL,
+        "KeyM" => KeyCode::KeyM,
+        "KeyN" => KeyCode::KeyN,
+        "KeyO" => KeyCode::KeyO,
+        "KeyP" => KeyCode::KeyP,
+        "KeyQ" => KeyCode::KeyQ,
+        "KeyR" => KeyCode::KeyR,
+        "KeyS" => KeyCode::KeyS,
+        "KeyT" => KeyCode::KeyT,
+        "KeyU" => KeyCode::KeyU,
+        "KeyV" => KeyCode::KeyV,
+        "KeyW" => KeyCode::KeyW,
+        "KeyX" => KeyCode::KeyX,
+        "KeyY" => KeyCode::KeyY,
+        "KeyZ" => KeyCode::KeyZ,
+        "Minus" => KeyCode::Minus,
+        "Period" => KeyCode::Period,
+        "Quote" => KeyCode::Quote,
+        "Semicolon" => KeyCode::Semicolon,
+        "Slash" => KeyCode::Slash,
+        "AltLeft" => KeyCode::AltLeft,
+        "AltRight" => KeyCode::AltRight,
+        "Backspace" => KeyCode::Backspace,
+        "CapsLock" => KeyCode::CapsLock,
+        "ContextMenu" => KeyCode::ContextMenu,
+        "ControlLeft" => KeyCode::ControlLeft,
+        "ControlRight" => KeyCode::ControlRight,
+        "Enter" => KeyCode::Enter,
+        "MetaLeft" => KeyCode::SuperLeft,
+        "MetaRight" => KeyCode::SuperRight,
+        "ShiftLeft" => KeyCode::ShiftLeft,
+        "ShiftRight" => KeyCode::ShiftRight,
+        "Space" => KeyCode::Space,
+        "Tab" => KeyCode::Tab,
+        "Convert" => KeyCode::Convert,
+        "KanaMode" => KeyCode::KanaMode,
+        "Lang1" => KeyCode::Lang1,
+        "Lang2" => KeyCode::Lang2,
+        "Lang3" => KeyCode::Lang3,
+        "Lang4" => KeyCode::Lang4,
+        "Lang5" => KeyCode::Lang5,
+        "NonConvert" => KeyCode::NonConvert,
+        "Delete" => KeyCode::Delete,
+        "End" => KeyCode::End,
+        "Help" => KeyCode::Help,
+        "Home" => KeyCode::Home,
+        "Insert" => KeyCode::Insert,
+        "PageDown" => KeyCode::PageDown,
+        "PageUp" => KeyCode::PageUp,
+        "ArrowDown" => KeyCode::ArrowDown,
+        "ArrowLeft" => KeyCode::ArrowLeft,
+        "ArrowRight" => KeyCode::ArrowRight,
+        "ArrowUp" => KeyCode::ArrowUp,
+        "NumLock" => KeyCode::NumLock,
+        "Numpad0" => KeyCode::Numpad0,
+        "Numpad1" => KeyCode::Numpad1,
+        "Numpad2" => KeyCode::Numpad2,
+        "Numpad3" => KeyCode::Numpad3,
+        "Numpad4" => KeyCode::Numpad4,
+        "Numpad5" => KeyCode::Numpad5,
+        "Numpad6" => KeyCode::Numpad6,
+        "Numpad7" => KeyCode::Numpad7,
+        "Numpad8" => KeyCode::Numpad8,
+        "Numpad9" => KeyCode::Numpad9,
+        "NumpadAdd" => KeyCode::NumpadAdd,
+        "NumpadBackspace" => KeyCode::NumpadBackspace,
+        "NumpadClear" => KeyCode::NumpadClear,
+        "NumpadClearEntry" => KeyCode::NumpadClearEntry,
+        "NumpadComma" => KeyCode::NumpadComma,
+        "NumpadDecimal" => KeyCode::NumpadDecimal,
+        "NumpadDivide" => KeyCode::NumpadDivide,
+        "NumpadEnter" => KeyCode::NumpadEnter,
+        "NumpadEqual" => KeyCode::NumpadEqual,
+        "NumpadHash" => KeyCode::NumpadHash,
+        "NumpadMemoryAdd" => KeyCode::NumpadMemoryAdd,
+        "NumpadMemoryClear" => KeyCode::NumpadMemoryClear,
+        "NumpadMemoryRecall" => KeyCode::NumpadMemoryRecall,
+        "NumpadMemoryStore" => KeyCode::NumpadMemoryStore,
+        "NumpadMemorySubtract" => KeyCode::NumpadMemorySubtract,
+        "NumpadMultiply" => KeyCode::NumpadMultiply,
+        "NumpadParenLeft" => KeyCode::NumpadParenLeft,
+        "NumpadParenRight" => KeyCode::NumpadParenRight,
+        "NumpadStar" => KeyCode::NumpadStar,
+        "NumpadSubtract" => KeyCode::NumpadSubtract,
+        "Escape" => KeyCode::Escape,
+        "Fn" => KeyCode::Fn,
+        "FnLock" => KeyCode::FnLock,
+        "PrintScreen" => KeyCode::PrintScreen,
+        "ScrollLock" => KeyCode::ScrollLock,
+        "Pause" => KeyCode::Pause,
+        "BrowserBack" => KeyCode::BrowserBack,
+        "BrowserFavorites" => KeyCode::BrowserFavorites,
+        "BrowserForward" => KeyCode::BrowserForward,
+        "BrowserHome" => KeyCode::BrowserHome,
+        "BrowserRefresh" => KeyCode::BrowserRefresh,
+        "BrowserSearch" => KeyCode::BrowserSearch,
+        "BrowserStop" => KeyCode::BrowserStop,
+        "Eject" => KeyCode::Eject,
+        "LaunchApp1" => KeyCode::LaunchApp1,
+        "LaunchApp2" => KeyCode::LaunchApp2,
+        "LaunchMail" => KeyCode::LaunchMail,
+        "MediaPlayPause" => KeyCode::MediaPlayPause,
+        "MediaSelect" => KeyCode::MediaSelect,
+        "MediaStop" => KeyCode::MediaStop,
+        "MediaTrackNext" => KeyCode::MediaTrackNext,
+        "MediaTrackPrevious" => KeyCode::MediaTrackPrevious,
+        "Power" => KeyCode::Power,
+        "Sleep" => KeyCode::Sleep,
+        "AudioVolumeDown" => KeyCode::AudioVolumeDown,
+        "AudioVolumeMute" => KeyCode::AudioVolumeMute,
+        "AudioVolumeUp" => KeyCode::AudioVolumeUp,
+        "WakeUp" => KeyCode::WakeUp,
+        "Hyper" => KeyCode::Hyper,
+        "Turbo" => KeyCode::Turbo,
+        "Abort" => KeyCode::Abort,
+        "Resume" => KeyCode::Resume,
+        "Suspend" => KeyCode::Suspend,
+        "Again" => KeyCode::Again,
+        "Copy" => KeyCode::Copy,
+        "Cut" => KeyCode::Cut,
+        "Find" => KeyCode::Find,
+        "Open" => KeyCode::Open,
+        "Paste" => KeyCode::Paste,
+        "Props" => KeyCode::Props,
+        "Select" => KeyCode::Select,
+        "Undo" => KeyCode::Undo,
+        "Hiragana" => KeyCode::Hiragana,
+        "Katakana" => KeyCode::Katakana,
+        "F1" => KeyCode::F1,
+        "F2" => KeyCode::F2,
+        "F3" => KeyCode::F3,
+        "F4" => KeyCode::F4,
+        "F5" => KeyCode::F5,
+        "F6" => KeyCode::F6,
+        "F7" => KeyCode::F7,
+        "F8" => KeyCode::F8,
+        "F9" => KeyCode::F9,
+        "F10" => KeyCode::F10,
+        "F11" => KeyCode::F11,
+        "F12" => KeyCode::F12,
+        "F13" => KeyCode::F13,
+        "F14" => KeyCode::F14,
+        "F15" => KeyCode::F15,
+        "F16" => KeyCode::F16,
+        "F17" => KeyCode::F17,
+        "F18" => KeyCode::F18,
+        "F19" => KeyCode::F19,
+        "F20" => KeyCode::F20,
+        "F21" => KeyCode::F21,
+        "F22" => KeyCode::F22,
+        "F23" => KeyCode::F23,
+        "F24" => KeyCode::F24,
+        "F25" => KeyCode::F25,
+        "F26" => KeyCode::F26,
+        "F27" => KeyCode::F27,
+        "F28" => KeyCode::F28,
+        "F29" => KeyCode::F29,
+        "F30" => KeyCode::F30,
+        "F31" => KeyCode::F31,
+        "F32" => KeyCode::F32,
+        "F33" => KeyCode::F33,
+        "F34" => KeyCode::F34,
+        "F35" => KeyCode::F35,
+        _ => KeyCode::Unknown,
+    }
+}
+
+fn is_fn_key(key: &str) -> bool {
+    key.starts_with('F') && key.len() >= 2
+}
+
+const CONTROL_KEYS: [&'static str; 25] = [
+    "Alt",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "Backspace",
+    "CapsLock",
+    "ContextMenu",
+    "Control",
+    "Dead",
+    "Delete",
+    "End",
+    "Esc",
+    "Escape",
+    "GroupNext",
+    "Help",
+    "Home",
+    "Insert",
+    "Meta",
+    "NumLock",
+    "PageDown",
+    "PageUp",
+    "Pause",
+    "ScrollLock",
+    "Shift",
+];
+
+fn is_ctrl_key(key: &str) -> bool {
+    CONTROL_KEYS.contains(&key)
+}
+
+fn text_from_keyboard_event(key: &str) -> Option<SmolStr> {
+    if is_fn_key(key) || is_ctrl_key(key) {
+        return None;
+    }
+
+    Some(match key {
+        "Enter" => SmolStr::new("\r"),
+        "Tab" => SmolStr::new("\t"),
+        _ => SmolStr::new(key),
+    })
 }
