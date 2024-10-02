@@ -10,10 +10,11 @@
     * fix event callbacks (s: &mut state), split update and draw?
     * Assets/resources loading
     * gamepad for wasm32
-    * input wasm32 (compositionend events to get ime/chars)
+    * input wasm32 (compositionend events to get ime/chars) -> https://stackoverflow.com/questions/51226598/what-is-javascripts-compositionevent-please-give-examples
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
     * puffin profiling?
     * create_font should have a ".pixelated()" option to use a second mask_texture with Nearest filter
+    * touch support
 
 - questions:
     * should we use `offset` or `origin` instead of `position` to set elements in the screen and `position` instead of `translate`?
@@ -22,6 +23,7 @@
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
+    * on wasm32 leaving fullscreen mode do not restore previous size
     * complex chars like áéí etc... don't work on wasm, we need to use composition events on a hidden input elements
     * local transform2d is not working right for star (or/and path2d?)
     * linux not working because issues with surface size? (fix asap)

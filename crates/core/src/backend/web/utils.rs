@@ -20,6 +20,8 @@ pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) 
     canvas.set_width(ww as _);
     canvas.set_height(hh as _);
 
+    log::warn!("set_size_dpi: {:?}, {:?}", ww, hh);
+
     if let Err(e) = canvas.style().set_property("width", &format!("{width}px")) {
         log::error!("{e:?}");
     }

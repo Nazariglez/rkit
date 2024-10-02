@@ -157,6 +157,9 @@ impl WebBackend {
                 CharReceived { text } => {
                     self.keyboard_state.add_text(text.as_str());
                 }
+                WindowResize { size } => {
+                    self.gfx.as_mut().unwrap().resize(size.x, size.y);
+                }
             }
         }
     }
@@ -188,10 +191,10 @@ impl BackendImpl<GfxBackend> for WebBackend {
         todo!()
     }
     fn is_fullscreen(&self) -> bool {
-        todo!()
+        self.win.as_ref().unwrap().is_fullscreen()
     }
     fn toggle_fullscreen(&mut self) {
-        todo!()
+        self.win.as_mut().unwrap().toggle_fullscreen();
     }
     fn dpi(&self) -> f32 {
         todo!()

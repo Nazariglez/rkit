@@ -1,11 +1,12 @@
 use super::events::{Event, EventIterator};
 use super::utils::{
     canvas_add_event_listener, canvas_position_from_global, document_add_event_listener,
+    set_size_dpi, window_add_event_listener,
 };
 use super::window::WebWindow;
 use crate::input::{KeyCode, MouseButton};
 use crate::math::{IVec2, Vec2};
-use glam::vec2;
+use glam::{uvec2, vec2};
 use smol_str::SmolStr;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -127,6 +128,63 @@ fn listen_key_down(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>)
     });
 }
 
+fn listen_fullscreen_change(win: &mut WebWindow) {
+    let def_size = win.config.size;
+    let canvas = win.canvas.clone();
+    let doc = win.document.clone();
+    let events = win.events.clone();
+    let last_size = win.fullscreen_last_size.clone();
+    let evt = window_add_event_listener("fullscreenchange", move |_: WEvent| {
+        let size = if doc.fullscreen() {
+            uvec2(canvas.client_width() as _, canvas.client_height() as _)
+        } else {
+            match *last_size.borrow() {
+                Some(size) => size,
+                _ => {
+                    // fallback to initial size
+                    log::error!("Cannot restore size from fullscreen mode.");
+                    def_size
+                }
+            }
+        };
+        log::warn!("last: {:?} -> to: {:?}", last_size.borrow(), size);
+        // TODO last_size not working when leaving fullscreen mode?
+        set_size_dpi(&canvas, size.x, size.y);
+        events.borrow_mut().push(Event::WindowResize { size });
+    });
+    std::mem::forget(evt);
+}
+
+fn listen_resize_win(win: &mut WebWindow) {
+    if !win.config.resizable {
+        return;
+    }
+
+    let min = win.config.min_size;
+    let max = win.config.max_size;
+    let canvas = win.canvas.clone();
+    let parent = win.parent.clone();
+    let events = win.events.clone();
+
+    let evt = window_add_event_listener("resize", move |_: WEvent| {
+        let parent_size = uvec2(parent.client_width() as _, parent.client_height() as _);
+        if let Some(min) = min {
+            parent_size.min(min);
+        }
+
+        if let Some(max) = max {
+            parent_size.max(max);
+        }
+
+        log::warn!("2");
+        set_size_dpi(&canvas, parent_size.x, parent_size.y);
+        events
+            .borrow_mut()
+            .push(Event::WindowResize { size: parent_size });
+    });
+    std::mem::forget(evt);
+}
+
 pub(crate) fn enable_input_events(win: &mut WebWindow) {
     let delayed_dispatch = create_delayed_event_handler(win);
 
@@ -142,6 +200,10 @@ pub(crate) fn enable_input_events(win: &mut WebWindow) {
     // keyboard
     listen_key_down(win, delayed_dispatch.clone());
     listen_key_up(win, delayed_dispatch.clone());
+
+    // window events
+    listen_resize_win(win);
+    listen_fullscreen_change(win);
 }
 
 fn get_mouse_xy(
@@ -176,10 +238,27 @@ fn create_delayed_event_handler(win: &mut WebWindow) -> Rc<RefCell<dyn Fn()>> {
     let canvas = win.canvas.clone();
     let doc = win.document.clone();
     let cursor_lock_request = win.cursor_lock_request.clone();
+    let fullscreen_request = win.fullscreen_request.clone();
+    let last_win_size = win.fullscreen_last_size.clone();
     Rc::new(RefCell::new(move || {
+        // Manage cursor lock/unlock requests
         match cursor_lock_request.borrow_mut().take() {
             Some(true) => canvas.request_pointer_lock(),
             Some(false) => doc.exit_pointer_lock(),
+            _ => {}
+        }
+
+        // Manage fullscreen requests
+        match fullscreen_request.borrow_mut().take() {
+            Some(true) => {
+                let size = uvec2(canvas.client_width() as _, canvas.client_height() as _);
+                *last_win_size.borrow_mut() = Some(size);
+                log::warn!("Setting last_size {:?}", last_win_size.borrow());
+                if let Err(e) = canvas.request_fullscreen() {
+                    log::error!("Error requesting fullscreen mode: {:?}", e);
+                }
+            }
+            Some(false) => doc.exit_fullscreen(),
             _ => {}
         }
     }))

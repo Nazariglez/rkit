@@ -31,6 +31,9 @@ pub(crate) struct WebWindow {
     pub events: Rc<RefCell<EventIterator>>,
     pub cursor_locked: Rc<RefCell<bool>>,
     pub cursor_lock_request: Rc<RefCell<Option<bool>>>,
+
+    pub fullscreen_last_size: Rc<RefCell<Option<UVec2>>>,
+    pub fullscreen_request: Rc<RefCell<Option<bool>>>,
 }
 
 impl HasWindowHandle for WebWindow {
@@ -75,11 +78,15 @@ impl WebWindow {
             x: width,
             y: height,
         } = config.size;
+        log::warn!("3");
         set_size_dpi(&canvas, width, height);
 
         let events = Rc::new(RefCell::new(EventIterator::default()));
         let cursor_locked = Rc::new(RefCell::new(false));
         let cursor_lock_request = Rc::new(RefCell::new(None));
+
+        let fullscreen_last_size = Rc::new(RefCell::new(None));
+        let fullscreen_request = Rc::new(RefCell::new(None));
 
         let mut win = Self {
             canvas,
@@ -92,6 +99,8 @@ impl WebWindow {
             events,
             cursor_locked,
             cursor_lock_request,
+            fullscreen_last_size,
+            fullscreen_request,
         };
 
         enable_input_events(&mut win);
@@ -99,7 +108,20 @@ impl WebWindow {
         Ok(win)
     }
 
+    pub fn is_fullscreen(&self) -> bool {
+        // TODO how fast is this? maybe is better to use a Rc<RefCell<bool>>?
+        self.document
+            .fullscreen_element()
+            .map_or(false, |el| &el == self.canvas.as_ref())
+    }
+
+    pub fn toggle_fullscreen(&mut self) {
+        let full = !self.is_fullscreen();
+        self.fullscreen_request.replace(Some(full));
+    }
+
     pub fn set_size(&mut self, width: u32, height: u32) {
+        log::warn!("4");
         set_size_dpi(&self.canvas, width as _, height as _);
         self.config.size = uvec2(width, height);
     }

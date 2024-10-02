@@ -1,5 +1,5 @@
 use crate::input::{KeyCode, MouseButton};
-use crate::math::Vec2;
+use crate::math::{UVec2, Vec2};
 use smol_str::SmolStr;
 use std::collections::VecDeque;
 
@@ -14,6 +14,7 @@ pub enum Event {
     KeyUp { key: KeyCode },
     KeyDown { key: KeyCode },
     CharReceived { text: SmolStr },
+    WindowResize { size: UVec2 },
 }
 
 /// Event iterator queue
