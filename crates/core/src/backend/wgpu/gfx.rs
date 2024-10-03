@@ -1075,7 +1075,10 @@ fn create_texture(
     if !is_depth_texture {
         if let Some(d) = data {
             // TODO, get the bytes_per_row/channles from the TextureFormat instead?
-            let channels = d.bytes.len() as u32 / (d.height * d.width);
+
+            let total = d.width * d.height;
+            debug_assert!(total != 0, "Depth texture width or height cannot be zero.");
+            let channels = d.bytes.len() as u32 / total;
             if !d.bytes.is_empty() {
                 queue.write_texture(
                     wgpu::ImageCopyTexture {

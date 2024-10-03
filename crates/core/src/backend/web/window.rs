@@ -78,7 +78,6 @@ impl WebWindow {
             x: width,
             y: height,
         } = config.size;
-        log::warn!("3");
         set_size_dpi(&canvas, width, height);
 
         let events = Rc::new(RefCell::new(EventIterator::default()));
@@ -121,7 +120,6 @@ impl WebWindow {
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
-        log::warn!("4");
         set_size_dpi(&self.canvas, width as _, height as _);
         self.config.size = uvec2(width, height);
     }

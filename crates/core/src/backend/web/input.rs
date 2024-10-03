@@ -147,8 +147,6 @@ fn listen_fullscreen_change(win: &mut WebWindow) {
                 }
             }
         };
-        log::warn!("last: {:?} -> to: {:?}", last_size.borrow(), size);
-        // TODO last_size not working when leaving fullscreen mode?
         set_size_dpi(&canvas, size.x, size.y);
         events.borrow_mut().push(Event::WindowResize { size });
     });
@@ -167,16 +165,22 @@ fn listen_resize_win(win: &mut WebWindow) {
     let events = win.events.clone();
 
     let evt = window_add_event_listener("resize", move |_: WEvent| {
-        let parent_size = uvec2(parent.client_width() as _, parent.client_height() as _);
+        let mut parent_size = uvec2(parent.client_width() as _, parent.client_height() as _);
+        if parent_size.x == 0 {
+            parent_size.x = canvas.client_width() as _;
+        }
+
+        if parent_size.y == 0 {
+            parent_size.y = canvas.client_height() as _;
+        }
         if let Some(min) = min {
-            parent_size.min(min);
+            parent_size = parent_size.min(min);
         }
 
         if let Some(max) = max {
-            parent_size.max(max);
+            parent_size = parent_size.max(max);
         }
 
-        log::warn!("2");
         set_size_dpi(&canvas, parent_size.x, parent_size.y);
         events
             .borrow_mut()
@@ -253,7 +257,6 @@ fn create_delayed_event_handler(win: &mut WebWindow) -> Rc<RefCell<dyn Fn()>> {
             Some(true) => {
                 let size = uvec2(canvas.client_width() as _, canvas.client_height() as _);
                 *last_win_size.borrow_mut() = Some(size);
-                log::warn!("Setting last_size {:?}", last_win_size.borrow());
                 if let Err(e) = canvas.request_fullscreen() {
                     log::error!("Error requesting fullscreen mode: {:?}", e);
                 }
