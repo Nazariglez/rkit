@@ -205,6 +205,7 @@ dependencies = [
  "atomic_refcell",
  "kira",
  "log",
+ "num",
  "once_cell",
  "rayon",
  "rustc-hash 2.0.0",

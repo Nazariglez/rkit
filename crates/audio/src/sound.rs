@@ -1,10 +1,10 @@
 use kira::sound::static_sound::StaticSoundData;
+use utils::drop_signal::DropObserver;
 
 #[derive(Clone)]
 pub struct SoundInstance {
     pub(crate) id: InstanceId,
     pub(crate) snd: Sound,
-    // pub(crate) drop_observer: DropObserver // TODO
 }
 
 #[derive(Copy, Clone, Default, Eq, PartialEq, Hash)]

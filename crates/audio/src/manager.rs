@@ -4,12 +4,14 @@ use atomic_refcell::AtomicRefCell;
 use kira::manager::error::PlaySoundError;
 use kira::manager::{AudioManager, AudioManagerSettings, DefaultBackend};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
-use kira::sound::PlaybackState;
+use kira::sound::{PlaybackRate, PlaybackState};
 use kira::tween::Tween;
 use kira::Volume;
+use num::Zero;
 use once_cell::sync::Lazy;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
+use utils::drop_signal::DropObserver;
 
 pub(crate) static MANAGER: Lazy<AtomicRefCell<Manager>> =
     Lazy::new(|| AtomicRefCell::new(Manager::default()));
@@ -19,6 +21,14 @@ struct InstanceData {
     raw: StaticSoundData,
     handle: StaticSoundHandle,
     volume: f32,
+    pitch: f32,
+    panning: f32,
+}
+
+impl InstanceData {
+    fn is_stopped(&self) -> bool {
+        matches!(self.handle.state(), PlaybackState::Stopped)
+    }
 }
 
 pub(crate) struct Manager {
@@ -56,7 +66,7 @@ impl Manager {
         }
     }
 
-    pub fn play_sound(&mut self, instance: SoundInstance) {
+    pub fn play_sound(&mut self, instance: SoundInstance, opts: PlayOptions) {
         // if the instance is global then we assign a new id for the current instance
         let id = match instance.id {
             InstanceId::Global => self.next_id(),
@@ -76,9 +86,12 @@ impl Manager {
                 return;
             }
 
-            match self.manager.play(data.raw.clone()) {
+            match self.manager.play(data.raw.with_settings(opts.into())) {
                 Ok(handle) => {
                     data.handle = handle;
+                    data.volume = opts.volume;
+                    data.pitch = opts.volume;
+                    data.panning = opts.volume;
                 }
                 Err(e) => {
                     log::error!("Error playing sound: {}", e.to_string());
@@ -88,13 +101,18 @@ impl Manager {
         }
 
         // No instance with this id found, so create and insert a new one
-        match self.manager.play(instance.snd.raw.clone()) {
+        match self
+            .manager
+            .play(instance.snd.raw.with_settings(opts.into()))
+        {
             Ok(handle) => {
                 let data = InstanceData {
                     id,
                     raw: instance.snd.raw,
                     handle,
-                    volume: 1.0,
+                    volume: opts.volume,
+                    pitch: opts.pitch,
+                    panning: opts.panning,
                 };
                 list.push(data);
             }
@@ -229,14 +247,103 @@ impl Manager {
         })
     }
 
+    pub fn set_sound_pitch(&mut self, instance: SoundInstance, pitch: f32) {
+        let Some(list) = self.instances.get_mut(&instance.snd.id) else {
+            return;
+        };
+
+        match instance.id {
+            InstanceId::Global => {
+                list.iter_mut().for_each(|d| {
+                    d.handle
+                        .set_playback_rate(PlaybackRate::Factor(pitch as _), Tween::default());
+                    d.pitch = pitch;
+                });
+            }
+            InstanceId::Local(id) => {
+                if let Some(data) = list.iter_mut().find(|d| d.id == id) {
+                    data.handle
+                        .set_playback_rate(PlaybackRate::Factor(pitch as _), Tween::default());
+                    data.pitch = pitch;
+                }
+            }
+        }
+    }
+
+    pub fn sound_pitch(&self, instance: SoundInstance) -> Option<f32> {
+        self.instances.get(&instance.snd.id)?.iter().find_map(|d| {
+            let check = match instance.id {
+                InstanceId::Global => true,
+                InstanceId::Local(id) => id == d.id,
+            };
+
+            check.then_some(d.pitch)
+        })
+    }
+
+    pub fn set_sound_panning(&mut self, instance: SoundInstance, panning: f32) {
+        let Some(list) = self.instances.get_mut(&instance.snd.id) else {
+            return;
+        };
+
+        let panning = panning.clamp(0.0, 1.0);
+        match instance.id {
+            InstanceId::Global => {
+                list.iter_mut().for_each(|d| {
+                    d.handle.set_panning(panning as f64, Tween::default());
+                    d.panning = panning;
+                });
+            }
+            InstanceId::Local(id) => {
+                if let Some(data) = list.iter_mut().find(|d| d.id == id) {
+                    data.handle.set_panning(panning as f64, Tween::default());
+                    data.panning = panning;
+                }
+            }
+        }
+    }
+
+    pub fn sound_panning(&self, instance: SoundInstance) -> Option<f32> {
+        self.instances.get(&instance.snd.id)?.iter().find_map(|d| {
+            let check = match instance.id {
+                InstanceId::Global => true,
+                InstanceId::Local(id) => id == d.id,
+            };
+
+            check.then_some(d.panning)
+        })
+    }
+
+    pub fn sound_progress(&self, instance: SoundInstance) -> Option<f32> {
+        self.instances.get(&instance.snd.id)?.iter().find_map(|d| {
+            let check = match instance.id {
+                InstanceId::Global => true,
+                InstanceId::Local(id) => id == d.id,
+            };
+
+            check.then(|| {
+                let duration = d.raw.duration().as_secs_f64();
+                let position = d.handle.position();
+                if duration.is_zero() {
+                    0.0
+                } else {
+                    (position / duration) as f32
+                }
+            })
+        })
+    }
+
     fn next_id(&mut self) -> u64 {
         let id = self.count_ids;
         self.count_ids += 1;
         id
     }
 
-    fn clean(&mut self) {
-        // TODO clean all the instance data that is not needed anymore
+    pub fn clean(&mut self) {
+        self.instances.retain(|k, v| {
+            v.retain(|d| !d.is_stopped());
+            !v.is_empty()
+        });
     }
 }
 
@@ -248,4 +355,39 @@ fn create_sound_from_bytes(id: u64, bytes: &[u8]) -> Result<Sound, String> {
         id: SoundId(id),
         raw,
     })
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct PlayOptions {
+    pub volume: f32,
+    pub repeat: bool,
+    pub pitch: f32,
+    pub panning: f32,
+}
+
+impl Default for PlayOptions {
+    fn default() -> Self {
+        Self {
+            volume: 1.0,
+            repeat: false,
+            pitch: 1.0,
+            panning: 0.5,
+        }
+    }
+}
+
+impl From<PlayOptions> for StaticSoundSettings {
+    fn from(value: PlayOptions) -> Self {
+        Self {
+            start_time: Default::default(),
+            start_position: Default::default(),
+            loop_region: value.repeat.then_some((..).into()),
+            reverse: false,
+            volume: Volume::Amplitude(value.volume as _).into(),
+            playback_rate: PlaybackRate::Factor(value.pitch as _).into(),
+            panning: (value.panning as f64).into(),
+            output_destination: Default::default(),
+            fade_in_tween: None,
+        }
+    }
 }

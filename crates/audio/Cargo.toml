@@ -16,6 +16,7 @@ atomic_refcell.workspace = true
 rayon.workspace = true
 rustc-hash.workspace = true
 smallvec.workspace = true
+num.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 kira = { version = "0.9.5", default-features = false, features = ["cpal", "ogg", "wav", "android_shared_stdcxx"] }

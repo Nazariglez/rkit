@@ -1,4 +1,4 @@
-use crate::manager::MANAGER;
+use crate::manager::{PlayOptions, MANAGER};
 pub use crate::sound::{AsSoundInstance, Sound, SoundInstance};
 
 mod manager;
@@ -17,8 +17,8 @@ pub fn create_sound_instance(sound: &Sound) -> SoundInstance {
 }
 
 #[inline]
-pub fn play_sound<S: AsSoundInstance>(sound: &S) {
-    MANAGER.borrow_mut().play_sound(sound.as_instance());
+pub fn play_sound<S: AsSoundInstance>(sound: &S) -> AudioPlay {
+    AudioPlay::new(sound.as_instance())
 }
 
 #[inline]
@@ -52,6 +52,36 @@ pub fn sound_volume<S: AsSoundInstance>(sound: &S) -> f32 {
 }
 
 #[inline]
+pub fn set_sound_pitch<S: AsSoundInstance>(sound: &S, pitch: f32) {
+    MANAGER
+        .borrow_mut()
+        .set_sound_pitch(sound.as_instance(), pitch);
+}
+
+#[inline]
+pub fn sound_pitch<S: AsSoundInstance>(sound: &S) -> f32 {
+    MANAGER
+        .borrow()
+        .sound_pitch(sound.as_instance())
+        .unwrap_or_default()
+}
+
+#[inline]
+pub fn set_sound_panning<S: AsSoundInstance>(sound: &S, panning: f32) {
+    MANAGER
+        .borrow_mut()
+        .set_sound_panning(sound.as_instance(), panning);
+}
+
+#[inline]
+pub fn sound_panning<S: AsSoundInstance>(sound: &S) -> f32 {
+    MANAGER
+        .borrow()
+        .sound_panning(sound.as_instance())
+        .unwrap_or_default()
+}
+
+#[inline]
 pub fn is_sound_playing<S: AsSoundInstance>(sound: &S) -> bool {
     MANAGER
         .borrow()
@@ -67,6 +97,14 @@ pub fn is_sound_paused<S: AsSoundInstance>(sound: &S) -> bool {
         .unwrap_or_default()
 }
 
+#[inline]
+pub fn sound_progress<S: AsSoundInstance>(sound: &S) -> f32 {
+    MANAGER
+        .borrow()
+        .sound_progress(sound.as_instance())
+        .unwrap_or_default()
+}
+
 // TODO set_sound_pitch and set_sound_pan?
 
 #[inline]
@@ -77,4 +115,56 @@ pub fn set_global_volume(v: f32) {
 #[inline]
 pub fn global_volume() -> f32 {
     MANAGER.borrow().volume
+}
+
+#[inline]
+pub fn clean_audio_manager() {
+    // TODO this must be private and injected with events on the core
+    MANAGER.borrow_mut().clean();
+}
+
+pub struct AudioPlay {
+    instance: Option<SoundInstance>,
+    opts: PlayOptions,
+}
+
+impl AudioPlay {
+    pub fn new(instance: SoundInstance) -> Self {
+        Self {
+            instance: Some(instance),
+            opts: Default::default(),
+        }
+    }
+
+    pub fn volume(mut self, vol: f32) -> Self {
+        self.opts.volume = vol.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn repeat(mut self, val: bool) -> Self {
+        self.opts.repeat = val;
+        self
+    }
+
+    pub fn pitch(mut self, speed: f32) -> Self {
+        self.opts.pitch = speed;
+        self
+    }
+
+    pub fn panning(mut self, panning: f32) -> Self {
+        self.opts.panning = panning.clamp(0.0, 1.0);
+        self
+    }
+}
+
+impl Drop for AudioPlay {
+    fn drop(&mut self) {
+        debug_assert!(
+            self.instance.is_some(),
+            "Instance must exists always on drop. This should be unreachable."
+        );
+        let instance = self.instance.take().unwrap();
+        let opts = self.opts;
+        MANAGER.borrow_mut().play_sound(instance, opts);
+    }
 }
