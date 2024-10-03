@@ -1,5 +1,5 @@
 - todo:
-    * audio clean sounds must be automatic with core events after frames
+    * audio clean sounds must be automatic with core events after frames, improve audio examples
     * use encase crate to comply with std140
     * blending, and masking
     * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)

@@ -28,7 +28,7 @@ fn main() -> Result<(), String> {
 
 fn update(s: &mut State) {
     if is_key_pressed(KeyCode::Space) {
-        play_sound(&s.snd);
+        play_sound(&s.snd).pitch(5.0);
     }
     if is_key_pressed(KeyCode::KeyS) {
         stop_sound(&s.snd);
