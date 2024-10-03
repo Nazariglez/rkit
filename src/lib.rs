@@ -6,3 +6,6 @@ pub use utils::*;
 
 #[cfg(feature = "draw")]
 pub use draw;
+
+#[cfg(feature = "audio")]
+pub use audio;

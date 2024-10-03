@@ -34,6 +34,7 @@ core = { path = "crates/core" }
 utils = { path = "crates/utils" }
 draw = { path = "crates/draw" }
 macros = { path = "crates/macros" }
+audio = { path = "crates/audio" }
 
 ## common deps
 log = "0.4.22"
@@ -58,6 +59,7 @@ num = "0.4.3"
 core.workspace = true
 utils.workspace = true
 draw = { workspace = true, optional = true }
+audio = { workspace = true, optional = true }
 
 fastrand = { version = "2.1.1", optional = true }
 
@@ -68,11 +70,7 @@ cosmic-text = "0.12.1"
 etagere = "0.2.13"
 
 [features]
-default = ["random", "draw", "draw-default-font"]
-# enable clipboard
-clipboard = ["core/clipboard"]
-# enable dropping files to window
-drop_files = ["core/drop_files"]
+default = ["random", "draw", "draw-default-font", "audio"]
 # enables gamepad api
 gamepad = ["core/gamepad"]
 # force webgl
@@ -81,5 +79,7 @@ webgl = ["core/webgl"]
 random = ["dep:fastrand"]
 # enables draw API
 draw = ["dep:draw"]
+# enables audio API
+audio = ["dep:audio"]
 # included a default font
 draw-default-font = ["draw?/default-font"]

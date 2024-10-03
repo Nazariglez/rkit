@@ -87,10 +87,6 @@ features = [
 test-env = []
 # WebGL instead of WebGPU on WASM
 webgl = ["wgpu/webgl"]
-# Enable clipboard features
-clipboard = ["web-sys/Clipboard", "web-sys/ClipboardEvent"]
-# Enable dropping files on the window
-drop_files = ["web-sys/DragEvent", "web-sys/DataTransfer", "web-sys/FileList", "web-sys/File", "web-sys/DataTransferItemList", "web-sys/DataTransferItem"]
 # Enable Gamepad API
 gamepad = ["dep:gilrs"]
 

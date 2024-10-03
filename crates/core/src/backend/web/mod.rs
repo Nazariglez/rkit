@@ -5,9 +5,6 @@ mod input;
 mod utils;
 mod window;
 
-#[cfg(all(feature = "clipboard", not(web_sys_unstable_apis)))]
-compile_error!("feature \"clipboard\" requires web_sys_unstable_apis to be enabled\nsee https://rustwasm.github.io/wasm-bindgen/web-sys/unstable-apis.html");
-
 use crate::backend::{BackendImpl, GfxBackendImpl};
 use crate::builder::AppBuilder;
 use crate::gfx::GfxBackend;

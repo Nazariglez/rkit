@@ -1,0 +1,21 @@
+[package]
+name = "audio"
+edition = "2021"
+
+[dependencies]
+utils.workspace = true
+
+# Kira does include by default "mp3" and "flac" features,
+# however mp3 have license issues and flac is too big/not needed for our case
+kira = { version = "0.9.5", default-features = false, features = ["cpal", "ogg", "wav"]}
+
+# common deps
+log.workspace = true
+once_cell.workspace = true
+atomic_refcell.workspace = true
+rayon.workspace = true
+rustc-hash.workspace = true
+smallvec.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+kira = { version = "0.9.5", default-features = false, features = ["cpal", "ogg", "wav", "android_shared_stdcxx"] }

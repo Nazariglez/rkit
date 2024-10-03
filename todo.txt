@@ -1,10 +1,10 @@
 - todo:
+    * audio
     * use encase crate to comply with std140
     * blending, and masking
     * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)
     * points and to_owned/cache
     * multisampling? mipmapping?
-    * audio
     * egui
     * lazy, drop file, open links?
     * fix event callbacks (s: &mut state), split update and draw?
@@ -23,12 +23,10 @@
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
-    * on wasm32 leaving fullscreen mode do not restore previous size
     * complex chars like áéí etc... don't work on wasm, we need to use composition events on a hidden input elements
     * local transform2d is not working right for star (or/and path2d?)
     * linux not working because issues with surface size? (fix asap)
     * stencil must be done in one pass?
-    * resize doesn't update the surface/offscreen
     * gfx_render_texture looks a bit weird when textures overlap, like darker colors?
     * no clipboard support?
 
