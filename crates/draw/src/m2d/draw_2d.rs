@@ -498,6 +498,14 @@ impl AsRenderer for Draw2D {
 
         let mut cleared = false;
         let mut renderer = Renderer::new();
+
+        if self.batches.is_empty() {
+            if let Some(color) = self.clear_color {
+                renderer.begin_pass().clear_color(color);
+                cleared = true;
+            }
+        }
+
         self.batches.iter().for_each(|b| {
             let pass = renderer.begin_pass();
 

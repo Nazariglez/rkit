@@ -3,6 +3,7 @@ use core::gfx::{
     TextureId, TextureWrap,
 };
 use core::math::{vec2, Rect, Vec2};
+use std::fmt::{Debug, Formatter};
 use utils::drop_signal::DropObserver;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]

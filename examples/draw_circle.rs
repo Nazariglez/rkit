@@ -1,6 +1,8 @@
+use rkit::app::window_size;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::vec2;
+
+const RADIUS: f32 = 150.0;
 
 fn main() -> Result<(), String> {
     rkit::init().on_update(update).run()
@@ -9,6 +11,13 @@ fn main() -> Result<(), String> {
 fn update(s: &mut ()) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
-    draw.rect(vec2(100.0, 100.0), vec2(600.0, 400.0));
+
+    draw.circle(RADIUS)
+        .position(window_size() * 0.5 - RADIUS)
+        .color(Color::MAGENTA)
+        .fill()
+        .stroke_color(Color::WHITE)
+        .stroke(20.0);
+
     gfx::render_to_frame(&draw).unwrap();
 }

@@ -28,14 +28,22 @@ fn main() -> Result<(), String> {
 
 fn update(s: &mut State) {
     if is_key_pressed(KeyCode::Space) {
-        play_sound(&s.snd).pitch(5.0);
+        play_sound(&s.snd)
+            // Optional config
+            .panning(0.5)
+            .pitch(1.0)
+            .volume(1.0)
+            .repeat(true);
     }
+
     if is_key_pressed(KeyCode::KeyS) {
         stop_sound(&s.snd);
     }
+
     if is_key_pressed(KeyCode::KeyM) {
         set_global_volume(0.2);
     }
+
     if is_key_pressed(KeyCode::KeyU) {
         set_global_volume(1.0);
     }

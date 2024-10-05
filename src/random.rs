@@ -154,7 +154,8 @@ impl RangeGenerator for f32 {
             Bound::Excluded(n) => *n,
             Bound::Unbounded => 1.0,
         };
-        min + rng.raw.f32() * max
+        let len = max - min;
+        min + rng.raw.f32() * len
     }
 }
 
@@ -170,7 +171,8 @@ impl RangeGenerator for f64 {
             Bound::Excluded(n) => *n,
             Bound::Unbounded => 1.0,
         };
-        min + rng.raw.f64() * max
+        let len = max - min;
+        min + rng.raw.f64() * len
     }
 }
 

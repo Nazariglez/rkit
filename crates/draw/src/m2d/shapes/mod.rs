@@ -17,7 +17,9 @@ pub use star::*;
 pub use triangle::*;
 
 use super::PipelineContext;
-use core::gfx::{self, BindGroupLayout, BindingType, Buffer, VertexFormat, VertexLayout};
+use core::gfx::{
+    self, BindGroupLayout, BindingType, BlendMode, Buffer, VertexFormat, VertexLayout,
+};
 use core::math::Vec2;
 
 // language=wgsl
@@ -65,6 +67,7 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         .with_bind_group_layout(
             BindGroupLayout::new().with_entry(BindingType::uniform(0).with_vertex_visibility(true)),
         )
+        .with_blend_mode(BlendMode::NORMAL)
         .build()?;
 
     let bind_group = gfx::create_bind_group()
