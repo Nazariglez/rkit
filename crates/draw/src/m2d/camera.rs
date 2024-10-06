@@ -227,6 +227,14 @@ impl Camera2D {
         Rect::new(origin, size)
     }
 
+    pub fn is_point_visible(&self, pos: Vec2) -> bool {
+        self.bounds().contains(pos)
+    }
+
+    pub fn is_rect_visible(&self, rect: Rect) -> bool {
+        self.bounds().intersects(&rect)
+    }
+
     fn calculate_projection(&mut self) {
         let (projection, ratio) = match self.mode {
             ScreenMode::Normal => calculate_ortho_projection(self.size),

@@ -14,7 +14,7 @@ use arrayvec::ArrayVec;
 use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
-use strum_macros::{EnumCount, FromRepr};
+use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 const GAMEPAD_BUTTON_COUNT_POT2: usize = next_pot2(GamepadButton::COUNT);
 
@@ -115,7 +115,9 @@ impl std::fmt::Debug for GamepadButtonList {
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount, FromRepr)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount, FromRepr, EnumIter,
+)]
 #[repr(u8)]
 pub enum GamepadAxis {
     LeftX,
