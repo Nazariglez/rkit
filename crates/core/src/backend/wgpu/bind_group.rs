@@ -8,6 +8,12 @@ pub struct BindGroup {
     pub(crate) raw: Arc<RawBindGroup>,
 }
 
+impl PartialEq for BindGroup {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl BindGroup {
     pub fn id(&self) -> BindGroupId {
         self.id

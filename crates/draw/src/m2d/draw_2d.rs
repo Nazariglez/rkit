@@ -74,8 +74,7 @@ impl BatchInfo {
             return false;
         }
 
-        // FIXME check bind_groups instead of sprite?
-        if self.sprite != other.sprite {
+        if self.bind_groups != other.bind_groups {
             return false;
         }
 
