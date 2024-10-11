@@ -583,12 +583,20 @@ impl KeyboardState {
     }
 
     pub fn press(&mut self, btn: KeyCode) {
+        if self.down.contains(btn) {
+            return;
+        }
+
         self.pressed.insert(btn);
         self.down.insert(btn);
         self.released.remove(btn);
     }
 
     pub fn release(&mut self, btn: KeyCode) {
+        if !self.down.contains(btn) {
+            return;
+        }
+
         self.released.insert(btn);
         self.down.remove(btn);
         self.pressed.remove(btn);
