@@ -19,6 +19,8 @@ pub enum ScreenMode {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Camera2D {
+    pixel_perfect: bool,
+
     position: Vec2,
     rotation: f32,
     scale: Vec2,
@@ -39,6 +41,8 @@ pub struct Camera2D {
 impl Default for Camera2D {
     fn default() -> Self {
         Self {
+            pixel_perfect: false,
+
             position: Vec2::ZERO,
             rotation: 0.0,
             scale: Vec2::ONE,
@@ -118,6 +122,14 @@ impl Camera2D {
 
     pub fn screen_mode(&self) -> ScreenMode {
         self.mode
+    }
+
+    pub fn set_pixel_perfect(&mut self, value: bool) {
+        if self.pixel_perfect != value {
+            self.pixel_perfect = value;
+            self.dirty_projection = true;
+            self.dirty_transform = true;
+        }
     }
 
     pub fn set_size(&mut self, size: Vec2) {
@@ -237,13 +249,15 @@ impl Camera2D {
 
     fn calculate_projection(&mut self) {
         let (projection, ratio) = match self.mode {
-            ScreenMode::Normal => calculate_ortho_projection(self.size),
-            ScreenMode::Fill(work_size) => calculate_fill_projection(self.size, work_size),
+            ScreenMode::Normal => calculate_ortho_projection(self.size, self.pixel_perfect),
+            ScreenMode::Fill(work_size) => {
+                calculate_fill_projection(self.size, work_size, self.pixel_perfect)
+            }
             ScreenMode::AspectFit(work_size) => {
-                calculate_aspect_fit_projection(self.size, work_size)
+                calculate_aspect_fit_projection(self.size, work_size, self.pixel_perfect)
             }
             ScreenMode::AspectFill(work_size) => {
-                calculate_aspect_fill_projection(self.size, work_size)
+                calculate_aspect_fill_projection(self.size, work_size, self.pixel_perfect)
             }
         };
 
@@ -262,17 +276,30 @@ impl Camera2D {
     }
 }
 
-fn calculate_ortho_projection(win_size: Vec2) -> (Mat4, Vec2) {
+fn calculate_ortho_projection(win_size: Vec2, pixel_perfect: bool) -> (Mat4, Vec2) {
+    let win_size = if pixel_perfect {
+        win_size.floor()
+    } else {
+        win_size
+    };
+    let pos = if pixel_perfect {
+        (win_size * 0.5).floor()
+    } else {
+        win_size * 0.5
+    };
     let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
-    let pos = win_size * 0.5;
     let position = Mat4::from_translation(vec3(pos.x, pos.y, 0.0));
     let final_projection = projection * position;
     (final_projection, vec2(1.0, 1.0))
 }
 
-fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2) -> Mat4 {
+fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2, pixel_perfect: bool) -> Mat4 {
     let scale = Mat4::from_scale(vec3(ratio.x, ratio.y, 1.0));
-    let pos = win_size * 0.5;
+    let pos = if pixel_perfect {
+        (win_size * 0.5).floor()
+    } else {
+        win_size * 0.5
+    };
     let position = vec3(pos.x, pos.y, 0.0);
     let translation = Mat4::from_translation(position);
     let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
@@ -280,22 +307,48 @@ fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2) -> Mat4 {
     projection * translation * scale
 }
 
-fn calculate_fill_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {
+fn calculate_fill_projection(win_size: Vec2, work_size: Vec2, pixel_perfect: bool) -> (Mat4, Vec2) {
+    let (win_size, work_size) = if pixel_perfect {
+        (win_size.floor(), work_size.floor())
+    } else {
+        (win_size, work_size)
+    };
+
     let ratio = win_size / work_size;
-    let projection = calculate_scaled_projection(win_size, ratio);
+    let projection = calculate_scaled_projection(win_size, ratio, pixel_perfect);
     (projection, ratio)
 }
 
-fn calculate_aspect_fit_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {
+fn calculate_aspect_fit_projection(
+    win_size: Vec2,
+    work_size: Vec2,
+    pixel_perfect: bool,
+) -> (Mat4, Vec2) {
+    let (win_size, work_size) = if pixel_perfect {
+        (win_size.floor(), work_size.floor())
+    } else {
+        (win_size, work_size)
+    };
+
     let ratio = (win_size / work_size).min_element();
     let ratio = Vec2::splat(ratio);
-    let projection = calculate_scaled_projection(win_size, ratio);
+    let projection = calculate_scaled_projection(win_size, ratio, pixel_perfect);
     (projection, ratio)
 }
 
-fn calculate_aspect_fill_projection(win_size: Vec2, work_size: Vec2) -> (Mat4, Vec2) {
+fn calculate_aspect_fill_projection(
+    win_size: Vec2,
+    work_size: Vec2,
+    pixel_perfect: bool,
+) -> (Mat4, Vec2) {
+    let (win_size, work_size) = if pixel_perfect {
+        (win_size.floor(), work_size.floor())
+    } else {
+        (win_size, work_size)
+    };
+
     let ratio = (win_size / work_size).max_element();
     let ratio = Vec2::splat(ratio);
-    let projection = calculate_scaled_projection(win_size, ratio);
+    let projection = calculate_scaled_projection(win_size, ratio, pixel_perfect);
     (projection, ratio)
 }

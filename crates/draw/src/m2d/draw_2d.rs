@@ -143,6 +143,8 @@ where
 
 #[derive(Default, Clone)]
 pub struct Draw2D {
+    round_pixels: bool,
+
     size: Vec2,
 
     projection: Mat4,
@@ -181,6 +183,10 @@ impl Draw2D {
 
     pub fn set_alpha(&mut self, alpha: f32) {
         self.alpha = alpha;
+    }
+
+    pub fn set_round_pixels(&mut self, round: bool) {
+        self.round_pixels = round;
     }
 
     pub fn alpha(&self) -> f32 {
@@ -275,7 +281,13 @@ impl Draw2D {
                 let x = chunk[x_pos];
                 let y = chunk[y_pos];
 
-                let xyz = matrix * vec3(x, y, 1.0);
+                let prev_xyz = if self.round_pixels {
+                    vec3(x, y, 1.0).round()
+                } else {
+                    vec3(x, y, 1.0)
+                };
+
+                let xyz = matrix * prev_xyz;
                 chunk[x_pos] = xyz.x;
                 chunk[y_pos] = xyz.y;
 
