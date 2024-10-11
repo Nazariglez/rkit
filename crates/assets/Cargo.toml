@@ -1,0 +1,23 @@
+[package]
+name = "assets"
+edition = "2021"
+
+[dependencies]
+log.workspace = true
+parking_lot.workspace = true
+rustc-hash.workspace = true
+once_cell.workspace = true
+atomic_refcell.workspace = true
+
+bytes = "1.7.2"
+futures = "0.3.31"
+futures-util = { version = "0.3.31", default-features = false }
+indexmap = "2.6.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { workspace = true, features = ["XmlHttpRequest", "XmlHttpRequestEventTarget", "XmlHttpRequestResponseType"] }
+js-sys.workspace = true
+wasm-bindgen.workspace = true

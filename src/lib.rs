@@ -9,3 +9,6 @@ pub use draw;
 
 #[cfg(feature = "audio")]
 pub use audio;
+
+#[cfg(feature = "assets")]
+pub use assets;

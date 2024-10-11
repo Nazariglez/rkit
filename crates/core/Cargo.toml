@@ -49,14 +49,14 @@ env_logger = "0.11.5"
 
 # wasm deps
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+js-sys.workspace = true
 console_error_panic_hook = "0.1.7"
-wasm-bindgen = "0.2.93"
-wasm-bindgen-futures = "0.4.43"
+wasm-bindgen-futures = "0.4.45"
 console_log = "1.0.0"
-js-sys = "0.3.70"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
-version = "0.3.70"
+workspace = true
 features = [
     "Screen",
     "Document",
