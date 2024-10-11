@@ -271,7 +271,7 @@ impl<'a> Element2D for Text2D<'a> {
                     sprite: None,
                 });
 
-                let origin = pos - anchor * block_size;
+                let origin = self.position + pos - anchor * block_size;
                 draw.last_text_bounds = Rect::new(origin, block_size);
             });
         });
