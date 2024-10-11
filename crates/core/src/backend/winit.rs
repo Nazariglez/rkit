@@ -334,13 +334,7 @@ impl<S> ApplicationHandler for Runner<S> {
                 let mut bck = get_mut_backend();
                 let scale_factor = bck.window.as_ref().unwrap().scale_factor() as f32;
                 let value = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => {
-                        let line_scale = 1.0; // just trying magic numbers
-                        vec2(
-                            x * line_scale * scale_factor * x,
-                            y * line_scale * scale_factor * y,
-                        )
-                    }
+                    MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 50.0,
                     MouseScrollDelta::PixelDelta(dt) => {
                         let delta =
                             dt.to_logical::<f32>(bck.window.as_ref().unwrap().scale_factor());
