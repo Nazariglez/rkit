@@ -204,7 +204,7 @@ impl<'a> Element2D for Text2D<'a> {
             wrap_width: self.max_width,
             font_size: self.size,
             line_height: self.line_height,
-            scale: 1.0,
+            resolution: 1.0, // TODO expose this to the user
             h_align: self.h_align,
         };
 
@@ -217,7 +217,7 @@ impl<'a> Element2D for Text2D<'a> {
 
                 let block_size = {
                     let mut sys = get_mut_text_system();
-                    let block = sys.prepare_text(&info).unwrap();
+                    let block = sys.prepare_text(&info, false).unwrap();
                     if block.data.is_empty() {
                         return;
                     }

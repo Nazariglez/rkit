@@ -80,8 +80,67 @@ pub struct TextInfo<'a> {
     pub wrap_width: Option<f32>,
     pub font_size: f32,
     pub line_height: Option<f32>,
-    pub scale: f32,
+    pub resolution: f32,
     pub h_align: HAlign,
+}
+
+pub fn text_metrics<'a>(text: &'a str) -> TextMetricsBuilder<'a> {
+    TextMetricsBuilder {
+        info: TextInfo {
+            pos: Default::default(),
+            font: None,
+            text,
+            wrap_width: None,
+            font_size: 14.0,
+            line_height: None,
+            resolution: 1.0,
+            h_align: Default::default(),
+        },
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct TextMetrics {
+    pub size: Vec2,
+    pub lines: usize,
+}
+
+pub struct TextMetricsBuilder<'a> {
+    info: TextInfo<'a>,
+}
+
+impl<'a> TextMetricsBuilder<'a> {
+    pub fn font(mut self, font: &'a Font) -> Self {
+        self.info.font = Some(font);
+        self
+    }
+
+    pub fn size(mut self, size: f32) -> Self {
+        self.info.font_size = size;
+        self
+    }
+
+    pub fn max_width(mut self, width: f32) -> Self {
+        self.info.wrap_width = Some(width);
+        self
+    }
+
+    pub fn line_height(mut self, height: f32) -> Self {
+        self.info.line_height = Some(height);
+        self
+    }
+
+    pub fn resolution(mut self, scale: f32) -> Self {
+        self.info.resolution = scale;
+        self
+    }
+
+    pub fn measure(self) -> TextMetrics {
+        let BlockInfo { size, lines, .. } = get_mut_text_system()
+            .prepare_text(&self.info, true)
+            .unwrap();
+        TextMetrics { size, lines }
+    }
 }
 
 struct ProcessData {
@@ -235,7 +294,11 @@ impl TextSystem {
         })
     }
 
-    pub fn prepare_text(&mut self, text: &TextInfo) -> Result<BlockInfo, String> {
+    pub fn prepare_text(
+        &mut self,
+        text: &TextInfo,
+        only_measure: bool,
+    ) -> Result<BlockInfo, String> {
         // clean the keys before we process a new text
         self.process_data.clear();
 
@@ -260,14 +323,24 @@ impl TextSystem {
 
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
-        match self.process(text.scale)? {
+        // do not mess with textures when we only want the size of the block
+        if only_measure {
+            let (size, lines) = self.measure(text.resolution)?;
+            return Ok(BlockInfo {
+                size,
+                lines,
+                data: &[],
+            });
+        }
+
+        match self.process(text.resolution)? {
             PostAction::Restore => {
                 self.restore();
-                self.prepare_text(text)
+                self.prepare_text(text, false)
             }
             PostAction::Clear => {
                 self.clear()?;
-                self.prepare_text(text)
+                self.prepare_text(text, false)
             }
             PostAction::End { block_size, lines } => {
                 // cleaning the temporal data shared with the user at the end
@@ -344,7 +417,23 @@ impl TextSystem {
         self.bind_group = None;
     }
 
-    fn process(&mut self, scale: f32) -> Result<PostAction, String> {
+    fn measure(&mut self, _resolution: f32) -> Result<(Vec2, usize), String> {
+        let mut width: f32 = 0.0;
+        let mut total_lines: usize = 0;
+
+        for run in self.buffer.layout_runs() {
+            width = run.line_w.max(width);
+            total_lines += 1;
+        }
+
+        let size = vec2(
+            width, // TODO multiply by resolution??
+            total_lines as f32 * self.buffer.metrics().line_height,
+        );
+        Ok((size, total_lines))
+    }
+
+    fn process(&mut self, resolution: f32) -> Result<PostAction, String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -353,7 +442,7 @@ impl TextSystem {
             total_lines += 1;
 
             for layout in run.glyphs {
-                let glyph = layout.physical((0.0, 0.0), scale);
+                let glyph = layout.physical((0.0, 0.0), resolution);
 
                 // store to get rendering data later
                 self.process_data.push(ProcessData {
