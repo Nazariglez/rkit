@@ -1,5 +1,5 @@
 #[derive(Clone, Debug)]
-pub struct AssetLoad {
+pub(crate) struct AssetLoad {
     pub(crate) id: String,
     pub(crate) state: AssetState,
 }
@@ -11,9 +11,10 @@ impl AssetLoad {
     }
 
     /// Blob buffer
-    pub fn data(&self) -> Result<&[u8], String> {
+    pub fn data(&self) -> Result<Option<&[u8]>, String> {
         match &self.state {
-            AssetState::Loaded(buff) => Ok(buff.as_ref()),
+            AssetState::Loading => Ok(None),
+            AssetState::Loaded(buff) => Ok(Some(buff.as_ref())),
             AssetState::Err(err) => Err(err.clone()),
         }
     }
@@ -21,6 +22,7 @@ impl AssetLoad {
 
 #[derive(Clone, Debug)]
 pub(crate) enum AssetState {
+    Loading,
     Loaded(Vec<u8>),
     Err(String),
 }

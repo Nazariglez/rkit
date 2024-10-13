@@ -200,6 +200,7 @@ dependencies = [
  "parking_lot",
  "rayon",
  "rustc-hash 2.0.0",
+ "thunderdome",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -2890,6 +2891,12 @@ dependencies = [
  "quote",
  "syn 2.0.79",
 ]
+
+[[package]]
+name = "thunderdome"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e170f93360bf9ae6fe3c31116bbf27adb1d054cedd6bc3d7857e34f2d98d0b"
 
 [[package]]
 name = "tiny-skia"
