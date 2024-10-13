@@ -37,6 +37,7 @@ fn update(s: &mut State) {
                 *s = State::World { data: sprite };
             }
         }
+        // If the sprite is loaded we draw it
         State::World { data } => {
             draw_world(data);
         }

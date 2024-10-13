@@ -5,7 +5,7 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::future::Future;
 
 #[cfg(target_arch = "wasm32")]
-use futures_util::future::{poll_fn, ready, TryFutureExt};
+use futures_util::future::{poll_fn, ready, FutureExt, TryFutureExt};
 #[cfg(target_arch = "wasm32")]
 use js_sys::Uint8Array;
 #[cfg(target_arch = "wasm32")]
@@ -72,18 +72,28 @@ fn err_format(err: JsValue) -> String {
     format!("{:?}", err)
 }
 
+// Nasty trick to wrap XmlHttpRequest and make it Send so we bypass
+// the compiler errors about not being safe sharing *mut u8 (internal ref on this object)
+// this is sound for wasm32 because is single thread
 #[cfg(target_arch = "wasm32")]
-fn create_request(path: &str) -> Result<XmlHttpRequest, String> {
+struct Xhr(XmlHttpRequest);
+#[cfg(target_arch = "wasm32")]
+unsafe impl Send for Xhr {}
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for Xhr {}
+
+#[cfg(target_arch = "wasm32")]
+fn create_request(path: &str) -> Result<Xhr, String> {
     let xhr = XmlHttpRequest::new().map_err(err_format)?;
     xhr.open("GET", path).map_err(err_format)?;
     xhr.set_response_type(XmlHttpRequestResponseType::Arraybuffer);
     xhr.send().map_err(err_format)?;
-    Ok(xhr)
+    Ok(Xhr(xhr))
 }
 
 #[cfg(target_arch = "wasm32")]
 fn poll_request(
-    xhr: &XmlHttpRequest,
+    xhr: &Xhr,
     ctx: &mut Context,
     have_set_handlers: &mut bool,
 ) -> Poll<Result<Vec<u8>, String>> {
@@ -92,17 +102,19 @@ fn poll_request(
         let waker = ctx.waker().clone();
         let wake_up = Closure::wrap(Box::new(move || waker.wake_by_ref()) as Box<dyn FnMut()>);
         let wake_up_ref = wake_up.as_ref().unchecked_ref();
-        xhr.set_onload(Some(&wake_up_ref));
-        xhr.set_onerror(Some(&wake_up_ref));
+        xhr.0.set_onload(Some(&wake_up_ref));
+        xhr.0.set_onerror(Some(&wake_up_ref));
         wake_up.forget();
     }
     let status = xhr
+        .0
         .status()
         .expect("Failed to get the XmlHttpRequest status");
-    let ready_state = xhr.ready_state();
+    let ready_state = xhr.0.ready_state();
     match (status / 100, ready_state) {
         (2, 4) => Poll::Ready(
-            xhr.response()
+            xhr.0
+                .response()
                 .map(|resp| {
                     let array = Uint8Array::new(&resp);
                     let mut buffer = vec![0; array.length() as usize];
