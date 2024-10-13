@@ -1,22 +1,21 @@
-use std::sync::Arc;
 use super::waker::*;
 use crate::events::{AssetLoad, AssetState};
 use crate::load_file::FileLoader;
 use atomic_refcell::AtomicRefCell;
-use bytes::Bytes;
 use futures::future::LocalBoxFuture;
 use futures::task::{Context, Poll};
 use futures_util::future::BoxFuture;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
 // TODO url loader
 pub(crate) static ASSET_LOADER: Lazy<AtomicRefCell<AssetLoader>> =
     Lazy::new(|| AtomicRefCell::new(AssetLoader::new()));
 
 pub(crate) struct AssetLoader {
-    loading: Arc<Mutex<Vec<LoadWrapper>>>,
+    loading: Vec<LoadWrapper>,
     file_loader: FileLoader,
     loaded: FxHashMap<String, AssetLoad>,
 }
@@ -24,7 +23,7 @@ pub(crate) struct AssetLoader {
 impl AssetLoader {
     fn new() -> Self {
         Self {
-            loading: Arc::new(Mutex::new(vec![])),
+            loading: vec![],
             file_loader: FileLoader::new().unwrap(),
             loaded: FxHashMap::default(),
         }
@@ -37,7 +36,7 @@ impl AssetLoader {
 
     pub(crate) fn update(&mut self) {
         let mut needs_clean = true;
-        let mut loading = self.loading.lock();
+        let mut loading = &mut self.loading;
         loading.iter_mut().for_each(|loader| {
             if let Some(loaded) = loader.try_load() {
                 self.loaded.insert(loaded.id.clone(), loaded);
@@ -53,7 +52,7 @@ impl AssetLoader {
     pub(crate) fn load(&mut self, file_path: &str) {
         log::info!("Loading file '{}'", file_path);
         let fut = Box::pin(self.file_loader.load_file(file_path));
-        self.loading.lock().push(LoadWrapper::new(file_path, fut));
+        self.loading.push(LoadWrapper::new(file_path, fut));
     }
 
     pub(crate) fn clean(&mut self) {
@@ -63,15 +62,15 @@ impl AssetLoader {
 
 struct LoadWrapper {
     id: String,
-    fut: BoxFuture<'static, Result<Bytes, String>>,
+    fut: Arc<Mutex<BoxFuture<'static, Result<Vec<u8>, String>>>>,
     loaded: bool,
 }
 
 impl LoadWrapper {
-    pub fn new(id: &str, fut: BoxFuture<'static, Result<Bytes, String>>) -> Self {
+    pub fn new(id: &str, fut: BoxFuture<'static, Result<Vec<u8>, String>>) -> Self {
         Self {
             id: id.to_string(),
-            fut,
+            fut: Arc::new(Mutex::new(fut)),
             loaded: false,
         }
     }
@@ -79,7 +78,7 @@ impl LoadWrapper {
     pub fn try_load(&mut self) -> Option<AssetLoad> {
         let waker = DummyWaker.into_task_waker();
         let mut ctx = Context::from_waker(&waker);
-        match self.fut.as_mut().poll(&mut ctx) {
+        match self.fut.lock().as_mut().poll(&mut ctx) {
             Poll::Ready(r_buff) => {
                 self.loaded = true;
                 match r_buff {

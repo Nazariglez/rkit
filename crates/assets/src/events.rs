@@ -1,5 +1,3 @@
-use bytes::Bytes;
-
 #[derive(Clone, Debug)]
 pub struct AssetLoad {
     pub(crate) id: String,
@@ -23,6 +21,6 @@ impl AssetLoad {
 
 #[derive(Clone, Debug)]
 pub(crate) enum AssetState {
-    Loaded(Bytes),
+    Loaded(Vec<u8>),
     Err(String),
 }

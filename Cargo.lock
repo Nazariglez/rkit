@@ -191,7 +191,6 @@ name = "assets"
 version = "0.0.0"
 dependencies = [
  "atomic_refcell",
- "bytes",
  "futures",
  "futures-util",
  "indexmap",

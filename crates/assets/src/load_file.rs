@@ -1,7 +1,6 @@
 use futures::channel::oneshot;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::future::Future;
-use bytes::Bytes;
 
 pub(crate) struct FileLoader {
     thread_pool: ThreadPool,
@@ -15,7 +14,7 @@ impl FileLoader {
         Ok(Self { thread_pool })
     }
 
-    pub fn load_file(&self, path: &str) -> impl Future<Output = Result<Bytes, String>> {
+    pub fn load_file(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, String>> {
         let (tx, rx) = oneshot::channel();
 
         let path = path.to_owned();
