@@ -268,7 +268,7 @@ impl TextSystem {
         self.default_font = Some(font.clone());
     }
 
-    pub fn create_font(&mut self, data: &'static [u8]) -> Result<Font, String> {
+    pub fn create_font(&mut self, data: &[u8]) -> Result<Font, String> {
         let id = self.font_ids;
         self.font_ids += 1;
         let ids = self

@@ -1,10 +1,9 @@
-use assets::{parse_asset, AssetList};
+use assets::{AssetList, AssetMap};
 use draw::{Font, Sprite};
 use rkit::app::window_size;
-use rkit::assets::AssetId;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
+use rkit::math::{vec2, Vec2};
 
 struct Assets {
     tex1: Sprite,
@@ -29,22 +28,27 @@ fn setup() -> State {
         "./examples/assets/Ubuntu-B.ttf",
         "./examples/assets/data.txt",
     ])
-        .with_extension_parser("png", parse_sprite);
-        // .with_extension_parser("ttf", parse_font);
+    .with_extension_parser("png", parse_sprite)
+    .with_extension_parser("ttf", parse_font);
     State::Loading { list }
 }
 
 fn parse_sprite(id: &str, data: &[u8]) -> Result<Sprite, String> {
-    log::info!("Sprite '{id}' loaded.");
     draw::create_sprite().from_image(data).build()
 }
 
-// fn parse_font(id: &str, data: &[u8]) -> Result<Font, String> {
-//     log::info!("Font '{id}' loaded.");
-//     let d = data.to_vec();
-//     draw::create_font(&d).build()
-// }
+fn parse_font(id: &str, data: &[u8]) -> Result<Font, String> {
+    draw::create_font(data).build()
+}
 
+fn parse_assets(map: &AssetMap) -> Result<Assets, String> {
+    Ok(Assets {
+        tex1: map.get("./examples/assets/bunny.png")?,
+        tex2: map.get("./examples/assets/ferris.png")?,
+        font1: map.get("./examples/assets/Ubuntu-B.ttf")?,
+        data: map.get("./examples/assets/data.txt")?,
+    })
+}
 
 fn update(s: &mut State) {
     assets::update_assets();
@@ -52,25 +56,35 @@ fn update(s: &mut State) {
     match s {
         // Loading state, we get the data if loaded and we parse it as sprite
         State::Loading { list } => {
-            let data = list.parse(|d| Ok(())).unwrap();
+            let data = list.parse(parse_assets).unwrap();
 
             if let Some(list) = data {
-                // *s = State::World { data: sprite };
+                *s = State::World { assets: list };
             }
         }
         // If the sprite is loaded we draw it
         State::World { assets } => {
-            // draw_world(data);
+            draw_world(assets);
         }
     }
 }
 
-fn draw_world(sprite: &Sprite) {
+fn draw_world(assets: &Assets) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
-    draw.image(sprite)
+
+    // draw loaded image
+    draw.image(&assets.tex2)
         .translate(window_size() * 0.5)
         .anchor(Vec2::splat(0.5));
+
+    // draw loaded text file with loaded font
+    let txt = String::from_utf8_lossy(&assets.data);
+    draw.text(&txt)
+        .font(&assets.font1)
+        .anchor(Vec2::splat(0.5))
+        .position(window_size() * vec2(0.5, 0.8))
+        .size(24.0);
 
     gfx::render_to_frame(&draw).unwrap();
 }

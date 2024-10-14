@@ -52,12 +52,12 @@ pub fn clean_2d() {
 }
 
 // -- text
-pub struct FontBuilder {
-    source: &'static [u8],
+pub struct FontBuilder<'a> {
+    source: &'a [u8],
 }
 
-impl FontBuilder {
-    pub fn new(data: &'static [u8]) -> Self {
+impl<'a> FontBuilder<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
         Self { source: data }
     }
 
@@ -68,7 +68,7 @@ impl FontBuilder {
 }
 
 #[inline]
-pub fn create_font(data: &'static [u8]) -> FontBuilder {
+pub fn create_font(data: &[u8]) -> FontBuilder {
     FontBuilder::new(data)
 }
 

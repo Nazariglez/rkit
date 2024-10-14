@@ -45,30 +45,6 @@ impl AssetLoader {
             .map_or(false, |s| matches!(s.state, AssetState::Loading))
     }
 
-    // pub(crate) fn get(&self, id: AssetId) -> Result<Option<Vec<u8>>, String> {
-    //     let loaded = self.states.get(id.0)
-    //         .ok_or_else(|| "Invalid AssetID".to_string())?;
-    //
-    //     match &loaded.state {
-    //         AssetState::Loading => Ok(None),
-    //         AssetState::Loaded(d) => Ok(Some(d.clone())),
-    //         AssetState::Err(err) => Err(err.to_string())
-    //     }
-    // }
-
-    pub(crate) fn take(&mut self, id: AssetId) -> Result<Option<Vec<u8>>, String> {
-        let loaded = self
-            .states
-            .remove(id.0)
-            .ok_or_else(|| "Invalid AssetID".to_string())?;
-
-        match loaded.state {
-            AssetState::Loading => Ok(None),
-            AssetState::Loaded(d) => Ok(Some(d)),
-            AssetState::Err(err) => Err(err),
-        }
-    }
-
     pub(crate) fn parse<T, F>(
         &mut self,
         id: AssetId,
@@ -145,13 +121,20 @@ impl LoadWrapper {
     }
 
     pub fn try_load(&mut self, id: &str) -> Option<AssetState> {
+        if self.loaded {
+            return None;
+        }
+
         let waker = DummyWaker.into_task_waker();
         let mut ctx = Context::from_waker(&waker);
         match self.fut.lock().as_mut().poll(&mut ctx) {
             Poll::Ready(r_buff) => {
                 self.loaded = true;
                 match r_buff {
-                    Ok(buff) => Some(AssetState::Loaded(buff)),
+                    Ok(buff) => {
+                        log::info!("File loaded: '{}'", id);
+                        Some(AssetState::Loaded(buff))
+                    }
                     Err(err) => {
                         let err = format!("Cannot load file: {}: {}", id, err);
                         log::warn!("{}", err);
