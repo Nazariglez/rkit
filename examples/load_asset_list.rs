@@ -56,6 +56,8 @@ fn update(s: &mut State) {
     match s {
         // Loading state, we get the data if loaded and we parse it as sprite
         State::Loading { list } => {
+            draw_loading();
+
             let data = list.parse(parse_assets).unwrap();
 
             if let Some(list) = data {
@@ -67,6 +69,17 @@ fn update(s: &mut State) {
             draw_world(assets);
         }
     }
+}
+
+fn draw_loading() {
+    let mut draw = draw::create_draw_2d();
+    draw.clear(Color::BLACK);
+    draw.text("Loading...")
+        .anchor(Vec2::splat(0.5))
+        .translate(window_size() * 0.5)
+        .size(24.0);
+
+    gfx::render_to_frame(&draw).unwrap();
 }
 
 fn draw_world(assets: &Assets) {
@@ -83,7 +96,7 @@ fn draw_world(assets: &Assets) {
     draw.text(&txt)
         .font(&assets.font1)
         .anchor(Vec2::splat(0.5))
-        .position(window_size() * vec2(0.5, 0.8))
+        .translate(window_size() * vec2(0.5, 0.8))
         .size(24.0);
 
     gfx::render_to_frame(&draw).unwrap();

@@ -1,4 +1,5 @@
 - todo:
+    * EVENTS system: fix event callbacks (s: &mut state), split update and draw?
     * audio clean sounds must be automatic with core events after frames, improve audio examples
     * use encase crate to comply with std140
     * blending, and masking
@@ -7,14 +8,13 @@
     * multisampling? mipmapping?
     * egui
     * lazy, drop file, open links?
-    * fix event callbacks (s: &mut state), split update and draw?
-    * Assets/resources loading
     * gamepad for wasm32
     * input wasm32 (compositionend events to get ime/chars) -> https://stackoverflow.com/questions/51226598/what-is-javascripts-compositionevent-please-give-examples
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
     * puffin profiling?
     * create_font should have a ".pixelated()" option to use a second mask_texture with Nearest filter
     * touch support
+    * COLOR Srgb CPU vs Linear GPU
 
 - questions:
     * should we use `offset` or `origin` instead of `position` to set elements in the screen and `position` instead of `translate`?
