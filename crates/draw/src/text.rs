@@ -274,7 +274,7 @@ impl TextSystem {
         let ids = self
             .font_system
             .db_mut()
-            .load_font_source(Source::Binary(Arc::new(data)));
+            .load_font_source(Source::Binary(Arc::new(data.to_vec())));
         let raw_id = ids
             .get(0)
             .ok_or_else(|| "Cannot create the font".to_string())?

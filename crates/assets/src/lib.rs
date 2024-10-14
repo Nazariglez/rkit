@@ -1,9 +1,12 @@
 mod events;
+mod list;
 mod load_file;
 mod loader;
 mod waker;
 
+pub use crate::list::AssetList;
 pub use crate::loader::AssetId;
+
 use crate::loader::ASSET_LOADER;
 
 #[inline]

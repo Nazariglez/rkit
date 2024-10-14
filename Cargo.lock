@@ -160,6 +160,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anymap3"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9316150bf847270bd54e404c3fb1c5d3c6af118b3f0c3b42097da5ceafbe7c27"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -190,6 +196,7 @@ dependencies = [
 name = "assets"
 version = "0.0.0"
 dependencies = [
+ "anymap3",
  "atomic_refcell",
  "futures",
  "futures-util",
