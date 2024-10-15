@@ -18,6 +18,7 @@ lazy_static.workspace = true
 bytemuck.workspace = true
 smallvec.workspace = true
 once_cell.workspace = true
+rustc-hash.workspace = true
 
 # app/windowing
 winit = "0.30.5"
@@ -38,7 +39,6 @@ instant = { version = "0.1.13", features = ["wasm-bindgen"] }
 
 # Process images
 image = { version = "0.25.2", default-features = false, features = ["png", "jpeg", "webp", "rayon"] }
-
 
 ## deps only for this crate
 bitflags = "2.6.0"

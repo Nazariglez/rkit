@@ -550,6 +550,7 @@ dependencies = [
  "once_cell",
  "pollster",
  "raw-window-handle",
+ "rustc-hash 2.0.0",
  "smallvec 2.0.0-alpha.7",
  "smol_str 0.3.1",
  "strum",
