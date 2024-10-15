@@ -5,7 +5,7 @@ use rkit::gfx::{self, Color};
 const RADIUS: f32 = 150.0;
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(s: &mut ()) {

@@ -46,7 +46,7 @@ impl State {
 }
 
 fn main() {
-    rkit::init_with(State::new).on_update(update).run().unwrap()
+    rkit::init_with(State::new).update(update).run().unwrap()
 }
 
 fn update(state: &mut State) {

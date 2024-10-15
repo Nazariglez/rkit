@@ -4,7 +4,7 @@ use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(s: &mut ()) {

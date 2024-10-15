@@ -29,7 +29,7 @@ impl State {
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(State::new).on_update(update).run()
+    rkit::init_with(State::new).update(update).run()
 }
 
 fn update(state: &mut State) {

@@ -6,7 +6,7 @@ use rkit::math::Vec2;
 const TEXT: &'static str = "Drawing a background with a margin of 10 pixels!. To do so, we're measuring the text before draw it.";
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(state: &mut ()) {

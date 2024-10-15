@@ -5,7 +5,7 @@ use rkit::input::{is_key_pressed, KeyCode};
 use rkit::math::{vec2, Vec2};
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(s: &mut ()) {

@@ -198,6 +198,7 @@ version = "0.0.0"
 dependencies = [
  "anymap3",
  "atomic_refcell",
+ "core",
  "futures",
  "futures-util",
  "indexmap",
@@ -229,6 +230,7 @@ name = "audio"
 version = "0.0.0"
 dependencies = [
  "atomic_refcell",
+ "core",
  "kira",
  "log",
  "num",

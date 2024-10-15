@@ -18,7 +18,7 @@ const PERIOD: f32 = 6.0;
 const PI: f32 = std::f32::consts::PI;
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(s: &mut ()) {

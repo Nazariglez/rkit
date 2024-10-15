@@ -6,7 +6,7 @@ use rkit::time;
 use std::ops::Rem;
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(s: &mut ()) {

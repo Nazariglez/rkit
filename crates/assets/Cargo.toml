@@ -3,6 +3,7 @@ name = "assets"
 edition = "2021"
 
 [dependencies]
+core.workspace = true
 log.workspace = true
 parking_lot.workspace = true
 rustc-hash.workspace = true

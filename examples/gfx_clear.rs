@@ -2,7 +2,7 @@ use rkit::gfx::{self, Color, Renderer};
 use rkit::time;
 
 fn main() {
-    rkit::init().on_update(update).run().unwrap()
+    rkit::init().update(update).run().unwrap()
 }
 
 fn update(s: &mut ()) {

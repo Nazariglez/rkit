@@ -1,5 +1,5 @@
 use crate::sound::{InstanceId, SoundId};
-use crate::{Sound, SoundInstance};
+use crate::{clean_audio_manager, Sound, SoundInstance};
 use atomic_refcell::AtomicRefCell;
 use kira::manager::error::PlaySoundError;
 use kira::manager::{AudioManager, AudioManagerSettings, DefaultBackend};
@@ -13,8 +13,10 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
 use utils::drop_signal::DropObserver;
 
-pub(crate) static MANAGER: Lazy<AtomicRefCell<Manager>> =
-    Lazy::new(|| AtomicRefCell::new(Manager::default()));
+pub(crate) static MANAGER: Lazy<AtomicRefCell<Manager>> = Lazy::new(|| {
+    core::app::on_sys_post_update(|| clean_audio_manager());
+    AtomicRefCell::new(Manager::default())
+});
 
 struct InstanceData {
     id: u64,

@@ -1,4 +1,4 @@
-use audio::{clean_audio_manager, is_sound_playing, sound_progress};
+use audio::{is_sound_playing, sound_progress};
 use rkit::audio::{
     create_sound, create_sound_instance, play_sound, set_global_volume, stop_sound, Sound,
     SoundInstance,
@@ -23,7 +23,7 @@ impl State {
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(State::new).on_update(update).run()
+    rkit::init_with(State::new).update(update).run()
 }
 
 fn update(s: &mut State) {
@@ -61,6 +61,4 @@ fn update(s: &mut State) {
     ))
     .position(Vec2::splat(20.0));
     gfx::render_to_frame(&draw).unwrap();
-
-    clean_audio_manager();
 }

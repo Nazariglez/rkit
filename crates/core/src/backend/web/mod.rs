@@ -7,6 +7,7 @@ mod window;
 
 use crate::backend::{BackendImpl, GfxBackendImpl};
 use crate::builder::AppBuilder;
+use crate::events::{CoreEvent, CORE_EVENTS_MAP};
 use crate::gfx::GfxBackend;
 use crate::input::{KeyboardState, MouseState};
 use crate::math::Vec2;
@@ -61,6 +62,8 @@ where
         update: update_cb,
     };
 
+    CORE_EVENTS_MAP.borrow().trigger(CoreEvent::Init);
+
     let inner_callback = callback.clone();
     let win = web_sys::window().unwrap();
     *callback.borrow_mut() = Some(Closure::wrap(Box::new(move || {
@@ -72,6 +75,8 @@ where
         &web_sys::window().unwrap(),
         callback.borrow().as_ref().unwrap(),
     );
+
+    // TODO CoreEvent::Cleanup, and also stop request animation frame?
 }
 
 struct Runner<S> {
@@ -85,6 +90,7 @@ impl<S> Runner<S> {
 
         // pre frame
         {
+            CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);
             let mut bck = get_mut_backend();
             bck.process_events();
             bck.gfx().prepare_frame();
@@ -96,6 +102,8 @@ impl<S> Runner<S> {
         {
             let mut bck = get_mut_backend();
             bck.gfx().present_frame();
+            CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PostUpdate);
+
             bck.mouse_state.tick();
             bck.keyboard_state.tick();
         }

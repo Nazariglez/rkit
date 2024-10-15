@@ -23,6 +23,7 @@ use crate::math::{vec2, Vec2};
 
 #[cfg(feature = "gamepad")]
 use crate::backend::gamepad_gilrs::GilrsBackend;
+use crate::events::{CoreEvent, CORE_EVENTS_MAP};
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;
 use crate::time;
@@ -300,6 +301,7 @@ impl<S> ApplicationHandler for Runner<S> {
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
         }
+        CORE_EVENTS_MAP.borrow().trigger(CoreEvent::Init);
     }
 
     fn window_event(
@@ -387,9 +389,13 @@ impl<S> ApplicationHandler for Runner<S> {
                 }
 
                 // app's update cb
+                CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);
+
                 get_mut_backend().gfx().prepare_frame();
                 (*self.update)(self.state.as_mut().unwrap());
                 get_mut_backend().gfx().present_frame();
+
+                CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PostUpdate);
 
                 // post-update
                 let mut bck = get_mut_backend();
@@ -445,6 +451,8 @@ where
 
     // at this point the runner is not in use, the app is closing
     cleanup_cb(runner.state.as_mut().unwrap());
+
+    CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
 
     Ok(())
 }

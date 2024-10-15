@@ -2,6 +2,7 @@ use crate::backend::{get_backend, get_mut_backend, BackendImpl};
 use crate::math::{vec2, Vec2};
 
 mod window;
+use crate::events::{CoreEvent, CORE_EVENTS_MAP};
 pub use window::*;
 
 // -- Window section
@@ -93,4 +94,37 @@ pub fn close_window() {
 #[inline]
 pub fn screen_size() -> Vec2 {
     get_backend().screen_size()
+}
+
+// - Core events
+/// Callback executed after the init.
+/// This is primarily intended for use by plugins, not by the end user.
+#[inline]
+pub fn on_sys_init<F: Fn() + Send + Sync + 'static>(cb: F) {
+    CORE_EVENTS_MAP.borrow_mut().insert(CoreEvent::Init, cb);
+}
+
+/// Callback executed before the update callback.
+/// This is primarily intended for use by plugins, not by the end user.
+#[inline]
+pub fn on_sys_pre_update<F: Fn() + Send + Sync + 'static>(cb: F) {
+    CORE_EVENTS_MAP
+        .borrow_mut()
+        .insert(CoreEvent::PreUpdate, cb);
+}
+
+/// Callback executed after the update callback.
+/// This is primarily intended for use by plugins, not by the end user.
+#[inline]
+pub fn on_sys_post_update<F: Fn() + Send + Sync + 'static>(cb: F) {
+    CORE_EVENTS_MAP
+        .borrow_mut()
+        .insert(CoreEvent::PostUpdate, cb);
+}
+
+/// Callback executed after the cleanup callback.
+/// This is primarily intended for use by plugins, not by the end user.
+#[inline]
+pub fn on_sys_cleanup<F: Fn() + Send + Sync + 'static>(cb: F) {
+    CORE_EVENTS_MAP.borrow_mut().insert(CoreEvent::CleanUp, cb);
 }

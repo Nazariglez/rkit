@@ -14,8 +14,9 @@ pub fn load_asset(file_path: &str) -> AssetId {
     ASSET_LOADER.borrow_mut().load(file_path)
 }
 
+/// Used by system to pull the assets futures
 #[inline]
-pub fn update_assets() {
+pub(crate) fn update_assets() {
     ASSET_LOADER.borrow_mut().update();
 }
 
@@ -37,8 +38,7 @@ where
     ASSET_LOADER.borrow_mut().parse(*id, parser, keep)
 }
 
-// TODO this should not be exposed and used automatically on frame end event
 #[inline]
-pub fn clean() {
-    ASSET_LOADER.borrow_mut().clean();
+pub fn clear_assets() {
+    ASSET_LOADER.borrow_mut().clear();
 }

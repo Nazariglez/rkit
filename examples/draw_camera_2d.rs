@@ -42,7 +42,7 @@ fn main() -> Result<(), String> {
     };
     rkit::init_with(State::new)
         .with_window(win)
-        .on_update(update)
+        .update(update)
         .run()
 }
 

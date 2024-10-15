@@ -18,7 +18,7 @@ impl State {
 
 fn main() -> Result<(), String> {
     rkit::init_with(|| State::new().unwrap())
-        .on_update(update)
+        .update(update)
         .run()
 }
 

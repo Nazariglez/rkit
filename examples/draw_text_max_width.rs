@@ -8,7 +8,7 @@ The standard chunk of Lorem Ipsum used since the 1500s is reproduced below for t
 "#;
 
 fn main() -> Result<(), String> {
-    rkit::init().on_update(update).run()
+    rkit::init().update(update).run()
 }
 
 fn update(s: &mut ()) {

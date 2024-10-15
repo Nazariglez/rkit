@@ -24,7 +24,7 @@ struct State {
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(State::default).on_update(update).run()
+    rkit::init_with(State::default).update(update).run()
 }
 
 fn update(state: &mut State) {

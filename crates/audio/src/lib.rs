@@ -117,9 +117,9 @@ pub fn global_volume() -> f32 {
     MANAGER.borrow().volume
 }
 
+/// Used by the system to clean after the frame ends
 #[inline]
-pub fn clean_audio_manager() {
-    // TODO this must be private and injected with events on the core
+pub(crate) fn clean_audio_manager() {
     MANAGER.borrow_mut().clean();
 }
 

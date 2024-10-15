@@ -35,10 +35,7 @@ struct AppState {
 }
 
 fn main() {
-    rkit::init_with(AppState::new)
-        .on_update(update)
-        .run()
-        .unwrap()
+    rkit::init_with(AppState::new).update(update).run().unwrap()
 }
 
 impl AppState {

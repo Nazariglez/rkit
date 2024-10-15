@@ -18,7 +18,7 @@ enum State {
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(setup).on_update(update).run()
+    rkit::init_with(setup).update(update).run()
 }
 
 fn setup() -> State {
@@ -51,8 +51,6 @@ fn parse_assets(map: &AssetMap) -> Result<Assets, String> {
 }
 
 fn update(s: &mut State) {
-    assets::update_assets();
-
     match s {
         // Loading state, we get the data if loaded and we parse it as sprite
         State::Loading { list } => {

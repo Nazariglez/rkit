@@ -13,7 +13,6 @@ where
     pub(crate) init_cb: InitCb<S>,
     pub(crate) update_cb: UpdateCb<S>,
     pub(crate) cleanup_cb: CleanupCb<S>,
-    // events, cleanup, maybe on? once?
 }
 
 pub(crate) fn builder<F, S>(cb: F) -> AppBuilder<S>
@@ -38,7 +37,7 @@ where
         self
     }
 
-    pub fn on_update<F>(mut self, cb: F) -> Self
+    pub fn update<F>(mut self, cb: F) -> Self
     where
         F: FnMut(&mut S) + 'static,
     {
@@ -46,7 +45,7 @@ where
         self
     }
 
-    pub fn on_cleanup<F>(mut self, cb: F) -> Self
+    pub fn cleanup<F>(mut self, cb: F) -> Self
     where
         F: FnOnce(&mut S) + 'static,
     {

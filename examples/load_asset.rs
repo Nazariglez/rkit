@@ -16,7 +16,7 @@ fn main() -> Result<(), String> {
         let asset_id = assets::load_asset("./examples/assets/rust-logo-512x512.png");
         State::Loading { asset_id }
     })
-    .on_update(update)
+    .update(update)
     .run()
 }
 
@@ -26,8 +26,6 @@ fn parse_sprite(id: &str, data: &[u8]) -> Result<Sprite, String> {
 }
 
 fn update(s: &mut State) {
-    assets::update_assets();
-
     match s {
         // Loading state, we get the data if loaded and we parse it as sprite
         State::Loading { asset_id } => {

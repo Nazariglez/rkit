@@ -44,7 +44,7 @@ impl State {
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(init).on_update(update).run()
+    rkit::init_with(init).update(update).run()
 }
 
 fn init() -> State {

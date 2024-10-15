@@ -1,6 +1,7 @@
 use super::waker::*;
 use crate::events::{AssetLoad, AssetState};
 use crate::load_file::FileLoader;
+use crate::update_assets;
 use atomic_refcell::AtomicRefCell;
 use futures::future::LocalBoxFuture;
 use futures::task::{Context, Poll};
@@ -15,8 +16,10 @@ use thunderdome::{Arena, Index};
 pub struct AssetId(Index);
 
 // TODO url loader
-pub(crate) static ASSET_LOADER: Lazy<AtomicRefCell<AssetLoader>> =
-    Lazy::new(|| AtomicRefCell::new(AssetLoader::new()));
+pub(crate) static ASSET_LOADER: Lazy<AtomicRefCell<AssetLoader>> = Lazy::new(|| {
+    core::app::on_sys_pre_update(|| update_assets());
+    AtomicRefCell::new(AssetLoader::new())
+});
 
 pub(crate) struct AssetLoader {
     loading: Vec<LoadWrapper>,
@@ -100,7 +103,7 @@ impl AssetLoader {
         id
     }
 
-    pub(crate) fn clean(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.states.clear();
     }
 }
