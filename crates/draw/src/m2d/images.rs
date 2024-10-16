@@ -45,14 +45,22 @@ var t_texture: texture_2d<f32>;
 @group(1) @binding(1)
 var s_texture: sampler;
 
+// srg to linear
+{{SRGB_TO_LINEAR}}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_texture, s_texture, in.uvs) * in.color;
+    let in_color = srgb_to_linear(in.color);
+    return textureSample(t_texture, s_texture, in.uvs) * in_color;
 }
 "#;
 
 pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
-    let pip = gfx::create_render_pipeline(SHADER)
+    let shader = SHADER.replace(
+        "{{SRGB_TO_LINEAR}}",
+        include_str!("../resources/to_linear.wgsl"),
+    );
+    let pip = gfx::create_render_pipeline(&shader)
         .with_label("Draw2D images default pipeline")
         .with_vertex_layout(
             VertexLayout::new()

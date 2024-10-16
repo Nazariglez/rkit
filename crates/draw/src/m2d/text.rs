@@ -54,24 +54,32 @@ var t_mask: texture_2d<f32>;
 @group(1) @binding(2)
 var t_color: texture_2d<f32>;
 
+// srg to linear
+{{SRGB_TO_LINEAR}}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let in_color = srgb_to_linear(in.color);
     if (in.tex == 0u) {
         let mask_sample = textureSampleLevel(t_mask, s_texture, in.uvs, 0.0);
-        var color: vec4<f32> = vec4(in.color.rgb, mask_sample.r * in.color.a);
+        var color: vec4<f32> = vec4(in_color.rgb, mask_sample.r * in_color.a);
         if color.a <= 0.0 {
             discard;
         }
         return color;
     } else {
         let color_sample = textureSampleLevel(t_color, s_texture, in.uvs, 0.0);
-        return color_sample * in.color;
+        return color_sample * in_color;
     }
 }
 "#;
 
 pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
-    let pip = gfx::create_render_pipeline(SHADER)
+    let shader = SHADER.replace(
+        "{{SRGB_TO_LINEAR}}",
+        include_str!("../resources/to_linear.wgsl"),
+    );
+    let pip = gfx::create_render_pipeline(&shader)
         .with_label("Draw2D text default pipeline")
         .with_vertex_layout(
             VertexLayout::new()

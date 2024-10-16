@@ -51,14 +51,21 @@ fn vs_main(
     return out;
 }
 
+// srgb_to_linear
+{{SRGB_TO_LINEAR}}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+    return srgb_to_linear(in.color);
 }
 "#;
 
 pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
-    let pip = gfx::create_render_pipeline(SHADER)
+    let shader = SHADER.replace(
+        "{{SRGB_TO_LINEAR}}",
+        include_str!("../../resources/to_linear.wgsl"),
+    );
+    let pip = gfx::create_render_pipeline(&shader)
         .with_vertex_layout(
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)

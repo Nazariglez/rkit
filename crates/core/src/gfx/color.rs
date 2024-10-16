@@ -112,7 +112,7 @@ impl Color {
     }
 
     #[inline(always)]
-    /// Returns the hexadecimal representantion of the colos as string like #RRGGBBAA
+    /// Returns the hexadecimal representation of the colors as string like #RRGGBBAA
     pub fn to_hex_string(&self) -> String {
         hex_to_string(self.to_hex())
     }
@@ -152,6 +152,16 @@ impl Color {
     /// Converts a linear RGB color to sRGB and returns a Color struct
     pub fn from_linear_rgb(c: LinearColor) -> Color {
         c.into()
+    }
+
+    /// Returns the color as linear
+    pub fn as_linear(self) -> Self {
+        Self {
+            r: gamma_to_linear(self.r),
+            g: gamma_to_linear(self.g),
+            b: gamma_to_linear(self.b),
+            a: self.a,
+        }
     }
 }
 
@@ -230,10 +240,10 @@ pub fn hex_to_string(hex: u32) -> String {
 /// Color on the linear space
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct LinearColor {
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
 }
 
 impl From<Color> for LinearColor {

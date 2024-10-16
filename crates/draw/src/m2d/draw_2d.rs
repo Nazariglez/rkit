@@ -525,7 +525,7 @@ impl AsRenderer for Draw2D {
 
         if self.batches.is_empty() {
             if let Some(color) = self.clear_color {
-                renderer.begin_pass().clear_color(color);
+                renderer.begin_pass().clear_color(color.as_linear());
                 cleared = true;
             }
         }
@@ -536,7 +536,7 @@ impl AsRenderer for Draw2D {
             // clear only once
             if !cleared {
                 if let Some(color) = self.clear_color {
-                    pass.clear_color(color);
+                    pass.clear_color(color.as_linear());
                     cleared = true;
                 }
             }
