@@ -141,6 +141,12 @@ where
     }
 }
 
+#[derive(Copy, Clone, Debug, Default)]
+pub struct DrawStats {
+    pub elements: usize,
+    pub batches: usize,
+}
+
 #[derive(Default, Clone)]
 pub struct Draw2D {
     round_pixels: bool,
@@ -162,6 +168,7 @@ pub struct Draw2D {
     indices: SmallVec<u32, { STACK_ALLOCATED_QUADS * 6 }>,
 
     pub(crate) last_text_bounds: Rect,
+    stats: DrawStats,
 }
 
 impl Draw2D {
@@ -198,6 +205,7 @@ impl Draw2D {
         T: Element2D,
     {
         element.process(self);
+        self.stats.elements += 1;
     }
 
     pub fn add_to_batch<'a>(&'a mut self, info: DrawingInfo<'a>) {
@@ -253,6 +261,7 @@ impl Draw2D {
         if new_batch {
             self.indices_offset = 0;
             self.batches.push(batch);
+            self.stats.batches += 1;
         }
 
         let current = self.batches.last_mut().unwrap();
@@ -469,6 +478,10 @@ impl Draw2D {
     // pub fn fps(&mut self) -> Drawing<'_, Text2D> {
     //     Drawing::new(self, Text2D::new(""))
     // }
+
+    pub fn stats(&self) -> DrawStats {
+        self.stats
+    }
 }
 
 pub struct DrawingInfo<'a> {

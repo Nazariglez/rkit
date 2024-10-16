@@ -5,7 +5,7 @@ fn main() {
     rkit::init().update(update).run().unwrap()
 }
 
-fn update(s: &mut ()) {
+fn update() {
     let t = time::elapsed_f32();
     let color = Color::rgb(t.cos(), t.sin(), 1.0);
 

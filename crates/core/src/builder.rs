@@ -37,23 +37,47 @@ where
         self
     }
 
-    pub fn update<F>(mut self, cb: F) -> Self
+    pub fn update<F, P>(mut self, mut cb: F) -> Self
     where
-        F: FnMut(&mut S) + 'static,
+        F: Handler<S, P> + 'static,
     {
-        self.update_cb = Box::new(cb);
+        self.update_cb = Box::new(move |s| cb.call(s));
         self
     }
 
-    pub fn cleanup<F>(mut self, cb: F) -> Self
+    pub fn cleanup<F, P>(mut self, mut cb: F) -> Self
     where
-        F: FnOnce(&mut S) + 'static,
+        F: Handler<S, P> + 'static,
     {
-        self.cleanup_cb = Box::new(cb);
+        self.cleanup_cb = Box::new(move |s| cb.call(s));
         self
     }
 
     pub fn run(self) -> Result<(), String> {
         run(self)
+    }
+}
+
+pub trait Handler<S, Params> {
+    fn call(&mut self, state: &mut S);
+}
+
+impl<S, Fun> Handler<S, ()> for Fun
+where
+    S: 'static,
+    Fun: FnMut(),
+{
+    fn call(&mut self, _state: &mut S) {
+        (*self)();
+    }
+}
+
+impl<S, Fun> Handler<S, (S,)> for Fun
+where
+    S: 'static,
+    Fun: FnMut(&mut S),
+{
+    fn call(&mut self, state: &mut S) {
+        (*self)(state);
     }
 }

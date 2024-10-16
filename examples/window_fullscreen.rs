@@ -8,7 +8,7 @@ fn main() -> Result<(), String> {
     rkit::init().update(update).run()
 }
 
-fn update(s: &mut ()) {
+fn update() {
     if is_key_pressed(KeyCode::Space) {
         toggle_fullscreen();
     }

@@ -6,7 +6,7 @@ fn main() -> Result<(), String> {
     rkit::init().update(update).run()
 }
 
-fn update(s: &mut ()) {
+fn update() {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.rect(vec2(100.0, 100.0), vec2(600.0, 400.0));

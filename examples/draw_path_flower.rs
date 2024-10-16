@@ -21,7 +21,7 @@ fn main() -> Result<(), String> {
     rkit::init().update(update).run()
 }
 
-fn update(s: &mut ()) {
+fn update() {
     let t = time::elapsed_f32() * 1000.0;
 
     let mut draw = create_draw_2d();

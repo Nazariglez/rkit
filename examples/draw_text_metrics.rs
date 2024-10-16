@@ -9,7 +9,7 @@ fn main() -> Result<(), String> {
     rkit::init().update(update).run()
 }
 
-fn update(state: &mut ()) {
+fn update() {
     let mut draw = create_draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
