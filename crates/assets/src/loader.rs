@@ -3,12 +3,10 @@ use crate::events::{AssetLoad, AssetState};
 use crate::load_file::FileLoader;
 use crate::update_assets;
 use atomic_refcell::AtomicRefCell;
-use futures::future::LocalBoxFuture;
 use futures::task::{Context, Poll};
 use futures_util::future::BoxFuture;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use thunderdome::{Arena, Index};
 
@@ -17,7 +15,7 @@ pub struct AssetId(Index);
 
 // TODO url loader
 pub(crate) static ASSET_LOADER: Lazy<AtomicRefCell<AssetLoader>> = Lazy::new(|| {
-    core::app::on_sys_pre_update(|| update_assets());
+    core::app::on_sys_pre_update(update_assets);
     AtomicRefCell::new(AssetLoader::new())
 });
 
@@ -108,9 +106,11 @@ impl AssetLoader {
     }
 }
 
+type InnerBoxFuture = BoxFuture<'static, Result<Vec<u8>, String>>;
+
 struct LoadWrapper {
     id: AssetId,
-    fut: Arc<Mutex<BoxFuture<'static, Result<Vec<u8>, String>>>>,
+    fut: Arc<Mutex<InnerBoxFuture>>,
     loaded: bool,
 }
 

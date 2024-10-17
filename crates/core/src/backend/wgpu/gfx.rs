@@ -33,8 +33,9 @@ pub(crate) struct GfxBackend {
     pub(crate) surface: Surface, // Eventually we could have a HashMap<WindowId, Surface> if we want multiple window
 
     next_resource_id: u64,
-    vsync: bool,
     ctx: Context,
+
+    #[cfg_attr(target_arch = "wasm32", allow(unused))]
     depth_format: TextureFormat,
     frame: Option<DrawFrame>,
 
@@ -68,10 +69,11 @@ impl GfxBackendImpl for GfxBackend {
         W: HasDisplayHandle + HasWindowHandle,
     {
         let id = resource_id(&mut self.next_resource_id);
-        let surface = init_surface(
+        let surface = Surface::create_raw_surface(window, &self.ctx.instance)?;
+        let surface = init_surface_from_raw(
             id,
             &mut self.ctx,
-            window,
+            surface,
             self.depth_format,
             win_size,
             vsync,
@@ -758,22 +760,6 @@ impl GfxBackend {
             Instance::default()
         };
 
-        #[cfg(not(target_arch = "wasm32"))]
-        let (ctx, surface) = {
-            let mut ctx = Context::new(instance, None).await?;
-            let surface = init_surface(
-                resource_id(&mut next_resource_id),
-                &mut ctx,
-                window,
-                depth_format,
-                win_size,
-                vsync,
-            )
-            .await?;
-            (ctx, surface)
-        };
-
-        #[cfg(target_arch = "wasm32")]
         let (ctx, surface) = {
             let raw = Surface::create_raw_surface(window, &instance)?;
             let mut ctx = Context::new(instance, Some(&raw)).await?;
@@ -791,7 +777,6 @@ impl GfxBackend {
 
         let mut bck = Self {
             next_resource_id,
-            vsync,
             ctx,
             depth_format,
             surface,
@@ -980,38 +965,6 @@ impl GfxBackend {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", allow(clippy::unused))]
-async fn init_surface<W>(
-    id: TextureId,
-    ctx: &mut Context,
-    window: &W,
-    depth_format: TextureFormat,
-    win_physical_size: UVec2,
-    vsync: bool,
-) -> Result<Surface, String>
-where
-    W: HasDisplayHandle + HasWindowHandle,
-{
-    let depth_texture = create_texture(
-        id,
-        &ctx.device,
-        &ctx.queue,
-        TextureDescriptor {
-            label: Some("Depth Texture for Surface"),
-            format: depth_format,
-            write: true,
-        },
-        Some(TextureData {
-            bytes: &[],
-            width: win_physical_size.x,
-            height: win_physical_size.y,
-        }),
-    )?;
-
-    Surface::new(ctx, window, win_physical_size, vsync, depth_texture).await
-}
-
-#[cfg(target_arch = "wasm32")]
 async fn init_surface_from_raw(
     id: TextureId,
     ctx: &mut Context,

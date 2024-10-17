@@ -48,7 +48,8 @@ where
     let size = config.size;
 
     let callback = Rc::new(RefCell::new(None));
-    let win = WebWindow::new(config, callback.clone()).unwrap();
+    let win = WebWindow::new(config).unwrap();
+    let close_requested = win.close_requested.clone();
     let gfx = GfxBackend::init(&win, vsync, size).await.unwrap();
     {
         let mut bck = get_mut_backend();
@@ -66,6 +67,11 @@ where
     let inner_callback = callback.clone();
     let win = web_sys::window().unwrap();
     *callback.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        if *close_requested.borrow() {
+            CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
+            return;
+        }
+
         runner.tick();
         request_animation_frame(&win, inner_callback.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
@@ -202,7 +208,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
         self.win.as_mut().unwrap().toggle_fullscreen();
     }
     fn dpi(&self) -> f32 {
-        todo!()
+        self.win.as_ref().unwrap().dpi
     }
     fn position(&self) -> Vec2 {
         todo!()
@@ -220,7 +226,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
         todo!()
     }
     fn close(&mut self) {
-        todo!()
+        self.win.as_ref().unwrap().exit();
     }
 
     // input

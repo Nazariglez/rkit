@@ -1,4 +1,4 @@
-use super::get_mut_2d_painter;
+use super::{get_2d_painter, get_mut_2d_painter};
 use crate::m2d::images::Image2D;
 use crate::m2d::mat3_stack::Mat3Stack;
 use crate::m2d::painter::DrawPipelineId;
@@ -30,11 +30,11 @@ pub struct PipelineContext {
 }
 
 pub trait AsBindGroups {
-    fn as_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>;
+    fn to_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>;
 }
 
 impl<'a> AsBindGroups for &'a [BindGroup] {
-    fn as_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> {
+    fn to_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> {
         debug_assert!(
             self.len() <= MAX_BIND_GROUPS_PER_PIPELINE,
             "Bind Groups must be less than {}",
@@ -51,7 +51,6 @@ struct BatchInfo {
     end_idx: usize,
     pipeline: RenderPipeline,
     bind_groups: ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
-    sprite: Option<Sprite>,
 }
 
 impl Clone for BatchInfo {
@@ -63,7 +62,6 @@ impl Clone for BatchInfo {
             end_idx: self.end_idx,
             pipeline: self.pipeline.clone(),
             bind_groups: self.bind_groups.clone(),
-            sprite: None,
         }
     }
 }
@@ -250,7 +248,6 @@ impl Draw2D {
             end_idx,
             pipeline,
             bind_groups: groups,
-            sprite: info.sprite.cloned(),
         };
 
         let new_batch = match self.batches.last() {
@@ -269,8 +266,8 @@ impl Draw2D {
 
         let vbo_count = info.vertices.len() as u64 * 4; // f32=4bytes
         let ebo_count = info.indices.len() as u64 * 4; // u32=4bytes
-        current.vbo_range.end = current.vbo_range.end + vbo_count;
-        current.ebo_range.end = current.ebo_range.end + ebo_count;
+        current.vbo_range.end += vbo_count;
+        current.ebo_range.end += ebo_count;
 
         // the indices must use an offset
         self.indices.extend(
@@ -498,7 +495,7 @@ pub trait Element2D {
 
 impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
-        let painter = get_mut_2d_painter();
+        let painter = get_2d_painter();
 
         let ubo_transform = &painter.ubo;
         let vbo = &painter.vbo;
@@ -545,7 +542,7 @@ impl AsRenderer for Draw2D {
                 b.bind_groups.iter().collect();
 
             pass.pipeline(&b.pipeline)
-                .buffers_with_offset(&[(&vbo, b.vbo_range.clone()), (&ebo, b.ebo_range.clone())])
+                .buffers_with_offset(&[(vbo, b.vbo_range.clone()), (ebo, b.ebo_range.clone())])
                 .bindings(&binds);
 
             let count = b.count() as u32;

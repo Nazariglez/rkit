@@ -12,28 +12,25 @@ use raw_window_handle::{
 use std::cell::RefCell;
 use std::ptr::NonNull;
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{Document, Element, Event as WebEvent, HtmlCanvasElement, Window};
+use web_sys::{Document, Element, Event as WebEvent, HtmlCanvasElement};
 use wgpu::rwh::{HandleError, HasWindowHandle, WindowHandle};
-
-type RafType = Rc<RefCell<Option<Closure<dyn FnMut()>>>>;
 
 pub(crate) struct WebWindow {
     pub canvas: HtmlCanvasElement,
-    pub win: Window,
     pub document: Document,
     pub parent: Element,
     pub dpi: f32,
 
     pub config: WindowConfig,
-    pub raf: RafType,
     pub events: Rc<RefCell<EventIterator>>,
     pub cursor_locked: Rc<RefCell<bool>>,
     pub cursor_lock_request: Rc<RefCell<Option<bool>>>,
 
     pub fullscreen_last_size: Rc<RefCell<Option<UVec2>>>,
     pub fullscreen_request: Rc<RefCell<Option<bool>>>,
+
+    pub close_requested: Rc<RefCell<bool>>,
 }
 
 impl HasWindowHandle for WebWindow {
@@ -51,7 +48,7 @@ impl HasDisplayHandle for WebWindow {
 }
 
 impl WebWindow {
-    pub fn new(config: WindowConfig, raf: RafType) -> Result<Self, String> {
+    pub fn new(config: WindowConfig) -> Result<Self, String> {
         let window =
             web_sys::window().ok_or_else(|| String::from("Can't access window dom object."))?;
         let document = window
@@ -89,17 +86,16 @@ impl WebWindow {
 
         let mut win = Self {
             canvas,
-            win: window,
             document,
             parent: canvas_parent,
             dpi: dpi as f32,
             config,
-            raf,
             events,
             cursor_locked,
             cursor_lock_request,
             fullscreen_last_size,
             fullscreen_request,
+            close_requested: Rc::new(RefCell::new(false)),
         };
 
         enable_input_events(&mut win);
@@ -135,6 +131,10 @@ impl WebWindow {
 
     pub fn title(&self) -> &str {
         &self.config.title
+    }
+
+    pub fn exit(&self) {
+        *self.close_requested.borrow_mut() = true;
     }
 }
 

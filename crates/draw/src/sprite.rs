@@ -3,7 +3,6 @@ use core::gfx::{
     TextureId, TextureWrap,
 };
 use core::math::{vec2, Rect, Vec2};
-use std::fmt::{Debug, Formatter};
 use utils::drop_signal::DropObserver;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -67,6 +66,7 @@ impl Sprite {
     }
 }
 
+#[derive(Default)]
 pub struct SpriteBuilder<'a> {
     texture_builder: TextureBuilder<'a>,
     sampler_builder: SamplerBuilder<'a>,
@@ -76,12 +76,7 @@ pub struct SpriteBuilder<'a> {
 
 impl<'a> SpriteBuilder<'a> {
     pub fn new() -> Self {
-        Self {
-            texture_builder: TextureBuilder::new(),
-            sampler_builder: SamplerBuilder::new(),
-            texture: None,
-            sampler: None,
-        }
+        Self::default()
     }
 
     pub fn with_label(mut self, label: &'a str) -> Self {

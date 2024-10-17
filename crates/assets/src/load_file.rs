@@ -5,14 +5,11 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::future::Future;
 
 #[cfg(target_arch = "wasm32")]
-use futures_util::future::{poll_fn, ready, FutureExt, TryFutureExt};
+use futures_util::future::{poll_fn, ready, TryFutureExt};
 #[cfg(target_arch = "wasm32")]
 use js_sys::Uint8Array;
 #[cfg(target_arch = "wasm32")]
-use std::{
-    io::Error as IOError,
-    task::{Context, Poll},
-};
+use std::task::{Context, Poll};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 #[cfg(target_arch = "wasm32")]
@@ -38,7 +35,7 @@ impl FileLoader {
         let path = path.to_owned();
         self.thread_pool.spawn(move || {
             let read_result = std::fs::read(&path);
-            let _ = tx.send(read_result.map(|v| v.into()).map_err(|e| e.to_string()));
+            let _ = tx.send(read_result.map_err(|e| e.to_string()));
         });
 
         async move {
@@ -102,8 +99,8 @@ fn poll_request(
         let waker = ctx.waker().clone();
         let wake_up = Closure::wrap(Box::new(move || waker.wake_by_ref()) as Box<dyn FnMut()>);
         let wake_up_ref = wake_up.as_ref().unchecked_ref();
-        xhr.0.set_onload(Some(&wake_up_ref));
-        xhr.0.set_onerror(Some(&wake_up_ref));
+        xhr.0.set_onload(Some(wake_up_ref));
+        xhr.0.set_onerror(Some(wake_up_ref));
         wake_up.forget();
     }
     let status = xhr

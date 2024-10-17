@@ -87,7 +87,7 @@ pub fn pixelated_pipeline(res: PipelineResources) -> Result<PipelineContext, Str
             transform_bind_group,
             res.sprite_bind_group.clone(), // reuse the binding group for texture/samplers
         ])
-            .as_bind_groups(),
+            .to_bind_groups(),
         vertex_offset: 8,
         x_pos: 0,
         y_pos: 1,

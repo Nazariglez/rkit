@@ -101,7 +101,7 @@ pub fn custom_pipeline(
 
     Ok(PipelineContext {
         pipeline: pip,
-        groups: (&[transform_bg, effect_bg]).as_bind_groups(),
+        groups: (&[transform_bg, effect_bg]).to_bind_groups(),
         vertex_offset: 6,
         x_pos: 0,
         y_pos: 1,

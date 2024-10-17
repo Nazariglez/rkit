@@ -174,15 +174,15 @@ fn stroke(quad: &Rectangle2D, draw: &mut Draw2D) {
 }
 
 fn fill(quad: &Rectangle2D, draw: &mut Draw2D) {
-    let mut draw_shape = |mut vertices: &mut [f32], indices: &[u32]| {
+    let mut draw_shape = |vertices: &mut [f32], indices: &[u32]| {
         let matrix = quad
             .transform
             .map_or(Mat3::IDENTITY, |mut t| t.set_size(quad.size).updated_mat3());
 
         draw.add_to_batch(DrawingInfo {
             pipeline: quad.pip,
-            vertices: &mut vertices,
-            indices: &indices,
+            vertices,
+            indices,
             transform: matrix,
             sprite: None,
         });

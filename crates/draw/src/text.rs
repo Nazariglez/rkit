@@ -1,7 +1,7 @@
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat};
 use core::math::{uvec2, vec2, UVec2, Vec2};
-use cosmic_text::fontdb::{Source, ID};
+use cosmic_text::fontdb::Source;
 use cosmic_text::{
     Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch, Style, SwashCache,
     SwashContent, Weight,
@@ -36,7 +36,7 @@ pub struct FontId(pub(crate) u64);
 #[derive(Clone, Debug)]
 pub struct Font {
     id: FontId,
-    raw: ID,
+    // raw: ID,
     family: Arc<String>,
     weight: Weight,
     style: Style,
@@ -56,7 +56,7 @@ pub struct GlyphData {
     pub size: Vec2,
     pub uvs1: Vec2,
     pub uvs2: Vec2,
-    pub typ: AtlasType,
+    pub(crate) typ: AtlasType,
 }
 
 pub struct BlockInfo<'a> {
@@ -84,7 +84,7 @@ pub struct TextInfo<'a> {
     pub h_align: HAlign,
 }
 
-pub fn text_metrics<'a>(text: &'a str) -> TextMetricsBuilder<'a> {
+pub fn text_metrics(text: &str) -> TextMetricsBuilder {
     TextMetricsBuilder {
         info: TextInfo {
             pos: Default::default(),
@@ -219,6 +219,7 @@ impl TextSystem {
 
         let buffer = Buffer::new(&mut font_system, Metrics::new(1.0, 1.0));
 
+        #[allow(unused_mut)]
         let mut sys = Self {
             mask,
             color,
@@ -275,10 +276,9 @@ impl TextSystem {
             .font_system
             .db_mut()
             .load_font_source(Source::Binary(Arc::new(data.to_vec())));
-        let raw_id = ids
-            .get(0)
-            .ok_or_else(|| "Cannot create the font".to_string())?
-            .clone();
+        let raw_id = *ids
+            .first()
+            .ok_or_else(|| "Cannot create the font".to_string())?;
         let face = self
             .font_system
             .db()
@@ -286,7 +286,7 @@ impl TextSystem {
             .ok_or_else(|| "Invalid font type".to_string())?;
         Ok(Font {
             id: FontId(id),
-            raw: raw_id,
+            // raw: raw_id,
             family: Arc::new(face.families[0].0.to_string()),
             weight: face.weight,
             style: face.style,
@@ -347,9 +347,7 @@ impl TextSystem {
                 self.temp_data.clear();
 
                 let processed = self.process_data.iter().filter_map(|data| {
-                    let Some(info) = self.cache.get(&data.key) else {
-                        return None;
-                    };
+                    let info = self.cache.get(&data.key)?;
 
                     if matches!(info.typ, AtlasType::None) {
                         return None;
@@ -586,7 +584,7 @@ impl AtlasData {
     fn upload(&self, size: UVec2, offset: UVec2, data: &[u8]) -> Result<(), String> {
         log::debug!("Uploading new glyph to texture");
         gfx::write_texture(&self.texture)
-            .from_data(&data)
+            .from_data(data)
             .with_offset(offset)
             .with_size(size)
             .build()

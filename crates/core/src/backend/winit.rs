@@ -35,7 +35,6 @@ pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
 
 #[derive(Default)]
 pub(crate) struct WinitBackend {
-    win_opts: WindowAttributes,
     window: Option<Window>,
     request_close: bool,
     mouse_state: MouseState,
@@ -83,8 +82,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     #[inline]
     fn set_min_size(&mut self, size: Vec2) {
         debug_assert!(self.window.is_some(), "Window must be present");
-        let _ = self
-            .window
+        self.window
             .as_mut()
             .unwrap()
             .set_min_inner_size(Some(LogicalSize::new(size.x, size.y)));
@@ -93,8 +91,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     #[inline]
     fn set_max_size(&mut self, size: Vec2) {
         debug_assert!(self.window.is_some(), "Window must be present");
-        let _ = self
-            .window
+        self.window
             .as_mut()
             .unwrap()
             .set_max_inner_size(Some(LogicalSize::new(size.x, size.y)));
@@ -256,6 +253,7 @@ struct Runner<S> {
 
 impl<S> ApplicationHandler for Runner<S> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        #[allow(unused_mut)]
         let mut attrs = self.window_attrs.clone();
 
         #[cfg(target_arch = "wasm32")]
@@ -337,7 +335,6 @@ impl<S> ApplicationHandler for Runner<S> {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let mut bck = get_mut_backend();
-                let scale_factor = bck.window.as_ref().unwrap().scale_factor() as f32;
                 let value = match delta {
                     MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 50.0,
                     MouseScrollDelta::PixelDelta(dt) => {
@@ -370,14 +367,9 @@ impl<S> ApplicationHandler for Runner<S> {
                     bck.keyboard_state.add_text(txt.as_str());
                 }
             }
-            WindowEvent::Ime(ime) => {
+            WindowEvent::Ime(Ime::Commit(c)) => {
                 // chars
-                match ime {
-                    Ime::Commit(c) => {
-                        get_mut_backend().keyboard_state.add_text(c.as_str());
-                    }
-                    _ => {}
-                }
+                get_mut_backend().keyboard_state.add_text(c.as_str());
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -414,10 +406,7 @@ impl<S> ApplicationHandler for Runner<S> {
                 let mut bck = get_mut_backend();
                 bck.gfx.as_mut().unwrap().resize(size.width, size.height);
             }
-            WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                inner_size_writer,
-            } => {
+            WindowEvent::ScaleFactorChanged { .. } => {
                 // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
             }
             _ => (),

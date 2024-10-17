@@ -1,8 +1,8 @@
 use super::{create_shapes_2d_pipeline_ctx, PipelineContext};
 use crate::sprite::SpriteId;
 use crate::{
-    create_images_2d_pipeline_ctx, create_pattern_2d_pipeline_ctx, create_text_2d_pipeline_ctx,
-    Sprite,
+    clean_2d, create_images_2d_pipeline_ctx, create_pattern_2d_pipeline_ctx,
+    create_text_2d_pipeline_ctx, Sprite,
 };
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::gfx::{self, BindGroup, Buffer, RenderPipeline};
@@ -11,8 +11,11 @@ use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use utils::drop_signal::DropSignal;
 
-pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> =
-    Lazy::new(|| AtomicRefCell::new(Painter2D::default()));
+pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> = Lazy::new(|| {
+    core::app::on_sys_post_update(clean_2d);
+
+    AtomicRefCell::new(Painter2D::default())
+});
 
 // hackish to allow the Lazy<T>, this is fine because wasm32 is not multithreading
 unsafe impl Sync for Painter2D {}
@@ -53,7 +56,7 @@ pub(crate) struct Painter2D {
     pub vbo: Buffer,
     pub ebo: Buffer,
     pub dummy_sprite_bg: Option<BindGroup>,
-    pub sprites_cache: FxHashMap<SpriteId, CachedBindGroup>,
+    sprites_cache: FxHashMap<SpriteId, CachedBindGroup>,
 }
 
 impl Default for Painter2D {
@@ -163,10 +166,6 @@ impl Painter2D {
         self.pipelines.remove(id)
     }
 
-    pub fn ctx(&self, id: &DrawPipelineId) -> Option<&PipelineContext> {
-        self.pipelines.get(id)
-    }
-
     pub fn cached_bind_group_for(&mut self, pip: &RenderPipeline, sprite: &Sprite) -> BindGroup {
         self.sprites_cache
             .entry(sprite.id())
@@ -186,7 +185,7 @@ impl Painter2D {
     }
 
     pub fn clean(&mut self) {
-        self.sprites_cache.retain(|k, v| !v.expired());
+        self.sprites_cache.retain(|_k, v| !v.expired());
     }
 }
 

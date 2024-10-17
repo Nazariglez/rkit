@@ -37,21 +37,6 @@ impl Surface {
         }
     }
 
-    pub async fn new<W>(
-        ctx: &mut Context,
-        window: &W,
-        win_physical_size: UVec2,
-        vsync: bool,
-        depth_texture: Texture,
-    ) -> Result<Self, String>
-    where
-        W: HasDisplayHandle + HasWindowHandle,
-    {
-        log::trace!("Generating main surface");
-        let surface = Self::create_raw_surface(window, &ctx.instance)?;
-        Self::new_from_raw(ctx, surface, win_physical_size, vsync, depth_texture).await
-    }
-
     pub async fn new_from_raw(
         ctx: &mut Context,
         surface: RawSurface<'static>,

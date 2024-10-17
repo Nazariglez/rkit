@@ -1,7 +1,6 @@
 use crate::sound::{InstanceId, SoundId};
 use crate::{clean_audio_manager, Sound, SoundInstance};
 use atomic_refcell::AtomicRefCell;
-use kira::manager::error::PlaySoundError;
 use kira::manager::{AudioManager, AudioManagerSettings, DefaultBackend};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::sound::{PlaybackRate, PlaybackState};
@@ -11,10 +10,9 @@ use num::Zero;
 use once_cell::sync::Lazy;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
-use utils::drop_signal::DropObserver;
 
 pub(crate) static MANAGER: Lazy<AtomicRefCell<Manager>> = Lazy::new(|| {
-    core::app::on_sys_post_update(|| clean_audio_manager());
+    core::app::on_sys_post_update(clean_audio_manager);
     AtomicRefCell::new(Manager::default())
 });
 
@@ -76,10 +74,7 @@ impl Manager {
         };
 
         // If the sound is in progress get the list if not create the list
-        let list = self
-            .instances
-            .entry(instance.snd.id)
-            .or_insert_with(SmallVec::new);
+        let list = self.instances.entry(instance.snd.id).or_default();
 
         // Check if an instance with the same id already exists in the list
         let data_opt = list.iter_mut().find(|data| data.id == id);
@@ -342,7 +337,7 @@ impl Manager {
     }
 
     pub fn clean(&mut self) {
-        self.instances.retain(|k, v| {
+        self.instances.retain(|_, v| {
             v.retain(|d| !d.is_stopped());
             !v.is_empty()
         });

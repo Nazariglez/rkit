@@ -111,7 +111,7 @@ pub fn pixelated_pipeline(
             res.sprite_bind_group.clone(), // reuse the binding group for texture/samplers
             pixel_bind_group,
         ])
-            .as_bind_groups(),
+            .to_bind_groups(),
         vertex_offset: 8,
         x_pos: 0,
         y_pos: 1,

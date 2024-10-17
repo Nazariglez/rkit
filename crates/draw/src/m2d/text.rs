@@ -8,8 +8,8 @@ use macros::Drawable2D;
 use std::cell::RefCell;
 
 thread_local! {
-    static TEMP_VERTICES: RefCell<Vec<f32>> = RefCell::new(vec![]);
-    static TEMP_INDICES: RefCell<Vec<u32>> = RefCell::new(vec![]);
+    static TEMP_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(vec![]) };
+    static TEMP_INDICES: RefCell<Vec<u32>> = const { RefCell::new(vec![]) };
 }
 
 // language=wgsl
@@ -102,7 +102,7 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
 
     let bind_group = gfx::create_bind_group()
         .with_layout(pip.bind_group_layout_ref(0)?)
-        .with_uniform(0, &ubo_transform)
+        .with_uniform(0, ubo_transform)
         .build()?;
 
     Ok(PipelineContext {
@@ -207,7 +207,7 @@ impl<'a> Element2D for Text2D<'a> {
     fn process(&self, draw: &mut Draw2D) {
         let info = TextInfo {
             pos: self.position,
-            font: self.font.clone(),
+            font: self.font,
             text: self.text,
             wrap_width: self.max_width,
             font_size: self.size,

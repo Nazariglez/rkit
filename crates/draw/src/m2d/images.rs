@@ -81,12 +81,12 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
 
     let bind_group = gfx::create_bind_group()
         .with_layout(pip.bind_group_layout_ref(0)?)
-        .with_uniform(0, &ubo_transform)
+        .with_uniform(0, ubo_transform)
         .build()?;
 
     Ok(PipelineContext {
         pipeline: pip,
-        groups: (&[bind_group]).as_bind_groups(),
+        groups: (&[bind_group]).to_bind_groups(),
         vertex_offset: 8,
         x_pos: 0,
         y_pos: 1,

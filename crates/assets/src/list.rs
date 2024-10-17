@@ -15,7 +15,7 @@ impl AssetMap {
 
         self.inner
             .entry(type_id)
-            .or_insert_with(FxHashMap::default)
+            .or_default()
             .insert(id, Rc::new(asset));
 
         self.len += 1;
@@ -35,11 +35,15 @@ impl AssetMap {
                     .downcast::<T>()
                     .map_err(|_| format!("Failed to downcast asset with id '{id}' to correct type"))
             })
-            .and_then(|asset| Ok((*asset).clone()))
+            .map(|asset| (*asset).clone())
     }
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
@@ -48,12 +52,14 @@ struct Data {
     loaded: bool,
 }
 
+type ParserFn = dyn Fn(&AssetId, &str, &mut AssetMap) -> Result<(), String>;
+
 pub struct AssetList {
     inner: FxHashMap<String, Data>,
     total: usize,
 
     assets: AssetMap,
-    parsers: FxHashMap<String, Box<dyn Fn(&AssetId, &str, &mut AssetMap) -> Result<(), String>>>,
+    parsers: FxHashMap<String, Box<ParserFn>>,
 }
 
 impl AssetList {
@@ -81,8 +87,7 @@ impl AssetList {
         }
 
         // at this point we will iterate twice against the map but I think that the cost it's minimal
-        let progress = self.load_len() as f32 / self.total as f32;
-        progress
+        self.load_len() as f32 / self.total as f32
     }
 
     pub fn load_len(&self) -> usize {

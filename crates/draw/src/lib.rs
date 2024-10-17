@@ -45,9 +45,8 @@ pub fn create_draw_2d() -> Draw2D {
     Draw2D::new(window_size())
 }
 
-// TODO execute this somehow at the end of the frame
 #[inline]
-pub fn clean_2d() {
+pub(crate) fn clean_2d() {
     get_mut_2d_painter().clean();
 }
 
