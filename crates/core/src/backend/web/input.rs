@@ -34,14 +34,14 @@ fn listen_mouse_move(win: &mut WebWindow) {
         e.stop_propagation();
         e.prevent_default();
         let old_pos = last_pos.borrow().as_vec2();
-        let pos = get_mouse_xy(&canvas, e, *captured.borrow(), &mut last_pos.borrow_mut());
+        let pos = get_mouse_xy(canvas, e, *captured.borrow(), &mut last_pos.borrow_mut());
         let delta = pos - old_pos;
         events.push(Event::MouseMove { pos, delta });
     });
 }
 
 fn listen_mouse_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
-    add_mouse_listener(win, "mouseup", move |canvas, events, e: MouseEvent| {
+    add_mouse_listener(win, "mouseup", move |_canvas, events, e: MouseEvent| {
         e.stop_propagation();
         e.prevent_default();
         (*delayed_dispatch.borrow())();
@@ -55,14 +55,14 @@ fn listen_mouse_down(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>
         e.stop_propagation();
         e.prevent_default();
         (*delayed_dispatch.borrow())();
-        canvas.focus();
+        let _ = canvas.focus();
         let btn = mouse_btn_cast(e.button());
         events.push(Event::MouseDown { btn });
     });
 }
 
 fn listen_mouse_leave(win: &mut WebWindow) {
-    add_mouse_listener(win, "mouseout", |canvas, events, e: MouseEvent| {
+    add_mouse_listener(win, "mouseout", |_canvas, events, e: MouseEvent| {
         e.stop_propagation();
         e.prevent_default();
         events.push(Event::MouseLeave);
@@ -70,7 +70,7 @@ fn listen_mouse_leave(win: &mut WebWindow) {
 }
 
 fn listen_mouse_enter(win: &mut WebWindow) {
-    add_mouse_listener(win, "mouseover", |canvas, events, e: MouseEvent| {
+    add_mouse_listener(win, "mouseover", |_canvas, events, e: MouseEvent| {
         e.stop_propagation();
         e.prevent_default();
         events.push(Event::MouseEnter);
@@ -108,7 +108,7 @@ fn listen_cursor_captured(win: &mut WebWindow) {
 }
 
 fn listen_key_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
-    add_mouse_listener(win, "keyup", move |canvas, events, e: KeyboardEvent| {
+    add_mouse_listener(win, "keyup", move |_canvas, events, e: KeyboardEvent| {
         (*delayed_dispatch.borrow())();
         let key = keyboard_code_cast(&e.code());
         events.push(Event::KeyUp { key });
@@ -116,7 +116,7 @@ fn listen_key_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
 }
 
 fn listen_key_down(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
-    add_mouse_listener(win, "keydown", move |canvas, events, e: KeyboardEvent| {
+    add_mouse_listener(win, "keydown", move |_canvas, events, e: KeyboardEvent| {
         (*delayed_dispatch.borrow())();
         let key = keyboard_code_cast(&e.code());
         events.push(Event::KeyDown { key });
@@ -470,7 +470,7 @@ fn is_fn_key(key: &str) -> bool {
     key.starts_with('F') && key.len() >= 2
 }
 
-const CONTROL_KEYS: [&'static str; 25] = [
+const CONTROL_KEYS: [&str; 25] = [
     "Alt",
     "ArrowDown",
     "ArrowLeft",

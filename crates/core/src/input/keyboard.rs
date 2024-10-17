@@ -14,7 +14,6 @@ const MAX_KEYS_PRESSED: usize = option_usize_env!("GK_MAX_KEYS_PRESSED", 16);
 const KEYS_COUNT_POT2: usize = next_pot2(MAX_KEYS_PRESSED);
 
 /// This enum comes from winit, we only add Unknown
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount)]
 #[repr(u16)]
 pub enum KeyCode {
@@ -534,6 +533,7 @@ impl TextList {
         self.list.iter().map(|s| s.as_str())
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = SmolStr> + 'static {
         self.list.into_iter()
     }

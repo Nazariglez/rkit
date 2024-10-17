@@ -92,7 +92,7 @@ impl<'a> RenderPass<'a> {
             let end = match r.end_bound() {
                 Bound::Included(n) => *n + 1,
                 Bound::Excluded(n) => *n,
-                Bound::Unbounded => b.len() as _,
+                Bound::Unbounded => b.size() as _,
             };
 
             (*b, start..end)
@@ -102,7 +102,7 @@ impl<'a> RenderPass<'a> {
 
     pub fn buffers(&mut self, buffers: &[&'a Buffer]) -> &mut Self {
         self.buffers
-            .extend(buffers.iter().map(|b| (*b, 0..b.len() as _)));
+            .extend(buffers.iter().map(|b| (*b, 0..b.size() as _)));
         self
     }
 

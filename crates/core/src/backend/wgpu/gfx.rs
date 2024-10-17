@@ -1,4 +1,6 @@
-use crate::backend::backend::GfxBackendImpl;
+#![allow(clippy::arc_with_non_send_sync)]
+
+use crate::backend::traits::GfxBackendImpl;
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;
 use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
@@ -140,7 +142,7 @@ impl GfxBackendImpl for GfxBackend {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: rp.clear_options.color.map_or(wgpu::LoadOp::Load, |color| {
-                                wgpu::LoadOp::Clear(color.to_wgpu())
+                                wgpu::LoadOp::Clear(color.as_wgpu())
                             }),
                             store: StoreOp::Store,
                         },
@@ -164,7 +166,7 @@ impl GfxBackendImpl for GfxBackend {
                         load: rp
                             .clear_options
                             .stencil
-                            .map_or(wgpu::LoadOp::Load, |stencil| wgpu::LoadOp::Clear(stencil)),
+                            .map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
                         store: StoreOp::Store,
                     })
                 } else {
@@ -344,7 +346,7 @@ impl GfxBackendImpl for GfxBackend {
                     .iter()
                     .map(|attr| {
                         let a = wgpu::VertexAttribute {
-                            format: attr.format.to_wgpu(),
+                            format: attr.format.as_wgpu(),
                             offset,
                             shader_location: attr.location as _,
                         };
@@ -355,7 +357,7 @@ impl GfxBackendImpl for GfxBackend {
 
                 let layout = wgpu::VertexBufferLayout {
                     array_stride: offset,
-                    step_mode: vl.step_mode.to_wgpu(),
+                    step_mode: vl.step_mode.as_wgpu(),
                     attributes: &[],
                 };
 
@@ -372,7 +374,7 @@ impl GfxBackendImpl for GfxBackend {
         let mut compatible_formats: ArrayVec<WTextureFormat, MAX_PIPELINE_COMPATIBLE_TEXTURES> =
             ArrayVec::new();
         desc.compatible_textures.iter().for_each(|tf| {
-            let wgpu_tf = tf.to_wgpu();
+            let wgpu_tf = tf.as_wgpu();
             if compatible_formats.contains(&wgpu_tf) {
                 return;
             }
@@ -381,11 +383,11 @@ impl GfxBackendImpl for GfxBackend {
         });
 
         if compatible_formats.is_empty() {
-            compatible_formats.push(TextureFormat::Rgba8UNormSrgb.to_wgpu());
+            compatible_formats.push(TextureFormat::Rgba8UNormSrgb.as_wgpu());
         }
 
-        let blend = desc.blend_mode.map(|bm| bm.to_wgpu());
-        let write_mask = desc.color_mask.to_wgpu();
+        let blend = desc.blend_mode.map(|bm| bm.as_wgpu());
+        let write_mask = desc.color_mask.as_wgpu();
         let fragment_targets = compatible_formats
             .iter()
             .map(|format| {
@@ -417,8 +419,8 @@ impl GfxBackendImpl for GfxBackend {
                     targets: fragment_targets.as_slice(),
                 }),
                 primitive: wgpu::PrimitiveState {
-                    topology: desc.primitive.to_wgpu(),
-                    cull_mode: desc.cull_mode.map(|cm| cm.to_wgpu()),
+                    topology: desc.primitive.as_wgpu(),
+                    cull_mode: desc.cull_mode.map(|cm| cm.as_wgpu()),
                     ..Default::default()
                 },
                 depth_stencil: wgpu_depth_stencil(desc.depth_stencil, desc.stencil),
@@ -427,7 +429,7 @@ impl GfxBackendImpl for GfxBackend {
                 cache: None,
             });
 
-        let index_format = desc.index_format.to_wgpu();
+        let index_format = desc.index_format.as_wgpu();
         let mut bind_group_layout = ArrayVec::new();
         bind_group_layouts.reverse();
         while let Some(bgl) = bind_group_layouts.pop() {
@@ -447,7 +449,7 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String> {
-        let mut usage = desc.usage.to_wgpu();
+        let mut usage = desc.usage.as_wgpu();
         if desc.write {
             usage |= wgpu::BufferUsages::COPY_DST;
         }
@@ -527,7 +529,7 @@ impl GfxBackendImpl for GfxBackend {
                 label: desc.label,
                 layout: &desc
                     .layout
-                    .ok_or_else(|| "Cannot create binding group with a missing layout.")?
+                    .ok_or("Cannot create binding group with a missing layout.")?
                     .raw,
                 entries: &entries,
             });
@@ -542,17 +544,17 @@ impl GfxBackendImpl for GfxBackend {
         debug_assert!(buffer.write, "Cannot write data to a static buffer");
 
         // update inner buffer if the size is not enough
-        if buffer.len() < data.len() {
+        if buffer.size() < data.len() {
             let required = offset as usize + data.len();
-            let next_size = next_buffer_size(buffer.len(), required);
+            let next_size = next_buffer_size(buffer.size(), required);
 
             log::info!(
                 "Updating Buffer '{}' size from {} to {}",
                 buffer.inner_label,
-                buffer.len(),
+                buffer.size(),
                 next_size
             );
-            let mut usage = buffer.usage.to_wgpu();
+            let mut usage = buffer.usage.as_wgpu();
             usage |= wgpu::BufferUsages::COPY_DST;
 
             let raw = self.ctx.device.create_buffer(&WBufferDescriptor {
@@ -588,9 +590,9 @@ impl GfxBackendImpl for GfxBackend {
         }
 
         debug_assert!(
-            buffer.len() >= offset as usize + data.len(),
+            buffer.size() >= offset as usize + data.len(),
             "Invalid buffer size '{}' expected '{}'",
-            buffer.len(),
+            buffer.size(),
             offset as usize + data.len()
         );
         self.ctx
@@ -602,14 +604,14 @@ impl GfxBackendImpl for GfxBackend {
     fn create_sampler(&mut self, desc: SamplerDescriptor) -> Result<Sampler, String> {
         let raw = self.ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: desc.label,
-            address_mode_u: desc.wrap_x.to_wgpu(),
-            address_mode_v: desc.wrap_y.to_wgpu(),
-            address_mode_w: desc.wrap_z.to_wgpu(),
-            mag_filter: desc.mag_filter.to_wgpu(),
-            min_filter: desc.min_filter.to_wgpu(),
+            address_mode_u: desc.wrap_x.as_wgpu(),
+            address_mode_v: desc.wrap_y.as_wgpu(),
+            address_mode_w: desc.wrap_z.as_wgpu(),
+            mag_filter: desc.mag_filter.as_wgpu(),
+            min_filter: desc.min_filter.as_wgpu(),
             mipmap_filter: desc
                 .mipmap_filter
-                .map_or(Default::default(), |tf| tf.to_wgpu()),
+                .map_or(Default::default(), |tf| tf.as_wgpu()),
             ..Default::default()
         });
         Ok(Sampler {
@@ -620,7 +622,7 @@ impl GfxBackendImpl for GfxBackend {
             wrap_z: desc.wrap_z,
             mag_filter: desc.mag_filter,
             min_filter: desc.min_filter,
-            mipmap_filter: desc.mipmap_filter,
+            // mipmap_filter: desc.mipmap_filter,
         })
     }
 
@@ -819,7 +821,6 @@ impl GfxBackend {
             view,
             encoder,
             dirty: false,
-            present_check: false,
         });
 
         Ok(())
@@ -852,7 +853,7 @@ impl GfxBackend {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: rp.clear_options.color.map_or(wgpu::LoadOp::Load, |color| {
-                                wgpu::LoadOp::Clear(color.to_wgpu())
+                                wgpu::LoadOp::Clear(color.as_wgpu())
                             }),
                             store: StoreOp::Store,
                         },
@@ -876,7 +877,7 @@ impl GfxBackend {
                         load: rp
                             .clear_options
                             .stencil
-                            .map_or(wgpu::LoadOp::Load, |stencil| wgpu::LoadOp::Clear(stencil)),
+                            .map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear),
                         store: StoreOp::Store,
                     })
                 } else {
@@ -979,6 +980,7 @@ impl GfxBackend {
     }
 }
 
+#[cfg_attr(target_arch = "wasm32", allow(clippy::unused))]
 async fn init_surface<W>(
     id: TextureId,
     ctx: &mut Context,
@@ -1037,8 +1039,6 @@ async fn init_surface_from_raw(
     Surface::new_from_raw(ctx, raw, win_physical_size, vsync, depth_texture).await
 }
 
-struct InnerTextureInfo {}
-
 fn create_texture(
     id: TextureId,
     device: &wgpu::Device,
@@ -1052,10 +1052,7 @@ fn create_texture(
         depth_or_array_layers: 1,
     });
 
-    let is_depth_texture = match desc.format {
-        TextureFormat::Depth32Float => true,
-        _ => false,
-    };
+    let is_depth_texture = matches!(desc.format, TextureFormat::Depth32Float);
     let mut usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
     if is_depth_texture || desc.write {
         usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
@@ -1067,7 +1064,7 @@ fn create_texture(
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
-        format: desc.format.to_wgpu(),
+        format: desc.format.as_wgpu(),
         usage,
         view_formats: &[],
     });
@@ -1100,7 +1097,7 @@ fn create_texture(
     }
 
     let view = raw.create_view(&wgpu::TextureViewDescriptor {
-        format: Some(desc.format.to_wgpu()),
+        format: Some(desc.format.as_wgpu()),
         ..Default::default()
     });
 
@@ -1115,7 +1112,7 @@ fn create_texture(
 }
 
 impl Color {
-    pub fn to_wgpu(&self) -> wgpu::Color {
+    pub fn as_wgpu(&self) -> wgpu::Color {
         wgpu::Color {
             r: self.r as f64,
             g: self.g as f64,

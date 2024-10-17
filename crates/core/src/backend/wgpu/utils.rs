@@ -20,26 +20,26 @@ pub fn wgpu_shader_visibility(vertex: bool, fragment: bool, compute: bool) -> wg
 }
 
 impl BlendMode {
-    pub(crate) fn to_wgpu(&self) -> wgpu::BlendState {
+    pub(crate) fn as_wgpu(&self) -> wgpu::BlendState {
         wgpu::BlendState {
-            color: self.color.to_wgpu(),
-            alpha: self.alpha.to_wgpu(),
+            color: self.color.as_wgpu(),
+            alpha: self.alpha.as_wgpu(),
         }
     }
 }
 
 impl BlendComponent {
-    pub(crate) fn to_wgpu(&self) -> wgpu::BlendComponent {
+    pub(crate) fn as_wgpu(&self) -> wgpu::BlendComponent {
         wgpu::BlendComponent {
-            src_factor: self.src.to_wgpu(),
-            dst_factor: self.dst.to_wgpu(),
-            operation: self.op.to_wgpu(),
+            src_factor: self.src.as_wgpu(),
+            dst_factor: self.dst.as_wgpu(),
+            operation: self.op.as_wgpu(),
         }
     }
 }
 
 impl BlendFactor {
-    pub(crate) fn to_wgpu(&self) -> wgpu::BlendFactor {
+    pub(crate) fn as_wgpu(&self) -> wgpu::BlendFactor {
         match self {
             BlendFactor::Zero => wgpu::BlendFactor::Zero,
             BlendFactor::One => wgpu::BlendFactor::One,
@@ -56,7 +56,7 @@ impl BlendFactor {
 }
 
 impl BlendOperation {
-    pub(crate) fn to_wgpu(&self) -> wgpu::BlendOperation {
+    pub(crate) fn as_wgpu(&self) -> wgpu::BlendOperation {
         match self {
             BlendOperation::Add => wgpu::BlendOperation::Add,
             BlendOperation::Subtract => wgpu::BlendOperation::Subtract,
@@ -77,19 +77,19 @@ pub fn wgpu_depth_stencil(
 
     let (depth_write_enabled, depth_compare) = match depth {
         None => (false, CompareFunction::Always),
-        Some(depth) => (depth.write, depth.compare.to_wgpu()),
+        Some(depth) => (depth.write, depth.compare.as_wgpu()),
     };
 
     Some(wgpu::DepthStencilState {
-        format: SURFACE_DEFAULT_DEPTH_FORMAT.to_wgpu(),
+        format: SURFACE_DEFAULT_DEPTH_FORMAT.as_wgpu(),
         depth_write_enabled,
         depth_compare,
         stencil: stencil.map_or(Default::default(), |stencil| {
             let stencil_face = wgpu::StencilFaceState {
-                compare: stencil.compare.to_wgpu(),
-                fail_op: stencil.stencil_fail.to_wgpu(),
-                depth_fail_op: stencil.depth_fail.to_wgpu(),
-                pass_op: stencil.pass.to_wgpu(),
+                compare: stencil.compare.as_wgpu(),
+                fail_op: stencil.stencil_fail.as_wgpu(),
+                depth_fail_op: stencil.depth_fail.as_wgpu(),
+                pass_op: stencil.pass.as_wgpu(),
             };
 
             wgpu::StencilState {

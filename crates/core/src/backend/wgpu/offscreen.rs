@@ -231,10 +231,6 @@ impl OffscreenSurfaceData {
         Ok(())
     }
 
-    pub fn render(&self, gfx: &mut GfxBackend, renderer: &Renderer) -> Result<(), String> {
-        gfx.render_to(&self.texture, renderer)
-    }
-
     pub fn present(&self, gfx: &mut GfxBackend, frame: &mut DrawFrame) -> Result<(), String> {
         let mut renderer = Renderer::new();
         renderer

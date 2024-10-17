@@ -1,5 +1,3 @@
-#![cfg(target_arch = "wasm32")]
-
 mod events;
 mod input;
 mod utils;
@@ -130,6 +128,7 @@ impl WebBackend {
         use events::Event::*;
 
         let mut events = self.win.as_mut().unwrap().events.take();
+        #[allow(clippy::while_let_on_iterator)]
         while let Some(evt) = events.next() {
             match evt {
                 MouseMove { pos, delta } => {
@@ -187,10 +186,10 @@ impl BackendImpl<GfxBackend> for WebBackend {
             .unwrap()
             .set_size(size.x as _, size.y as _);
     }
-    fn set_min_size(&mut self, size: Vec2) {
+    fn set_min_size(&mut self, _size: Vec2) {
         todo!()
     }
-    fn set_max_size(&mut self, size: Vec2) {
+    fn set_max_size(&mut self, _size: Vec2) {
         todo!()
     }
     fn screen_size(&self) -> Vec2 {
@@ -208,7 +207,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
     fn position(&self) -> Vec2 {
         todo!()
     }
-    fn set_position(&mut self, x: f32, y: f32) {
+    fn set_position(&mut self, _x: f32, _y: f32) {
         todo!()
     }
     fn is_focused(&self) -> bool {
@@ -254,7 +253,8 @@ impl BackendImpl<GfxBackend> for WebBackend {
             .unwrap()
             .canvas
             .style()
-            .set_property("cursor", mode);
+            .set_property("cursor", mode)
+            .unwrap();
     }
     fn is_cursor_visible(&self) -> bool {
         let current = self

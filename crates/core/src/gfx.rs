@@ -64,12 +64,12 @@ pub fn create_bind_group<'a>() -> BindGroupBuilder<'a> {
 }
 
 #[inline]
-pub fn write_buffer<'a>(buffer: &'a Buffer) -> BufferWriteBuilder {
+pub fn write_buffer(buffer: &Buffer) -> BufferWriteBuilder {
     BufferWriteBuilder::new(buffer)
 }
 
 #[inline]
-pub fn write_texture<'a>(tex: &'a Texture) -> TextureWriteBuilder {
+pub fn write_texture(tex: &Texture) -> TextureWriteBuilder {
     TextureWriteBuilder::new(tex)
 }
 

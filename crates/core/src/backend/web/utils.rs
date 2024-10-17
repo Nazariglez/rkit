@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{Document, HtmlCanvasElement, Window};
+use web_sys::{HtmlCanvasElement, Window};
 
 pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) {
     let auto_res = canvas
@@ -43,44 +43,6 @@ pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) 
 pub(crate) fn request_animation_frame(win: &Window, f: &Closure<dyn FnMut()>) -> i32 {
     win.request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK")
-}
-
-pub(crate) fn get_or_create_canvas(
-    doc: &Document,
-    canvas_id: &str,
-) -> Result<HtmlCanvasElement, String> {
-    let canvas = match doc.get_element_by_id(canvas_id) {
-        Some(c) => c,
-        None => {
-            let c = doc.create_element("canvas").map_err(|e| format!("{e:?}"))?;
-
-            let body = doc
-                .body()
-                .ok_or_else(|| "body doesn't exists on document.".to_string())?;
-            body.append_child(&c).map_err(|e| format!("{e:?}"))?;
-
-            c.set_id(canvas_id);
-            c
-        }
-    };
-
-    let canvas_element = canvas
-        .dyn_into::<HtmlCanvasElement>()
-        .map_err(|e| format!("{e:?}"))?;
-
-    if let Err(e) = canvas_element.style().set_property("touch-action", "none") {
-        log::error!("Cannot set touch-action: none {e:?}");
-    }
-
-    if let Err(e) = canvas_element.set_attribute("tabindex", "0") {
-        log::warn!("Cannot set tabindex to 0, this can lead to errors with focus/unfocus the canvas: {e:?}");
-    }
-
-    if let Err(e) = canvas_element.style().set_property("outline", "none") {
-        log::error!("Cannot set outline: none {e:?}");
-    }
-
-    Ok(canvas_element)
 }
 
 pub(crate) fn canvas_add_event_listener<F, E>(
@@ -154,13 +116,6 @@ pub(crate) fn canvas_position_from_global(
     (x as _, y as _)
 }
 
-pub(crate) fn canvas_position_from_touch(
-    canvas: &HtmlCanvasElement,
-    evt: web_sys::PointerEvent,
-) -> (f32, f32) {
-    canvas_pos(canvas, evt.client_x(), evt.client_y())
-}
-
 fn canvas_pos(canvas: &HtmlCanvasElement, client_x: i32, client_y: i32) -> (f32, f32) {
     let client_x = client_x as f32;
     let client_y = client_y as f32;
@@ -168,24 +123,6 @@ fn canvas_pos(canvas: &HtmlCanvasElement, client_x: i32, client_y: i32) -> (f32,
     let x = client_x - rect.left() as f32;
     let y = client_y - rect.top() as f32;
     (x, y)
-}
-
-pub(crate) fn canvas_visible(canvas: &HtmlCanvasElement, visible: bool) {
-    if let Err(e) = canvas
-        .style()
-        .set_property("display", if visible { "block" } else { "none" })
-    {
-        log::error!("{:?}", e);
-    }
-}
-
-pub(crate) fn canvas_mouse_passthrough(canvas: &HtmlCanvasElement, passthrough: bool) {
-    if let Err(e) = canvas
-        .style()
-        .set_property("pointer-events", if passthrough { "none" } else { "auto" })
-    {
-        log::error!("{:?}", e);
-    }
 }
 
 pub(crate) fn get_gk_size(canvas: &HtmlCanvasElement) -> (u32, u32) {

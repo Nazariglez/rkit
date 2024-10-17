@@ -33,7 +33,7 @@ impl RenderPipeline {
 }
 
 impl ColorMask {
-    pub(crate) fn to_wgpu(&self) -> wgpu::ColorWrites {
+    pub(crate) fn as_wgpu(&self) -> wgpu::ColorWrites {
         let mut raw_mask = ColorWrites::empty();
         if self.r {
             raw_mask |= ColorWrites::RED;

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::input::{KeyCode, MouseButton};
 use crate::math::{UVec2, Vec2};
 use smol_str::SmolStr;

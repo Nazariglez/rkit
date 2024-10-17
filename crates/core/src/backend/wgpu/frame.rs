@@ -5,5 +5,4 @@ pub struct DrawFrame {
     pub(crate) view: TextureView,
     pub(crate) encoder: CommandEncoder,
     pub(crate) dirty: bool,
-    pub(crate) present_check: bool,
 }

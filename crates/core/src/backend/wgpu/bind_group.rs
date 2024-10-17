@@ -25,3 +25,9 @@ pub struct BindGroupLayoutRef {
     pub(crate) id: BindGroupLayoutId,
     pub(crate) raw: Arc<BindGroupLayout>,
 }
+
+impl BindGroupLayoutRef {
+    pub fn id(&self) -> BindGroupLayoutId {
+        self.id
+    }
+}

@@ -60,7 +60,7 @@ impl Debug for Texture {
 }
 
 impl TextureFormat {
-    pub(crate) fn to_wgpu(&self) -> WTextureFormat {
+    pub(crate) fn as_wgpu(&self) -> WTextureFormat {
         match self {
             TextureFormat::R8UNorm => WTextureFormat::R8Unorm,
             TextureFormat::R8INorm => WTextureFormat::R8Snorm,
@@ -180,7 +180,7 @@ impl TextureFormat {
 }
 
 impl TextureWrap {
-    pub(crate) fn to_wgpu(&self) -> wgpu::AddressMode {
+    pub(crate) fn as_wgpu(&self) -> wgpu::AddressMode {
         match self {
             TextureWrap::Clamp => wgpu::AddressMode::ClampToEdge,
             TextureWrap::Repeat => wgpu::AddressMode::Repeat,
@@ -190,7 +190,7 @@ impl TextureWrap {
 }
 
 impl TextureFilter {
-    pub(crate) fn to_wgpu(&self) -> wgpu::FilterMode {
+    pub(crate) fn as_wgpu(&self) -> wgpu::FilterMode {
         match self {
             TextureFilter::Linear => wgpu::FilterMode::Linear,
             TextureFilter::Nearest => wgpu::FilterMode::Nearest,
@@ -208,7 +208,7 @@ pub struct Sampler {
     pub(crate) wrap_z: TextureWrap,
     pub(crate) mag_filter: TextureFilter,
     pub(crate) min_filter: TextureFilter,
-    pub(crate) mipmap_filter: Option<TextureFilter>,
+    // pub(crate) mipmap_filter: Option<TextureFilter>, // TODO mipmap filter?
 }
 
 impl Sampler {

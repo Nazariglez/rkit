@@ -215,13 +215,13 @@ impl<'a> BufferWriteBuilder<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct SamplerBuilder<'a> {
     desc: SamplerDescriptor<'a>,
 }
 impl<'a> SamplerBuilder<'a> {
     pub fn new() -> Self {
-        let desc = SamplerDescriptor::default();
-        Self { desc }
+        Self::default()
     }
 
     pub fn with_label(mut self, label: &'a str) -> Self {
@@ -329,14 +329,20 @@ pub struct TextureBuilder<'a> {
     data: TextureRawData<'a>,
 }
 
-impl<'a> TextureBuilder<'a> {
-    pub fn new() -> Self {
+impl Default for TextureBuilder<'_> {
+    fn default() -> Self {
         let desc = TextureDescriptor::default();
         let data = TextureRawData::Empty {
             width: 1,
             height: 1,
         };
         Self { desc, data }
+    }
+}
+
+impl<'a> TextureBuilder<'a> {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn from_image(mut self, image: &'a [u8]) -> Self {
@@ -419,14 +425,14 @@ impl<'a> TextureBuilder<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct RenderTextureBuilder<'a> {
     desc: RenderTextureDescriptor<'a>,
 }
 
 impl<'a> RenderTextureBuilder<'a> {
     pub fn new() -> Self {
-        let desc = RenderTextureDescriptor::default();
-        Self { desc }
+        Self::default()
     }
 
     pub fn with_label(mut self, label: &'a str) -> Self {

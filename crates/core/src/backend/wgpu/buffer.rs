@@ -37,13 +37,13 @@ impl Buffer {
         self.write
     }
 
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.inner.borrow().size
     }
 }
 
 impl BufferUsage {
-    pub(crate) fn to_wgpu(&self) -> wgpu::BufferUsages {
+    pub(crate) fn as_wgpu(&self) -> wgpu::BufferUsages {
         match self {
             BufferUsage::Vertex => BufferUsages::VERTEX,
             BufferUsage::Index => BufferUsages::INDEX,
@@ -53,7 +53,7 @@ impl BufferUsage {
 }
 
 impl VertexFormat {
-    pub(crate) fn to_wgpu(&self) -> wgpu::VertexFormat {
+    pub(crate) fn as_wgpu(&self) -> wgpu::VertexFormat {
         match self {
             VertexFormat::UInt8x2 => wgpu::VertexFormat::Uint8x2,
             VertexFormat::UInt8x4 => wgpu::VertexFormat::Uint8x4,
@@ -90,7 +90,7 @@ impl VertexFormat {
 }
 
 impl VertexStepMode {
-    pub fn to_wgpu(self) -> wgpu::VertexStepMode {
+    pub fn as_wgpu(self) -> wgpu::VertexStepMode {
         match self {
             VertexStepMode::Vertex => wgpu::VertexStepMode::Vertex,
             VertexStepMode::Instance => wgpu::VertexStepMode::Instance,
@@ -99,7 +99,7 @@ impl VertexStepMode {
 }
 
 impl IndexFormat {
-    pub(crate) fn to_wgpu(&self) -> wgpu::IndexFormat {
+    pub(crate) fn as_wgpu(&self) -> wgpu::IndexFormat {
         match self {
             IndexFormat::UInt16 => wgpu::IndexFormat::Uint16,
             IndexFormat::UInt32 => wgpu::IndexFormat::Uint32,
@@ -108,7 +108,7 @@ impl IndexFormat {
 }
 
 impl Primitive {
-    pub(crate) fn to_wgpu(&self) -> wgpu::PrimitiveTopology {
+    pub(crate) fn as_wgpu(&self) -> wgpu::PrimitiveTopology {
         match self {
             Primitive::Points => wgpu::PrimitiveTopology::PointList,
             Primitive::Lines => wgpu::PrimitiveTopology::LineList,
@@ -120,7 +120,7 @@ impl Primitive {
 }
 
 impl CullMode {
-    pub(crate) fn to_wgpu(&self) -> wgpu::Face {
+    pub(crate) fn as_wgpu(&self) -> wgpu::Face {
         match self {
             CullMode::Front => wgpu::Face::Front,
             CullMode::Back => wgpu::Face::Back,
@@ -129,7 +129,7 @@ impl CullMode {
 }
 
 impl CompareMode {
-    pub(crate) fn to_wgpu(&self) -> wgpu::CompareFunction {
+    pub(crate) fn as_wgpu(&self) -> wgpu::CompareFunction {
         match self {
             CompareMode::Never => wgpu::CompareFunction::Never,
             CompareMode::Less => wgpu::CompareFunction::Less,
@@ -144,7 +144,7 @@ impl CompareMode {
 }
 
 impl StencilAction {
-    pub(crate) fn to_wgpu(&self) -> wgpu::StencilOperation {
+    pub(crate) fn as_wgpu(&self) -> wgpu::StencilOperation {
         match self {
             StencilAction::Keep => wgpu::StencilOperation::Keep,
             StencilAction::Zero => wgpu::StencilOperation::Zero,

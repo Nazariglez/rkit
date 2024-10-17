@@ -1,11 +1,13 @@
+#![allow(clippy::arc_with_non_send_sync)]
+
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::texture::Texture;
 use crate::math::UVec2;
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
-    Device, Instance, Surface as RawSurface, SurfaceCapabilities, SurfaceConfiguration,
-    SurfaceTexture, TextureFormat as RawTextureFormat,
+    Device, Instance, Surface as RawSurface, SurfaceConfiguration, SurfaceTexture,
+    TextureFormat as RawTextureFormat,
 };
 use winit::raw_window_handle::HasWindowHandle;
 
@@ -13,9 +15,9 @@ use winit::raw_window_handle::HasWindowHandle;
 pub(crate) struct Surface {
     pub surface: Arc<RawSurface<'static>>,
     pub config: SurfaceConfiguration,
-    pub capabilities: Arc<SurfaceCapabilities>,
     pub depth_texture: Texture,
     pub raw_format: RawTextureFormat,
+    // pub capabilities: Arc<SurfaceCapabilities>,
 }
 
 impl Surface {
@@ -105,9 +107,9 @@ impl Surface {
         Ok(Self {
             surface: Arc::new(surface),
             config,
-            capabilities: Arc::new(capabilities),
             depth_texture,
             raw_format,
+            // capabilities: Arc::new(capabilities),
         })
     }
 

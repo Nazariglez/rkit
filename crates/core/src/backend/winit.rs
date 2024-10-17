@@ -15,7 +15,7 @@ use winit::window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, Window
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
 
-use super::backend::{BackendImpl, GfxBackendImpl};
+use super::traits::{BackendImpl, GfxBackendImpl};
 use crate::app::WindowConfig;
 use crate::backend::wgpu::GfxBackend;
 use crate::builder::AppBuilder;

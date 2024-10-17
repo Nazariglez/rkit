@@ -52,6 +52,7 @@ pub(crate) trait GfxBackendImpl {
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle;
 
+    #[cfg_attr(target_arch = "wasm32", allow(unused))]
     async fn update_surface<W>(
         &mut self,
         window: &W,
