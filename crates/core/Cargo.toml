@@ -45,15 +45,22 @@ bitflags = "2.6.0"
 strum = "0.26.3"
 strum_macros = "0.26.4"
 crossbeam-channel = "0.5.13"
+
+# loggin
+fern = { version = "0.6.2", optional = true, features = ["colored"] }
 env_logger = "0.11.5"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+time = { version = "0.3.36", optional = true, features = ["formatting", "local-offset"] }
 
 # wasm deps
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen.workspace = true
 js-sys.workspace = true
-console_error_panic_hook = "0.1.7"
 wasm-bindgen-futures = "0.4.45"
-console_log = "1.0.0"
+
+console_error_panic_hook = { version = "0.1.7", optional = true }
+console_log = { version = "1.0.0", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 workspace = true
@@ -89,6 +96,8 @@ test-env = []
 webgl = ["wgpu/webgl"]
 # Enable Gamepad API
 gamepad = ["dep:gilrs"]
+# Logging
+logs = ["dep:time", "dep:fern", "dep:console_log", "dep:console_error_panic_hook"]
 
 [dev-dependencies]
 # Hackish, to add environment variables for test builds

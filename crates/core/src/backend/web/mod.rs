@@ -43,6 +43,7 @@ where
         init_cb,
         update_cb,
         cleanup_cb: _, // TODO cleanup
+        ..
     } = builder;
 
     let vsync = config.vsync;

@@ -432,6 +432,7 @@ where
         init_cb,
         update_cb,
         cleanup_cb,
+        ..
     } = builder;
 
     let event_loop = EventLoop::new().unwrap();

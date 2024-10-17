@@ -16,13 +16,8 @@ const FILL_COLOR: Color = Color::rgb(0.9, 0.9, 0.9);
 const OUTLINE_COLOR: Color = Color::rgb(0.0, 0.8, 0.7);
 
 fn main() -> Result<(), String> {
-    let win = WindowConfig {
-        size: uvec2(BOARD_SIZE as _, BOARD_SIZE as _),
-        ..Default::default()
-    };
-
     rkit::init_with(State::new)
-        .with_window(win)
+        .with_window(WindowConfig::default().size(BOARD_SIZE as _, BOARD_SIZE as _))
         .update(update)
         .run()
 }

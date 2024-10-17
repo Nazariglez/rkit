@@ -1,6 +1,9 @@
 use crate::app::WindowConfig;
 use crate::backend::run;
 
+#[cfg(feature = "logs")]
+use crate::app::logger::{init_logs, LogConfig};
+
 pub(crate) type InitCb<S> = Box<dyn FnOnce() -> S>;
 pub(crate) type UpdateCb<S> = Box<dyn FnMut(&mut S)>;
 pub(crate) type CleanupCb<S> = Box<dyn FnOnce(&mut S)>;
@@ -13,6 +16,9 @@ where
     pub(crate) init_cb: InitCb<S>,
     pub(crate) update_cb: UpdateCb<S>,
     pub(crate) cleanup_cb: CleanupCb<S>,
+
+    #[cfg(feature = "logs")]
+    log_config: LogConfig,
 }
 
 pub(crate) fn builder<F, S>(cb: F) -> AppBuilder<S>
@@ -25,6 +31,9 @@ where
         init_cb: Box::new(cb),
         update_cb: Box::new(|_| ()),
         cleanup_cb: Box::new(|_| ()),
+
+        #[cfg(feature = "logs")]
+        log_config: LogConfig::default(),
     }
 }
 
@@ -34,6 +43,12 @@ where
 {
     pub fn with_window(mut self, config: WindowConfig) -> Self {
         self.window = config;
+        self
+    }
+
+    #[cfg(feature = "logs")]
+    pub fn with_logs(mut self, config: LogConfig) -> Self {
+        self.log_config = config;
         self
     }
 
@@ -54,6 +69,9 @@ where
     }
 
     pub fn run(self) -> Result<(), String> {
+        #[cfg(feature = "logs")]
+        init_logs(self.log_config.clone());
+
         run(self)
     }
 }

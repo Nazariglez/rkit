@@ -98,12 +98,8 @@ impl State {
 }
 
 fn main() -> Result<(), String> {
-    let win = WindowConfig {
-        size: uvec2((WIDTH * 4) as _, (HEIGHT * 4) as _),
-        ..Default::default()
-    };
     rkit::init_with(State::new)
-        .with_window(win)
+        .with_window(WindowConfig::default().size((WIDTH * 4) as _, (HEIGHT * 4) as _))
         .update(update)
         .run()
 }

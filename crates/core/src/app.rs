@@ -2,8 +2,14 @@ use crate::backend::{get_backend, get_mut_backend, BackendImpl};
 use crate::math::{vec2, Vec2};
 
 mod window;
-use crate::events::{CoreEvent, CORE_EVENTS_MAP};
 pub use window::*;
+
+#[cfg(feature = "logs")]
+pub mod logger;
+#[cfg(feature = "logs")]
+pub use logger::LogConfig;
+
+use crate::events::{CoreEvent, CORE_EVENTS_MAP};
 
 // -- Window section
 #[inline]

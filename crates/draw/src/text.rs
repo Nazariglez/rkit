@@ -249,7 +249,7 @@ impl TextSystem {
 
     pub fn bind_group(&mut self, pip: &RenderPipeline) -> &BindGroup {
         if self.bind_group.is_none() {
-            log::info!("New text atlas bind_group created");
+            log::debug!("New text atlas bind_group created");
             let bg = gfx::create_bind_group()
                 .with_sampler(0, &self.sampler)
                 .with_texture(1, &self.mask.texture)
@@ -584,7 +584,7 @@ impl AtlasData {
     }
 
     fn upload(&self, size: UVec2, offset: UVec2, data: &[u8]) -> Result<(), String> {
-        log::info!("Uploading new glyph to texture");
+        log::debug!("Uploading new glyph to texture");
         gfx::write_texture(&self.texture)
             .from_data(&data)
             .with_offset(offset)

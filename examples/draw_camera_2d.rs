@@ -35,13 +35,8 @@ impl State {
 }
 
 fn main() -> Result<(), String> {
-    let win = WindowConfig {
-        size: uvec2(600, 500),
-        vsync: true,
-        ..Default::default()
-    };
     rkit::init_with(State::new)
-        .with_window(win)
+        .with_window(WindowConfig::default().size(600, 500))
         .update(update)
         .run()
 }

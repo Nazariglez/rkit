@@ -23,3 +23,35 @@ impl Default for WindowConfig {
         }
     }
 }
+
+impl WindowConfig {
+    pub fn title(mut self, title: &str) -> Self {
+        self.title = title.to_string();
+        self
+    }
+
+    pub fn size(mut self, width: u32, height: u32) -> Self {
+        self.size = uvec2(width, height);
+        self
+    }
+
+    pub fn max_size(mut self, width: u32, height: u32) -> Self {
+        self.max_size = Some(uvec2(width, height));
+        self
+    }
+
+    pub fn min_size(mut self, width: u32, height: u32) -> Self {
+        self.min_size = Some(uvec2(width, height));
+        self
+    }
+
+    pub fn resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
+
+    pub fn vsync(mut self, vsync: bool) -> Self {
+        self.vsync = vsync;
+        self
+    }
+}
