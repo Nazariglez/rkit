@@ -1,4 +1,3 @@
-use etagere::euclid::Trig;
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::gfx::{self, Color};
@@ -7,8 +6,6 @@ use rkit::time;
 
 struct State {
     img: Sprite,
-    count: f32,
-    multi: f32,
 }
 
 impl State {
@@ -17,11 +14,7 @@ impl State {
             .from_image(include_bytes!("assets/pattern.png"))
             .build()?;
 
-        Ok(Self {
-            img,
-            count: 1.0,
-            multi: 1.0,
-        })
+        Ok(Self { img })
     }
 }
 

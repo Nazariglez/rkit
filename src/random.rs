@@ -1,5 +1,3 @@
-#![cfg(feature = "random")]
-
 use fastrand::Rng as RawRng;
 use std::cell::RefCell;
 use std::collections::Bound;
