@@ -3,6 +3,8 @@
 use crate::math::uvec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
+use spin_sleep_util::Interval;
+use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
@@ -249,6 +251,7 @@ struct Runner<S> {
     state: Option<S>,
     update: Box<dyn FnMut(&mut S)>,
     vsync: bool,
+    interval: Option<Interval>,
 }
 
 impl<S> ApplicationHandler for Runner<S> {
@@ -402,6 +405,10 @@ impl<S> ApplicationHandler for Runner<S> {
                 bck.window.as_ref().unwrap().request_redraw();
                 bck.mouse_state.tick();
                 bck.keyboard_state.tick();
+
+                if let Some(interval) = &mut self.interval {
+                    interval.tick();
+                }
             }
             WindowEvent::Resized(size) => {
                 let mut bck = get_mut_backend();
@@ -439,6 +446,9 @@ where
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let vsync = window.vsync;
+    let interval = window
+        .max_fps
+        .map(|max| spin_sleep_util::interval(Duration::from_secs(1) / max as u32));
 
     let mut runner = Runner {
         window_attrs: window_attrs(window),
@@ -446,6 +456,7 @@ where
         state: None,
         update: update_cb,
         vsync,
+        interval,
     };
 
     event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;
@@ -476,6 +487,7 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         max_size,
         resizable,
         vsync: _,
+        max_fps: _,
     } = config;
 
     let mut attrs = WindowAttributes::default()

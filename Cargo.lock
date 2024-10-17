@@ -567,6 +567,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "smallvec 2.0.0-alpha.7",
  "smol_str 0.3.1",
+ "spin_sleep_util",
  "strum",
  "strum_macros",
  "time",
@@ -2752,6 +2753,24 @@ checksum = "66eaf762c5af19db3108300515c8aa7a50efc90ff745f4c62288052ebf9fdd25"
 dependencies = [
  "borsh",
  "serde",
+]
+
+[[package]]
+name = "spin_sleep"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64bd7227d85bfd1b8df51e0d83da36d9baaee85eb75730386ef8e3ab6f2a2ea3"
+dependencies = [
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "spin_sleep_util"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f0a8402dff6fc447faddc8bebac9bc3645e5addde1d2293cfd2919d1a8e7efd"
+dependencies = [
+ "spin_sleep",
 ]
 
 [[package]]

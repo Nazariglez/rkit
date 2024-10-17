@@ -1,6 +1,5 @@
 use crate::math::{uvec2, UVec2};
 
-// TODO set target FPS?
 #[derive(Debug)]
 pub struct WindowConfig {
     pub title: String,
@@ -9,6 +8,7 @@ pub struct WindowConfig {
     pub max_size: Option<UVec2>,
     pub resizable: bool,
     pub vsync: bool,
+    pub max_fps: Option<u8>,
 }
 
 impl Default for WindowConfig {
@@ -20,6 +20,7 @@ impl Default for WindowConfig {
             max_size: None,
             resizable: true,
             vsync: true,
+            max_fps: None,
         }
     }
 }
@@ -52,6 +53,11 @@ impl WindowConfig {
 
     pub fn vsync(mut self, vsync: bool) -> Self {
         self.vsync = vsync;
+        self
+    }
+
+    pub fn max_fps(mut self, fps: u8) -> Self {
+        self.max_fps = Some(fps);
         self
     }
 }

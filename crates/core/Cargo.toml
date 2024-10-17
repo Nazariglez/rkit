@@ -52,6 +52,7 @@ env_logger = "0.11.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 time = { version = "0.3.36", optional = true, features = ["formatting", "local-offset"] }
+spin_sleep_util = "0.1.1"
 
 # wasm deps
 [target.'cfg(target_arch = "wasm32")'.dependencies]
