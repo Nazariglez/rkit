@@ -1,9 +1,7 @@
 - todo:
-    * EVENTS system: fix event callbacks (s: &mut state), split update and draw?
     * audio clean sounds must be automatic with core events after frames, improve audio examples
     * use encase crate to comply with std140
     * blending, and masking
-    * camera should have a pixel-perfect mode (also in web canvas css property must be set if needed)
     * points and to_owned/cache
     * multisampling? mipmapping?
     * egui
@@ -14,7 +12,6 @@
     * puffin profiling?
     * create_font should have a ".pixelated()" option to use a second mask_texture with Nearest filter
     * touch support
-    * COLOR Srgb CPU vs Linear GPU
 
 - questions:
     * should we use `offset` or `origin` instead of `position` to set elements in the screen and `position` instead of `translate`?
