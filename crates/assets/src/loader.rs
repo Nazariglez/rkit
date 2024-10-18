@@ -60,11 +60,15 @@ impl AssetLoader {
             .get(id.0)
             .ok_or_else(|| "Invalid AssetID".to_string())?;
 
-        let (remove, res) = match &loaded.state {
-            AssetState::Loading => (false, Ok(None)),
-            AssetState::Loaded(d) => (!keep, Ok(Some(parser(&loaded.id, d.as_slice())?))),
-            AssetState::Err(err) => (!keep, Err(err.to_string())),
+        let (parsed, remove, res) = match &loaded.state {
+            AssetState::Loading => (false, false, Ok(None)),
+            AssetState::Loaded(d) => (true, !keep, Ok(Some(parser(&loaded.id, d.as_slice())?))),
+            AssetState::Err(err) => (false, !keep, Err(err.to_string())),
         };
+
+        if parsed {
+            log::info!("File '{}' parsed.", &loaded.id);
+        }
 
         if remove {
             let _ = self.states.remove(id.0);

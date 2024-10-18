@@ -150,7 +150,6 @@ impl AssetList {
             data.loaded = true;
         }
 
-        println!("{} {}", self.total, self.load_len());
         if !self.is_loaded() {
             return Ok(None);
         }

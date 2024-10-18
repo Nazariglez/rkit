@@ -55,7 +55,7 @@ impl Surface {
         } = win_physical_size;
         let capabilities = surface.get_capabilities(&ctx.adapter);
 
-        log::info!("Surface formats: {:?}", capabilities.formats);
+        log::debug!("Surface formats: {:?}", capabilities.formats);
 
         let raw_format = capabilities
             .formats
@@ -81,7 +81,7 @@ impl Surface {
 
         surface.configure(&ctx.device, &config);
 
-        log::info!(
+        log::debug!(
             "Surface size({:?} {:?}), depth_texture({:?}), format({:?})",
             config.width,
             config.height,

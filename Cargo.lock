@@ -2660,6 +2660,7 @@ checksum = "c88d65d73a7be5843270b3983db740338859682ce67659789a335402c5ac18af"
 dependencies = [
  "hashbrown 0.14.5",
  "lock_api",
+ "rayon",
  "shipyard_proc",
  "siphasher",
 ]
