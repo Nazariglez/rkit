@@ -2524,11 +2524,11 @@ dependencies = [
  "audio",
  "bytemuck",
  "core",
- "cosmic-text",
  "draw",
- "etagere",
  "fastrand",
  "log",
+ "shipyard",
+ "static_assertions",
  "utils",
 ]
 
@@ -2653,6 +2653,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "shipyard"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c88d65d73a7be5843270b3983db740338859682ce67659789a335402c5ac18af"
+dependencies = [
+ "hashbrown 0.14.5",
+ "lock_api",
+ "shipyard_proc",
+ "siphasher",
+]
+
+[[package]]
+name = "shipyard_proc"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7515c11aebbea0b9d85e1a1724792c658c701913761e23d62a8e732c0389d0a9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2663,6 +2686,12 @@ name = "simd-adler32"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
+
+[[package]]
+name = "siphasher"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
 
 [[package]]
 name = "skrifa"
