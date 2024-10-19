@@ -175,6 +175,9 @@ impl TextSystem {
         let sampler = gfx::create_sampler()
             .with_min_filter(TextureFilter::Linear)
             .with_mag_filter(TextureFilter::Linear)
+            // TODO pixelated
+            // .with_min_filter(TextureFilter::Nearest)
+            // .with_mag_filter(TextureFilter::Nearest)
             .build()?;
 
         // mask atlas

@@ -248,6 +248,7 @@ struct Runner<S> {
     state: Option<S>,
     update: Box<dyn FnMut(&mut S)>,
     vsync: bool,
+    pixelated_offscreen: bool,
     interval: Option<Interval>,
 }
 
@@ -285,6 +286,7 @@ impl<S> ApplicationHandler for Runner<S> {
                 &win,
                 self.vsync,
                 uvec2(win_size.width, win_size.height),
+                self.pixelated_offscreen,
             ));
             match gfx {
                 Ok(gfx) => {
@@ -439,6 +441,8 @@ where
         .max_fps
         .map(|max| spin_sleep_util::interval(Duration::from_secs(1) / max as u32));
 
+    let pixelated_offscreen = window.pixelated;
+
     let mut runner = Runner {
         window_attrs: window_attrs(window),
         init: Some(init_cb),
@@ -446,6 +450,7 @@ where
         update: update_cb,
         vsync,
         interval,
+        pixelated_offscreen,
     };
 
     event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;
@@ -477,6 +482,7 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         resizable,
         vsync: _,
         max_fps: _,
+        pixelated: _,
     } = config;
 
     let mut attrs = WindowAttributes::default()

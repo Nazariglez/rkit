@@ -4,7 +4,7 @@ use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingType, BlendMode,
     Buffer, BufferDescriptor, BufferUsage, GfxBackend, IndexFormat, RenderPipeline,
     RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
-    SamplerDescriptor, TextureFormat, VertexFormat, VertexLayout,
+    SamplerDescriptor, TextureFilter, TextureFormat, VertexFormat, VertexLayout,
 };
 
 // language=wgsl
@@ -84,7 +84,7 @@ pub(crate) struct OffscreenSurfaceData {
 }
 
 impl OffscreenSurfaceData {
-    pub fn new(gfx: &mut GfxBackend) -> Result<Self, String> {
+    pub fn new(gfx: &mut GfxBackend, pixelated: bool) -> Result<Self, String> {
         let texture = gfx.create_render_texture(RenderTextureDescriptor {
             label: Some("Offscreen Surface"),
             depth: false,
@@ -93,9 +93,16 @@ impl OffscreenSurfaceData {
             format: TextureFormat::Rgba8UNormSrgb, // compatible with all platforms even web
         })?;
 
-        // TODO allow config for this, pixelart games sampler, etc...
+        let filter = if pixelated {
+            TextureFilter::Nearest
+        } else {
+            TextureFilter::Linear
+        };
+
         let sampler = gfx.create_sampler(SamplerDescriptor {
             label: Some("Offscreen Surface Sampler"),
+            mag_filter: filter,
+            min_filter: filter,
             ..Default::default()
         })?;
 

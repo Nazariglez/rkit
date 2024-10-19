@@ -1,5 +1,4 @@
 use draw::Draw2D;
-use etagere::euclid::Trig;
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Transform2D};
 use rkit::gfx::{self, Color};

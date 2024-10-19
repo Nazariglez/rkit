@@ -158,8 +158,8 @@ fn listen_resize_win(win: &mut WebWindow) {
         return;
     }
 
-    let min = win.config.min_size;
-    let max = win.config.max_size;
+    let min = win.min_size.clone();
+    let max = win.max_size.clone();
     let canvas = win.canvas.clone();
     let parent = win.parent.clone();
     let events = win.events.clone();
@@ -173,12 +173,12 @@ fn listen_resize_win(win: &mut WebWindow) {
         if parent_size.y == 0 {
             parent_size.y = canvas.client_height() as _;
         }
-        if let Some(min) = min {
-            parent_size = parent_size.min(min);
+        if let Some(min) = *min.borrow() {
+            parent_size = parent_size.max(min);
         }
 
-        if let Some(max) = max {
-            parent_size = parent_size.max(max);
+        if let Some(max) = *max.borrow() {
+            parent_size = parent_size.min(max);
         }
 
         set_size_dpi(&canvas, parent_size.x, parent_size.y);

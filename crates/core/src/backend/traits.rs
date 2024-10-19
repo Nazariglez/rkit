@@ -47,7 +47,12 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
 }
 
 pub(crate) trait GfxBackendImpl {
-    async fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    async fn init<W>(
+        window: &W,
+        vsync: bool,
+        win_size: UVec2,
+        pixelated: bool,
+    ) -> Result<Self, String>
     where
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle;

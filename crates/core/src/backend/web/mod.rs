@@ -46,11 +46,14 @@ where
 
     let vsync = config.vsync;
     let size = config.size;
+    let pixelated = config.pixelated;
 
     let callback = Rc::new(RefCell::new(None));
     let win = WebWindow::new(config).unwrap();
     let close_requested = win.close_requested.clone();
-    let gfx = GfxBackend::init(&win, vsync, size).await.unwrap();
+    let gfx = GfxBackend::init(&win, vsync, size, pixelated)
+        .await
+        .unwrap();
     {
         let mut bck = get_mut_backend();
         bck.win = Some(win);
@@ -192,11 +195,17 @@ impl BackendImpl<GfxBackend> for WebBackend {
             .unwrap()
             .set_size(size.x as _, size.y as _);
     }
-    fn set_min_size(&mut self, _size: Vec2) {
-        todo!()
+    fn set_min_size(&mut self, size: Vec2) {
+        self.win
+            .as_mut()
+            .unwrap()
+            .set_min_size(size.x as _, size.y as _);
     }
-    fn set_max_size(&mut self, _size: Vec2) {
-        todo!()
+    fn set_max_size(&mut self, size: Vec2) {
+        self.win
+            .as_mut()
+            .unwrap()
+            .set_max_size(size.x as _, size.y as _);
     }
     fn screen_size(&self) -> Vec2 {
         todo!()

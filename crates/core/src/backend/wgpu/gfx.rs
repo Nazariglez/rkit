@@ -1,5 +1,6 @@
 #![allow(clippy::arc_with_non_send_sync)]
 
+use crate::app::WindowConfig;
 use crate::backend::traits::GfxBackendImpl;
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;
@@ -50,12 +51,17 @@ unsafe impl Send for GfxBackend {}
 unsafe impl Sync for GfxBackend {}
 
 impl GfxBackendImpl for GfxBackend {
-    async fn init<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    async fn init<W>(
+        window: &W,
+        vsync: bool,
+        win_size: UVec2,
+        pixelated: bool,
+    ) -> Result<Self, String>
     where
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle,
     {
-        Self::new(window, vsync, win_size).await
+        Self::new(window, vsync, win_size, pixelated).await
     }
 
     async fn update_surface<W>(
@@ -742,7 +748,12 @@ fn resource_id<T: From<u64>>(count: &mut u64) -> T {
 }
 
 impl GfxBackend {
-    async fn new<W>(window: &W, vsync: bool, win_size: UVec2) -> Result<Self, String>
+    async fn new<W>(
+        window: &W,
+        vsync: bool,
+        win_size: UVec2,
+        pixelated: bool,
+    ) -> Result<Self, String>
     where
         W: HasWindowHandle + HasDisplayHandle,
     {
@@ -784,7 +795,7 @@ impl GfxBackend {
             offscreen: None,
         };
 
-        let offscreen = OffscreenSurfaceData::new(&mut bck)?;
+        let offscreen = OffscreenSurfaceData::new(&mut bck, pixelated)?;
         bck.offscreen = Some(offscreen);
 
         Ok(bck)

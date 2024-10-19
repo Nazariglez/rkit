@@ -31,6 +31,8 @@ pub(crate) struct WebWindow {
     pub fullscreen_request: Rc<RefCell<Option<bool>>>,
 
     pub close_requested: Rc<RefCell<bool>>,
+    pub min_size: Rc<RefCell<Option<UVec2>>>,
+    pub max_size: Rc<RefCell<Option<UVec2>>>,
 }
 
 impl HasWindowHandle for WebWindow {
@@ -55,7 +57,7 @@ impl WebWindow {
             .document()
             .ok_or("Can't access document dom object ")?;
 
-        let canvas = get_or_create_canvas(&document, "gk_canvas")?;
+        let canvas = get_or_create_canvas(&document, "gk_canvas", config.pixelated)?;
 
         let canvas_parent = canvas
             .parent_element()
@@ -84,6 +86,9 @@ impl WebWindow {
         let fullscreen_last_size = Rc::new(RefCell::new(None));
         let fullscreen_request = Rc::new(RefCell::new(None));
 
+        let min_size = Rc::new(RefCell::new(config.min_size));
+        let max_size = Rc::new(RefCell::new(config.max_size));
+
         let mut win = Self {
             canvas,
             document,
@@ -96,6 +101,8 @@ impl WebWindow {
             fullscreen_last_size,
             fullscreen_request,
             close_requested: Rc::new(RefCell::new(false)),
+            min_size,
+            max_size,
         };
 
         enable_input_events(&mut win);
@@ -120,6 +127,16 @@ impl WebWindow {
         self.config.size = uvec2(width, height);
     }
 
+    pub fn set_min_size(&mut self, width: u32, height: u32) {
+        self.config.min_size = Some(uvec2(width, height));
+        *self.min_size.borrow_mut() = self.config.min_size;
+    }
+
+    pub fn set_max_size(&mut self, width: u32, height: u32) {
+        self.config.max_size = Some(uvec2(width, height));
+        *self.max_size.borrow_mut() = self.config.max_size;
+    }
+
     pub fn size(&self) -> Vec2 {
         let (w, h) = get_gk_size(&self.canvas);
         vec2(w as _, h as _)
@@ -138,7 +155,11 @@ impl WebWindow {
     }
 }
 
-fn get_or_create_canvas(doc: &Document, canvas_id: &str) -> Result<HtmlCanvasElement, String> {
+fn get_or_create_canvas(
+    doc: &Document,
+    canvas_id: &str,
+    pixelated: bool,
+) -> Result<HtmlCanvasElement, String> {
     let canvas = match doc.get_element_by_id(canvas_id) {
         Some(c) => c,
         None => {
@@ -168,6 +189,15 @@ fn get_or_create_canvas(doc: &Document, canvas_id: &str) -> Result<HtmlCanvasEle
 
     if let Err(e) = canvas_element.style().set_property("outline", "none") {
         log::error!("Cannot set outline: none {e:?}");
+    }
+
+    if pixelated {
+        if let Err(e) = canvas_element
+            .style()
+            .set_property("image-rendering", "pixelated")
+        {
+            log::error!("Cannot set image-rendering: pixelated {e:?}");
+        }
     }
 
     Ok(canvas_element)
