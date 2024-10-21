@@ -33,6 +33,8 @@ pub(crate) struct WebWindow {
     pub close_requested: Rc<RefCell<bool>>,
     pub min_size: Rc<RefCell<Option<UVec2>>>,
     pub max_size: Rc<RefCell<Option<UVec2>>>,
+
+    pub pixelated: bool,
 }
 
 impl HasWindowHandle for WebWindow {
@@ -57,7 +59,8 @@ impl WebWindow {
             .document()
             .ok_or("Can't access document dom object ")?;
 
-        let canvas = get_or_create_canvas(&document, "gk_canvas", config.pixelated)?;
+        let pixelated = config.pixelated;
+        let canvas = get_or_create_canvas(&document, "gk_canvas", pixelated)?;
 
         let canvas_parent = canvas
             .parent_element()
@@ -103,6 +106,7 @@ impl WebWindow {
             close_requested: Rc::new(RefCell::new(false)),
             min_size,
             max_size,
+            pixelated,
         };
 
         enable_input_events(&mut win);

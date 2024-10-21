@@ -85,7 +85,7 @@ logs = ["core/logs"]
 # enables gamepad api
 gamepad = ["core/gamepad"]
 # force webgl
-webgl = ["core/webgl"]
+webgl = ["core/webgl", "draw/webgl"]
 # enable fastrand random
 random = ["dep:fastrand"]
 # enables draw API

@@ -40,6 +40,8 @@ pub(crate) struct WinitBackend {
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
 
+    pixelated: bool,
+
     cursor_locked: bool,
     cursor_visible: bool,
 
@@ -167,6 +169,12 @@ impl BackendImpl<GfxBackend> for WinitBackend {
             .unwrap()
             .is_minimized()
             .unwrap_or_default()
+    }
+
+    #[inline]
+    fn is_pixelated(&self) -> bool {
+        debug_assert!(self.window.is_some(), "Window must be present");
+        self.pixelated
     }
 
     #[inline]
@@ -300,7 +308,11 @@ impl<S> ApplicationHandler for Runner<S> {
         }
 
         win.request_redraw();
-        get_mut_backend().window = Some(win);
+        {
+            let mut bck = get_mut_backend();
+            bck.window = Some(win);
+            bck.pixelated = self.pixelated_offscreen;
+        }
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
         }

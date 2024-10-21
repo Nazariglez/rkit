@@ -28,3 +28,4 @@ cosmic-text = "0.12.1"
 [features]
 default = []
 default-font = []
+webgl = []

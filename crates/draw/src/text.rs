@@ -430,7 +430,7 @@ impl TextSystem {
         self.bind_group = None;
     }
 
-    fn measure(&mut self, _resolution: f32) -> Result<(Vec2, usize), String> {
+    fn measure(&mut self, resolution: f32) -> Result<(Vec2, usize), String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -442,7 +442,7 @@ impl TextSystem {
         let size = vec2(
             width, // TODO multiply by resolution??
             total_lines as f32 * self.buffer.metrics().line_height,
-        );
+        ) * resolution;
         Ok((size, total_lines))
     }
 

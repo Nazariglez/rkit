@@ -234,6 +234,9 @@ impl BackendImpl<GfxBackend> for WebBackend {
     fn is_minimized(&self) -> bool {
         todo!()
     }
+    fn is_pixelated(&self) -> bool {
+        self.win.as_ref().unwrap().pixelated
+    }
     fn close(&mut self) {
         self.win.as_ref().unwrap().exit();
     }

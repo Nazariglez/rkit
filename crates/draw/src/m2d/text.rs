@@ -1,5 +1,6 @@
 use crate::text::{get_mut_text_system, AtlasType, Font, HAlign, TextInfo};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Transform2D};
+use core::app::is_window_pixelated;
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
@@ -63,6 +64,17 @@ var t_color: texture_2d<f32>;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let in_color = srgb_to_linear(in.color);
 
+    // naga translation to webgl does not support using multiple samples per texture but webgpu does
+    {{SELECT_TEXTURE_AND_SAMPLER}}
+
+    // emojis
+    let color_sample = textureSampleLevel(t_color, s_linear, in.uvs, 0.0);
+    return color_sample * in_color;
+}
+"#;
+
+#[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
+const SELECT_TEXTURE_SAMPLER: &str = r#"
     // linear
     if (in.tex == 0.0) {
         let mask_sample = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
@@ -74,18 +86,59 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let mask_sample = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
         return vec4(in_color.rgb, mask_sample.r * in_color.a);
     }
-
-    // emojis
-    let color_sample = textureSampleLevel(t_color, s_linear, in.uvs, 0.0);
-    return color_sample * in_color;
-}
 "#;
 
+#[cfg(all(target_arch = "wasm32", feature = "webgl"))]
+const SELECT_TEXTURE_SAMPLER_LINEAR: &str = r#"
+    // linear
+    if (in.tex != 2.0) {
+        let mask_sample = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask_sample.r * in_color.a);
+    }
+"#;
+
+#[cfg(all(target_arch = "wasm32", feature = "webgl"))]
+const SELECT_TEXTURE_SAMPLER_NEAREST: &str = r#"
+    // nearest
+    if (in.tex != 2.0) {
+        let mask_sample = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask_sample.r * in_color.a);
+    }
+"#;
+
+// IMPORTANT NOTE: WebGL shader translation does not support multiple shader per texture
+// to make this work, webgpu targets will select the sampler based on the font but
+// webgl will select only one sampler based on the window "pixelated" flag. This means that
+// if the window is defined as pixelated all font will use a NEAREST sampler while targeting WebGL
+fn select_texture_sampler() -> &'static str {
+    #[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
+    {
+        return SELECT_TEXTURE_SAMPLER;
+    }
+
+    #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
+    {
+        if is_window_pixelated() {
+            SELECT_TEXTURE_SAMPLER_NEAREST
+        } else {
+            SELECT_TEXTURE_SAMPLER_LINEAR
+        }
+    }
+}
+
+// TODO: alternatively we can create a new pipeline for WebGL using only one sampler and then
+// we swap the binding group depending if the font is pixelated or not. This will match the WebGPU
+// behavior where the same app can have pixelated and linear fonts, the downside is that this
+// we'll need to swap the batches if we're swapping between pixelated or linear fonts incurring in more
+// draw calls. Which is probably worth it if we want better webgl suppor.
 pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
-    let shader = SHADER.replace(
-        "{{SRGB_TO_LINEAR}}",
-        include_str!("../resources/to_linear.wgsl"),
-    );
+    let shader = SHADER
+        .replace(
+            "{{SRGB_TO_LINEAR}}",
+            include_str!("../resources/to_linear.wgsl"),
+        )
+        .replace("{{SELECT_TEXTURE_AND_SAMPLER}}", select_texture_sampler());
+
     let pip = gfx::create_render_pipeline(&shader)
         .with_label("Draw2D text default pipeline")
         .with_vertex_layout(
@@ -134,6 +187,7 @@ pub struct Text2D<'a> {
     line_height: Option<f32>,
     max_width: Option<f32>,
     h_align: HAlign,
+    res: f32,
 
     #[pipeline_id]
     pip: DrawPipelineId,
@@ -154,6 +208,7 @@ impl<'a> Text2D<'a> {
             line_height: None,
             max_width: None,
             h_align: HAlign::default(),
+            res: 1.0,
 
             pip: DrawPipelineId::Text,
             transform: None,
@@ -209,6 +264,11 @@ impl<'a> Text2D<'a> {
         self.h_align = HAlign::Right;
         self
     }
+
+    pub fn resolution(&mut self, res: f32) -> &mut Self {
+        self.res = res;
+        self
+    }
 }
 
 impl<'a> Element2D for Text2D<'a> {
@@ -220,7 +280,7 @@ impl<'a> Element2D for Text2D<'a> {
             wrap_width: self.max_width,
             font_size: self.size,
             line_height: self.line_height,
-            resolution: 1.0, // TODO expose this to the user
+            resolution: self.res,
             h_align: self.h_align,
         };
 

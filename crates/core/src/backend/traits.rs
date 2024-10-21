@@ -28,6 +28,7 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     fn is_focused(&self) -> bool;
     fn is_maximized(&self) -> bool;
     fn is_minimized(&self) -> bool;
+    fn is_pixelated(&self) -> bool;
     fn close(&mut self);
 
     // input
