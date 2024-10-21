@@ -37,6 +37,7 @@ pub struct FontId(pub(crate) u64);
 pub struct Font {
     id: FontId,
     // raw: ID,
+    nearest: bool,
     family: Arc<String>,
     weight: Weight,
     style: Style,
@@ -48,6 +49,10 @@ impl Font {
     pub fn id(&self) -> FontId {
         self.id
     }
+
+    pub fn is_pixelated(&self) -> bool {
+        self.nearest
+    }
 }
 
 #[derive(Debug)]
@@ -57,6 +62,7 @@ pub struct GlyphData {
     pub uvs1: Vec2,
     pub uvs2: Vec2,
     pub(crate) typ: AtlasType,
+    pub(crate) pixelated: bool,
 }
 
 pub struct BlockInfo<'a> {
@@ -153,7 +159,8 @@ struct ProcessData {
 pub struct TextSystem {
     mask: AtlasData,
     color: AtlasData,
-    sampler: Sampler,
+    linear_sampler: Sampler,
+    nearest_sampler: Sampler,
     cache: FastCache<CacheKey, GlyphInfo>,
     font_system: FontSystem,
     swash: SwashCache,
@@ -172,12 +179,14 @@ impl TextSystem {
     pub fn new() -> Result<Self, String> {
         // common
         let max_texture_size = gfx::limits().max_texture_size_2d;
-        let sampler = gfx::create_sampler()
+        let linear_sampler = gfx::create_sampler()
             .with_min_filter(TextureFilter::Linear)
             .with_mag_filter(TextureFilter::Linear)
-            // TODO pixelated
-            // .with_min_filter(TextureFilter::Nearest)
-            // .with_mag_filter(TextureFilter::Nearest)
+            .build()?;
+
+        let nearest_sampler = gfx::create_sampler()
+            .with_min_filter(TextureFilter::Nearest)
+            .with_mag_filter(TextureFilter::Nearest)
             .build()?;
 
         // mask atlas
@@ -226,7 +235,8 @@ impl TextSystem {
         let mut sys = Self {
             mask,
             color,
-            sampler,
+            linear_sampler,
+            nearest_sampler,
             cache,
             font_system,
             swash,
@@ -242,9 +252,10 @@ impl TextSystem {
 
         #[cfg(feature = "default-font")]
         {
-            let font = sys.create_font(include_bytes!(
-                "./resources/arcade-legacy/arcade-legacy.ttf"
-            ))?;
+            let font = sys.create_font(
+                include_bytes!("./resources/arcade-legacy/arcade-legacy.ttf"),
+                true,
+            )?;
             sys.default_font = Some(font);
         }
 
@@ -255,9 +266,10 @@ impl TextSystem {
         if self.bind_group.is_none() {
             log::debug!("New text atlas bind_group created");
             let bg = gfx::create_bind_group()
-                .with_sampler(0, &self.sampler)
-                .with_texture(1, &self.mask.texture)
-                .with_texture(2, &self.color.texture)
+                .with_sampler(0, &self.linear_sampler)
+                .with_sampler(1, &self.nearest_sampler)
+                .with_texture(2, &self.mask.texture)
+                .with_texture(3, &self.color.texture)
                 .with_layout(pip.bind_group_layout_ref(1).unwrap())
                 .build()
                 .unwrap();
@@ -272,7 +284,7 @@ impl TextSystem {
         self.default_font = Some(font.clone());
     }
 
-    pub fn create_font(&mut self, data: &[u8]) -> Result<Font, String> {
+    pub fn create_font(&mut self, data: &[u8], nearest: bool) -> Result<Font, String> {
         let id = self.font_ids;
         self.font_ids += 1;
         let ids = self
@@ -290,6 +302,7 @@ impl TextSystem {
         Ok(Font {
             id: FontId(id),
             // raw: raw_id,
+            nearest,
             family: Arc::new(face.families[0].0.to_string()),
             weight: face.weight,
             style: face.style,
@@ -307,6 +320,7 @@ impl TextSystem {
 
         // start processing the new text with the data provided by the user
         let font = text.font.or(self.default_font.as_ref());
+        let pixelated = font.map(|f| f.is_pixelated()).unwrap_or_default();
         let attrs = match font {
             Some(f) => Attrs::new()
                 .family(Family::Name(&f.family))
@@ -352,9 +366,6 @@ impl TextSystem {
                 let processed = self.process_data.iter().filter_map(|data| {
                     let info = self.cache.get(&data.key)?;
 
-                    if matches!(info.typ, AtlasType::None) {
-                        return None;
-                    }
                     let tex_size = match info.typ {
                         AtlasType::None => return None,
                         AtlasType::Mask => self.mask.texture.size(),
@@ -382,6 +393,7 @@ impl TextSystem {
                         uvs1: info.atlas_pos / tex_size,
                         uvs2: (info.atlas_pos + glyph_size) / tex_size,
                         typ: info.typ,
+                        pixelated,
                     })
                 });
                 self.temp_data.extend(processed);

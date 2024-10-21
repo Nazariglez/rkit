@@ -53,16 +53,27 @@ pub(crate) fn clean_2d() {
 // -- text
 pub struct FontBuilder<'a> {
     source: &'a [u8],
+    nearest: bool,
 }
 
 impl<'a> FontBuilder<'a> {
     pub fn new(data: &'a [u8]) -> Self {
-        Self { source: data }
+        Self {
+            source: data,
+            nearest: false,
+        }
     }
 
+    pub fn with_nearest_filter(mut self, nearest: bool) -> Self {
+        self.nearest = nearest;
+        self
+    }
+
+    // TODO from_system("Arial") it uses a system font (not supported on wasm)
+
     pub fn build(self) -> Result<Font, String> {
-        let Self { source } = self;
-        get_mut_text_system().create_font(source)
+        let Self { source, nearest } = self;
+        get_mut_text_system().create_font(source, nearest)
     }
 }
 

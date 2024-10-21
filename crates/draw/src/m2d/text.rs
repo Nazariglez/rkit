@@ -24,15 +24,15 @@ var<uniform> transform: Transform;
 struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) uvs: vec2<f32>,
-    @location(2) tex: u32,
+    @location(2) tex: f32,
     @location(3) color: vec4<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uvs: vec2<f32>,
-    @location(1) @interpolate(flat) tex: u32,
-    @location(2) color: vec4<f32>,
+    @location(1) color: vec4<f32>,
+    @location(2) @interpolate(flat) tex: f32,
 };
 
 @vertex
@@ -48,10 +48,12 @@ fn vs_main(
 }
 
 @group(1) @binding(0)
-var s_texture: sampler;
+var s_linear: sampler;
 @group(1) @binding(1)
-var t_mask: texture_2d<f32>;
+var s_nearest: sampler;
 @group(1) @binding(2)
+var t_mask: texture_2d<f32>;
+@group(1) @binding(3)
 var t_color: texture_2d<f32>;
 
 // srg to linear
@@ -60,17 +62,22 @@ var t_color: texture_2d<f32>;
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let in_color = srgb_to_linear(in.color);
-    if (in.tex == 0u) {
-        let mask_sample = textureSampleLevel(t_mask, s_texture, in.uvs, 0.0);
-        var color: vec4<f32> = vec4(in_color.rgb, mask_sample.r * in_color.a);
-        if color.a <= 0.0 {
-            discard;
-        }
-        return color;
-    } else {
-        let color_sample = textureSampleLevel(t_color, s_texture, in.uvs, 0.0);
-        return color_sample * in_color;
+
+    // linear
+    if (in.tex == 0.0) {
+        let mask_sample = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask_sample.r * in_color.a);
     }
+
+    // nearest
+    if (in.tex == 1.0) {
+        let mask_sample = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask_sample.r * in_color.a);
+    }
+
+    // emojis
+    let color_sample = textureSampleLevel(t_color, s_linear, in.uvs, 0.0);
+    return color_sample * in_color;
 }
 "#;
 
@@ -85,7 +92,7 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)
-                .with_attr(2, VertexFormat::UInt32)
+                .with_attr(2, VertexFormat::Float32)
                 .with_attr(3, VertexFormat::Float32x4),
         )
         .with_bind_group_layout(
@@ -94,8 +101,9 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
         .with_bind_group_layout(
             BindGroupLayout::new()
                 .with_entry(BindingType::sampler(0).with_fragment_visibility(true))
-                .with_entry(BindingType::texture(1).with_fragment_visibility(true))
-                .with_entry(BindingType::texture(2).with_fragment_visibility(true)),
+                .with_entry(BindingType::sampler(1).with_fragment_visibility(true))
+                .with_entry(BindingType::texture(2).with_fragment_visibility(true))
+                .with_entry(BindingType::texture(3).with_fragment_visibility(true)),
         )
         .with_blend_mode(BlendMode::NORMAL)
         .build()?;
@@ -235,10 +243,10 @@ impl<'a> Element2D for Text2D<'a> {
                         let Vec2 { x: x2, y: y2 } = data.xy + data.size;
                         let Vec2 { x: u1, y: v1 } = data.uvs1;
                         let Vec2 { x: u2, y: v2 } = data.uvs2;
-                        let t: f32 = if matches!(data.typ, AtlasType::Mask) {
-                            0.0
-                        } else {
-                            1.0
+                        let t = match data.typ {
+                            AtlasType::Mask if data.pixelated => 1.0,
+                            AtlasType::Mask => 0.0,
+                            _ => 2.0,
                         };
 
                         #[rustfmt::skip]
