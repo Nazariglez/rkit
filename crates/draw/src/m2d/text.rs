@@ -284,7 +284,7 @@ impl<'a> Element2D for Text2D<'a> {
             h_align: self.h_align,
         };
 
-        let c = self.color;
+        let c = self.color.with_alpha(self.color.a * self.alpha);
 
         TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
             TEMP_INDICES.with_borrow_mut(|temp_indices| {
