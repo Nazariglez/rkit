@@ -19,6 +19,12 @@ pub fn fps() -> f32 {
     TIME_STATE.borrow().fps()
 }
 
+/// Returns an Instant corresponding to now
+#[inline]
+pub fn now() -> Instant {
+    Instant::now()
+}
+
 /// Delta time between frames
 #[inline]
 pub fn delta() -> Duration {

@@ -19,6 +19,9 @@ impl State {
 fn main() -> Result<(), String> {
     rkit::init_with(|| State::new().unwrap())
         .update(update)
+        .fixed_update(1.0, || println!("each second"))
+        .fixed_update(1.0 / 2.0, || println!("each half second"))
+        .fixed_update(1.0 / 4.0, || println!("each quarter second"))
         .run()
 }
 

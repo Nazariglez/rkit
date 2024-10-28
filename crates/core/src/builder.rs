@@ -8,6 +8,24 @@ pub(crate) type InitCb<S> = Box<dyn FnOnce() -> S>;
 pub(crate) type UpdateCb<S> = Box<dyn FnMut(&mut S)>;
 pub(crate) type CleanupCb<S> = Box<dyn FnOnce(&mut S)>;
 
+struct FixedUpdate<S> {
+    delta: f32,
+    accumulator: f32,
+    cb: UpdateCb<S>,
+}
+
+impl<S> FixedUpdate<S> {
+    fn tick(&mut self, state: &mut S) {
+        let dt = crate::time::delta_f32();
+        self.accumulator += dt;
+
+        while self.accumulator >= self.delta {
+            (self.cb)(state);
+            self.accumulator -= self.delta;
+        }
+    }
+}
+
 pub struct AppBuilder<S>
 where
     S: 'static,
@@ -15,6 +33,7 @@ where
     pub(crate) window: WindowConfig,
     pub(crate) init_cb: InitCb<S>,
     pub(crate) update_cb: UpdateCb<S>,
+    pub(crate) fixed_update_cb: Option<Vec<FixedUpdate<S>>>,
     pub(crate) cleanup_cb: CleanupCb<S>,
 
     #[cfg(feature = "logs")]
@@ -30,6 +49,7 @@ where
         window: WindowConfig::default(),
         init_cb: Box::new(cb),
         update_cb: Box::new(|_| ()),
+        fixed_update_cb: None,
         cleanup_cb: Box::new(|_| ()),
 
         #[cfg(feature = "logs")]
@@ -60,6 +80,21 @@ where
         self
     }
 
+    pub fn fixed_update<F, P>(mut self, delta: f32, mut cb: F) -> Self
+    where
+        F: Handler<S, P> + 'static,
+    {
+        let cb = FixedUpdate {
+            delta,
+            cb: Box::new(move |s| cb.call(s)),
+            accumulator: 0.0,
+        };
+
+        let list = self.fixed_update_cb.get_or_insert_with(|| vec![]);
+        list.push(cb);
+        self
+    }
+
     pub fn cleanup<F, P>(mut self, mut cb: F) -> Self
     where
         F: Handler<S, P> + 'static,
@@ -68,9 +103,20 @@ where
         self
     }
 
-    pub fn run(self) -> Result<(), String> {
+    pub fn run(mut self) -> Result<(), String> {
         #[cfg(feature = "logs")]
         init_logs(self.log_config.clone());
+
+        // Prepare for fixed update
+        if let Some(mut fixed) = self.fixed_update_cb.take() {
+            let mut update = self.update_cb;
+            self.update_cb = Box::new(move |s| {
+                fixed.iter_mut().for_each(|cb| {
+                    cb.tick(s);
+                });
+                update(s);
+            });
+        }
 
         run(self)
     }
