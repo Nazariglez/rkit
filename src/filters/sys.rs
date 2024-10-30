@@ -1,5 +1,5 @@
 use crate::app::window_size;
-use crate::filters::PostProcess;
+use crate::filters::{create_filter_pipeline, PostProcess};
 use crate::gfx;
 use crate::gfx::{
     AsRenderer, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingType,
@@ -20,32 +20,7 @@ pub(crate) static SYS: Lazy<AtomicRefCell<PostProcessSys>> =
     Lazy::new(|| AtomicRefCell::new(PostProcessSys::new().unwrap()));
 
 // language=wgsl
-const SHADER: &str = r#"
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @location(1) tex_coords: vec2<f32>,
-}
-
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
-}
-
-@vertex
-fn vs_main(
-    model: VertexInput,
-) -> VertexOutput {
-    var out: VertexOutput;
-    out.tex_coords = model.tex_coords;
-    out.clip_position = vec4<f32>(model.position.x, model.position.y * -1.0, 0.0, 1.0);
-    return out;
-}
-
-@group(0) @binding(0)
-var t_texture: texture_2d<f32>;
-@group(0) @binding(1)
-var s_texture: sampler;
-
+const FRAG: &str = r#"
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(t_texture, s_texture, in.tex_coords);
@@ -90,21 +65,12 @@ impl PostProcessSys {
             .with_mag_filter(TextureFilter::Nearest)
             .build()?;
 
-        let pip = gfx::create_render_pipeline(SHADER)
-            .with_label("PostProcess pipeline")
-            .with_vertex_layout(
-                VertexLayout::new()
-                    .with_attr(0, VertexFormat::Float32x2)
-                    .with_attr(1, VertexFormat::Float32x2),
-            )
-            .with_index_format(IndexFormat::UInt16)
-            .with_bind_group_layout(
-                BindGroupLayout::new()
-                    .with_entry(BindingType::texture(0).with_fragment_visibility(true))
-                    .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
-            )
-            .with_blend_mode(BlendMode::NORMAL)
-            .build()?;
+        let pip = create_filter_pipeline(FRAG, |builder| {
+            builder
+                .with_label("PostProcess pipeline")
+                .with_blend_mode(BlendMode::NORMAL)
+                .build()
+        })?;
 
         #[rustfmt::skip]
         let vertices: &[f32] = &[
