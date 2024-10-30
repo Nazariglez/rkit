@@ -1,5 +1,6 @@
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
+use rkit::filters::PostProcess;
 use rkit::gfx::{self, Color};
 
 struct State {
@@ -29,5 +30,10 @@ fn update(s: &mut State) {
     draw.image(&s.sprite)
         .position(window_size() * 0.5 - s.sprite.size() * 0.5);
 
-    gfx::render_to_frame(&draw).unwrap();
+    gfx::render_to_frame(&PostProcess {
+        filters: &[],
+        render: &draw,
+        pixelated: false,
+    })
+    .unwrap();
 }

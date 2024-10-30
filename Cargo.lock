@@ -2521,12 +2521,14 @@ name = "rkit"
 version = "0.1.0"
 dependencies = [
  "assets",
+ "atomic_refcell",
  "audio",
  "bytemuck",
  "core",
  "draw",
  "fastrand",
  "log",
+ "once_cell",
  "shipyard",
  "static_assertions",
  "utils",

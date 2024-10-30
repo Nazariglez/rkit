@@ -1,12 +1,11 @@
-mod filters;
+pub mod filters;
+pub mod utils;
+
 #[cfg(feature = "random")]
 pub mod random;
-mod utils;
 
 #[doc(inline)]
 pub use core::*;
-#[doc(inline)]
-pub use utils::*;
 
 #[doc(inline)]
 #[cfg(feature = "draw")]

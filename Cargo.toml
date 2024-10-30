@@ -67,7 +67,13 @@ draw = { workspace = true, optional = true }
 audio = { workspace = true, optional = true }
 assets = { workspace = true, optional = true }
 
+log.workspace = true
+
 fastrand = { version = "2.1.1", optional = true }
+
+# used on filters TODO maybe this must be optional under the filter feature?
+atomic_refcell.workspace = true
+once_cell.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { version = "2.1.1", optional = true, features = ["js"] }

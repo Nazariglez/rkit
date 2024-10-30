@@ -173,5 +173,5 @@ fn update(s: &mut State) {
         .anchor(Vec2::splat(0.5))
         .pipeline(&s.pip_id); // use the custom pipeline
 
-    gfx::render_to_frame(&post_process(&filters, &draw)).unwrap();
+    gfx::render_to_frame(&draw).unwrap();
 }
