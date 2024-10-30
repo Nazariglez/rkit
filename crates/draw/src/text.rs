@@ -8,6 +8,7 @@ use cosmic_text::{
 };
 use etagere::{size2, BucketedAtlasAllocator};
 use once_cell::sync::Lazy;
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use utils::fast_cache::FastCache;
 
@@ -161,7 +162,7 @@ pub struct TextSystem {
     color: AtlasData,
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
-    cache: FastCache<CacheKey, GlyphInfo>,
+    cache: FxHashMap<CacheKey, GlyphInfo>,
     font_system: FontSystem,
     swash: SwashCache,
     buffer: Buffer,
@@ -224,7 +225,7 @@ impl TextSystem {
             current_size: DEFAULT_TEXTURE_SIZE,
         };
 
-        let cache = FastCache::default();
+        let cache = FxHashMap::default();
 
         let mut font_system = FontSystem::new();
         let swash = SwashCache::new();

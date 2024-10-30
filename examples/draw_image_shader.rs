@@ -1,7 +1,8 @@
 use draw::{AsBindGroups, DrawPipelineId, PipelineContext, PipelineResources};
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::gfx::{
-    self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
+    self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, Renderer, VertexFormat,
+    VertexLayout,
 };
 use rkit::math::{vec2, Vec2};
 use rkit::time;
@@ -172,5 +173,5 @@ fn update(s: &mut State) {
         .anchor(Vec2::splat(0.5))
         .pipeline(&s.pip_id); // use the custom pipeline
 
-    gfx::render_to_frame(&draw).unwrap();
+    gfx::render_to_frame(&post_process(&filters, &draw)).unwrap();
 }

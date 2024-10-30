@@ -5,3 +5,5 @@ edition = "2021"
 [dependencies]
 hashbrown.workspace = true
 rustc-hash.workspace = true
+
+lru = { version = "0.12.5" , default-features = false }
