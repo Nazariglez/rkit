@@ -18,17 +18,23 @@ let tex_size = vec2<f32>(textureDimensions(t_texture));
     let shifted_uvs = in.uvs - 0.5;
     let coords = floor((shifted_uvs * tex_size) / pixel_data.size) * pixel_data.size;
     let uvs = (coords / tex_size) + 0.5;
-    return textureSample(t_texture, s_texture, uvs) * in.color;
+    return textureSample(t_texture, s_texture, uvs);
 }
 "#;
+
+// TODO encase
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct PixelateFilterParams {
+    pub size: Vec2,
+}
 
 pub struct PixelateFilter {
     pip: RenderPipeline,
     ubo: Buffer,
-    bind_group: BindGroup,
+    bind_groups: [BindGroup; 1],
 
-    last_size: Vec2,
-    pub size: Vec2,
+    last_params: PixelateFilterParams,
+    pub params: PixelateFilterParams,
 }
 
 impl PixelateFilter {
@@ -44,9 +50,11 @@ impl PixelateFilter {
                 .build()
         })?;
 
-        let size = Vec2::splat(10.0);
+        let params = PixelateFilterParams {
+            size: Vec2::splat(10.0),
+        };
 
-        let ubo = gfx::create_uniform_buffer(size.as_ref())
+        let ubo = gfx::create_uniform_buffer(params.size.as_ref())
             .with_label("PixelateFilter UBO")
             .with_write_flag(true)
             .build()?;
@@ -60,15 +68,30 @@ impl PixelateFilter {
         Ok(Self {
             pip,
             ubo,
-            bind_group,
-            last_size: size,
-            size,
+            bind_groups: [bind_group],
+            last_params: params,
+            params,
         })
     }
 }
 
 impl Filter for PixelateFilter {
+    fn prepare(&mut self) -> Result<(), String> {
+        if self.last_params != self.params {
+            gfx::write_buffer(&self.ubo)
+                .with_data(self.params.size.as_ref())
+                .build()?;
+            self.last_params = self.params;
+        }
+
+        Ok(())
+    }
+
     fn pipeline(&self) -> &RenderPipeline {
         &self.pip
+    }
+
+    fn bind_groups(&self) -> &[BindGroup] {
+        &self.bind_groups
     }
 }

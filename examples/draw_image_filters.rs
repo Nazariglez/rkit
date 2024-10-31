@@ -1,10 +1,11 @@
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
-use rkit::filters::PostProcess;
+use rkit::filters::{PixelateFilter, PostProcess};
 use rkit::gfx::{self, Color};
 
 struct State {
     sprite: Sprite,
+    pixelate: PixelateFilter,
 }
 
 impl State {
@@ -13,7 +14,9 @@ impl State {
             .from_image(include_bytes!("assets/ferris.png"))
             .build()?;
 
-        Ok(Self { sprite })
+        let pixelate = PixelateFilter::new()?;
+
+        Ok(Self { sprite, pixelate })
     }
 }
 
@@ -31,9 +34,10 @@ fn update(s: &mut State) {
         .position(window_size() * 0.5 - s.sprite.size() * 0.5);
 
     gfx::render_to_frame(&PostProcess {
-        filters: &[],
+        filters: &[&s.pixelate],
+        // filters: &[],
         render: &draw,
-        pixelated: false,
+        pixelated: true,
     })
     .unwrap();
 }

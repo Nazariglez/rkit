@@ -43,6 +43,11 @@ where
     }
 
     #[inline]
+    pub fn get_or_insert_mut<F: FnOnce() -> V>(&mut self, k: K, cb: F) -> &mut V {
+        self.inner.get_or_insert_mut(k, cb)
+    }
+
+    #[inline]
     pub fn clear(&mut self) {
         self.inner.clear();
     }
