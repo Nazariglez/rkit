@@ -1,4 +1,5 @@
 - todo:
+    * load images with premultiplied alpha
     * audio clean sounds must be automatic with core events after frames, improve audio examples
     * use encase crate to comply with std140
     * blending, and masking

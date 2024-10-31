@@ -1,5 +1,5 @@
 use crate::app::window_size;
-use crate::filters::{create_filter_pipeline, PostProcess};
+use crate::filters::{create_filter_pipeline, Filter, PostProcess};
 use crate::gfx::{
     self, AsRenderer, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingType,
     BlendMode, Buffer, BufferDescriptor, BufferUsage, IndexFormat, RenderPipeline,
@@ -171,44 +171,55 @@ impl PostProcessSys {
         };
 
         // filter pass
-        info.filters.iter().for_each(|filter| {
-            // clear any group form last filter
-            let mut bind_groups: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
-                ArrayVec::new();
+        info.filters
+            .iter()
+            .filter(|f| f.is_enabled())
+            .for_each(|filter| {
+                // clear any group form last filter
+                let mut bind_groups: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
+                    ArrayVec::new();
 
-            // prepare a new bing_group if needed
-            let bg_key = BindGroupKey {
-                tex: io_tex.in_tex.id(),
-                sampler: sampler.id(),
-            };
-            let bind_group = self.bind_groups.get_or_insert(bg_key, || {
-                gfx::create_bind_group()
-                    .with_label("PostProcess BindGroup")
-                    .with_layout(self.pip.bind_group_layout_ref(0).unwrap())
-                    .with_texture(0, io_tex.in_tex.texture())
-                    .with_sampler(1, sampler)
-                    .build()
-                    .unwrap() // TODO raise error...
+                let sampler = filter
+                    .texture_filter()
+                    .map(|tf| match tf {
+                        TextureFilter::Linear => &self.linear_sampler,
+                        TextureFilter::Nearest => &self.nearest_sampler,
+                    })
+                    .unwrap_or(sampler);
+
+                // prepare a new bing_group if needed
+                let bg_key = BindGroupKey {
+                    tex: io_tex.in_tex.id(),
+                    sampler: sampler.id(),
+                };
+                let bind_group = self.bind_groups.get_or_insert(bg_key, || {
+                    gfx::create_bind_group()
+                        .with_label("PostProcess BindGroup")
+                        .with_layout(self.pip.bind_group_layout_ref(0).unwrap())
+                        .with_texture(0, io_tex.in_tex.texture())
+                        .with_sampler(1, sampler)
+                        .build()
+                        .unwrap() // TODO raise error...
+                });
+
+                // TODO custom sampler per filter?
+                let f_pip = filter.pipeline();
+                let f_bind_groups = filter.bind_groups();
+
+                bind_groups.push(bind_group);
+                f_bind_groups.iter().for_each(|bg| bind_groups.push(bg));
+
+                let mut renderer = Renderer::new();
+                renderer
+                    .begin_pass()
+                    .pipeline(f_pip)
+                    .buffers(&[&self.vbo, &self.ebo])
+                    .bindings(&bind_groups)
+                    .draw(0..6);
+
+                gfx::render_to_texture(&io_tex.out_tex, &renderer).unwrap();
+                std::mem::swap(&mut io_tex.in_tex, &mut io_tex.out_tex);
             });
-
-            // TODO custom sampler per filter?
-            let f_pip = filter.pipeline();
-            let f_bind_groups = filter.bind_groups();
-
-            bind_groups.push(bind_group);
-            f_bind_groups.iter().for_each(|bg| bind_groups.push(bg));
-
-            let mut renderer = Renderer::new();
-            renderer
-                .begin_pass()
-                .pipeline(f_pip)
-                .buffers(&[&self.vbo, &self.ebo])
-                .bindings(&bind_groups)
-                .draw(0..6);
-
-            gfx::render_to_texture(&io_tex.out_tex, &renderer).unwrap();
-            std::mem::swap(&mut io_tex.in_tex, &mut io_tex.out_tex);
-        });
 
         // final pass
         let bg_key = BindGroupKey {

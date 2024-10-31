@@ -1,57 +1,65 @@
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
-use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline};
-use crate::math::Vec2;
+use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, Color, RenderPipeline};
 
 // language=wgsl
 const FRAG: &str = r#"
-struct PixelData {
-    size: vec4<f32>, // it's a vec2 but webgl has alignment issues
+struct ColorReplace {
+    in_color: vec4<f32>,
+    out_color: vec4<f32>,
+    tolerance: f32,
 };
 
 @group(1) @binding(0)
-var<uniform> pixel_data: PixelData;
+var<uniform> color_replace: ColorReplace;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-let tex_size = vec2<f32>(textureDimensions(t_texture));
-    let shifted_uvs = in.uvs - 0.5;
-    let coords = floor((shifted_uvs * tex_size) / pixel_data.size.xy) * pixel_data.size.xy;
-    let uvs = (coords / tex_size) + 0.5;
-    return textureSample(t_texture, s_texture, uvs);
+    let color = textureSample(t_texture, s_texture, in.uvs);
+    let diff = distance(color.rgb, color_replace.in_color.rgb);
+
+    if diff <= color_replace.tolerance {
+        return color_replace.out_color;
+    } else {
+        return color;
+    }
 }
 "#;
 
 // TODO encase
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct PixelateParams {
-    pub size: Vec2,
+pub struct ColorReplaceParams {
+    pub in_color: Color,
+    pub out_color: Color,
+    pub tolerance: f32,
 }
 
-impl Default for PixelateParams {
+impl Default for ColorReplaceParams {
     fn default() -> Self {
         Self {
-            size: Vec2::splat(10.0),
+            in_color: Color::RED,
+            out_color: Color::BLACK,
+            tolerance: 0.4,
         }
     }
 }
 
-pub struct PixelateFilter {
+pub struct ColorReplaceFilter {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_groups: [BindGroup; 1],
 
-    last_params: PixelateParams,
-    pub params: PixelateParams,
+    last_params: ColorReplaceParams,
+    pub params: ColorReplaceParams,
 
     pub enabled: bool,
 }
 
-impl PixelateFilter {
-    pub fn new(params: PixelateParams) -> Result<Self, String> {
+impl ColorReplaceFilter {
+    pub fn new(params: ColorReplaceParams) -> Result<Self, String> {
         let pip = create_filter_pipeline(FRAG, |builder| {
             builder
-                .with_label("PixelateFilter Pipeline")
+                .with_label("ColorReplaceFilter Pipeline")
                 // this is bind group 1
                 .with_bind_group_layout(
                     BindGroupLayout::new()
@@ -60,13 +68,13 @@ impl PixelateFilter {
                 .build()
         })?;
 
-        let ubo = gfx::create_uniform_buffer(&[params.size.x, params.size.y, 0.0, 0.0])
-            .with_label("PixelateFilter UBO")
+        let ubo = gfx::create_uniform_buffer(&ubo_data(&params))
+            .with_label("ColorReplaceFilter UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("PixelateFilter BindGroup(1)")
+            .with_label("ColorReplaceFilter BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -82,7 +90,7 @@ impl PixelateFilter {
     }
 }
 
-impl Filter for PixelateFilter {
+impl Filter for ColorReplaceFilter {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -90,7 +98,7 @@ impl Filter for PixelateFilter {
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
             gfx::write_buffer(&self.ubo)
-                .with_data(&[self.params.size.x, self.params.size.y, 0.0, 0.0])
+                .with_data(&ubo_data(&self.params))
                 .build()?;
             self.last_params = self.params;
         }
@@ -105,4 +113,19 @@ impl Filter for PixelateFilter {
     fn bind_groups(&self) -> &[BindGroup] {
         &self.bind_groups
     }
+}
+
+fn ubo_data(params: &ColorReplaceParams) -> [f32; 12] {
+    let in_c = params.in_color.to_rgba();
+    let out_c = params.out_color.to_rgba();
+    let tolerance = params.tolerance;
+
+    #[rustfmt::skip]
+    let data = [
+        in_c[0], in_c[1], in_c[2], in_c[3],
+        out_c[0], out_c[1], out_c[2], out_c[3],
+        tolerance, 0.0, 0.0, 0.0,
+    ];
+
+    data
 }

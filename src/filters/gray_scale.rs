@@ -1,72 +1,65 @@
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline};
-use crate::math::Vec2;
 
 // language=wgsl
 const FRAG: &str = r#"
-struct PixelData {
-    size: vec4<f32>, // it's a vec2 but webgl has alignment issues
-};
+struct GrayScale {
+    factor: f32,
+}
 
 @group(1) @binding(0)
-var<uniform> pixel_data: PixelData;
+var<uniform> gray_scale: GrayScale;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-let tex_size = vec2<f32>(textureDimensions(t_texture));
-    let shifted_uvs = in.uvs - 0.5;
-    let coords = floor((shifted_uvs * tex_size) / pixel_data.size.xy) * pixel_data.size.xy;
-    let uvs = (coords / tex_size) + 0.5;
-    return textureSample(t_texture, s_texture, uvs);
-}
-"#;
+    let color = textureSample(t_texture, s_texture, in.uvs);
+    let luminance = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
+    let gray_color = vec4<f32>(vec3<f32>(luminance), color.a);
+    return mix(color, gray_color, gray_scale.factor);
+}"#;
 
-// TODO encase
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct PixelateParams {
-    pub size: Vec2,
+pub struct GrayScaleParams {
+    pub factor: f32,
 }
 
-impl Default for PixelateParams {
+impl Default for GrayScaleParams {
     fn default() -> Self {
-        Self {
-            size: Vec2::splat(10.0),
-        }
+        Self { factor: 1.0 }
     }
 }
 
-pub struct PixelateFilter {
+pub struct GrayScaleFilter {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_groups: [BindGroup; 1],
 
-    last_params: PixelateParams,
-    pub params: PixelateParams,
+    last_params: GrayScaleParams,
+    pub params: GrayScaleParams,
 
     pub enabled: bool,
 }
 
-impl PixelateFilter {
-    pub fn new(params: PixelateParams) -> Result<Self, String> {
+impl GrayScaleFilter {
+    pub fn new(params: GrayScaleParams) -> Result<Self, String> {
         let pip = create_filter_pipeline(FRAG, |builder| {
             builder
-                .with_label("PixelateFilter Pipeline")
-                // this is bind group 1
+                .with_label("GrayScaleFilter Pipeline")
                 .with_bind_group_layout(
-                    BindGroupLayout::new()
+                    BindGroupLayout::default()
                         .with_entry(BindingType::uniform(0).with_fragment_visibility(true)),
                 )
                 .build()
         })?;
 
-        let ubo = gfx::create_uniform_buffer(&[params.size.x, params.size.y, 0.0, 0.0])
-            .with_label("PixelateFilter UBO")
+        let ubo = gfx::create_uniform_buffer(&[params.factor])
+            .with_label("GrayScaleFilter UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("PixelateFilter BindGroup(1)")
+            .with_label("GrayScaleFilter BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -82,7 +75,7 @@ impl PixelateFilter {
     }
 }
 
-impl Filter for PixelateFilter {
+impl Filter for GrayScaleFilter {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -90,7 +83,7 @@ impl Filter for PixelateFilter {
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
             gfx::write_buffer(&self.ubo)
-                .with_data(&[self.params.size.x, self.params.size.y, 0.0, 0.0])
+                .with_data(&[self.params.factor])
                 .build()?;
             self.last_params = self.params;
         }

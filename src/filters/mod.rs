@@ -1,20 +1,30 @@
+mod blur;
+mod color_replace;
+mod gray_scale;
 mod pixelate;
 mod sys;
 
 use crate::filters::sys::SYS;
 use crate::gfx;
 use crate::gfx::{
-    AsRenderer, BindGroup, BindGroupLayout, BindingType, Buffer, IndexFormat, RenderPipeline,
-    RenderPipelineBuilder, RenderTexture, Renderer, VertexFormat, VertexLayout,
+    AsRenderer, BindGroup, BindGroupLayout, BindingType, IndexFormat, RenderPipeline,
+    RenderPipelineBuilder, RenderTexture, TextureFilter, VertexFormat, VertexLayout,
 };
 
+pub use color_replace::*;
+pub use gray_scale::*;
 pub use pixelate::*;
+// pub use blur::*;
 
 pub trait Filter {
-    fn prepare(&mut self) -> Result<(), String>;
+    // TODO use "apply" instead to allow multipass filters?
+    fn is_enabled(&self) -> bool;
+    fn update(&mut self) -> Result<(), String>;
     fn pipeline(&self) -> &RenderPipeline;
-    // fn buffers(&self) -> &[Buffer];
     fn bind_groups(&self) -> &[BindGroup];
+    fn texture_filter(&self) -> Option<TextureFilter> {
+        None
+    }
 }
 
 pub struct PostProcess<'a, R>
