@@ -1,16 +1,11 @@
 use crate::app::window_size;
-use crate::filters::{create_filter_pipeline, Filter, PostProcess};
+use crate::filters::{create_filter_pipeline, PostProcess};
 use crate::gfx::{
-    self, AsRenderer, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingType,
-    BlendMode, Buffer, BufferDescriptor, BufferUsage, IndexFormat, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, RenderTextureId, Renderer,
-    Sampler, SamplerDescriptor, SamplerId, Texture, TextureFilter, TextureFormat, VertexFormat,
-    VertexLayout,
+    self, AsRenderer, BindGroup, BlendMode, RenderPipeline, RenderTexture, RenderTextureId,
+    Renderer, Sampler, SamplerId, Texture, TextureFilter,
 };
 use crate::math::UVec2;
-use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
-use gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
 use utils::fast_cache::FastCache;
@@ -129,7 +124,7 @@ impl PostProcessSys {
         // filter
         let size = target
             .map(|rt| rt.size())
-            .unwrap_or_else(|| window_size())
+            .unwrap_or_else(window_size)
             .as_uvec2();
 
         let io_tex = self.textures.get_or_insert_mut(size, || {

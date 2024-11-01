@@ -1,6 +1,5 @@
 use crate::text::{get_mut_text_system, AtlasType, Font, HAlign, TextInfo};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Transform2D};
-use core::app::is_window_pixelated;
 use core::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
@@ -113,6 +112,7 @@ const SELECT_TEXTURE_SAMPLER_NEAREST: &str = r#"
 fn select_texture_sampler() -> &'static str {
     #[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
     {
+        #[allow(clippy::needless_return)]
         return SELECT_TEXTURE_SAMPLER;
     }
 

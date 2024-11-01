@@ -6,7 +6,7 @@ use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline
 // language=wgsl
 const FRAG: &str = r#"
 struct GrayScale {
-    factor: f32,
+    factor: vec4<f32>,
 }
 
 @group(1) @binding(0)
@@ -14,10 +14,11 @@ var<uniform> gray_scale: GrayScale;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let factor = gray_scale.factor.x;
     let color = textureSample(t_texture, s_texture, in.uvs);
     let luminance = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
     let gray_color = vec4<f32>(vec3<f32>(luminance), color.a);
-    return mix(color, gray_color, gray_scale.factor);
+    return mix(color, gray_color, factor);
 }"#;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -54,7 +55,7 @@ impl GrayScaleFilter {
                 .build()
         })?;
 
-        let ubo = gfx::create_uniform_buffer(&[params.factor])
+        let ubo = gfx::create_uniform_buffer(&[params.factor, 0.0, 0.0, 0.0])
             .with_label("GrayScaleFilter UBO")
             .with_write_flag(true)
             .build()?;
@@ -99,7 +100,7 @@ impl Filter for GrayScaleFilter {
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
             gfx::write_buffer(&self.ubo)
-                .with_data(&[self.params.factor])
+                .with_data(&[self.params.factor, 0.0, 0.0, 0.0])
                 .build()?;
             self.last_params = self.params;
         }

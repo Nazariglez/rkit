@@ -1,6 +1,5 @@
 #![allow(clippy::arc_with_non_send_sync)]
 
-use crate::app::WindowConfig;
 use crate::backend::traits::GfxBackendImpl;
 use crate::backend::wgpu::context::Context;
 use crate::backend::wgpu::frame::DrawFrame;

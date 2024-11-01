@@ -1,4 +1,3 @@
-mod blur;
 mod color_replace;
 mod gray_scale;
 mod pixelate;
@@ -7,8 +6,8 @@ mod sys;
 use crate::filters::sys::{InOutTextures, SYS};
 use crate::gfx;
 use crate::gfx::{
-    AsRenderer, BindGroup, BindGroupLayout, BindingType, IndexFormat, RenderPipeline,
-    RenderPipelineBuilder, RenderTexture, TextureFilter, VertexFormat, VertexLayout,
+    AsRenderer, BindGroup, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder,
+    RenderTexture, TextureFilter,
 };
 
 pub use color_replace::*;

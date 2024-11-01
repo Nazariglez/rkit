@@ -10,7 +10,6 @@ use etagere::{size2, BucketedAtlasAllocator};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
-use utils::fast_cache::FastCache;
 
 pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
     Lazy::new(|| AtomicRefCell::new(TextSystem::new().unwrap()));

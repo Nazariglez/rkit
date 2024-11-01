@@ -33,8 +33,9 @@ where
     pub(crate) window: WindowConfig,
     pub(crate) init_cb: InitCb<S>,
     pub(crate) update_cb: UpdateCb<S>,
-    pub(crate) fixed_update_cb: Option<Vec<FixedUpdate<S>>>,
     pub(crate) cleanup_cb: CleanupCb<S>,
+
+    fixed_update_cb: Option<Vec<FixedUpdate<S>>>,
 
     #[cfg(feature = "logs")]
     log_config: LogConfig,
@@ -90,7 +91,7 @@ where
             accumulator: 0.0,
         };
 
-        let list = self.fixed_update_cb.get_or_insert_with(|| vec![]);
+        let list = self.fixed_update_cb.get_or_insert_with(Vec::new);
         list.push(cb);
         self
     }
