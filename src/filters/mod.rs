@@ -4,7 +4,7 @@ mod gray_scale;
 mod pixelate;
 mod sys;
 
-use crate::filters::sys::SYS;
+use crate::filters::sys::{InOutTextures, SYS};
 use crate::gfx;
 use crate::gfx::{
     AsRenderer, BindGroup, BindGroupLayout, BindingType, IndexFormat, RenderPipeline,
@@ -17,11 +17,10 @@ pub use pixelate::*;
 // pub use blur::*;
 
 pub trait Filter {
-    // TODO use "apply" instead to allow multipass filters?
     fn is_enabled(&self) -> bool;
+    fn name(&self) -> &str;
+    fn apply(&self, io_tex: &mut InOutTextures, bg_tex: &BindGroup) -> Result<(), String>;
     fn update(&mut self) -> Result<(), String>;
-    fn pipeline(&self) -> &RenderPipeline;
-    fn bind_groups(&self) -> &[BindGroup];
     fn texture_filter(&self) -> Option<TextureFilter> {
         None
     }

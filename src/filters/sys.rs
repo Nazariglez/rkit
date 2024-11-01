@@ -4,7 +4,7 @@ use crate::gfx::{
     self, AsRenderer, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingType,
     BlendMode, Buffer, BufferDescriptor, BufferUsage, IndexFormat, RenderPipeline,
     RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, RenderTextureId, Renderer,
-    Sampler, SamplerDescriptor, SamplerId, TextureFilter, TextureFormat, VertexFormat,
+    Sampler, SamplerDescriptor, SamplerId, Texture, TextureFilter, TextureFormat, VertexFormat,
     VertexLayout,
 };
 use crate::math::UVec2;
@@ -34,29 +34,41 @@ struct BindGroupKey {
     sampler: SamplerId,
 }
 
-struct IOTextures {
+pub struct InOutTextures {
     in_tex: RenderTexture,
     out_tex: RenderTexture,
 }
 
-impl IOTextures {
+impl InOutTextures {
     fn new(size: UVec2) -> Result<Self, String> {
         let in_tex = gfx::create_render_texture()
-            .with_label(&format!("PostProcess In Texture ({}, {})", size.x, size.y))
+            .with_label(&format!("PostProcess Texture 1 - ({}, {})", size.x, size.y))
             .with_size(size.x, size.y)
             .build()?;
 
         let out_tex = gfx::create_render_texture()
-            .with_label(&format!("PostProcess Out Texture ({}, {})", size.x, size.y))
+            .with_label(&format!("PostProcess Texture 2 - ({}, {})", size.x, size.y))
             .with_size(size.x, size.y)
             .build()?;
 
         Ok(Self { in_tex, out_tex })
     }
+
+    pub fn input(&self) -> &Texture {
+        self.in_tex.texture()
+    }
+
+    pub fn output(&self) -> &RenderTexture {
+        &self.out_tex
+    }
+
+    pub fn swap(&mut self) {
+        std::mem::swap(&mut self.in_tex, &mut self.out_tex);
+    }
 }
 
 pub(crate) struct PostProcessSys {
-    textures: FastCache<UVec2, IOTextures>,
+    textures: FastCache<UVec2, InOutTextures>,
     bind_groups: FastCache<BindGroupKey, BindGroup>,
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
@@ -126,7 +138,7 @@ impl PostProcessSys {
                 size.x,
                 size.y
             );
-            IOTextures::new(size).unwrap() // TODO maybe this is better to raise the error somehow?
+            InOutTextures::new(size).unwrap() // TODO maybe this is better to raise the error somehow?
         });
         gfx::render_to_texture(&io_tex.in_tex, info.render)?;
 
@@ -141,10 +153,6 @@ impl PostProcessSys {
             .iter()
             .filter(|f| f.is_enabled())
             .for_each(|filter| {
-                // clear any group form last filter
-                let mut bind_groups: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
-                    ArrayVec::new();
-
                 let sampler = filter
                     .texture_filter()
                     .map(|tf| match tf {
@@ -153,7 +161,7 @@ impl PostProcessSys {
                     })
                     .unwrap_or(sampler);
 
-                // prepare a new bing_group if needed
+                // prepare a new bing_group if necessary
                 let bg_key = BindGroupKey {
                     tex: io_tex.in_tex.id(),
                     sampler: sampler.id(),
@@ -162,28 +170,20 @@ impl PostProcessSys {
                     gfx::create_bind_group()
                         .with_label("PostProcess BindGroup")
                         .with_layout(self.pip.bind_group_layout_ref(0).unwrap())
-                        .with_texture(0, io_tex.in_tex.texture())
+                        .with_texture(0, io_tex.input())
                         .with_sampler(1, sampler)
                         .build()
                         .unwrap() // TODO raise error...
                 });
 
-                // TODO custom sampler per filter?
-                let f_pip = filter.pipeline();
-                let f_bind_groups = filter.bind_groups();
-
-                bind_groups.push(bind_group);
-                f_bind_groups.iter().for_each(|bg| bind_groups.push(bg));
-
-                let mut renderer = Renderer::new();
-                renderer
-                    .begin_pass()
-                    .pipeline(f_pip)
-                    .bindings(&bind_groups)
-                    .draw(0..6);
-
-                gfx::render_to_texture(&io_tex.out_tex, &renderer).unwrap();
-                std::mem::swap(&mut io_tex.in_tex, &mut io_tex.out_tex);
+                match filter.apply(io_tex, bind_group) {
+                    Ok(_) => {
+                        io_tex.swap();
+                    }
+                    Err(e) => {
+                        log::error!("Unable to apply filter '{}': {}", filter.name(), e);
+                    }
+                }
             });
 
         // final pass

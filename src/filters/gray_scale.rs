@@ -1,6 +1,7 @@
+use crate::filters::sys::InOutTextures;
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
-use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline};
+use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
 
 // language=wgsl
 const FRAG: &str = r#"
@@ -33,7 +34,7 @@ impl Default for GrayScaleParams {
 pub struct GrayScaleFilter {
     pip: RenderPipeline,
     ubo: Buffer,
-    bind_groups: [BindGroup; 1],
+    bind_group: BindGroup,
 
     last_params: GrayScaleParams,
     pub params: GrayScaleParams,
@@ -67,7 +68,7 @@ impl GrayScaleFilter {
         Ok(Self {
             pip,
             ubo,
-            bind_groups: [bind_group],
+            bind_group,
             last_params: params,
             params,
             enabled: true,
@@ -80,6 +81,21 @@ impl Filter for GrayScaleFilter {
         self.enabled
     }
 
+    fn name(&self) -> &str {
+        "GrayScaleFilter"
+    }
+
+    fn apply(&self, io_tex: &mut InOutTextures, bg_tex: &BindGroup) -> Result<(), String> {
+        let mut renderer = Renderer::new();
+        renderer
+            .begin_pass()
+            .pipeline(&self.pip)
+            .bindings(&[bg_tex, &self.bind_group])
+            .draw(0..6);
+
+        gfx::render_to_texture(io_tex.output(), &renderer)
+    }
+
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
             gfx::write_buffer(&self.ubo)
@@ -89,13 +105,5 @@ impl Filter for GrayScaleFilter {
         }
 
         Ok(())
-    }
-
-    fn pipeline(&self) -> &RenderPipeline {
-        &self.pip
-    }
-
-    fn bind_groups(&self) -> &[BindGroup] {
-        &self.bind_groups
     }
 }

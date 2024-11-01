@@ -1,6 +1,9 @@
+use crate::filters::sys::InOutTextures;
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
-use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, Color, RenderPipeline};
+use crate::gfx::{
+    BindGroup, BindGroupLayout, BindingType, Buffer, Color, RenderPipeline, Renderer,
+};
 
 // language=wgsl
 const FRAG: &str = r#"
@@ -47,7 +50,7 @@ impl Default for ColorReplaceParams {
 pub struct ColorReplaceFilter {
     pip: RenderPipeline,
     ubo: Buffer,
-    bind_groups: [BindGroup; 1],
+    bind_group: BindGroup,
 
     last_params: ColorReplaceParams,
     pub params: ColorReplaceParams,
@@ -82,7 +85,7 @@ impl ColorReplaceFilter {
         Ok(Self {
             pip,
             ubo,
-            bind_groups: [bind_group],
+            bind_group,
             last_params: params,
             params,
             enabled: true,
@@ -95,6 +98,21 @@ impl Filter for ColorReplaceFilter {
         self.enabled
     }
 
+    fn name(&self) -> &str {
+        "ColorReplaceFilter"
+    }
+
+    fn apply(&self, io_tex: &mut InOutTextures, bg_tex: &BindGroup) -> Result<(), String> {
+        let mut renderer = Renderer::new();
+        renderer
+            .begin_pass()
+            .pipeline(&self.pip)
+            .bindings(&[bg_tex, &self.bind_group])
+            .draw(0..6);
+
+        gfx::render_to_texture(io_tex.output(), &renderer)
+    }
+
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
             gfx::write_buffer(&self.ubo)
@@ -104,14 +122,6 @@ impl Filter for ColorReplaceFilter {
         }
 
         Ok(())
-    }
-
-    fn pipeline(&self) -> &RenderPipeline {
-        &self.pip
-    }
-
-    fn bind_groups(&self) -> &[BindGroup] {
-        &self.bind_groups
     }
 }
 
