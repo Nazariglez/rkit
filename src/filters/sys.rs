@@ -61,8 +61,6 @@ pub(crate) struct PostProcessSys {
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
     pip: RenderPipeline,
-    vbo: Buffer,
-    ebo: Buffer,
 }
 
 impl PostProcessSys {
@@ -94,44 +92,12 @@ impl PostProcessSys {
                 .build()
         })?;
 
-        #[rustfmt::skip]
-        let vertices: &[f32] = &[
-            1.0,  1.0,      1.0, 1.0,
-            1.0, -1.0,      1.0, 0.0,
-            -1.0, -1.0,     0.0, 0.0,
-            -1.0,  1.0,     0.0, 1.0,
-
-            1.0,  1.0,      1.0, 1.0,
-            1.0, -1.0,      1.0, 0.0,
-            -1.0, -1.0,     0.0, 0.0,
-            -1.0,  1.0,     0.0, 1.0,
-        ];
-
-        let vbo = gfx::create_vertex_buffer(vertices)
-            .with_label("PostProcess VBO")
-            .build()?;
-
-        #[rustfmt::skip]
-        let indices: &[u16] = &[
-            0, 1, 3,
-            1, 2, 3,
-
-            4, 5, 7,
-            5, 6, 7,
-        ];
-
-        let ebo = gfx::create_index_buffer(indices)
-            .with_label("PostProcess EBO")
-            .build()?;
-
         Ok(Self {
             textures,
             bind_groups,
             linear_sampler,
             nearest_sampler,
             pip,
-            vbo,
-            ebo,
         })
     }
 
@@ -213,7 +179,6 @@ impl PostProcessSys {
                 renderer
                     .begin_pass()
                     .pipeline(f_pip)
-                    .buffers(&[&self.vbo, &self.ebo])
                     .bindings(&bind_groups)
                     .draw(0..6);
 
@@ -240,7 +205,6 @@ impl PostProcessSys {
         renderer
             .begin_pass()
             .pipeline(&self.pip)
-            .buffers(&[&self.vbo, &self.ebo])
             .bindings(&[bind_group])
             .draw(0..6);
 

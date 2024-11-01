@@ -7,6 +7,8 @@ use crate::gfx::{
     SamplerDescriptor, TextureFilter, TextureFormat, VertexFormat, VertexLayout,
 };
 
+// TODO bufferless vertex?
+
 // language=wgsl
 const VERT: &str = r#"
 struct VertexInput {
@@ -143,11 +145,6 @@ impl OffscreenSurfaceData {
             1.0, -1.0,      1.0, 0.0,
             -1.0, -1.0,     0.0, 0.0,
             -1.0,  1.0,     0.0, 1.0,
-
-            1.0,  1.0,      1.0, 1.0,
-            1.0, -1.0,      1.0, 0.0,
-            -1.0, -1.0,     0.0, 0.0,
-            -1.0,  1.0,     0.0, 1.0,
         ];
 
         let vbo = gfx.create_buffer(BufferDescriptor {
@@ -161,9 +158,6 @@ impl OffscreenSurfaceData {
         let indices: &[u16] = &[
             0, 1, 3,
             1, 2, 3,
-
-            4, 5, 7,
-            5, 6, 7,
         ];
 
         let ebo = gfx.create_buffer(BufferDescriptor {

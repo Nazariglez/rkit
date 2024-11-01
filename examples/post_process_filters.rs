@@ -29,6 +29,7 @@ impl MyFilters {
 
         // Update pixelate's pixel size
         self.pixelate.params.size = Vec2::splat(10.0 + elapsed.sin());
+        self.pixelate.enabled = false;
 
         // Update color_replace out color
         let r = elapsed.sin() * 0.5 + 0.5;

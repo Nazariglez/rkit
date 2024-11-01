@@ -48,23 +48,37 @@ where
 
 // language=wgsl
 const VERT: &str = r"
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @location(1) uvs: vec2<f32>,
-}
-
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uvs: vec2<f32>,
 }
 
 @vertex
-fn vs_main(
-    model: VertexInput,
-) -> VertexOutput {
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    out.uvs = model.uvs;
-    out.position = vec4<f32>(model.position.x, model.position.y * -1.0, 0.0, 1.0);
+
+    var positions = array<vec2<f32>, 6>(
+        vec2<f32>( 1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(-1.0,  1.0)
+    );
+
+    var uvs = array<vec2<f32>, 6>(
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(0.0, 1.0)
+    );
+
+    // Access positions and UVs based on the vertex index
+    let pos = positions[vertex_index];
+    out.position = vec4<f32>(pos.x, pos.y * -1.0, 0.0, 1.0);
+    out.uvs = uvs[vertex_index];
     return out;
 }
 
@@ -82,17 +96,10 @@ pub fn create_filter_pipeline<
     cb: F,
 ) -> Result<RenderPipeline, String> {
     let shader = format!("{}\n{}", VERT, fragment);
-    let builder = gfx::create_render_pipeline(&shader)
-        .with_vertex_layout(
-            VertexLayout::new()
-                .with_attr(0, VertexFormat::Float32x2)
-                .with_attr(1, VertexFormat::Float32x2),
-        )
-        .with_index_format(IndexFormat::UInt16)
-        .with_bind_group_layout(
-            BindGroupLayout::new()
-                .with_entry(BindingType::texture(0).with_fragment_visibility(true))
-                .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
-        );
+    let builder = gfx::create_render_pipeline(&shader).with_bind_group_layout(
+        BindGroupLayout::new()
+            .with_entry(BindingType::texture(0).with_fragment_visibility(true))
+            .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
+    );
     cb(builder)
 }
