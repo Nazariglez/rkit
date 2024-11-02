@@ -55,7 +55,8 @@ impl MyFilters {
         self.blur.update()?;
 
         // self.blur.enabled = false;
-        self.blur.params.quality = 1.0;
+        // self.blur.params.quality = 0.0;
+        // self.blur.params.strength = 8.0;
 
         self.pixelate.enabled = false;
         self.color_replace.enabled = false;

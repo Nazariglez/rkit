@@ -48,7 +48,8 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     let final_uvs = uvs[vertex_index];
 
     let tex_size = vec2<f32>(textureDimensions(t_texture));
-    let pixel_strength = tex_size.{{DIMENSION}} * blur.strength;
+    let pixel_strength = blur.strength / tex_size.{{DIMENSION}};
+//    let pixel_strength = tex_size.{{DIMENSION}} * blur.strength;
 
     return VertexOutput(
        vec4<f32>(pos.x, pos.y * -1.0, 0.0, 1.0),
@@ -214,18 +215,22 @@ impl Filter for BlurFilter {
     }
 
     fn apply(&self, data: IOFilterData) -> Result<(), String> {
+        if self.passes == 0 {
+            return Ok(());
+        }
+
         if self.passes == 1 {
             self.pass(
                 ShaderAxis::Horizontal,
-                data.output.tex,
+                data.temp.tex,
                 data.input.bind_group,
-                true,
+                false,
             )?;
             self.pass(
                 ShaderAxis::Vertical,
                 data.output.tex,
-                data.input.bind_group,
-                true,
+                data.temp.bind_group,
+                false,
             )?;
             return Ok(());
         }
@@ -241,13 +246,13 @@ impl Filter for BlurFilter {
             ShaderAxis::Horizontal,
             data.output.tex,
             input.bind_group,
-            true,
+            false,
         )?;
 
         let mut input = data.input;
         let mut output = data.temp;
         for _ in 0..self.passes - 1 {
-            self.pass(ShaderAxis::Vertical, output.tex, input.bind_group, true)?;
+            self.pass(ShaderAxis::Vertical, output.tex, input.bind_group, false)?;
             std::mem::swap(&mut input, &mut output);
         }
 
@@ -255,7 +260,7 @@ impl Filter for BlurFilter {
             ShaderAxis::Vertical,
             data.output.tex,
             input.bind_group,
-            true,
+            false,
         )?;
 
         Ok(())
@@ -263,6 +268,10 @@ impl Filter for BlurFilter {
 
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
+            debug_assert_eq!(
+                self.last_params.kernel_size, self.params.kernel_size,
+                "Changing the KernelSize of BlurFilter after creation does nothing."
+            );
             self.ubs
                 .write(&ubo_params(&self.params))
                 .map_err(|e| e.to_string())?;
@@ -334,6 +343,8 @@ fn generate_shader(axis: ShaderAxis, ks: KernelSize) -> Result<RenderPipeline, S
         .replace("{{STRUCT}}", &blur_struct_src)
         .replace("{{VERTEX_OUT}}", &blur_out_src)
         .replace("{{SAMPLING}}", &blur_sampling_src);
+
+    println!("SHADER {:?}:\n{}", axis, shader);
 
     gfx::create_render_pipeline(&shader)
         .with_label(&format!("BlurFilter {:?} Pipeline", axis))
