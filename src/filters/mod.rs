@@ -2,19 +2,21 @@ mod blur;
 mod color_replace;
 mod gray_scale;
 mod pixelate;
+mod rgb_split;
 mod sys;
 
-use crate::filters::sys::{IOFilterData, InOutTextures, SYS};
+use crate::filters::sys::{IOFilterData, SYS};
 use crate::gfx;
 use crate::gfx::{
-    AsRenderer, BindGroup, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder,
-    RenderTexture, TextureFilter,
+    AsRenderer, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder, RenderTexture,
+    TextureFilter,
 };
 
 pub use blur::*;
 pub use color_replace::*;
 pub use gray_scale::*;
 pub use pixelate::*;
+pub use rgb_split::*;
 
 pub trait Filter {
     fn is_enabled(&self) -> bool;

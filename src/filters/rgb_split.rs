@@ -2,56 +2,78 @@ use crate::filters::sys::IOFilterData;
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
+use corelib::math::{vec2, Vec2};
 use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl
 const FRAG: &str = r#"
-struct GrayScale {
-    factor: f32,
-    _pad: f32,
-    _pad2: vec2<f32>,
+struct RgbSplit {
+    red: vec2<f32>,
+    green: vec2<f32>,
+    blue: vec2<f32>,
 }
 
 @group(1) @binding(0)
-var<uniform> gray_scale: GrayScale;
+var<uniform> rgb_split: RgbSplit;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let color = textureSample(t_texture, s_texture, in.uvs);
-    let luminance = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
-    let gray_color = vec4<f32>(vec3<f32>(luminance), color.a);
-    return mix(color, gray_color, gray_scale.factor);
+    let tex_size = vec2<f32>(textureDimensions(t_texture));
+
+    // Convert the pixel offsets into normalized UV space
+    let red_uv_offset = rgb_split.red / tex_size;
+    let green_uv_offset = rgb_split.green / tex_size;
+    let blue_uv_offset = rgb_split.blue / tex_size;
+
+    // Apply the normalized UV offsets to the original UV coordinates
+    let red_uv = in.uvs + red_uv_offset;
+    let green_uv = in.uvs + green_uv_offset;
+    let blue_uv = in.uvs + blue_uv_offset;
+
+    // Sample the texture with the respective offsets for each channel
+    let red = textureSample(t_texture, s_texture, red_uv).r;
+    let green = textureSample(t_texture, s_texture, green_uv).g;
+    let blue = textureSample(t_texture, s_texture, blue_uv).b;
+    let alpha = textureSample(t_texture, s_texture, in.uvs).a;
+
+    // Combine the sampled channels into a single color
+    return vec4<f32>(red, green, blue, alpha);
 }"#;
 
 #[derive(Copy, Clone, Debug, PartialEq, ShaderType)]
-pub struct GrayScaleParams {
-    #[align(16)]
-    pub factor: f32,
+pub struct RgbSplitParams {
+    pub red: Vec2,
+    pub green: Vec2,
+    pub blue: Vec2,
 }
 
-impl Default for GrayScaleParams {
+impl Default for RgbSplitParams {
     fn default() -> Self {
-        Self { factor: 1.0 }
+        Self {
+            red: vec2(-10.0, 0.0),
+            green: vec2(0.0, 10.0),
+            blue: Vec2::ZERO,
+        }
     }
 }
 
-pub struct GrayScaleFilter {
+pub struct RgbSplitFilter {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
-    ubs: UniformBuffer<[u8; 16]>,
+    ubs: UniformBuffer<[u8; 24]>,
 
-    last_params: GrayScaleParams,
-    pub params: GrayScaleParams,
+    last_params: RgbSplitParams,
+    pub params: RgbSplitParams,
 
     pub enabled: bool,
 }
 
-impl GrayScaleFilter {
-    pub fn new(params: GrayScaleParams) -> Result<Self, String> {
+impl RgbSplitFilter {
+    pub fn new(params: RgbSplitParams) -> Result<Self, String> {
         let pip = create_filter_pipeline(FRAG, |builder| {
             builder
-                .with_label("GrayScaleFilter Pipeline")
+                .with_label("RgbSplitFilter Pipeline")
                 .with_bind_group_layout(
                     BindGroupLayout::default()
                         .with_entry(BindingType::uniform(0).with_fragment_visibility(true)),
@@ -60,16 +82,16 @@ impl GrayScaleFilter {
         })?;
 
         // uniform buffer storage
-        let mut ubs = UniformBuffer::new([0; 16]);
+        let mut ubs = UniformBuffer::new([0; 24]);
         ubs.write(&params).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
-            .with_label("GrayScaleFilter UBO")
+            .with_label("RgbSplitFilter UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("GrayScaleFilter BindGroup(1)")
+            .with_label("RgbSplitFilter BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -86,13 +108,13 @@ impl GrayScaleFilter {
     }
 }
 
-impl Filter for GrayScaleFilter {
+impl Filter for RgbSplitFilter {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     fn name(&self) -> &str {
-        "GrayScaleFilter"
+        "RgbSplitFilter"
     }
 
     fn apply(&self, data: IOFilterData) -> Result<bool, String> {

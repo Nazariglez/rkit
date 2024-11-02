@@ -1,8 +1,8 @@
-use crate::filters::sys::{IOFilterData, InOutTextures};
+use crate::filters::sys::IOFilterData;
 use crate::filters::Filter;
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
-use corelib::gfx::{Color, RenderTexture, TextureFilter};
+use corelib::gfx::{RenderTexture, TextureFilter};
 use encase::{ShaderType, UniformBuffer};
 
 // Based in the BlurFilter from pixi.js

@@ -1,4 +1,4 @@
-use crate::filters::sys::{IOFilterData, InOutTextures};
+use crate::filters::sys::IOFilterData;
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{

@@ -2,7 +2,7 @@ use crate::app::window_size;
 use crate::filters::{create_filter_pipeline, PostProcess};
 use crate::gfx::{
     self, AsRenderer, BindGroup, BlendMode, RenderPipeline, RenderTexture, RenderTextureId,
-    Renderer, Sampler, SamplerId, Texture, TextureFilter,
+    Renderer, Sampler, SamplerId, TextureFilter,
 };
 use crate::math::UVec2;
 use atomic_refcell::AtomicRefCell;
@@ -60,14 +60,6 @@ impl InOutTextures {
             out_rt: out_tex,
             temp_rt: temp_tex,
         })
-    }
-
-    pub fn input(&self) -> &Texture {
-        self.in_rt.texture()
-    }
-
-    pub fn output(&self) -> &RenderTexture {
-        &self.out_rt
     }
 
     pub fn swap(&mut self) {

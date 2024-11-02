@@ -1,8 +1,10 @@
+use corelib::app::window_height;
 use corelib::input::{is_key_pressed, KeyCode};
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::filters::{
     BlurFilter, ColorReplaceFilter, Filter, GrayScaleFilter, PixelateFilter, PostProcess,
+    RgbSplitFilter,
 };
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Vec2};
@@ -13,6 +15,7 @@ struct MyFilters {
     color_replace: ColorReplaceFilter,
     gray_scale: GrayScaleFilter,
     blur: BlurFilter,
+    rgb_split: RgbSplitFilter,
 }
 
 impl MyFilters {
@@ -25,12 +28,15 @@ impl MyFilters {
         gray_scale.enabled = false;
         let mut blur = BlurFilter::new(Default::default())?;
         blur.enabled = false;
+        let mut rgb_split = RgbSplitFilter::new(Default::default())?;
+        rgb_split.enabled = false;
 
         Ok(Self {
             pixelate,
             color_replace,
             gray_scale,
             blur,
+            rgb_split,
         })
     }
 
@@ -53,21 +59,29 @@ impl MyFilters {
         // Blur strength
         self.blur.params.strength = (elapsed.cos() * 0.5 + 0.5) * 8.0;
 
+        // RGBSplit values
+        self.rgb_split.params.red = vec2(-10.0 + elapsed.sin() * 20.0, 0.0);
+        self.rgb_split.params.green = vec2(0.0, -10.0 + elapsed.cos() * 20.0);
+        self.rgb_split.params.green =
+            vec2(-10.0 + elapsed.cos() * 20.0, -10.0 + elapsed.sin() * 20.0);
+
         // Now we need to upload to the gpu the changes made in the params
         self.pixelate.update()?;
         self.color_replace.update()?;
         self.gray_scale.update()?;
         self.blur.update()?;
+        self.rgb_split.update()?;
 
         Ok(())
     }
 
-    fn filters(&self) -> [&dyn Filter; 4] {
+    fn filters(&self) -> [&dyn Filter; 5] {
         [
             &self.gray_scale,
             &self.color_replace,
             &self.pixelate,
             &self.blur,
+            &self.rgb_split,
         ]
     }
 }
@@ -139,6 +153,15 @@ fn draw_ui(s: &mut State) {
         .position(vec2(10.0, 70.0))
         .size(12.0);
 
+    draw.text(&format!("5: RgbSplit: {:?}", s.filters.blur.enabled))
+        .position(vec2(10.0, 90.0))
+        .size(12.0);
+
+    draw.text(&format!("MS: {:.4}", time::delta_f32()))
+        .anchor(vec2(0.0, 1.0))
+        .translate(vec2(10.0, window_height() - 10.0))
+        .size(10.0);
+
     gfx::render_to_frame(&draw).unwrap();
 
     if is_key_pressed(KeyCode::Digit1) {
@@ -155,5 +178,9 @@ fn draw_ui(s: &mut State) {
 
     if is_key_pressed(KeyCode::Digit4) {
         s.filters.blur.enabled = !s.filters.blur.enabled;
+    }
+
+    if is_key_pressed(KeyCode::Digit5) {
+        s.filters.rgb_split.enabled = !s.filters.rgb_split.enabled;
     }
 }
