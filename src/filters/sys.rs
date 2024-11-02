@@ -30,8 +30,9 @@ struct BindGroupKey {
 }
 
 pub struct InOutTextures {
-    in_tex: RenderTexture,
-    out_tex: RenderTexture,
+    pub in_rt: RenderTexture,
+    pub out_rt: RenderTexture,
+    pub temp_rt: RenderTexture,
 }
 
 impl InOutTextures {
@@ -46,20 +47,45 @@ impl InOutTextures {
             .with_size(size.x, size.y)
             .build()?;
 
-        Ok(Self { in_tex, out_tex })
+        let temp_tex = gfx::create_render_texture()
+            .with_label(&format!(
+                "PostProcess Texture Temp - ({}, {})",
+                size.x, size.y
+            ))
+            .with_size(size.x, size.y)
+            .build()?;
+
+        Ok(Self {
+            in_rt: in_tex,
+            out_rt: out_tex,
+            temp_rt: temp_tex,
+        })
     }
 
     pub fn input(&self) -> &Texture {
-        self.in_tex.texture()
+        self.in_rt.texture()
     }
 
     pub fn output(&self) -> &RenderTexture {
-        &self.out_tex
+        &self.out_rt
     }
 
     pub fn swap(&mut self) {
-        std::mem::swap(&mut self.in_tex, &mut self.out_tex);
+        std::mem::swap(&mut self.in_rt, &mut self.out_rt);
     }
+}
+
+#[derive(Copy, Clone)]
+pub struct TextureBindGroup<'a> {
+    pub tex: &'a RenderTexture,
+    pub bind_group: &'a BindGroup,
+}
+
+#[derive(Copy, Clone)]
+pub struct IOFilterData<'a> {
+    pub input: TextureBindGroup<'a>,
+    pub output: TextureBindGroup<'a>,
+    pub temp: TextureBindGroup<'a>,
 }
 
 pub(crate) struct PostProcessSys {
@@ -68,6 +94,41 @@ pub(crate) struct PostProcessSys {
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
     pip: RenderPipeline,
+}
+
+macro_rules! insert_bg {
+    ($self:ident, $rt:expr, $sampler:expr) => {{
+        let bg_key = BindGroupKey {
+            tex: $rt.id(),
+            sampler: $sampler.id(),
+        };
+
+        if !$self.bind_groups.contains_key(&bg_key) {
+            $self.bind_groups.insert(
+                bg_key,
+                gfx::create_bind_group()
+                    .with_label("PostProcess BindGroup")
+                    .with_layout($self.pip.bind_group_layout_ref(0).unwrap())
+                    .with_texture(0, $rt)
+                    .with_sampler(1, $sampler)
+                    .build()
+                    .unwrap(),
+            );
+        }
+
+        $self.bind_groups.promote(&bg_key);
+    }};
+}
+
+macro_rules! get_bg {
+    ($self:ident, $rt:expr, $sampler:expr) => {{
+        let bg_key = BindGroupKey {
+            tex: $rt.id(),
+            sampler: $sampler.id(),
+        };
+
+        $self.bind_groups.peek(&bg_key).unwrap()
+    }};
 }
 
 impl PostProcessSys {
@@ -135,7 +196,7 @@ impl PostProcessSys {
             );
             InOutTextures::new(size).unwrap() // TODO maybe this is better to raise the error somehow?
         });
-        gfx::render_to_texture(&io_tex.in_tex, info.render)?;
+        gfx::render_to_texture(&io_tex.in_rt, info.render)?;
 
         let sampler = if info.nearest_sampler {
             &self.nearest_sampler
@@ -157,21 +218,31 @@ impl PostProcessSys {
                     .unwrap_or(sampler);
 
                 // prepare a new bing_group if necessary
-                let bg_key = BindGroupKey {
-                    tex: io_tex.in_tex.id(),
-                    sampler: sampler.id(),
-                };
-                let bind_group = self.bind_groups.get_or_insert(bg_key, || {
-                    gfx::create_bind_group()
-                        .with_label("PostProcess BindGroup")
-                        .with_layout(self.pip.bind_group_layout_ref(0).unwrap())
-                        .with_texture(0, io_tex.input())
-                        .with_sampler(1, sampler)
-                        .build()
-                        .unwrap() // TODO raise error...
-                });
+                insert_bg!(self, &io_tex.in_rt, sampler);
+                insert_bg!(self, &io_tex.out_rt, sampler);
+                insert_bg!(self, &io_tex.temp_rt, sampler);
 
-                match filter.apply(io_tex, bind_group) {
+                // get it
+                let in_bg = get_bg!(self, &io_tex.in_rt, sampler);
+                let out_bg = get_bg!(self, &io_tex.out_rt, sampler);
+                let temp_bg = get_bg!(self, &io_tex.temp_rt, sampler);
+
+                let data = IOFilterData {
+                    input: TextureBindGroup {
+                        tex: &io_tex.in_rt,
+                        bind_group: in_bg,
+                    },
+                    output: TextureBindGroup {
+                        tex: &io_tex.out_rt,
+                        bind_group: out_bg,
+                    },
+                    temp: TextureBindGroup {
+                        tex: &io_tex.temp_rt,
+                        bind_group: temp_bg,
+                    },
+                };
+
+                match filter.apply(data) {
                     Ok(_) => {
                         io_tex.swap();
                     }
@@ -183,14 +254,14 @@ impl PostProcessSys {
 
         // final pass
         let bg_key = BindGroupKey {
-            tex: io_tex.in_tex.id(),
+            tex: io_tex.in_rt.id(),
             sampler: sampler.id(),
         };
         let bind_group = self.bind_groups.get_or_insert(bg_key, || {
             gfx::create_bind_group()
                 .with_label("PostProcess BindGroup")
                 .with_layout(self.pip.bind_group_layout_ref(0).unwrap())
-                .with_texture(0, io_tex.in_tex.texture())
+                .with_texture(0, io_tex.in_rt.texture())
                 .with_sampler(1, sampler)
                 .build()
                 .unwrap() // TODO raise error...

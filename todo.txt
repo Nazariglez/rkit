@@ -1,7 +1,6 @@
 - todo:
     * load images with premultiplied alpha
     * audio clean sounds must be automatic with core events after frames, improve audio examples
-    * use encase crate to comply with std140
     * blending, and masking
     * points and to_owned/cache
     * multisampling? mipmapping?
@@ -11,7 +10,6 @@
     * input wasm32 (compositionend events to get ime/chars) -> https://stackoverflow.com/questions/51226598/what-is-javascripts-compositionevent-please-give-examples
     * m1d API, a texture used as framebuffer to push pixels and draw the image to screen
     * puffin profiling?
-    * create_font should have a ".pixelated()" option to use a second mask_texture with Nearest filter
     * touch support
 
 - questions:
@@ -23,8 +21,6 @@
 - know issues:
     * complex chars like áéí etc... don't work on wasm, we need to use composition events on a hidden input elements
     * local transform2d is not working right for star (or/and path2d?)
-    * linux not working because issues with surface size? (fix asap)
-    * stencil must be done in one pass?
     * gfx_render_texture looks a bit weird when textures overlap, like darker colors?
     * no clipboard support?
 

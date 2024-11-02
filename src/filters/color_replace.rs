@@ -1,4 +1,4 @@
-use crate::filters::sys::InOutTextures;
+use crate::filters::sys::{IOFilterData, InOutTextures};
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{
@@ -109,15 +109,15 @@ impl Filter for ColorReplaceFilter {
         "ColorReplaceFilter"
     }
 
-    fn apply(&self, io_tex: &mut InOutTextures, bg_tex: &BindGroup) -> Result<(), String> {
+    fn apply(&self, data: IOFilterData) -> Result<(), String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()
             .pipeline(&self.pip)
-            .bindings(&[bg_tex, &self.bind_group])
+            .bindings(&[data.input.bind_group, &self.bind_group])
             .draw(0..6);
 
-        gfx::render_to_texture(io_tex.output(), &renderer)
+        gfx::render_to_texture(data.output.tex, &renderer)
     }
 
     fn update(&mut self) -> Result<(), String> {
@@ -132,19 +132,4 @@ impl Filter for ColorReplaceFilter {
 
         Ok(())
     }
-}
-
-fn ubo_data(params: &ColorReplaceParams) -> [f32; 12] {
-    let in_c = params.in_color.to_rgba();
-    let out_c = params.out_color.to_rgba();
-    let tolerance = params.tolerance;
-
-    #[rustfmt::skip]
-    let data = [
-        in_c[0], in_c[1], in_c[2], in_c[3],
-        out_c[0], out_c[1], out_c[2], out_c[3],
-        tolerance, 0.0, 0.0, 0.0,
-    ];
-
-    data
 }

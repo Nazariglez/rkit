@@ -1,4 +1,4 @@
-use crate::filters::sys::InOutTextures;
+use crate::filters::sys::{IOFilterData, InOutTextures};
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
@@ -95,15 +95,15 @@ impl Filter for GrayScaleFilter {
         "GrayScaleFilter"
     }
 
-    fn apply(&self, io_tex: &mut InOutTextures, bg_tex: &BindGroup) -> Result<(), String> {
+    fn apply(&self, data: IOFilterData) -> Result<(), String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()
             .pipeline(&self.pip)
-            .bindings(&[bg_tex, &self.bind_group])
+            .bindings(&[data.input.bind_group, &self.bind_group])
             .draw(0..6);
 
-        gfx::render_to_texture(io_tex.output(), &renderer)
+        gfx::render_to_texture(data.output.tex, &renderer)
     }
 
     fn update(&mut self) -> Result<(), String> {

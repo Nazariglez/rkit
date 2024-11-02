@@ -1,6 +1,8 @@
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
-use rkit::filters::{ColorReplaceFilter, Filter, GrayScaleFilter, PixelateFilter, PostProcess};
+use rkit::filters::{
+    BlurFilter, ColorReplaceFilter, Filter, GrayScaleFilter, PixelateFilter, PostProcess,
+};
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Vec2};
 use rkit::time;
@@ -9,6 +11,7 @@ struct MyFilters {
     pixelate: PixelateFilter,
     color_replace: ColorReplaceFilter,
     gray_scale: GrayScaleFilter,
+    blur: BlurFilter,
 }
 
 impl MyFilters {
@@ -16,11 +19,13 @@ impl MyFilters {
         let pixelate = PixelateFilter::new(Default::default())?;
         let color_replace = ColorReplaceFilter::new(Default::default())?;
         let gray_scale = GrayScaleFilter::new(Default::default())?;
+        let blur = BlurFilter::new(Default::default())?;
 
         Ok(Self {
             pixelate,
             color_replace,
             gray_scale,
+            blur,
         })
     }
 
@@ -40,16 +45,32 @@ impl MyFilters {
         // Update grayscale factor
         self.gray_scale.params.factor = elapsed.sin() * 0.5 + 0.5;
 
+        // Blur options
+        // self.blur.params.quality = 1.0;
+
         // Now we need to upload to the gpu the changes made in the params
         self.pixelate.update()?;
         self.color_replace.update()?;
         self.gray_scale.update()?;
+        self.blur.update()?;
+
+        // self.blur.enabled = false;
+        self.blur.params.quality = 1.0;
+
+        self.pixelate.enabled = false;
+        self.color_replace.enabled = false;
+        self.gray_scale.enabled = false;
 
         Ok(())
     }
 
-    fn filters(&self) -> [&dyn Filter; 3] {
-        [&self.gray_scale, &self.color_replace, &self.pixelate]
+    fn filters(&self) -> [&dyn Filter; 4] {
+        [
+            &self.gray_scale,
+            &self.color_replace,
+            &self.pixelate,
+            &self.blur,
+        ]
     }
 }
 

@@ -28,6 +28,16 @@ where
     }
 
     #[inline]
+    pub fn promote(&mut self, k: &K) {
+        self.inner.promote(k);
+    }
+
+    #[inline]
+    pub fn peek(&self, k: &K) -> Option<&V> {
+        self.inner.peek(k)
+    }
+
+    #[inline]
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         self.inner.put(k, v)
     }

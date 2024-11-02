@@ -1,24 +1,25 @@
+mod blur;
 mod color_replace;
 mod gray_scale;
 mod pixelate;
 mod sys;
 
-use crate::filters::sys::{InOutTextures, SYS};
+use crate::filters::sys::{IOFilterData, InOutTextures, SYS};
 use crate::gfx;
 use crate::gfx::{
     AsRenderer, BindGroup, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder,
     RenderTexture, TextureFilter,
 };
 
+pub use blur::*;
 pub use color_replace::*;
 pub use gray_scale::*;
 pub use pixelate::*;
-// pub use blur::*;
 
 pub trait Filter {
     fn is_enabled(&self) -> bool;
     fn name(&self) -> &str;
-    fn apply(&self, io_tex: &mut InOutTextures, bg_tex: &BindGroup) -> Result<(), String>;
+    fn apply(&self, data: IOFilterData) -> Result<(), String>;
     fn update(&mut self) -> Result<(), String>;
     fn texture_filter(&self) -> Option<TextureFilter> {
         None
@@ -96,7 +97,11 @@ pub fn create_filter_pipeline<
     let shader = format!("{}\n{}", VERT, fragment);
     let builder = gfx::create_render_pipeline(&shader).with_bind_group_layout(
         BindGroupLayout::new()
-            .with_entry(BindingType::texture(0).with_fragment_visibility(true))
+            .with_entry(
+                BindingType::texture(0)
+                    .with_fragment_visibility(true)
+                    .with_vertex_visibility(true),
+            )
             .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
     );
     cb(builder)
