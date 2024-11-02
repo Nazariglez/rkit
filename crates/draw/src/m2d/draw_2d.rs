@@ -8,9 +8,9 @@ use crate::sprite::Sprite;
 use crate::text::get_mut_text_system;
 use crate::{BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
 use arrayvec::ArrayVec;
-use core::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
-use core::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
-use core::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
+use corelib::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
+use corelib::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
+use corelib::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
 

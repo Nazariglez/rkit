@@ -1,6 +1,8 @@
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::{self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat};
-use core::math::{uvec2, vec2, UVec2, Vec2};
+use corelib::gfx::{
+    self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat,
+};
+use corelib::math::{uvec2, vec2, UVec2, Vec2};
 use cosmic_text::fontdb::Source;
 use cosmic_text::{
     Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch, Style, SwashCache,

@@ -15,7 +15,7 @@ pub struct AssetId(Index);
 
 // TODO url loader
 pub(crate) static ASSET_LOADER: Lazy<AtomicRefCell<AssetLoader>> = Lazy::new(|| {
-    core::app::on_sys_pre_update(update_assets);
+    corelib::app::on_sys_pre_update(update_assets);
     AtomicRefCell::new(AssetLoader::new())
 });
 

@@ -4,7 +4,7 @@ edition = "2021"
 
 [dependencies]
 utils.workspace = true
-core.workspace = true
+corelib.workspace = true
 
 # Kira does include by default "mp3" and "flac" features,
 # however mp3 have license issues and flac is too big/not needed for our case

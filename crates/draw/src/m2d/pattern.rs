@@ -1,8 +1,8 @@
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Sprite, Transform2D};
-use core::gfx::{
+use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use core::math::{bvec2, Mat3, Vec2};
+use corelib::math::{bvec2, Mat3, Vec2};
 use macros::Drawable2D;
 use num::Zero;
 

@@ -1,4 +1,4 @@
-use core::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
+use corelib::math::{vec2, vec3, vec4, Mat3, Mat4, Rect, Vec2};
 
 pub trait BaseCam2D {
     fn projection(&self) -> Mat4;

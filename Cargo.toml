@@ -30,7 +30,7 @@ members = ["crates/*"]
 
 [workspace.dependencies]
 # gamekit packages
-core = { path = "crates/core" }
+corelib = { path = "crates/corelib" }
 utils = { path = "crates/utils" }
 draw = { path = "crates/draw" }
 macros = { path = "crates/macros" }
@@ -61,7 +61,7 @@ js-sys = "0.3.72"
 wasm-bindgen = "0.2.95"
 
 [dependencies]
-core.workspace = true
+corelib.workspace = true
 utils.workspace = true
 draw = { workspace = true, optional = true }
 audio = { workspace = true, optional = true }
@@ -88,11 +88,11 @@ static_assertions = "1.1.0"
 [features]
 default = ["random", "draw", "draw-default-font", "audio", "assets", "logs"]
 # enable loggin
-logs = ["core/logs"]
+logs = ["corelib/logs"]
 # enables gamepad api
-gamepad = ["core/gamepad"]
+gamepad = ["corelib/gamepad"]
 # force webgl
-webgl = ["core/webgl", "draw/webgl"]
+webgl = ["corelib/webgl", "draw/webgl"]
 # enable fastrand random
 random = ["dep:fastrand"]
 # enables draw API

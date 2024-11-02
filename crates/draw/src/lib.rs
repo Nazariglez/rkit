@@ -8,7 +8,7 @@ pub use sprite::*;
 
 pub use text::*;
 
-use core::app::window_size;
+use corelib::app::window_size;
 
 // -- Draw API
 #[inline]

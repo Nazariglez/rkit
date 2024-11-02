@@ -5,7 +5,7 @@ pub mod utils;
 pub mod random;
 
 #[doc(inline)]
-pub use core::*;
+pub use corelib::*;
 
 #[doc(inline)]
 #[cfg(feature = "draw")]

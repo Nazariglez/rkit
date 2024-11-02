@@ -7,7 +7,7 @@ use rkit::input::{
     unlock_cursor, KeyCode, MouseButton,
 };
 use rkit::math::{vec2, Vec2};
-use rkit::ring_buffer::RingBuffer;
+use rkit::utils::RingBuffer;
 
 struct State {
     ring_buffer: RingBuffer<String, 5>,

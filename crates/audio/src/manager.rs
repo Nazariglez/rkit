@@ -12,7 +12,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
 
 pub(crate) static MANAGER: Lazy<AtomicRefCell<Manager>> = Lazy::new(|| {
-    core::app::on_sys_post_update(clean_audio_manager);
+    corelib::app::on_sys_post_update(clean_audio_manager);
     AtomicRefCell::new(Manager::default())
 });
 

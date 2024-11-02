@@ -5,14 +5,14 @@ use crate::{
     create_text_2d_pipeline_ctx, Sprite,
 };
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use core::gfx::{self, BindGroup, Buffer, RenderPipeline};
-use core::math::Mat4;
+use corelib::gfx::{self, BindGroup, Buffer, RenderPipeline};
+use corelib::math::Mat4;
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use utils::drop_signal::DropSignal;
 
 pub(crate) static PAINTER_2D: Lazy<AtomicRefCell<Painter2D>> = Lazy::new(|| {
-    core::app::on_sys_post_update(clean_2d);
+    corelib::app::on_sys_post_update(clean_2d);
 
     AtomicRefCell::new(Painter2D::default())
 });

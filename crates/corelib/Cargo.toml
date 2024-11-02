@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "corelib"
 edition = "2021"
 build = "build.rs"
 
@@ -102,4 +102,4 @@ logs = ["dep:time", "dep:fern", "dep:console_log", "dep:console_error_panic_hook
 
 [dev-dependencies]
 # Hackish, to add environment variables for test builds
-core = { path = ".", features = ["test-env"]}
+corelib = { path = ".", features = ["test-env"]}

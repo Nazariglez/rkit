@@ -191,7 +191,7 @@ name = "assets"
 version = "0.0.0"
 dependencies = [
  "atomic_refcell",
- "core",
+ "corelib",
  "futures",
  "futures-util",
  "indexmap",
@@ -223,7 +223,7 @@ name = "audio"
 version = "0.0.0"
 dependencies = [
  "atomic_refcell",
- "core",
+ "corelib",
  "kira",
  "log",
  "num",
@@ -532,47 +532,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "core"
-version = "0.0.0"
-dependencies = [
- "arrayvec",
- "atomic_refcell",
- "bitflags 2.6.0",
- "bytemuck",
- "console_error_panic_hook",
- "console_log",
- "core",
- "crossbeam-channel",
- "env_logger",
- "fern",
- "gilrs",
- "glam",
- "heapless",
- "image",
- "instant",
- "js-sys",
- "lazy_static",
- "log",
- "nohash-hasher",
- "once_cell",
- "pollster",
- "raw-window-handle",
- "rustc-hash 2.0.0",
- "smallvec 2.0.0-alpha.7",
- "smol_str 0.3.1",
- "spin_sleep_util",
- "strum",
- "strum_macros",
- "time",
- "utils",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -640,6 +599,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ce857aa0b77d77287acc1ac3e37a05a8c95a2af3647d23b15f263bdaeb7562b"
 dependencies = [
  "bindgen",
+]
+
+[[package]]
+name = "corelib"
+version = "0.0.0"
+dependencies = [
+ "arrayvec",
+ "atomic_refcell",
+ "bitflags 2.6.0",
+ "bytemuck",
+ "console_error_panic_hook",
+ "console_log",
+ "corelib",
+ "crossbeam-channel",
+ "env_logger",
+ "fern",
+ "gilrs",
+ "glam",
+ "heapless",
+ "image",
+ "instant",
+ "js-sys",
+ "lazy_static",
+ "log",
+ "nohash-hasher",
+ "once_cell",
+ "pollster",
+ "raw-window-handle",
+ "rustc-hash 2.0.0",
+ "smallvec 2.0.0-alpha.7",
+ "smol_str 0.3.1",
+ "spin_sleep_util",
+ "strum",
+ "strum_macros",
+ "time",
+ "utils",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -805,7 +805,7 @@ version = "0.0.0"
 dependencies = [
  "arrayvec",
  "atomic_refcell",
- "core",
+ "corelib",
  "cosmic-text",
  "etagere",
  "hashbrown 0.15.0",
@@ -2525,7 +2525,7 @@ dependencies = [
  "atomic_refcell",
  "audio",
  "bytemuck",
- "core",
+ "corelib",
  "draw",
  "fastrand",
  "log",

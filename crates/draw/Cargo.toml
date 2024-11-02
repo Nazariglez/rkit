@@ -3,7 +3,7 @@ name = "draw"
 edition = "2021"
 
 [dependencies]
-core.workspace = true
+corelib.workspace = true
 utils.workspace = true
 macros.workspace = true
 

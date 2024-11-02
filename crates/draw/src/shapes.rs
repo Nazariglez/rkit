@@ -1,4 +1,4 @@
-use core::gfx::Color;
+use corelib::gfx::Color;
 use lyon::path::Path;
 use lyon::tessellation::*;
 use std::cell::RefCell;

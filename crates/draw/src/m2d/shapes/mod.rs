@@ -17,10 +17,10 @@ pub use star::*;
 pub use triangle::*;
 
 use super::PipelineContext;
-use core::gfx::{
+use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, VertexFormat, VertexLayout,
 };
-use core::math::Vec2;
+use corelib::math::Vec2;
 
 // language=wgsl
 const SHADER: &str = r#"

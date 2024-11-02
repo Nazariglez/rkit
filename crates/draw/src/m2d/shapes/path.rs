@@ -1,8 +1,8 @@
 use super::size_from_vertices;
 use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
-use core::gfx::Color;
-use core::math::{bvec2, Mat3, Vec2};
+use corelib::gfx::Color;
+use corelib::math::{bvec2, Mat3, Vec2};
 use lyon::geom::Arc;
 use lyon::math::{point, Angle};
 use lyon::path::path::Builder;
