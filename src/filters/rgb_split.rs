@@ -11,6 +11,7 @@ struct RgbSplit {
     red: vec2<f32>,
     green: vec2<f32>,
     blue: vec2<f32>,
+    _pad: vec2<f32>
 }
 
 @group(1) @binding(0)
@@ -44,6 +45,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 pub struct RgbSplitParams {
     pub red: Vec2,
     pub green: Vec2,
+    #[align(16)]
     pub blue: Vec2,
 }
 
@@ -61,7 +63,7 @@ pub struct RgbSplitFilter {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
-    ubs: UniformBuffer<[u8; 24]>,
+    ubs: UniformBuffer<[u8; 32]>,
 
     last_params: RgbSplitParams,
     pub params: RgbSplitParams,
@@ -82,7 +84,7 @@ impl RgbSplitFilter {
         })?;
 
         // uniform buffer storage
-        let mut ubs = UniformBuffer::new([0; 24]);
+        let mut ubs = UniformBuffer::new([0; 32]);
         ubs.write(&params).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
