@@ -217,12 +217,13 @@ impl PostProcessSys {
                     })
                     .unwrap_or(sampler);
 
-                // prepare a new bing_group if necessary
+                // If necessary we need to insert on the cache the bind groups and then get them
+                // to avoid borrow issues.
                 insert_bg!(self, &io_tex.in_rt, sampler);
                 insert_bg!(self, &io_tex.out_rt, sampler);
                 insert_bg!(self, &io_tex.temp_rt, sampler);
 
-                // get it
+                // get them
                 let in_bg = get_bg!(self, &io_tex.in_rt, sampler);
                 let out_bg = get_bg!(self, &io_tex.out_rt, sampler);
                 let temp_bg = get_bg!(self, &io_tex.temp_rt, sampler);
@@ -243,8 +244,10 @@ impl PostProcessSys {
                 };
 
                 match filter.apply(data) {
-                    Ok(_) => {
-                        io_tex.swap();
+                    Ok(swap) => {
+                        if swap {
+                            io_tex.swap();
+                        }
                     }
                     Err(e) => {
                         log::error!("Unable to apply filter '{}': {}", filter.name(), e);

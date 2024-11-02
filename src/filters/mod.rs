@@ -19,7 +19,7 @@ pub use pixelate::*;
 pub trait Filter {
     fn is_enabled(&self) -> bool;
     fn name(&self) -> &str;
-    fn apply(&self, data: IOFilterData) -> Result<(), String>;
+    fn apply(&self, data: IOFilterData) -> Result<bool, String>;
     fn update(&mut self) -> Result<(), String>;
     fn texture_filter(&self) -> Option<TextureFilter> {
         None

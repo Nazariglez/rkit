@@ -5,6 +5,8 @@ use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline
 use corelib::gfx::{Color, RenderTexture, TextureFilter};
 use encase::{ShaderType, UniformBuffer};
 
+// Based in the BlurFilter from pixi.js
+
 // language=wgsl
 const SHADER: &str = r#"
 struct VertexOutput {
@@ -19,6 +21,8 @@ var s_texture: sampler;
 
 struct Blur {
     strength: f32,
+    _pad: f32,
+    _pad2: vec2<f32>,
 };
 
 @group(1) @binding(0)
@@ -49,7 +53,6 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
     let tex_size = vec2<f32>(textureDimensions(t_texture));
     let pixel_strength = blur.strength / tex_size.{{DIMENSION}};
-//    let pixel_strength = tex_size.{{DIMENSION}} * blur.strength;
 
     return VertexOutput(
        vec4<f32>(pos.x, pos.y * -1.0, 0.0, 1.0),
@@ -80,7 +83,6 @@ pub enum KernelSize {
 
 impl KernelSize {
     fn gaussian_values(&self) -> &[f32] {
-        // From pixi.js https://github.com/pixijs/pixijs/blob/dev/src/filters/defaults/blur/const.ts
         use KernelSize::*;
         match self {
             Ks5 => &[0.153388, 0.221461, 0.250301],
@@ -182,7 +184,6 @@ impl BlurFilter {
         axis: ShaderAxis,
         output: &RenderTexture,
         bg_tex: &BindGroup,
-        clear: bool,
     ) -> Result<(), String> {
         let pip = match axis {
             ShaderAxis::Horizontal => &self.pip_h,
@@ -190,16 +191,11 @@ impl BlurFilter {
         };
 
         let mut renderer = Renderer::new();
-        let pass = renderer
+        renderer
             .begin_pass()
             .pipeline(pip)
-            .bindings(&[bg_tex, &self.bind_group]);
-
-        if clear {
-            pass.clear_color(Color::TRANSPARENT);
-        }
-
-        pass.draw(0..6);
+            .bindings(&[bg_tex, &self.bind_group])
+            .draw(0..6);
 
         gfx::render_to_texture(output, &renderer)
     }
@@ -214,56 +210,40 @@ impl Filter for BlurFilter {
         "BlurFilter"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<(), String> {
+    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
         if self.passes == 0 {
-            return Ok(());
+            return Ok(false);
+        }
+
+        if self.params.strength <= 0.0 {
+            return Ok(false);
         }
 
         if self.passes == 1 {
-            self.pass(
-                ShaderAxis::Horizontal,
-                data.temp.tex,
-                data.input.bind_group,
-                false,
-            )?;
-            self.pass(
-                ShaderAxis::Vertical,
-                data.output.tex,
-                data.temp.bind_group,
-                false,
-            )?;
-            return Ok(());
+            self.pass(ShaderAxis::Horizontal, data.temp.tex, data.input.bind_group)?;
+            self.pass(ShaderAxis::Vertical, data.output.tex, data.temp.bind_group)?;
+            return Ok(true);
         }
 
         let mut input = data.input;
         let mut output = data.temp;
         for _ in 0..self.passes - 1 {
-            self.pass(ShaderAxis::Horizontal, output.tex, input.bind_group, true)?;
+            self.pass(ShaderAxis::Horizontal, output.tex, input.bind_group)?;
             std::mem::swap(&mut input, &mut output);
         }
 
-        self.pass(
-            ShaderAxis::Horizontal,
-            data.output.tex,
-            input.bind_group,
-            false,
-        )?;
+        self.pass(ShaderAxis::Horizontal, data.output.tex, input.bind_group)?;
 
         let mut input = data.input;
         let mut output = data.temp;
         for _ in 0..self.passes - 1 {
-            self.pass(ShaderAxis::Vertical, output.tex, input.bind_group, false)?;
+            self.pass(ShaderAxis::Vertical, output.tex, input.bind_group)?;
             std::mem::swap(&mut input, &mut output);
         }
 
-        self.pass(
-            ShaderAxis::Vertical,
-            data.output.tex,
-            input.bind_group,
-            false,
-        )?;
+        self.pass(ShaderAxis::Vertical, data.output.tex, input.bind_group)?;
 
-        Ok(())
+        Ok(true)
     }
 
     fn update(&mut self) -> Result<(), String> {
@@ -281,7 +261,7 @@ impl Filter for BlurFilter {
                 .build()?;
 
             self.last_params = self.params;
-            self.passes = self.params.quality.round() as usize;
+            self.passes = self.params.quality.ceil() as usize;
         }
 
         Ok(())
@@ -343,8 +323,6 @@ fn generate_shader(axis: ShaderAxis, ks: KernelSize) -> Result<RenderPipeline, S
         .replace("{{STRUCT}}", &blur_struct_src)
         .replace("{{VERTEX_OUT}}", &blur_out_src)
         .replace("{{SAMPLING}}", &blur_sampling_src);
-
-    println!("SHADER {:?}:\n{}", axis, shader);
 
     gfx::create_render_pipeline(&shader)
         .with_label(&format!("BlurFilter {:?} Pipeline", axis))

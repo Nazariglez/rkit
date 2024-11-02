@@ -1,3 +1,4 @@
+use corelib::input::{is_key_pressed, KeyCode};
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::filters::{
@@ -16,10 +17,14 @@ struct MyFilters {
 
 impl MyFilters {
     fn new() -> Result<Self, String> {
-        let pixelate = PixelateFilter::new(Default::default())?;
-        let color_replace = ColorReplaceFilter::new(Default::default())?;
-        let gray_scale = GrayScaleFilter::new(Default::default())?;
-        let blur = BlurFilter::new(Default::default())?;
+        let mut pixelate = PixelateFilter::new(Default::default())?;
+        pixelate.enabled = false;
+        let mut color_replace = ColorReplaceFilter::new(Default::default())?;
+        color_replace.enabled = false;
+        let mut gray_scale = GrayScaleFilter::new(Default::default())?;
+        gray_scale.enabled = false;
+        let mut blur = BlurFilter::new(Default::default())?;
+        blur.enabled = false;
 
         Ok(Self {
             pixelate,
@@ -38,29 +43,21 @@ impl MyFilters {
         // Update color_replace out color
         let r = elapsed.sin() * 0.5 + 0.5;
         let g = elapsed.cos() * 0.5 + 0.5;
-        self.color_replace.params.in_color = Color::RED;
+        self.color_replace.params.in_color = Color::rgba_u8(100, 126, 191, 255);
         self.color_replace.params.out_color = Color::rgb(r, g, 0.0);
-        self.color_replace.params.tolerance = 0.9;
+        self.color_replace.params.tolerance = 0.5;
 
         // Update grayscale factor
         self.gray_scale.params.factor = elapsed.sin() * 0.5 + 0.5;
 
-        // Blur options
-        // self.blur.params.quality = 1.0;
+        // Blur strength
+        self.blur.params.strength = (elapsed.cos() * 0.5 + 0.5) * 8.0;
 
         // Now we need to upload to the gpu the changes made in the params
         self.pixelate.update()?;
         self.color_replace.update()?;
         self.gray_scale.update()?;
         self.blur.update()?;
-
-        // self.blur.enabled = false;
-        // self.blur.params.quality = 0.0;
-        // self.blur.params.strength = 8.0;
-
-        self.pixelate.enabled = false;
-        self.color_replace.enabled = false;
-        self.gray_scale.enabled = false;
 
         Ok(())
     }
@@ -117,4 +114,46 @@ fn update(s: &mut State) {
         nearest_sampler: true,
     })
     .unwrap();
+
+    draw_ui(s);
+}
+
+fn draw_ui(s: &mut State) {
+    let mut draw = create_draw_2d();
+    draw.text(&format!("1: Pixelate: {:?}", s.filters.pixelate.enabled))
+        .position(vec2(10.0, 10.0))
+        .size(12.0);
+
+    draw.text(&format!(
+        "2: ColorReplace: {:?}",
+        s.filters.color_replace.enabled
+    ))
+    .position(vec2(10.0, 30.0))
+    .size(12.0);
+
+    draw.text(&format!("3: GrayScale: {:?}", s.filters.gray_scale.enabled))
+        .position(vec2(10.0, 50.0))
+        .size(12.0);
+
+    draw.text(&format!("4: Blur: {:?}", s.filters.blur.enabled))
+        .position(vec2(10.0, 70.0))
+        .size(12.0);
+
+    gfx::render_to_frame(&draw).unwrap();
+
+    if is_key_pressed(KeyCode::Digit1) {
+        s.filters.pixelate.enabled = !s.filters.pixelate.enabled;
+    }
+
+    if is_key_pressed(KeyCode::Digit2) {
+        s.filters.color_replace.enabled = !s.filters.color_replace.enabled;
+    }
+
+    if is_key_pressed(KeyCode::Digit3) {
+        s.filters.gray_scale.enabled = !s.filters.gray_scale.enabled;
+    }
+
+    if is_key_pressed(KeyCode::Digit4) {
+        s.filters.blur.enabled = !s.filters.blur.enabled;
+    }
 }

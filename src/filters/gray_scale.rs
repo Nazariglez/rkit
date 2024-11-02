@@ -95,7 +95,7 @@ impl Filter for GrayScaleFilter {
         "GrayScaleFilter"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<(), String> {
+    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()
@@ -103,7 +103,8 @@ impl Filter for GrayScaleFilter {
             .bindings(&[data.input.bind_group, &self.bind_group])
             .draw(0..6);
 
-        gfx::render_to_texture(data.output.tex, &renderer)
+        gfx::render_to_texture(data.output.tex, &renderer)?;
+        Ok(true)
     }
 
     fn update(&mut self) -> Result<(), String> {
