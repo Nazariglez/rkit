@@ -7,6 +7,9 @@ use corelib::math::{bvec2, Mat3, Rect, Vec2};
 use macros::Drawable2D;
 use std::cell::RefCell;
 
+#[cfg(all(target_arch = "wasm32", feature = "webgl"))]
+use corelib::app::is_window_pixelated;
+
 thread_local! {
     static TEMP_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(vec![]) };
     static TEMP_INDICES: RefCell<Vec<u32>> = const { RefCell::new(vec![]) };

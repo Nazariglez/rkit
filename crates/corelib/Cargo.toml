@@ -19,6 +19,7 @@ bytemuck.workspace = true
 smallvec.workspace = true
 once_cell.workspace = true
 rustc-hash.workspace = true
+encase.workspace = true
 
 # app/windowing
 winit = "0.30"

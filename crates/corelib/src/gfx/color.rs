@@ -1,7 +1,9 @@
+use encase::ShaderType;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// Represents a color in the sRGB space (alpha is linear)
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, ShaderType)]
+#[align(16)]
 pub struct Color {
     /// Red value
     pub r: f32,

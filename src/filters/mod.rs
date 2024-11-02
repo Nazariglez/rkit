@@ -31,7 +31,7 @@ where
 {
     pub filters: &'a [&'a dyn Filter],
     pub render: &'a R,
-    pub pixelated: bool,
+    pub nearest_sampler: bool,
 }
 
 impl<'a, R> AsRenderer for PostProcess<'a, R>

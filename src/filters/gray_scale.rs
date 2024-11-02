@@ -2,11 +2,14 @@ use crate::filters::sys::InOutTextures;
 use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
+use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl
 const FRAG: &str = r#"
 struct GrayScale {
-    factor: vec4<f32>,
+    factor: f32,
+    _pad: f32,
+    _pad2: vec2<f32>,
 }
 
 @group(1) @binding(0)
@@ -14,15 +17,15 @@ var<uniform> gray_scale: GrayScale;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let factor = gray_scale.factor.x;
     let color = textureSample(t_texture, s_texture, in.uvs);
     let luminance = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
     let gray_color = vec4<f32>(vec3<f32>(luminance), color.a);
-    return mix(color, gray_color, factor);
+    return mix(color, gray_color, gray_scale.factor);
 }"#;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, ShaderType)]
 pub struct GrayScaleParams {
+    #[align(16)]
     pub factor: f32,
 }
 
@@ -36,6 +39,7 @@ pub struct GrayScaleFilter {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
+    ubs: UniformBuffer<[u8; 16]>,
 
     last_params: GrayScaleParams,
     pub params: GrayScaleParams,
@@ -55,7 +59,11 @@ impl GrayScaleFilter {
                 .build()
         })?;
 
-        let ubo = gfx::create_uniform_buffer(&[params.factor, 0.0, 0.0, 0.0])
+        // uniform buffer storage
+        let mut ubs = UniformBuffer::new([0; 16]);
+        ubs.write(&params).map_err(|e| e.to_string())?;
+
+        let ubo = gfx::create_uniform_buffer(ubs.as_ref())
             .with_label("GrayScaleFilter UBO")
             .with_write_flag(true)
             .build()?;
@@ -70,6 +78,7 @@ impl GrayScaleFilter {
             pip,
             ubo,
             bind_group,
+            ubs,
             last_params: params,
             params,
             enabled: true,
@@ -99,8 +108,10 @@ impl Filter for GrayScaleFilter {
 
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
+            self.ubs.write(&self.params).map_err(|e| e.to_string())?;
+
             gfx::write_buffer(&self.ubo)
-                .with_data(&[self.params.factor, 0.0, 0.0, 0.0])
+                .with_data(self.ubs.as_ref())
                 .build()?;
             self.last_params = self.params;
         }

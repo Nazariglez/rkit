@@ -4,6 +4,7 @@ use crate::gfx;
 use crate::gfx::{
     BindGroup, BindGroupLayout, BindingType, Buffer, Color, RenderPipeline, Renderer,
 };
+use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl
 const FRAG: &str = r#"
@@ -30,10 +31,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 "#;
 
 // TODO encase
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, ShaderType)]
 pub struct ColorReplaceParams {
     pub in_color: Color,
     pub out_color: Color,
+    #[align(16)]
     pub tolerance: f32,
 }
 
@@ -51,6 +53,7 @@ pub struct ColorReplaceFilter {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
+    ubs: UniformBuffer<[u8; 48]>,
 
     last_params: ColorReplaceParams,
     pub params: ColorReplaceParams,
@@ -71,7 +74,10 @@ impl ColorReplaceFilter {
                 .build()
         })?;
 
-        let ubo = gfx::create_uniform_buffer(&ubo_data(&params))
+        let mut ubs = UniformBuffer::new([0; 48]);
+        ubs.write(&params).map_err(|e| e.to_string())?;
+
+        let ubo = gfx::create_uniform_buffer(ubs.as_ref())
             .with_label("ColorReplaceFilter UBO")
             .with_write_flag(true)
             .build()?;
@@ -86,6 +92,7 @@ impl ColorReplaceFilter {
             pip,
             ubo,
             bind_group,
+            ubs,
             last_params: params,
             params,
             enabled: true,
@@ -115,8 +122,10 @@ impl Filter for ColorReplaceFilter {
 
     fn update(&mut self) -> Result<(), String> {
         if self.last_params != self.params {
+            self.ubs.write(&self.params).map_err(|e| e.to_string())?;
+
             gfx::write_buffer(&self.ubo)
-                .with_data(&ubo_data(&self.params))
+                .with_data(self.ubs.as_ref())
                 .build()?;
             self.last_params = self.params;
         }

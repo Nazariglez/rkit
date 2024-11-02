@@ -80,7 +80,7 @@ fn update(s: &mut State) {
     let mut draw = create_draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
-    let elapsed = time::elapsed_f32();
+    let elapsed = time::elapsed_f32() * 0.5;
     let offset = vec2(elapsed.sin(), elapsed.cos()) * 150.0;
     draw.image(&s.sprite)
         .position(window_size() * 0.5 - s.sprite.size() * 0.5 + offset);
@@ -92,7 +92,7 @@ fn update(s: &mut State) {
     gfx::render_to_frame(&PostProcess {
         filters: &s.filters.filters(),
         render: &draw,
-        pixelated: true,
+        nearest_sampler: true,
     })
     .unwrap();
 }

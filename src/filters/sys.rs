@@ -137,7 +137,7 @@ impl PostProcessSys {
         });
         gfx::render_to_texture(&io_tex.in_tex, info.render)?;
 
-        let sampler = if info.pixelated {
+        let sampler = if info.nearest_sampler {
             &self.nearest_sampler
         } else {
             &self.linear_sampler
