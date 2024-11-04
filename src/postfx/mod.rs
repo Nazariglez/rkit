@@ -8,7 +8,7 @@ mod sys;
 
 use crate::gfx;
 use crate::gfx::AsRenderer;
-use crate::postfx::sys::SYS;
+use sys::SYS;
 
 pub use blur_fx::*;
 pub use color_replace_fx::*;
@@ -16,6 +16,7 @@ pub use gray_scale_fx::*;
 pub use pfx::*;
 pub use pixelate_fx::*;
 pub use rgb_split_fx::*;
+pub use sys::{IOPostFxData, InOutTextures};
 
 #[inline]
 pub fn render_to_pfx_frame<R>(renderer: &R) -> Result<(), String>
