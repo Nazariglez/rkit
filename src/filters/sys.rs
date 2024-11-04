@@ -1,5 +1,5 @@
 use crate::app::window_size;
-use crate::filters::{create_filter_pipeline, PostProcess};
+use crate::filters::{create_filter_pipeline, Filter, PostProcess};
 use crate::gfx::{
     self, AsRenderer, BindGroup, BlendMode, RenderPipeline, RenderTexture, RenderTextureId,
     Renderer, Sampler, SamplerId, TextureFilter,
@@ -82,6 +82,7 @@ pub struct IOFilterData<'a> {
 }
 
 pub(crate) struct PostProcessSys {
+    frame_rt: Option<RenderTexture>,
     textures: FastCache<UVec2, InOutTextures>,
     bind_groups: FastCache<BindGroupKey, BindGroup>,
     linear_sampler: Sampler,
@@ -154,6 +155,7 @@ impl PostProcessSys {
         })?;
 
         Ok(Self {
+            frame_rt: None,
             textures,
             bind_groups,
             linear_sampler,
@@ -165,6 +167,7 @@ impl PostProcessSys {
     pub fn process<R: AsRenderer>(
         &mut self,
         info: &PostProcess<R>,
+        is_presenting_frame: bool,
         target: Option<&RenderTexture>,
     ) -> Result<(), String> {
         // skip process if there is no filters
@@ -190,19 +193,51 @@ impl PostProcessSys {
             InOutTextures::new(size).unwrap() // TODO maybe this is better to raise the error somehow?
         });
 
-        // clear the input texture
-        let mut renderer = Renderer::new();
-        renderer.begin_pass().clear_color(Color::TRANSPARENT);
-
-        gfx::render_to_texture(&io_tex.in_rt, &renderer)?;
-
-        gfx::render_to_texture(&io_tex.in_rt, info.render)?;
-
+        // default sampler
         let sampler = if info.nearest_sampler {
             &self.nearest_sampler
         } else {
             &self.linear_sampler
         };
+
+        if is_presenting_frame {
+            let rt = self
+                .frame_rt
+                .as_ref()
+                .ok_or_else(|| "PostFX Frame RenderTexture is not initiated.".to_string())?;
+
+            let bg_key = BindGroupKey {
+                tex: rt.id(),
+                sampler: sampler.id(),
+            };
+            let bind_group = self.bind_groups.get_or_insert(bg_key, || {
+                gfx::create_bind_group()
+                    .with_label("PostProcess Frame BindGroup")
+                    .with_layout(self.pip.bind_group_layout_ref(0).unwrap())
+                    .with_texture(0, rt.texture())
+                    .with_sampler(1, sampler)
+                    .build()
+                    .unwrap() // TODO raise error...
+            });
+
+            let mut renderer = Renderer::new();
+            renderer
+                .begin_pass()
+                .pipeline(&self.pip)
+                .bindings(&[bind_group])
+                .draw(0..6);
+
+            // draw first pass
+            gfx::render_to_texture(&io_tex.in_rt, &renderer)?;
+        } else {
+            // clear the input texture
+            let mut renderer = Renderer::new();
+            renderer.begin_pass().clear_color(Color::TRANSPARENT);
+            gfx::render_to_texture(&io_tex.in_rt, &renderer)?;
+
+            // draw first pass
+            gfx::render_to_texture(&io_tex.in_rt, info.render)?;
+        }
 
         // filter pass
         info.filters
@@ -282,4 +317,49 @@ impl PostProcessSys {
             Some(t) => gfx::render_to_texture(t, &renderer),
         }
     }
+
+    pub fn present_pfx_frame(
+        &mut self,
+        filters: &[&dyn Filter],
+        nearest: bool,
+    ) -> Result<(), String> {
+        debug_assert!(
+            self.frame_rt.is_some(),
+            "PostFX Frame RenderTexture is not initiated."
+        );
+        self.process(
+            &PostProcess {
+                filters,
+                render: &Renderer::new(),
+                nearest_sampler: nearest,
+            },
+            true,
+            None,
+        )
+    }
+
+    pub fn check_and_get_pfx_frame(&mut self) -> Result<&RenderTexture, String> {
+        let size = window_size().as_uvec2();
+        let rt = self
+            .frame_rt
+            .get_or_insert_with(|| create_frame_rt(size).unwrap());
+        let tex_size = rt.size().as_uvec2();
+        if tex_size != size {
+            *rt = create_frame_rt(size)?;
+        }
+
+        Ok(rt)
+    }
+}
+
+fn create_frame_rt(size: UVec2) -> Result<RenderTexture, String> {
+    log::info!(
+        "Created PostFX Frame RenderTexture size:{},{}",
+        size.x,
+        size.y
+    );
+    gfx::create_render_texture()
+        .with_label("PostFX Frame RenderTexture")
+        .with_size(size.x, size.y)
+        .build()
 }

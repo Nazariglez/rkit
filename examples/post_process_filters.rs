@@ -153,7 +153,7 @@ fn draw_ui(s: &mut State) {
         .position(vec2(10.0, 70.0))
         .size(12.0);
 
-    draw.text(&format!("5: RgbSplit: {:?}", s.filters.blur.enabled))
+    draw.text(&format!("5: RgbSplit: {:?}", s.filters.rgb_split.enabled))
         .position(vec2(10.0, 90.0))
         .size(12.0);
 

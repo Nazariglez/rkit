@@ -18,6 +18,22 @@ pub use gray_scale::*;
 pub use pixelate::*;
 pub use rgb_split::*;
 
+#[inline]
+pub fn render_to_pfx_frame<R>(renderer: &R) -> Result<(), String>
+where
+    R: AsRenderer,
+{
+    // the RT cloned to avoid borrow issues in case the user pass a PostProcess command
+    // cloning a RT is cheap because all types inside are references or small numbers
+    let rt = SYS.borrow_mut().check_and_get_pfx_frame()?.clone();
+    gfx::render_to_texture(&rt, renderer)
+}
+
+#[inline]
+pub fn present_pfx_frame(filters: &[&dyn Filter], nearest_sampler: bool) -> Result<(), String> {
+    SYS.borrow_mut().present_pfx_frame(filters, nearest_sampler)
+}
+
 pub trait Filter {
     fn is_enabled(&self) -> bool;
     fn name(&self) -> &str;
@@ -43,7 +59,7 @@ where
 {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
         let mut sys = SYS.borrow_mut();
-        sys.process(self, target)
+        sys.process(self, false, target)
     }
 }
 

@@ -10,32 +10,38 @@ thread_local! {
 // - Random API
 
 /// Returns the current global seed
+#[inline]
 pub fn seed() -> u64 {
     LOCAL_RNG.with(|rng| rng.borrow().seed())
 }
 
 /// Set a new seed for the global RNG
+#[inline]
 pub fn set_seed(seed: u64) {
     LOCAL_RNG.with(|rng| rng.replace(Rng::with_seed(seed)));
 }
 
 /// Generate a random value for T
 /// booleans will be true|false while floats will be a number between 0 and 1
+#[inline]
 pub fn gen<T: Generator>() -> T {
     LOCAL_RNG.with(|rng| rng.borrow_mut().gen())
 }
 
 /// Generate a random value between the range passed
+#[inline]
 pub fn range<T: RangeGenerator>(range: impl RangeBounds<T>) -> T {
     LOCAL_RNG.with(|rng| rng.borrow_mut().range(range))
 }
 
 /// Sort randomly a slice
+#[inline]
 pub fn shuffle<T>(slice: &mut [T]) {
     LOCAL_RNG.with(|rng| rng.borrow_mut().shuffle(slice))
 }
 
 /// Pick a value randomly
+#[inline]
 pub fn pick<I>(iter: I) -> Option<I::Item>
 where
     I: IntoIterator,
@@ -58,11 +64,13 @@ impl Default for Rng {
 
 impl Rng {
     /// New instance
+    #[inline]
     pub fn new() -> Self {
         Self { raw: RawRng::new() }
     }
 
     /// New instance using a seed
+    #[inline]
     pub fn with_seed(seed: u64) -> Self {
         Self {
             raw: RawRng::with_seed(seed),
@@ -71,21 +79,25 @@ impl Rng {
 
     /// Generate a random value for T
     /// booleans will be true|false while floats will be a number between 0 and 1
+    #[inline]
     pub fn gen<T: Generator>(&mut self) -> T {
         T::gen(self)
     }
 
     /// Generate a random value between the range passed
+    #[inline]
     pub fn range<T: RangeGenerator>(&mut self, range: impl RangeBounds<T>) -> T {
         T::range(self, range)
     }
 
     /// Returns the current seed
+    #[inline]
     pub fn seed(&self) -> u64 {
         self.raw.get_seed()
     }
 
     /// Sort randomly a slice
+    #[inline]
     pub fn shuffle<T>(&mut self, slice: &mut [T]) {
         self.raw.shuffle(slice)
     }
