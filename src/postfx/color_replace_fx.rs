@@ -1,9 +1,9 @@
-use crate::filters::sys::IOFilterData;
-use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{
     BindGroup, BindGroupLayout, BindingType, Buffer, Color, RenderPipeline, Renderer,
 };
+use crate::postfx::pfx::{create_pfx_pipeline, PostFx};
+use crate::postfx::sys::IOPostFxData;
 use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl
@@ -49,7 +49,7 @@ impl Default for ColorReplaceParams {
     }
 }
 
-pub struct ColorReplaceFilter {
+pub struct ColorReplaceFx {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
@@ -61,11 +61,11 @@ pub struct ColorReplaceFilter {
     pub enabled: bool,
 }
 
-impl ColorReplaceFilter {
+impl ColorReplaceFx {
     pub fn new(params: ColorReplaceParams) -> Result<Self, String> {
-        let pip = create_filter_pipeline(FRAG, |builder| {
+        let pip = create_pfx_pipeline(FRAG, |builder| {
             builder
-                .with_label("ColorReplaceFilter Pipeline")
+                .with_label("ColorReplaceFx Pipeline")
                 // this is bind group 1
                 .with_bind_group_layout(
                     BindGroupLayout::new()
@@ -78,12 +78,12 @@ impl ColorReplaceFilter {
         ubs.write(&params).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
-            .with_label("ColorReplaceFilter UBO")
+            .with_label("ColorReplaceFx UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("ColorReplaceFilter BindGroup(1)")
+            .with_label("ColorReplaceFx BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -100,16 +100,16 @@ impl ColorReplaceFilter {
     }
 }
 
-impl Filter for ColorReplaceFilter {
+impl PostFx for ColorReplaceFx {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     fn name(&self) -> &str {
-        "ColorReplaceFilter"
+        "ColorReplaceFx"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
+    fn apply(&self, data: IOPostFxData) -> Result<bool, String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()

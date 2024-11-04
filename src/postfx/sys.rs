@@ -1,10 +1,10 @@
 use crate::app::window_size;
-use crate::filters::{create_filter_pipeline, Filter, PostProcess};
 use crate::gfx::{
     self, AsRenderer, BindGroup, BlendMode, RenderPipeline, RenderTexture, RenderTextureId,
     Renderer, Sampler, SamplerId, TextureFilter,
 };
 use crate::math::UVec2;
+use crate::postfx::pfx::{create_pfx_pipeline, PostFx, PostProcess};
 use atomic_refcell::AtomicRefCell;
 use corelib::gfx::Color;
 use once_cell::sync::Lazy;
@@ -75,7 +75,7 @@ pub struct TextureBindGroup<'a> {
 }
 
 #[derive(Copy, Clone)]
-pub struct IOFilterData<'a> {
+pub struct IOPostFxData<'a> {
     pub input: TextureBindGroup<'a>,
     pub output: TextureBindGroup<'a>,
     pub temp: TextureBindGroup<'a>,
@@ -147,7 +147,7 @@ impl PostProcessSys {
             .with_mag_filter(TextureFilter::Nearest)
             .build()?;
 
-        let pip = create_filter_pipeline(FRAG, |builder| {
+        let pip = create_pfx_pipeline(FRAG, |builder| {
             builder
                 .with_label("PostProcess pipeline")
                 .with_blend_mode(BlendMode::NORMAL)
@@ -170,15 +170,15 @@ impl PostProcessSys {
         is_presenting_frame: bool,
         target: Option<&RenderTexture>,
     ) -> Result<(), String> {
-        // skip process if there is no filters
-        if info.filters.is_empty() {
+        // skip process if there is no effects
+        if info.effects.is_empty() {
             return match target {
                 None => gfx::render_to_frame(info.render),
                 Some(rt) => gfx::render_to_texture(rt, info.render),
             };
         }
 
-        // filter
+        // effect
         let size = target
             .map(|rt| rt.size())
             .unwrap_or_else(window_size)
@@ -239,12 +239,12 @@ impl PostProcessSys {
             gfx::render_to_texture(&io_tex.in_rt, info.render)?;
         }
 
-        // filter pass
-        info.filters
+        // effect pass
+        info.effects
             .iter()
             .filter(|f| f.is_enabled())
-            .for_each(|filter| {
-                let sampler = filter
+            .for_each(|effect| {
+                let sampler = effect
                     .texture_filter()
                     .map(|tf| match tf {
                         TextureFilter::Linear => &self.linear_sampler,
@@ -263,7 +263,7 @@ impl PostProcessSys {
                 let out_bg = get_bg!(self, &io_tex.out_rt, sampler);
                 let temp_bg = get_bg!(self, &io_tex.temp_rt, sampler);
 
-                let data = IOFilterData {
+                let data = IOPostFxData {
                     input: TextureBindGroup {
                         tex: &io_tex.in_rt,
                         bind_group: in_bg,
@@ -278,14 +278,18 @@ impl PostProcessSys {
                     },
                 };
 
-                match filter.apply(data) {
+                match effect.apply(data) {
                     Ok(swap) => {
                         if swap {
                             io_tex.swap();
                         }
                     }
                     Err(e) => {
-                        log::error!("Unable to apply filter '{}': {}", filter.name(), e);
+                        log::error!(
+                            "Unable to apply post process effect '{}': {}",
+                            effect.name(),
+                            e
+                        );
                     }
                 }
             });
@@ -320,7 +324,7 @@ impl PostProcessSys {
 
     pub fn present_pfx_frame(
         &mut self,
-        filters: &[&dyn Filter],
+        effects: &[&dyn PostFx],
         nearest: bool,
     ) -> Result<(), String> {
         debug_assert!(
@@ -329,7 +333,7 @@ impl PostProcessSys {
         );
         self.process(
             &PostProcess {
-                filters,
+                effects,
                 render: &Renderer::new(),
                 nearest_sampler: nearest,
             },

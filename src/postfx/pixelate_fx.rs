@@ -1,8 +1,8 @@
-use crate::filters::sys::IOFilterData;
-use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
 use crate::math::Vec2;
+use crate::postfx::pfx::{create_pfx_pipeline, PostFx};
+use crate::postfx::sys::IOPostFxData;
 use corelib::gfx::TextureFilter;
 use encase::{ShaderType, UniformBuffer};
 
@@ -40,7 +40,7 @@ impl Default for PixelateParams {
     }
 }
 
-pub struct PixelateFilter {
+pub struct PixelateFx {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
@@ -52,11 +52,11 @@ pub struct PixelateFilter {
     pub enabled: bool,
 }
 
-impl PixelateFilter {
+impl PixelateFx {
     pub fn new(params: PixelateParams) -> Result<Self, String> {
-        let pip = create_filter_pipeline(FRAG, |builder| {
+        let pip = create_pfx_pipeline(FRAG, |builder| {
             builder
-                .with_label("PixelateFilter Pipeline")
+                .with_label("PixelateFx Pipeline")
                 // this is bind group 1
                 .with_bind_group_layout(
                     BindGroupLayout::new()
@@ -70,12 +70,12 @@ impl PixelateFilter {
         ubs.write(&params).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
-            .with_label("PixelateFilter UBO")
+            .with_label("PixelateFx UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("PixelateFilter BindGroup(1)")
+            .with_label("PixelateFx BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -92,16 +92,16 @@ impl PixelateFilter {
     }
 }
 
-impl Filter for PixelateFilter {
+impl PostFx for PixelateFx {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     fn name(&self) -> &str {
-        "PixelateFilter"
+        "PixelateFx"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
+    fn apply(&self, data: IOPostFxData) -> Result<bool, String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()

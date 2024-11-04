@@ -1,5 +1,7 @@
-pub mod filters;
 pub mod utils;
+
+#[cfg(feature = "postfx")]
+pub mod postfx;
 
 #[cfg(feature = "random")]
 pub mod random;

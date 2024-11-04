@@ -2,33 +2,32 @@ use corelib::app::window_height;
 use corelib::input::{is_key_pressed, KeyCode};
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Sprite};
-use rkit::filters::{
-    BlurFilter, ColorReplaceFilter, Filter, GrayScaleFilter, PixelateFilter, PostProcess,
-    RgbSplitFilter,
-};
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Vec2};
+use rkit::postfx::{
+    BlurFx, ColorReplaceFx, GrayScaleFx, PixelateFx, PostFx, PostProcess, RgbSplitFx,
+};
 use rkit::time;
 
 struct MyFilters {
-    pixelate: PixelateFilter,
-    color_replace: ColorReplaceFilter,
-    gray_scale: GrayScaleFilter,
-    blur: BlurFilter,
-    rgb_split: RgbSplitFilter,
+    pixelate: PixelateFx,
+    color_replace: ColorReplaceFx,
+    gray_scale: GrayScaleFx,
+    blur: BlurFx,
+    rgb_split: RgbSplitFx,
 }
 
 impl MyFilters {
     fn new() -> Result<Self, String> {
-        let mut pixelate = PixelateFilter::new(Default::default())?;
+        let mut pixelate = PixelateFx::new(Default::default())?;
         pixelate.enabled = false;
-        let mut color_replace = ColorReplaceFilter::new(Default::default())?;
+        let mut color_replace = ColorReplaceFx::new(Default::default())?;
         color_replace.enabled = false;
-        let mut gray_scale = GrayScaleFilter::new(Default::default())?;
+        let mut gray_scale = GrayScaleFx::new(Default::default())?;
         gray_scale.enabled = false;
-        let mut blur = BlurFilter::new(Default::default())?;
+        let mut blur = BlurFx::new(Default::default())?;
         blur.enabled = false;
-        let mut rgb_split = RgbSplitFilter::new(Default::default())?;
+        let mut rgb_split = RgbSplitFx::new(Default::default())?;
         rgb_split.enabled = false;
 
         Ok(Self {
@@ -75,7 +74,7 @@ impl MyFilters {
         Ok(())
     }
 
-    fn filters(&self) -> [&dyn Filter; 5] {
+    fn filters(&self) -> [&dyn PostFx; 5] {
         [
             &self.gray_scale,
             &self.color_replace,
@@ -123,7 +122,7 @@ fn update(s: &mut State) {
 
     // Render the PostProcess
     gfx::render_to_frame(&PostProcess {
-        filters: &s.filters.filters(),
+        effects: &s.filters.filters(),
         render: &draw,
         nearest_sampler: true,
     })

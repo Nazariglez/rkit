@@ -1,7 +1,7 @@
-use crate::filters::sys::IOFilterData;
-use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
+use crate::postfx::pfx::{create_pfx_pipeline, PostFx};
+use crate::postfx::sys::IOPostFxData;
 use corelib::math::{vec2, Vec2};
 use encase::{ShaderType, UniformBuffer};
 
@@ -59,7 +59,7 @@ impl Default for RgbSplitParams {
     }
 }
 
-pub struct RgbSplitFilter {
+pub struct RgbSplitFx {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
@@ -71,11 +71,11 @@ pub struct RgbSplitFilter {
     pub enabled: bool,
 }
 
-impl RgbSplitFilter {
+impl RgbSplitFx {
     pub fn new(params: RgbSplitParams) -> Result<Self, String> {
-        let pip = create_filter_pipeline(FRAG, |builder| {
+        let pip = create_pfx_pipeline(FRAG, |builder| {
             builder
-                .with_label("RgbSplitFilter Pipeline")
+                .with_label("RgbSplitFx Pipeline")
                 .with_bind_group_layout(
                     BindGroupLayout::default()
                         .with_entry(BindingType::uniform(0).with_fragment_visibility(true)),
@@ -88,12 +88,12 @@ impl RgbSplitFilter {
         ubs.write(&params).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
-            .with_label("RgbSplitFilter UBO")
+            .with_label("RgbSplitFx UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("RgbSplitFilter BindGroup(1)")
+            .with_label("RgbSplitFx BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -110,16 +110,16 @@ impl RgbSplitFilter {
     }
 }
 
-impl Filter for RgbSplitFilter {
+impl PostFx for RgbSplitFx {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     fn name(&self) -> &str {
-        "RgbSplitFilter"
+        "RgbSplitFx"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
+    fn apply(&self, data: IOPostFxData) -> Result<bool, String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()

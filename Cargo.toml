@@ -105,3 +105,5 @@ audio = ["dep:audio"]
 assets = ["dep:assets"]
 # included a default font
 draw-default-font = ["draw?/default-font"]
+# post process effects
+postfx = []

@@ -1,43 +1,14 @@
-mod blur;
-mod color_replace;
-mod gray_scale;
-mod pixelate;
-mod rgb_split;
-mod sys;
-
-use crate::filters::sys::{IOFilterData, SYS};
-use crate::gfx;
-use crate::gfx::{
+use crate::postfx::sys::{IOPostFxData, SYS};
+use corelib::gfx;
+use corelib::gfx::{
     AsRenderer, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder, RenderTexture,
     TextureFilter,
 };
 
-pub use blur::*;
-pub use color_replace::*;
-pub use gray_scale::*;
-pub use pixelate::*;
-pub use rgb_split::*;
-
-#[inline]
-pub fn render_to_pfx_frame<R>(renderer: &R) -> Result<(), String>
-where
-    R: AsRenderer,
-{
-    // the RT cloned to avoid borrow issues in case the user pass a PostProcess command
-    // cloning a RT is cheap because all types inside are references or small numbers
-    let rt = SYS.borrow_mut().check_and_get_pfx_frame()?.clone();
-    gfx::render_to_texture(&rt, renderer)
-}
-
-#[inline]
-pub fn present_pfx_frame(filters: &[&dyn Filter], nearest_sampler: bool) -> Result<(), String> {
-    SYS.borrow_mut().present_pfx_frame(filters, nearest_sampler)
-}
-
-pub trait Filter {
+pub trait PostFx {
     fn is_enabled(&self) -> bool;
     fn name(&self) -> &str;
-    fn apply(&self, data: IOFilterData) -> Result<bool, String>;
+    fn apply(&self, data: IOPostFxData) -> Result<bool, String>;
     fn update(&mut self) -> Result<(), String>;
     fn texture_filter(&self) -> Option<TextureFilter> {
         None
@@ -48,7 +19,7 @@ pub struct PostProcess<'a, R>
 where
     R: AsRenderer,
 {
-    pub filters: &'a [&'a dyn Filter],
+    pub effects: &'a [&'a dyn PostFx],
     pub render: &'a R,
     pub nearest_sampler: bool,
 }
@@ -72,8 +43,6 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    var out: VertexOutput;
-
     var positions = array<vec2<f32>, 6>(
         vec2<f32>( 1.0,  1.0),
         vec2<f32>( 1.0, -1.0),
@@ -83,20 +52,12 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
         vec2<f32>(-1.0,  1.0)
     );
 
-    var uvs = array<vec2<f32>, 6>(
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(0.0, 1.0)
-    );
-
-    // Access positions and UVs based on the vertex index
     let pos = positions[vertex_index];
-    out.position = vec4<f32>(pos.x, pos.y * -1.0, 0.0, 1.0);
-    out.uvs = uvs[vertex_index];
-    return out;
+    let uvs = (pos + vec2<f32>(1.0, 1.0)) * 0.5;
+    return VertexOutput(
+        vec4<f32>(pos.x, pos.y * -1.0, 0.0, 1.0),
+        uvs
+    );
 }
 
 @group(0) @binding(0)
@@ -106,9 +67,7 @@ var s_texture: sampler;
 
 ";
 
-pub fn create_filter_pipeline<
-    F: FnOnce(RenderPipelineBuilder) -> Result<RenderPipeline, String>,
->(
+pub fn create_pfx_pipeline<F: FnOnce(RenderPipelineBuilder) -> Result<RenderPipeline, String>>(
     fragment: &str,
     cb: F,
 ) -> Result<RenderPipeline, String> {

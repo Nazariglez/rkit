@@ -1,7 +1,7 @@
-use crate::filters::sys::IOFilterData;
-use crate::filters::{create_filter_pipeline, Filter};
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
+use crate::postfx::pfx::{create_pfx_pipeline, PostFx};
+use crate::postfx::sys::IOPostFxData;
 use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl
@@ -35,7 +35,7 @@ impl Default for GrayScaleParams {
     }
 }
 
-pub struct GrayScaleFilter {
+pub struct GrayScaleFx {
     pip: RenderPipeline,
     ubo: Buffer,
     bind_group: BindGroup,
@@ -47,11 +47,11 @@ pub struct GrayScaleFilter {
     pub enabled: bool,
 }
 
-impl GrayScaleFilter {
+impl GrayScaleFx {
     pub fn new(params: GrayScaleParams) -> Result<Self, String> {
-        let pip = create_filter_pipeline(FRAG, |builder| {
+        let pip = create_pfx_pipeline(FRAG, |builder| {
             builder
-                .with_label("GrayScaleFilter Pipeline")
+                .with_label("GrayScaleFx Pipeline")
                 .with_bind_group_layout(
                     BindGroupLayout::default()
                         .with_entry(BindingType::uniform(0).with_fragment_visibility(true)),
@@ -64,12 +64,12 @@ impl GrayScaleFilter {
         ubs.write(&params).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
-            .with_label("GrayScaleFilter UBO")
+            .with_label("GrayScaleFx UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("GrayScaleFilter BindGroup(1)")
+            .with_label("GrayScaleFx BindGroup(1)")
             .with_layout(pip.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -86,16 +86,16 @@ impl GrayScaleFilter {
     }
 }
 
-impl Filter for GrayScaleFilter {
+impl PostFx for GrayScaleFx {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     fn name(&self) -> &str {
-        "GrayScaleFilter"
+        "GrayScaleFx"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
+    fn apply(&self, data: IOPostFxData) -> Result<bool, String> {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()

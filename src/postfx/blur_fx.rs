@@ -1,11 +1,11 @@
-use crate::filters::sys::IOFilterData;
-use crate::filters::Filter;
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
+use crate::postfx::pfx::PostFx;
+use crate::postfx::sys::IOPostFxData;
 use corelib::gfx::{RenderTexture, TextureFilter};
 use encase::{ShaderType, UniformBuffer};
 
-// Based in the BlurFilter from pixi.js
+// Based in the BlurFx from pixi.js
 
 // language=wgsl
 const SHADER: &str = r#"
@@ -39,17 +39,9 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
         vec2<f32>(-1.0,  1.0)
     );
 
-    var uvs = array<vec2<f32>, 6>(
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(0.0, 1.0)
-    );
-
+    // Access positions and UVs based on the vertex index
     let pos = positions[vertex_index];
-    let final_uvs = uvs[vertex_index];
+    let final_uvs = (pos + vec2<f32>(1.0, 1.0)) * 0.5;
 
     let tex_size = vec2<f32>(textureDimensions(t_texture));
     let pixel_strength = blur.strength / tex_size.{{DIMENSION}};
@@ -128,7 +120,7 @@ fn ubo_params(params: &BlurParams) -> InnerBlurParams {
     }
 }
 
-pub struct BlurFilter {
+pub struct BlurFx {
     pip_h: RenderPipeline,
     pip_v: RenderPipeline,
 
@@ -144,7 +136,7 @@ pub struct BlurFilter {
     pub enabled: bool,
 }
 
-impl BlurFilter {
+impl BlurFx {
     pub fn new(params: BlurParams) -> Result<Self, String> {
         let pip_h = generate_shader(ShaderAxis::Horizontal, params.kernel_size)?;
         let pip_v = generate_shader(ShaderAxis::Vertical, params.kernel_size)?;
@@ -154,12 +146,12 @@ impl BlurFilter {
         ubs.write(&ubo_params(&params)).map_err(|e| e.to_string())?;
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
-            .with_label("BlurFilter UBO")
+            .with_label("BlurFx UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
-            .with_label("BlurFilter BindGroup(1)")
+            .with_label("BlurFx BindGroup(1)")
             .with_layout(pip_h.bind_group_layout_ref(1)?)
             .with_uniform(0, &ubo)
             .build()?;
@@ -201,16 +193,16 @@ impl BlurFilter {
     }
 }
 
-impl Filter for BlurFilter {
+impl PostFx for BlurFx {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     fn name(&self) -> &str {
-        "BlurFilter"
+        "BlurFx"
     }
 
-    fn apply(&self, data: IOFilterData) -> Result<bool, String> {
+    fn apply(&self, data: IOPostFxData) -> Result<bool, String> {
         if self.passes == 0 {
             return Ok(false);
         }
@@ -250,7 +242,7 @@ impl Filter for BlurFilter {
         if self.last_params != self.params {
             debug_assert_eq!(
                 self.last_params.kernel_size, self.params.kernel_size,
-                "Changing the KernelSize of BlurFilter after creation does nothing."
+                "Changing the KernelSize of BlurFx after creation does nothing."
             );
             self.ubs
                 .write(&ubo_params(&self.params))
@@ -325,7 +317,7 @@ fn generate_shader(axis: ShaderAxis, ks: KernelSize) -> Result<RenderPipeline, S
         .replace("{{SAMPLING}}", &blur_sampling_src);
 
     gfx::create_render_pipeline(&shader)
-        .with_label(&format!("BlurFilter {:?} Pipeline", axis))
+        .with_label(&format!("BlurFx {:?} Pipeline", axis))
         .with_bind_group_layout(
             BindGroupLayout::new()
                 .with_entry(
