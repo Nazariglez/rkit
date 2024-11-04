@@ -33,6 +33,7 @@ where
     pub(crate) window: WindowConfig,
     pub(crate) init_cb: InitCb<S>,
     pub(crate) update_cb: UpdateCb<S>,
+    pub(crate) resize_cb: UpdateCb<S>,
     pub(crate) cleanup_cb: CleanupCb<S>,
 
     fixed_update_cb: Option<Vec<FixedUpdate<S>>>,
@@ -50,6 +51,7 @@ where
         window: WindowConfig::default(),
         init_cb: Box::new(cb),
         update_cb: Box::new(|_| ()),
+        resize_cb: Box::new(|_| ()),
         fixed_update_cb: None,
         cleanup_cb: Box::new(|_| ()),
 
@@ -78,6 +80,14 @@ where
         F: Handler<S, P> + 'static,
     {
         self.update_cb = Box::new(move |s| cb.call(s));
+        self
+    }
+
+    pub fn resize<F, P>(mut self, mut cb: F) -> Self
+    where
+        F: Handler<S, P> + 'static,
+    {
+        self.resize_cb = Box::new(move |s| cb.call(s));
         self
     }
 

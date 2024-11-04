@@ -255,6 +255,7 @@ struct Runner<S> {
     init: Option<Box<dyn FnOnce() -> S>>,
     state: Option<S>,
     update: Box<dyn FnMut(&mut S)>,
+    resize: Box<dyn FnMut(&mut S)>,
     vsync: bool,
     pixelated_offscreen: bool,
     interval: Option<Interval>,
@@ -417,8 +418,11 @@ impl<S> ApplicationHandler for Runner<S> {
                 }
             }
             WindowEvent::Resized(size) => {
-                let mut bck = get_mut_backend();
-                bck.gfx.as_mut().unwrap().resize(size.width, size.height);
+                {
+                    let mut bck = get_mut_backend();
+                    bck.gfx.as_mut().unwrap().resize(size.width, size.height);
+                }
+                (*self.resize)(self.state.as_mut().unwrap());
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
@@ -441,6 +445,7 @@ where
         window,
         init_cb,
         update_cb,
+        resize_cb,
         cleanup_cb,
         ..
     } = builder;
@@ -460,6 +465,7 @@ where
         init: Some(init_cb),
         state: None,
         update: update_cb,
+        resize: resize_cb,
         vsync,
         interval,
         pixelated_offscreen,

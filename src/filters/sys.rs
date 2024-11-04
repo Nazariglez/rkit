@@ -6,9 +6,9 @@ use crate::gfx::{
 };
 use crate::math::UVec2;
 use atomic_refcell::AtomicRefCell;
+use corelib::gfx::Color;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
-use corelib::gfx::Color;
 use utils::fast_cache::FastCache;
 
 const MAX_CACHED_TEXTURES: usize = 12;
@@ -192,8 +192,7 @@ impl PostProcessSys {
 
         // clear the input texture
         let mut renderer = Renderer::new();
-        renderer.begin_pass()
-            .clear_color(Color::TRANSPARENT);
+        renderer.begin_pass().clear_color(Color::TRANSPARENT);
 
         gfx::render_to_texture(&io_tex.in_rt, &renderer)?;
 

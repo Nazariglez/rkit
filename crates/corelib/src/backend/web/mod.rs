@@ -40,6 +40,7 @@ where
         window: config,
         init_cb,
         update_cb,
+        resize_cb,
         cleanup_cb: _, // TODO cleanup
         ..
     } = builder;
@@ -63,6 +64,7 @@ where
     let mut runner = Runner {
         state: init_cb(),
         update: update_cb,
+        resize: resize_cb,
     };
 
     CORE_EVENTS_MAP.borrow().trigger(CoreEvent::Init);
@@ -90,6 +92,7 @@ where
 struct Runner<S> {
     state: S,
     update: Box<dyn FnMut(&mut S)>,
+    resize: Box<dyn FnMut(&mut S)>,
 }
 
 impl<S> Runner<S> {
@@ -99,8 +102,8 @@ impl<S> Runner<S> {
         // pre frame
         {
             CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);
+            self.process_events();
             let mut bck = get_mut_backend();
-            bck.process_events();
             bck.gfx().prepare_frame();
         }
 
@@ -114,6 +117,64 @@ impl<S> Runner<S> {
 
             bck.mouse_state.tick();
             bck.keyboard_state.tick();
+        }
+    }
+
+    fn process_events(&mut self) {
+        use events::Event::*;
+
+        let mut events = get_mut_backend().take_events();
+        #[allow(clippy::while_let_on_iterator)]
+        while let Some(evt) = events.next() {
+            match evt {
+                MouseMove { pos, delta } => {
+                    let mut bck = get_mut_backend();
+                    bck.mouse_state.position = pos;
+                    bck.mouse_state.moving = true;
+                    bck.mouse_state.motion_delta = delta;
+                    bck.mouse_state.cursor_on_screen = true;
+                }
+                MouseDown { btn } => {
+                    let mut bck = get_mut_backend();
+                    bck.mouse_state.press(btn);
+                }
+                MouseUp { btn } => {
+                    let mut bck = get_mut_backend();
+                    bck.mouse_state.release(btn);
+                }
+                MouseEnter => {
+                    let mut bck = get_mut_backend();
+                    bck.mouse_state.cursor_on_screen = true;
+                }
+                MouseLeave => {
+                    let mut bck = get_mut_backend();
+                    bck.mouse_state.cursor_on_screen = false;
+                }
+                MouseWheel { delta } => {
+                    let mut bck = get_mut_backend();
+                    bck.mouse_state.wheel_delta = delta;
+                    bck.mouse_state.scrolling = true;
+                }
+                KeyUp { key } => {
+                    let mut bck = get_mut_backend();
+                    bck.keyboard_state.release(key);
+                }
+                KeyDown { key } => {
+                    let mut bck = get_mut_backend();
+                    bck.keyboard_state.press(key);
+                }
+                CharReceived { text } => {
+                    let mut bck = get_mut_backend();
+                    bck.keyboard_state.add_text(text.as_str());
+                }
+                WindowResize { size } => {
+                    {
+                        let mut bck = get_mut_backend();
+                        bck.gfx.as_mut().unwrap().resize(size.x, size.y);
+                    }
+                    (*self.resize)(&mut self.state);
+                }
+            }
         }
     }
 }
@@ -133,49 +194,8 @@ unsafe impl Sync for WebBackend {}
 unsafe impl Send for WebBackend {}
 
 impl WebBackend {
-    fn process_events(&mut self) {
-        use events::Event::*;
-
-        let mut events = self.win.as_mut().unwrap().events.take();
-        #[allow(clippy::while_let_on_iterator)]
-        while let Some(evt) = events.next() {
-            match evt {
-                MouseMove { pos, delta } => {
-                    self.mouse_state.position = pos;
-                    self.mouse_state.moving = true;
-                    self.mouse_state.motion_delta = delta;
-                    self.mouse_state.cursor_on_screen = true;
-                }
-                MouseDown { btn } => {
-                    self.mouse_state.press(btn);
-                }
-                MouseUp { btn } => {
-                    self.mouse_state.release(btn);
-                }
-                MouseEnter => {
-                    self.mouse_state.cursor_on_screen = true;
-                }
-                MouseLeave => {
-                    self.mouse_state.cursor_on_screen = false;
-                }
-                MouseWheel { delta } => {
-                    self.mouse_state.wheel_delta = delta;
-                    self.mouse_state.scrolling = true;
-                }
-                KeyUp { key } => {
-                    self.keyboard_state.release(key);
-                }
-                KeyDown { key } => {
-                    self.keyboard_state.press(key);
-                }
-                CharReceived { text } => {
-                    self.keyboard_state.add_text(text.as_str());
-                }
-                WindowResize { size } => {
-                    self.gfx.as_mut().unwrap().resize(size.x, size.y);
-                }
-            }
-        }
+    fn take_events(&mut self) -> events::EventIterator {
+        self.win.as_mut().unwrap().events.take()
     }
 }
 
