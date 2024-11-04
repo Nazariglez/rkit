@@ -8,6 +8,7 @@ use crate::math::UVec2;
 use atomic_refcell::AtomicRefCell;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
+use corelib::gfx::Color;
 use utils::fast_cache::FastCache;
 
 const MAX_CACHED_TEXTURES: usize = 12;
@@ -188,6 +189,14 @@ impl PostProcessSys {
             );
             InOutTextures::new(size).unwrap() // TODO maybe this is better to raise the error somehow?
         });
+
+        // clear the input texture
+        let mut renderer = Renderer::new();
+        renderer.begin_pass()
+            .clear_color(Color::TRANSPARENT);
+
+        gfx::render_to_texture(&io_tex.in_rt, &renderer)?;
+
         gfx::render_to_texture(&io_tex.in_rt, info.render)?;
 
         let sampler = if info.nearest_sampler {
