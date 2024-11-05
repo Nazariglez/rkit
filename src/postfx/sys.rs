@@ -171,7 +171,9 @@ impl PostProcessSys {
         target: Option<&RenderTexture>,
     ) -> Result<(), String> {
         // skip process if there is no effects
-        if info.effects.is_empty() {
+        let is_empty = info.effects.is_empty();
+        let all_disabled = info.effects.iter().find(|fx| fx.is_enabled()).is_none();
+        if !is_presenting_frame && (is_empty || all_disabled) {
             return match target {
                 None => gfx::render_to_frame(info.render),
                 Some(rt) => gfx::render_to_texture(rt, info.render),
