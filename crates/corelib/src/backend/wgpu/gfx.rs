@@ -237,7 +237,7 @@ impl GfxBackendImpl for GfxBackend {
                     });
 
                     rp.bind_groups.iter().enumerate().for_each(|(i, bg)| {
-                        rpass.set_bind_group(i as _, &bg.raw, &[]);
+                        rpass.set_bind_group(i as _, &*bg.raw, &[]);
                     });
 
                     if let Some(sr) = rp.stencil_ref {
@@ -415,13 +415,13 @@ impl GfxBackendImpl for GfxBackend {
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: desc.vs_entry.unwrap_or("vs_main"),
+                    entry_point: desc.vs_entry.or(Some("vs_main")),
                     compilation_options: Default::default(),
                     buffers: &buffers,
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: desc.fs_entry.unwrap_or("fs_main"),
+                    entry_point: desc.fs_entry.or(Some("fs_main")),
                     compilation_options: Default::default(),
                     targets: fragment_targets.as_slice(),
                 }),
@@ -921,7 +921,7 @@ impl GfxBackend {
                     });
 
                     rp.bind_groups.iter().enumerate().for_each(|(i, bg)| {
-                        rpass.set_bind_group(i as _, &bg.raw, &[]);
+                        rpass.set_bind_group(i as _, &*bg.raw, &[]);
                     });
 
                     if let Some(sr) = rp.stencil_ref {
