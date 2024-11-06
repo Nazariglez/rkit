@@ -18,10 +18,10 @@ hashbrown.workspace = true
 rustc-hash.workspace = true
 num.workspace = true
 
-internment = "0.8.4"
+internment = "0.8.6"
 lyon = "1.0.1"
 
-lru = { version = "0.12.4" , default-features = false }
+lru = { version = "0.12.5" , default-features = false }
 etagere = "0.2.13"
 cosmic-text = "0.12.1"
 
