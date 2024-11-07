@@ -32,6 +32,7 @@ where
 {
     pub(crate) window: WindowConfig,
     pub(crate) init_cb: InitCb<S>,
+    pub(crate) pre_update_cb: Option<UpdateCb<S>>,
     pub(crate) update_cb: UpdateCb<S>,
     pub(crate) resize_cb: UpdateCb<S>,
     pub(crate) cleanup_cb: CleanupCb<S>,
@@ -50,6 +51,7 @@ where
     AppBuilder {
         window: WindowConfig::default(),
         init_cb: Box::new(cb),
+        pre_update_cb: None,
         update_cb: Box::new(|_| ()),
         resize_cb: Box::new(|_| ()),
         fixed_update_cb: None,
@@ -72,6 +74,14 @@ where
     #[cfg(feature = "logs")]
     pub fn with_logs(mut self, config: LogConfig) -> Self {
         self.log_config = config;
+        self
+    }
+
+    pub fn pre_update<F, P>(mut self, mut cb: F) -> Self
+    where
+        F: Handler<S, P> + 'static,
+    {
+        self.pre_update_cb = Some(Box::new(move |s| cb.call(s)));
         self
     }
 
@@ -118,13 +128,24 @@ where
         #[cfg(feature = "logs")]
         init_logs(self.log_config.clone());
 
-        // Prepare for fixed update
-        if let Some(mut fixed) = self.fixed_update_cb.take() {
+        if self.pre_update_cb.is_some() || self.fixed_update_cb.is_some() {
+            let mut pre = self.pre_update_cb.take();
+            let mut fixed = self.fixed_update_cb.take();
             let mut update = self.update_cb;
             self.update_cb = Box::new(move |s| {
-                fixed.iter_mut().for_each(|cb| {
-                    cb.tick(s);
-                });
+                // pre_update if exists
+                if let Some(pre) = &mut pre {
+                    pre(s);
+                }
+
+                // fixed_update if exists
+                if let Some(fixed) = &mut fixed {
+                    fixed.iter_mut().for_each(|cb| {
+                        cb.tick(s);
+                    });
+                }
+
+                // regular update loop
                 update(s);
             });
         }
