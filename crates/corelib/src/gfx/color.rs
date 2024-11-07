@@ -57,14 +57,14 @@ impl Color {
 
     #[inline(always)]
     /// Create a new color from hexadecimal number like 0x000000ff (0xRRGGBBAA)
-    pub fn hex(hex: u32) -> Self {
+    pub const fn hex(hex: u32) -> Self {
         let [r, g, b, a] = hex_to_rgba(hex);
         Self { r, g, b, a }
     }
 
     #[inline(always)]
     /// Create a new color from rgba bytes
-    pub fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
+    pub const fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self {
             r: r as f32 / 255.0,
             g: g as f32 / 255.0,
@@ -111,7 +111,7 @@ impl Color {
 
     #[inline(always)]
     /// Returns the hexadecimal representation of the color like 0xRRGGBBAA
-    pub fn to_hex(&self) -> u32 {
+    pub const fn to_hex(&self) -> u32 {
         rgba_to_hex(self.r, self.g, self.b, self.a)
     }
 
@@ -123,7 +123,7 @@ impl Color {
 
     #[inline(always)]
     /// Returns byte representation of the color
-    pub fn to_rgba_u8(&self) -> [u8; 4] {
+    pub const fn to_rgba_u8(&self) -> [u8; 4] {
         let r = (self.r * 255.0) as _;
         let g = (self.g * 255.0) as _;
         let b = (self.b * 255.0) as _;
@@ -133,7 +133,7 @@ impl Color {
 
     #[inline(always)]
     /// Returns the same color as premultiplied alpha
-    pub fn to_premultiplied_alpha(&self) -> Color {
+    pub const fn to_premultiplied_alpha(&self) -> Color {
         if self.a == 0.0 {
             Self::TRANSPARENT
         } else if self.a == 1.0 {
@@ -217,7 +217,7 @@ impl std::fmt::Display for Color {
 
 #[inline(always)]
 /// Converts a rgba color values to a hexadecimal values
-pub fn rgba_to_hex(r: f32, g: f32, b: f32, a: f32) -> u32 {
+pub const fn rgba_to_hex(r: f32, g: f32, b: f32, a: f32) -> u32 {
     (((r * 255.0) as u32) << 24)
         + (((g * 255.0) as u32) << 16)
         + (((b * 255.0) as u32) << 8)
@@ -226,7 +226,7 @@ pub fn rgba_to_hex(r: f32, g: f32, b: f32, a: f32) -> u32 {
 
 #[inline(always)]
 /// Converts an hexadecimal value to a rgba values
-pub fn hex_to_rgba(hex: u32) -> [f32; 4] {
+pub const fn hex_to_rgba(hex: u32) -> [f32; 4] {
     [
         ((hex >> 24) & 0xFF) as f32 / 255.0,
         ((hex >> 16) & 0xFF) as f32 / 255.0,
