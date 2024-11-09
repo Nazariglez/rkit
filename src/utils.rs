@@ -5,8 +5,9 @@ pub use ::utils::fast_cache::*;
 #[doc(inline)]
 pub use ::utils::ring_buffer::*;
 
-#[doc(inline)]
-pub use ::utils::local_pool::*;
-// #[macro_use]
-// extern crate utils;
-pub use utils::init_local_pool;
+pub mod local_pool {
+    #[doc(inline)]
+    pub use ::utils::local_pool::*;
+    #[doc(inline)]
+    pub use utils::init_local_pool;
+}

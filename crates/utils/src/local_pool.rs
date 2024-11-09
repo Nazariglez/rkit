@@ -3,6 +3,11 @@ pub use paste::paste;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+// This code is hell... I am sure it can be done more directly in a better way
+// but I want to have auto-attach on the pool when the element is dropped
+// using one pool per thread and no locks... So, this seems handy to be like this
+// even if it's ugly.
+
 pub struct LocalPool<T, const N: usize> {
     _t: PhantomData<[T; N]>,
     on_take: fn() -> Option<LocalPoolObserver<T>>,
@@ -107,6 +112,7 @@ macro_rules! init_local_pool {
                 static [<INNER_ $name>]: std::cell::RefCell<InnerLocalPool<$t, $n>> = std::cell::RefCell::new(InnerLocalPool::new($init));
             }
 
+            #[allow(non_snake_case)]
             fn [<on_take_ $name>]() -> Option<LocalPoolObserver<$t>> {
                 [<INNER_ $name>].with(|pool| {
                     let mut pool = pool.borrow_mut();
@@ -115,12 +121,14 @@ macro_rules! init_local_pool {
                 })
             }
 
+            #[allow(non_snake_case)]
             fn [<on_drop_ $name>](t: $t) {
                 [<INNER_ $name>].with(|pool| {
                     pool.borrow_mut().put_back(t);
                 });
             }
 
+            #[allow(non_snake_case)]
             fn [<len_ $name>]() -> usize {
                 [<INNER_ $name>].with(|pool| {
                     pool.borrow().len()
