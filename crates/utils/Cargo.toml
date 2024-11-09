@@ -3,6 +3,8 @@ name = "utils"
 edition = "2021"
 
 [dependencies]
+macros.workspace = true
+
 hashbrown.workspace = true
 rustc-hash.workspace = true
 arrayvec.workspace = true

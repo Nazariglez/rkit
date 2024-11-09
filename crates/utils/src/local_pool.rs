@@ -1,13 +1,32 @@
 use arrayvec::ArrayVec;
-pub use paste::paste;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-// This code is hell... I am sure it can be done more directly in a better way
-// but I want to have auto-attach on the pool when the element is dropped
-// using one pool per thread and no locks... So, this seems handy to be like this
-// even if it's ugly.
-
+/// A thread-local object pool for managing reusable items without locks.
+///
+/// The `LocalPool` is designed to manage objects in a thread-local context, providing automatic
+/// reattachment to the pool when the `LocalPoolObserver` goes out of scope. This allows for efficient
+/// reuse of objects without requiring heap allocation each time.
+///
+/// **Important**: The `LocalPool` struct is intended to be used with the provided macro `init_local_pool!`.
+/// The macro generates the necessary thread-local instances and associated functions for managing the pool.
+/// Direct instantiation of `LocalPool` is discouraged to avoid issues with manual management of thread-local storage.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// // Initialize the pool using the macro (example usage)
+/// init_local_pool!(MY_POOL, 32, Vec<u8>, || Vec::with_capacity(100));
+///
+/// // Take an item from the pool
+/// if let Some(mut item) = MY_POOL.take() {
+///     item.push(42);
+///     println!("Item: {:?}", *item);
+/// }
+///
+/// // Check the length of the pool after taking an item
+/// println!("Available items in pool: {}", MY_POOL.len());
+/// ```
 pub struct LocalPool<T, const N: usize> {
     _t: PhantomData<[T; N]>,
     on_take: fn() -> Option<LocalPoolObserver<T>>,
@@ -16,7 +35,8 @@ pub struct LocalPool<T, const N: usize> {
 }
 
 impl<T, const N: usize> LocalPool<T, N> {
-    pub const fn new(
+    #[doc(hidden)]
+    pub const fn init(
         on_take: fn() -> Option<LocalPoolObserver<T>>,
         on_drop: fn(T),
         len_fn: fn() -> usize,
@@ -103,39 +123,65 @@ impl<T, const N: usize> InnerLocalPool<T, N> {
     }
 }
 
-// Define a macro to initialize thread-local pools
-#[macro_export]
-macro_rules! init_local_pool {
-    ($name:ident, $n:expr, $t:ty, $init:expr) => {
-        paste! {
-            thread_local! {
-                static [<INNER_ $name>]: std::cell::RefCell<InnerLocalPool<$t, $n>> = std::cell::RefCell::new(InnerLocalPool::new($init));
-            }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use macros::init_local_pool;
 
-            #[allow(non_snake_case)]
-            fn [<on_take_ $name>]() -> Option<LocalPoolObserver<$t>> {
-                [<INNER_ $name>].with(|pool| {
-                    let mut pool = pool.borrow_mut();
-                    pool.take()
-                        .map(|t| LocalPoolObserver::new(t, [<on_drop_ $name>]))
-                })
-            }
+    // Use the macro to initialize the pools used in the tests
+    init_local_pool!(POOL_A, 4, Vec<u8>, || Vec::with_capacity(10));
+    init_local_pool!(POOL_B, 3, String, || String::new());
 
-            #[allow(non_snake_case)]
-            fn [<on_drop_ $name>](t: $t) {
-                [<INNER_ $name>].with(|pool| {
-                    pool.borrow_mut().put_back(t);
-                });
-            }
+    #[test]
+    fn test_pool_a_initial_length() {
+        assert_eq!(POOL_A.len(), 4);
+    }
 
-            #[allow(non_snake_case)]
-            fn [<len_ $name>]() -> usize {
-                [<INNER_ $name>].with(|pool| {
-                    pool.borrow().len()
-                })
-            }
+    #[test]
+    fn test_take_and_return_pool_a() {
+        // Take an item from POOL_A
+        if let Some(mut item) = POOL_A.take() {
+            item.push(42);
+            assert_eq!(item.capacity(), 10);
 
-            pub static $name: LocalPool<$t, $n> = LocalPool::new([<on_take_ $name>], [<on_drop_ $name>], [<len_ $name>]);
+            // After taking an item, the pool should have one less
+            assert_eq!(POOL_A.len(), 3);
+        } else {
+            panic!("Expected an available item in POOL_A");
         }
+
+        // Item should be returned after drop
+        assert_eq!(POOL_A.len(), 4);
+    }
+
+    #[test]
+    fn test_take_all_items_from_pool_b() {
+        // Take all items from POOL_B
+        let mut observers = Vec::new();
+        for _ in 0..3 {
+            let item = POOL_B.take().expect("Expected an available item in POOL_B");
+            observers.push(item);
+        }
+
+        // All items are taken, POOL_B should be empty
+        assert_eq!(POOL_B.len(), 0);
+
+        // Taking another item should return None
+        assert!(POOL_B.take().is_none());
+    }
+
+    #[test]
+    fn test_return_all_items_to_pool_b() {
+        {
+            // Take all items from POOL_B
+            let mut observers = Vec::new();
+            for _ in 0..3 {
+                let item = POOL_B.take().expect("Expected an available item in POOL_B");
+                observers.push(item);
+            }
+        }
+
+        // After dropping all items, the pool should be full again
+        assert_eq!(POOL_B.len(), 3);
     }
 }

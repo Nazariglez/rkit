@@ -7,7 +7,7 @@ pub use ::utils::ring_buffer::*;
 
 pub mod local_pool {
     #[doc(inline)]
-    pub use ::utils::local_pool::*;
+    pub use ::macros::init_local_pool;
     #[doc(inline)]
-    pub use utils::init_local_pool;
+    pub use ::utils::local_pool::*;
 }

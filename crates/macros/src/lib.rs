@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields};
+use proc_macro2::Ident;
+use quote::{format_ident, quote};
+use syn::parse::{Parse, ParseStream};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitInt, Token, Type};
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
@@ -97,6 +99,99 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
 
             #pipeline_method
         }
+    };
+
+    TokenStream::from(expanded)
+}
+
+// -- LocalPool
+
+// Define a struct to parse the input arguments for the `init_local_pool` macro
+struct InitLocalPoolInput {
+    pool_name: Ident,
+    size: LitInt,
+    ty: Type,
+    init_expr: syn::ExprClosure,
+}
+
+impl Parse for InitLocalPoolInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let pool_name: Ident = input.parse()?;
+        input.parse::<Token![,]>()?;
+
+        let size: LitInt = input.parse()?;
+        input.parse::<Token![,]>()?;
+
+        let ty: Type = input.parse()?;
+        input.parse::<Token![,]>()?;
+
+        let init_expr: syn::ExprClosure = input.parse()?;
+
+        Ok(InitLocalPoolInput {
+            pool_name,
+            size,
+            ty,
+            init_expr,
+        })
+    }
+}
+
+/// A macro to initialize a thread-local object pool with a specified size.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// init_local_pool!(MY_POOL, 32, Vec<u8>, || Vec::with_capacity(100));
+/// ```
+///
+/// This will create a thread-local pool named `MY_POOL` that can hold up to 32 `Vec<u8>`
+/// elements, each initialized with a capacity of 100.
+///
+/// - `pool_name`: The name of the pool.
+/// - `size`: The size of the pool (number of items).
+/// - `type`: The type of items to be pooled.
+/// - `init_expr`: A closure to initialize each item in the pool.
+#[proc_macro]
+pub fn init_local_pool(input: TokenStream) -> TokenStream {
+    // Parse the input tokens into a custom InitLocalPoolInput struct
+    let input = parse_macro_input!(input as InitLocalPoolInput);
+
+    let pool_name = input.pool_name;
+    let size = input.size;
+    let ty = input.ty;
+    let init_expr = input.init_expr;
+
+    // Generate unique identifiers for functions and thread-local storage
+    let on_take_fn = format_ident!("on_take_{}", pool_name);
+    let on_drop_fn = format_ident!("on_drop_{}", pool_name);
+    let len_fn = format_ident!("len_{}", pool_name);
+    let inner_pool = format_ident!("INNER_POOL_{}", pool_name);
+
+    let expanded = quote! {
+        thread_local! {
+            static #inner_pool: std::cell::RefCell<InnerLocalPool<#ty, #size>> = std::cell::RefCell::new(InnerLocalPool::new(#init_expr));
+        }
+
+        fn #on_take_fn() -> Option<LocalPoolObserver<#ty>> {
+            #inner_pool.with(|pool| {
+                let mut pool = pool.borrow_mut();
+                pool.take().map(|t| LocalPoolObserver::new(t, #on_drop_fn))
+            })
+        }
+
+        fn #on_drop_fn(t: #ty) {
+            #inner_pool.with(|pool| {
+                pool.borrow_mut().put_back(t);
+            });
+        }
+
+        fn #len_fn() -> usize {
+            #inner_pool.with(|pool| {
+                pool.borrow().len()
+            })
+        }
+
+        pub static #pool_name: LocalPool<#ty, #size> = LocalPool::init(#on_take_fn, #on_drop_fn, #len_fn);
     };
 
     TokenStream::from(expanded)

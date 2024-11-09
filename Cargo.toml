@@ -64,6 +64,7 @@ wasm-bindgen = "0.2.95"
 [dependencies]
 corelib.workspace = true
 utils.workspace = true
+macros.workspace = true
 draw = { workspace = true, optional = true }
 audio = { workspace = true, optional = true }
 assets = { workspace = true, optional = true }
