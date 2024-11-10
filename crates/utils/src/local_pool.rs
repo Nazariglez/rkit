@@ -55,6 +55,10 @@ impl<T, const N: usize> LocalPool<T, N> {
     pub fn len(&self) -> usize {
         (self.len_fn)()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 pub struct LocalPoolObserver<T> {
@@ -120,6 +124,10 @@ impl<T, const N: usize> InnerLocalPool<T, N> {
 
     pub fn len(&self) -> usize {
         self.pool.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

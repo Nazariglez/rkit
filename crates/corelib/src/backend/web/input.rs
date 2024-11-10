@@ -12,6 +12,20 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use web_sys::{Event as WEvent, HtmlCanvasElement, KeyboardEvent, MouseEvent, WheelEvent};
 
+pub(crate) fn add_keyboard_listener<F, E>(win: &WebWindow, name: &str, mut handler: F)
+where
+    E: wasm_bindgen::convert::FromWasmAbi + 'static,
+    F: FnMut(&mut EventIterator, E) + 'static,
+{
+    let events = win.events.clone();
+    let evt = window_add_event_listener(name, move |e: E| {
+        let mut evts = events.borrow_mut();
+        handler(&mut evts, e);
+    })
+    .unwrap();
+    std::mem::forget(evt);
+}
+
 pub(crate) fn add_mouse_listener<F, E>(win: &WebWindow, name: &str, mut handler: F)
 where
     E: wasm_bindgen::convert::FromWasmAbi + 'static,
@@ -108,7 +122,7 @@ fn listen_cursor_captured(win: &mut WebWindow) {
 }
 
 fn listen_key_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
-    add_mouse_listener(win, "keyup", move |_canvas, events, e: KeyboardEvent| {
+    add_keyboard_listener(win, "keyup", move |events, e: KeyboardEvent| {
         (*delayed_dispatch.borrow())();
         let key = keyboard_code_cast(&e.code());
         events.push(Event::KeyUp { key });
@@ -116,7 +130,7 @@ fn listen_key_up(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
 }
 
 fn listen_key_down(win: &mut WebWindow, delayed_dispatch: Rc<RefCell<dyn Fn()>>) {
-    add_mouse_listener(win, "keydown", move |_canvas, events, e: KeyboardEvent| {
+    add_keyboard_listener(win, "keydown", move |events, e: KeyboardEvent| {
         (*delayed_dispatch.borrow())();
         let key = keyboard_code_cast(&e.code());
         events.push(Event::KeyDown { key });
