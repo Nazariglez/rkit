@@ -52,7 +52,7 @@ impl HasDisplayHandle for WebWindow {
 }
 
 impl WebWindow {
-    pub fn new(config: WindowConfig) -> Result<Self, String> {
+    pub fn new(mut config: WindowConfig) -> Result<Self, String> {
         let window =
             web_sys::window().ok_or_else(|| String::from("Can't access window dom object."))?;
         let document = window
@@ -75,6 +75,15 @@ impl WebWindow {
 
         let _ = canvas.focus();
         let dpi = window.device_pixel_ratio();
+
+        config.size = if config.maximized {
+            uvec2(
+                canvas_parent.client_width() as _,
+                canvas_parent.client_height() as _,
+            )
+        } else {
+            config.size
+        };
 
         let UVec2 {
             x: width,

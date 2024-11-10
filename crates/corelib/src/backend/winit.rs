@@ -498,6 +498,7 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         min_size,
         max_size,
         resizable,
+        maximized,
         vsync: _,
         max_fps: _,
         pixelated: _,
@@ -506,7 +507,8 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
     let mut attrs = WindowAttributes::default()
         .with_title(title)
         .with_inner_size(LogicalSize::new(size.x, size.y))
-        .with_resizable(resizable);
+        .with_resizable(resizable)
+        .with_maximized(maximized);
 
     if let Some(ms) = min_size {
         attrs = attrs.with_min_inner_size(LogicalSize::new(ms.x, ms.y));

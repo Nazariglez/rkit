@@ -46,11 +46,11 @@ where
     } = builder;
 
     let vsync = config.vsync;
-    let size = config.size;
     let pixelated = config.pixelated;
 
     let callback = Rc::new(RefCell::new(None));
     let win = WebWindow::new(config).unwrap();
+    let size = win.size().as_uvec2();
     let close_requested = win.close_requested.clone();
     let gfx = GfxBackend::init(&win, vsync, size, pixelated)
         .await

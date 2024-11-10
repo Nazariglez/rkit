@@ -7,6 +7,7 @@ pub struct WindowConfig {
     pub min_size: Option<UVec2>,
     pub max_size: Option<UVec2>,
     pub resizable: bool,
+    pub maximized: bool,
     pub vsync: bool,
     pub max_fps: Option<u8>,
     pub pixelated: bool,
@@ -20,6 +21,7 @@ impl Default for WindowConfig {
             min_size: None,
             max_size: None,
             resizable: true,
+            maximized: false,
             vsync: true,
             max_fps: None,
             pixelated: false,
@@ -55,6 +57,13 @@ impl WindowConfig {
     /// Allow the window to be resizable
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
+        self
+    }
+
+    /// Open the window maximized
+    /// `Web`: Will use the parent's size
+    pub fn maximized(mut self, maximized: bool) -> Self {
+        self.maximized = maximized;
         self
     }
 
