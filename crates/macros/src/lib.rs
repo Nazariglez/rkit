@@ -213,6 +213,7 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
 
                     let mut skip_field = false;
                     let mut custom_ease_fn: Option<syn::Path> = None;
+                    let mut yoyo = false;
 
                     // Iterate over attributes and parse them
                     for attr in &field.attrs {
@@ -224,24 +225,41 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
                                     if let Ok(path) = nested.value()?.parse::<syn::Path>() {
                                         custom_ease_fn = Some(path);
                                     }
+                                } else if nested.path.is_ident("yoyo") {
+                                    yoyo = true;
                                 }
                                 Ok(())
                             });
                         }
                     }
 
-                    // Handle skipping or using custom easing
+                    // Handle skipping, custom easing, or yoyo effect
                     if skip_field {
                         quote! {
                             #field_name: self.#field_name
                         }
-                    } else if let Some(ease_fn_path) = custom_ease_fn {
-                        quote! {
-                            #field_name: self.#field_name.interpolate(to.#field_name, progress, #ease_fn_path)
-                        }
                     } else {
-                        quote! {
-                            #field_name: self.#field_name.interpolate(to.#field_name, progress, easing)
+                        let easing_fn = if let Some(ease_fn_path) = custom_ease_fn {
+                            quote! { #ease_fn_path }
+                        } else {
+                            quote! { easing }
+                        };
+
+                        if yoyo {
+                            quote! {
+                                #field_name: {
+                                    let adjusted_progress = if progress < 0.5 {
+                                        progress * 2.0
+                                    } else {
+                                        1.0 - (progress - 0.5) * 2.0
+                                    };
+                                    self.#field_name.interpolate(to.#field_name, adjusted_progress, #easing_fn)
+                                }
+                            }
+                        } else {
+                            quote! {
+                                #field_name: self.#field_name.interpolate(to.#field_name, progress, #easing_fn)
+                            }
                         }
                     }
                 });
@@ -263,6 +281,7 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
 
                         let mut skip_field = false;
                         let mut custom_ease_fn: Option<syn::Path> = None;
+                        let mut yoyo = false;
 
                         // Iterate over attributes and parse them
                         for attr in &field.attrs {
@@ -274,24 +293,41 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
                                         if let Ok(path) = nested.value()?.parse::<syn::Path>() {
                                             custom_ease_fn = Some(path);
                                         }
+                                    } else if nested.path.is_ident("yoyo") {
+                                        yoyo = true;
                                     }
                                     Ok(())
                                 });
                             }
                         }
 
-                        // Handle skipping or using custom easing
+                        // Handle skipping, custom easing, or yoyo effect
                         if skip_field {
                             quote! {
                                 self.#index
                             }
-                        } else if let Some(ease_fn_path) = custom_ease_fn {
-                            quote! {
-                                self.#index.interpolate(to.#index, progress, #ease_fn_path)
-                            }
                         } else {
-                            quote! {
-                                self.#index.interpolate(to.#index, progress, easing)
+                            let easing_fn = if let Some(ease_fn_path) = custom_ease_fn {
+                                quote! { #ease_fn_path }
+                            } else {
+                                quote! { easing }
+                            };
+
+                            if yoyo {
+                                quote! {
+                                    {
+                                        let adjusted_progress = if progress < 0.5 {
+                                            progress * 2.0
+                                        } else {
+                                            1.0 - (progress - 0.5) * 2.0
+                                        };
+                                        self.#index.interpolate(to.#index, adjusted_progress, #easing_fn)
+                                    }
+                                }
+                            } else {
+                                quote! {
+                                    self.#index.interpolate(to.#index, progress, #easing_fn)
+                                }
                             }
                         }
                     });
