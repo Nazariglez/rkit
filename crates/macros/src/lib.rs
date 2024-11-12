@@ -172,6 +172,7 @@ pub fn init_local_pool(input: TokenStream) -> TokenStream {
             static #inner_pool: std::cell::RefCell<InnerLocalPool<#ty, #size>> = std::cell::RefCell::new(InnerLocalPool::new(#init_expr));
         }
 
+        #[allow(non_snake_case)]
         fn #on_take_fn() -> Option<LocalPoolObserver<#ty>> {
             #inner_pool.with(|pool| {
                 let mut pool = pool.borrow_mut();
@@ -179,19 +180,21 @@ pub fn init_local_pool(input: TokenStream) -> TokenStream {
             })
         }
 
+        #[allow(non_snake_case)]
         fn #on_drop_fn(t: #ty) {
             #inner_pool.with(|pool| {
                 pool.borrow_mut().put_back(t);
             });
         }
 
+        #[allow(non_snake_case)]
         fn #len_fn() -> usize {
             #inner_pool.with(|pool| {
                 pool.borrow().len()
             })
         }
 
-        pub static #pool_name: LocalPool<#ty, #size> = LocalPool::init(#on_take_fn, #on_drop_fn, #len_fn);
+        pub static #pool_name: LocalPool<#ty, #size> = LocalPool::init(#on_take_fn, #len_fn);
     };
 
     TokenStream::from(expanded)

@@ -30,7 +30,6 @@ use std::ops::{Deref, DerefMut};
 pub struct LocalPool<T, const N: usize> {
     _t: PhantomData<[T; N]>,
     on_take: fn() -> Option<LocalPoolObserver<T>>,
-    on_drop: fn(T),
     len_fn: fn() -> usize,
 }
 
@@ -38,13 +37,11 @@ impl<T, const N: usize> LocalPool<T, N> {
     #[doc(hidden)]
     pub const fn init(
         on_take: fn() -> Option<LocalPoolObserver<T>>,
-        on_drop: fn(T),
         len_fn: fn() -> usize,
     ) -> Self {
         Self {
             _t: std::marker::PhantomData,
             on_take,
-            on_drop,
             len_fn,
         }
     }
