@@ -1,4 +1,4 @@
-use crate::tween::{Interpolable, Tween};
+use crate::tween::{ApplyState, Interpolable, Tween};
 use rustc_hash::FxHashMap;
 
 pub struct TweenMap<K, V>
@@ -62,10 +62,8 @@ where
     }
 
     /// Applies the callback to a single Tween by key if it is started
-    pub fn apply<F: FnOnce(V)>(&mut self, key: &K, cb: F) {
-        if let Some(tween) = self.inner.get_mut(key) {
-            tween.apply(cb);
-        }
+    pub fn apply<F: FnOnce(V)>(&mut self, key: &K, cb: F) -> Option<ApplyState> {
+        self.inner.get_mut(key).map(|tween| tween.apply(cb))
     }
 
     /// Removes all entries in the TweenMap

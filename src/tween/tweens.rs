@@ -1,5 +1,19 @@
 use super::{interpolate, EaseFn, Interpolable, LINEAR};
 
+#[derive(Copy, Clone, Eq, PartialEq, Default, Debug)]
+pub enum ApplyState {
+    #[default]
+    Idle,
+    Applied,
+    Ended,
+}
+
+impl ApplyState {
+    pub fn is_done(self) -> bool {
+        matches!(self, Self::Ended)
+    }
+}
+
 #[derive(Clone, Copy)]
 enum RepeatMode {
     Never,
@@ -170,16 +184,21 @@ impl<T: Interpolable> Tween<T> {
         matches!(self.state, State::Ended)
     }
 
-    pub fn apply<F: FnOnce(T)>(&mut self, cb: F) {
+    pub fn apply<F: FnOnce(T)>(&mut self, cb: F) -> ApplyState {
         let can_apply = self.is_started() || self.is_ended();
         if !can_apply {
-            return;
+            return ApplyState::Idle;
         }
 
         cb(self.value);
 
         // avoid apply this after the end
         self.apply_end = self.is_ended();
+        if self.apply_end {
+            ApplyState::Ended
+        } else {
+            ApplyState::Applied
+        }
     }
 }
 
