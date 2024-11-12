@@ -199,3 +199,63 @@ pub fn init_local_pool(input: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+#[proc_macro_derive(Interpolable)]
+pub fn derive_interpolable(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+
+    let interpolate_impl = match input.data {
+        Data::Struct(data_struct) => match data_struct.fields {
+            Fields::Named(fields_named) => {
+                let field_interpolations = fields_named.named.iter().map(|field| {
+                    let field_name = &field.ident;
+                    quote! {
+                        #field_name: self.#field_name.interpolate(to.#field_name, progress, easing)
+                    }
+                });
+
+                quote! {
+                    impl Interpolable for #name {
+                        fn interpolate(self, to: Self, progress: f32, easing: EaseFn) -> Self {
+                            Self {
+                                #(#field_interpolations),*
+                            }
+                        }
+                    }
+                }
+            }
+            Fields::Unnamed(fields_unnamed) => {
+                let field_interpolations =
+                    fields_unnamed.unnamed.iter().enumerate().map(|(i, _)| {
+                        let index = syn::Index::from(i);
+                        quote! {
+                            self.#index.interpolate(to.#index, progress, easing)
+                        }
+                    });
+
+                quote! {
+                    impl Interpolable for #name {
+                        fn interpolate(self, to: Self, progress: f32, easing: EaseFn) -> Self {
+                            Self(
+                                #(#field_interpolations),*
+                            )
+                        }
+                    }
+                }
+            }
+            Fields::Unit => {
+                quote! {
+                    impl Interpolable for #name {
+                        fn interpolate(self, _to: Self, _progress: f32, _easing: EaseFn) -> Self {
+                            self
+                        }
+                    }
+                }
+            }
+        },
+        _ => panic!("Interpolable can only be derived for structs"),
+    };
+
+    TokenStream::from(interpolate_impl)
+}

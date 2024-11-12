@@ -4,31 +4,22 @@ use std::ops::{Add, Mul, Sub};
 
 pub type EaseFn = fn(f32) -> f32;
 
-pub trait Interpolable:
-    Copy
-    + Mul<f32, Output = Self>
-    + Mul<Self, Output = Self>
-    + Add<Output = Self>
-    + Sub<Output = Self>
-    + Sized
-{
+pub trait Interpolable: Copy + Sized {
+    fn interpolate(self, to: Self, progress: f32, easing: EaseFn) -> Self;
 }
 
-impl<T> Interpolable for T where
+impl<T> Interpolable for T
+where
     T: Copy
         + Mul<f32, Output = Self>
         + Mul<Self, Output = Self>
         + Add<Output = Self>
         + Sub<Output = Self>
-        + Sized
+        + Sized,
 {
-}
-
-pub fn interpolate<T>(from: T, to: T, total_time: f32, elapsed_time: f32, easing: EaseFn) -> T
-where
-    T: Interpolable,
-{
-    from + ((to - from) * easing(elapsed_time / total_time))
+    fn interpolate(self, to: Self, progress: f32, easing: EaseFn) -> Self {
+        self + ((to - self) * easing(progress))
+    }
 }
 
 pub const LINEAR: EaseFn = |t: f32| -> f32 { t };
@@ -248,7 +239,7 @@ mod test {
         let to = 100.0;
         let total_time = 10.0;
         let elapsed_time = 0.0;
-        let value = interpolate(from, to, total_time, elapsed_time, LINEAR);
+        let value = from.interpolate(to, elapsed_time / total_time, LINEAR);
         assert_eq!(value, 0.0)
     }
 
@@ -258,7 +249,7 @@ mod test {
         let to = 100.0;
         let total_time = 10.0;
         let elapsed_time = 5.0;
-        let value = interpolate(from, to, total_time, elapsed_time, LINEAR);
+        let value = from.interpolate(to, elapsed_time / total_time, LINEAR);
         assert_eq!(value, 50.0)
     }
 
@@ -268,7 +259,7 @@ mod test {
         let to = 100.0;
         let total_time = 10.0;
         let elapsed_time = 10.0;
-        let value = interpolate(from, to, total_time, elapsed_time, LINEAR);
+        let value = from.interpolate(to, elapsed_time / total_time, LINEAR);
         assert_eq!(value, 100.0)
     }
 
@@ -278,7 +269,7 @@ mod test {
         let to = Vec2::splat(100.0);
         let total_time = 10.0;
         let elapsed_time = 0.0;
-        let value = interpolate(from, to, total_time, elapsed_time, LINEAR);
+        let value = from.interpolate(to, elapsed_time / total_time, LINEAR);
         assert_eq!(value, Vec2::ZERO)
     }
 
@@ -288,7 +279,7 @@ mod test {
         let to = Vec2::splat(100.0);
         let total_time = 10.0;
         let elapsed_time = 5.0;
-        let value = interpolate(from, to, total_time, elapsed_time, LINEAR);
+        let value = from.interpolate(to, elapsed_time / total_time, LINEAR);
         assert_eq!(value, Vec2::splat(50.0))
     }
 
@@ -298,7 +289,7 @@ mod test {
         let to = Vec2::splat(100.0);
         let total_time = 10.0;
         let elapsed_time = 10.0;
-        let value = interpolate(from, to, total_time, elapsed_time, LINEAR);
+        let value = from.interpolate(to, elapsed_time / total_time, LINEAR);
         assert_eq!(value, Vec2::splat(100.0))
     }
 }

@@ -1,4 +1,5 @@
 - todo:
+    * tween examples
     * load images with premultiplied alpha
     * audio clean sounds must be automatic with core events after frames, improve audio examples
     * blending, and masking

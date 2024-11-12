@@ -1,4 +1,4 @@
-use super::{interpolate, EaseFn, Interpolable, LINEAR};
+use super::{EaseFn, Interpolable, LINEAR};
 
 #[derive(Copy, Clone, Eq, PartialEq, Default, Debug)]
 pub enum ApplyState {
@@ -88,9 +88,9 @@ impl<T: Interpolable> Tween<T> {
 
             self.elapsed_time = if did_finish { time } else { current_time };
 
-            self.value = interpolate(self.from, self.to, time, self.elapsed_time, self.easing);
-
-            // TODO total_time??
+            self.value = self
+                .from
+                .interpolate(self.to, self.elapsed_time / time, self.easing);
 
             if did_finish {
                 if self.yoyo_enabled && !self.yoyo_back {

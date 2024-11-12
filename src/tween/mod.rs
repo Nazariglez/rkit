@@ -5,3 +5,5 @@ mod tweens;
 pub use easing::*;
 pub use tween_map::*;
 pub use tweens::*;
+
+pub use macros::Interpolable;
