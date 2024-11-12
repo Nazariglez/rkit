@@ -2745,6 +2745,7 @@ dependencies = [
  "log",
  "macros",
  "once_cell",
+ "rustc-hash 2.0.0",
  "shipyard",
  "static_assertions",
  "utils",

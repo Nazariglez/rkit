@@ -70,6 +70,7 @@ audio = { workspace = true, optional = true }
 assets = { workspace = true, optional = true }
 
 log.workspace = true
+rustc-hash.workspace = true
 
 fastrand = { version = "2.1.1", optional = true }
 

@@ -5,6 +5,7 @@ pub mod postfx;
 
 #[cfg(feature = "random")]
 pub mod random;
+pub mod tween;
 
 #[doc(inline)]
 pub use corelib::*;
