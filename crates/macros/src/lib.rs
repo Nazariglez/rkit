@@ -200,7 +200,7 @@ pub fn init_local_pool(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-#[proc_macro_derive(Interpolable)]
+#[proc_macro_derive(Interpolable, attributes(interpolate))]
 pub fn derive_interpolable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
@@ -210,8 +210,39 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
             Fields::Named(fields_named) => {
                 let field_interpolations = fields_named.named.iter().map(|field| {
                     let field_name = &field.ident;
-                    quote! {
-                        #field_name: self.#field_name.interpolate(to.#field_name, progress, easing)
+
+                    let mut skip_field = false;
+                    let mut custom_ease_fn: Option<syn::Path> = None;
+
+                    // Iterate over attributes and parse them
+                    for attr in &field.attrs {
+                        if attr.path().is_ident("interpolate") {
+                            let _ = attr.parse_nested_meta(|nested| {
+                                if nested.path.is_ident("skip") {
+                                    skip_field = true;
+                                } else if nested.path.is_ident("ease") {
+                                    if let Ok(path) = nested.value()?.parse::<syn::Path>() {
+                                        custom_ease_fn = Some(path);
+                                    }
+                                }
+                                Ok(())
+                            });
+                        }
+                    }
+
+                    // Handle skipping or using custom easing
+                    if skip_field {
+                        quote! {
+                            #field_name: self.#field_name
+                        }
+                    } else if let Some(ease_fn_path) = custom_ease_fn {
+                        quote! {
+                            #field_name: self.#field_name.interpolate(to.#field_name, progress, #ease_fn_path)
+                        }
+                    } else {
+                        quote! {
+                            #field_name: self.#field_name.interpolate(to.#field_name, progress, easing)
+                        }
                     }
                 });
 
@@ -227,10 +258,41 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
             }
             Fields::Unnamed(fields_unnamed) => {
                 let field_interpolations =
-                    fields_unnamed.unnamed.iter().enumerate().map(|(i, _)| {
+                    fields_unnamed.unnamed.iter().enumerate().map(|(i, field)| {
                         let index = syn::Index::from(i);
-                        quote! {
-                            self.#index.interpolate(to.#index, progress, easing)
+
+                        let mut skip_field = false;
+                        let mut custom_ease_fn: Option<syn::Path> = None;
+
+                        // Iterate over attributes and parse them
+                        for attr in &field.attrs {
+                            if attr.path().is_ident("interpolate") {
+                                let _ = attr.parse_nested_meta(|nested| {
+                                    if nested.path.is_ident("skip") {
+                                        skip_field = true;
+                                    } else if nested.path.is_ident("ease") {
+                                        if let Ok(path) = nested.value()?.parse::<syn::Path>() {
+                                            custom_ease_fn = Some(path);
+                                        }
+                                    }
+                                    Ok(())
+                                });
+                            }
+                        }
+
+                        // Handle skipping or using custom easing
+                        if skip_field {
+                            quote! {
+                                self.#index
+                            }
+                        } else if let Some(ease_fn_path) = custom_ease_fn {
+                            quote! {
+                                self.#index.interpolate(to.#index, progress, #ease_fn_path)
+                            }
+                        } else {
+                            quote! {
+                                self.#index.interpolate(to.#index, progress, easing)
+                            }
                         }
                     });
 
