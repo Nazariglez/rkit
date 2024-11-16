@@ -31,8 +31,8 @@ where
     }
 
     /// Inserts a new Tween into the map
-    pub fn insert(&mut self, key: K, mut tween: Tween<V>) -> Option<Tween<V>> {
-        tween.start();
+    pub fn insert(&mut self, key: K, tween: Tween<V>) -> Option<Tween<V>> {
+        let tween = tween.start();
         self.inner.insert(key, tween)
     }
 

@@ -123,7 +123,7 @@ impl<T: Interpolable> Tween<T> {
         }
     }
 
-    pub fn start(&mut self) {
+    pub fn start(mut self) -> Self {
         match self.state {
             State::Idle => self.state = State::Started,
             State::Ended => {
@@ -132,6 +132,7 @@ impl<T: Interpolable> Tween<T> {
             }
             _ => {}
         }
+        self
     }
 
     pub fn stop(&mut self) {
@@ -148,24 +149,28 @@ impl<T: Interpolable> Tween<T> {
         self.value = self.from;
     }
 
-    pub fn set_repeat(&mut self, times: u32) {
+    pub fn with_repeat(mut self, times: u32) -> Self {
         self.repeat_mode = RepeatMode::Times(times);
+        self
     }
 
-    pub fn set_repeat_forever(&mut self, repeat: bool) {
+    pub fn with_loop(mut self, repeat: bool) -> Self {
         self.repeat_mode = if repeat {
             RepeatMode::Forever
         } else {
             RepeatMode::Never
         };
+        self
     }
 
-    pub fn set_yoyo(&mut self, yoyo: bool) {
+    pub fn with_yoyo(mut self, yoyo: bool) -> Self {
         self.yoyo_enabled = yoyo;
+        self
     }
 
-    pub fn set_easing(&mut self, easing: EaseFn) {
+    pub fn with_easing(mut self, easing: EaseFn) -> Self {
         self.easing = easing;
+        self
     }
 
     pub fn value(&self) -> T {
@@ -222,7 +227,7 @@ mod tests {
     fn test_start_and_stop() {
         let mut tween = Tween::new(0.0, 100.0, 1.0);
         assert!(!tween.is_started());
-        tween.start();
+        tween = tween.start();
         assert!(tween.is_started());
         tween.stop();
         assert!(!tween.is_started());
@@ -230,8 +235,7 @@ mod tests {
 
     #[test]
     fn test_tick_updates_value() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.start();
+        let mut tween = Tween::new(0.0, 100.0, 1.0).start();
         tween.tick(0.5);
         assert_eq!(tween.value(), 50.0);
         tween.tick(0.5);
@@ -241,10 +245,7 @@ mod tests {
 
     #[test]
     fn test_repeat_mode_times() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.set_repeat(2);
-        tween.start();
-
+        let mut tween = Tween::new(0.0, 100.0, 1.0).with_repeat(2).start();
         tween.tick(1.0);
         assert_eq!(tween.value(), 100.0);
         assert!(!tween.is_ended());
@@ -259,9 +260,7 @@ mod tests {
 
     #[test]
     fn test_repeat_forever() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.set_repeat_forever(true);
-        tween.start();
+        let mut tween = Tween::new(0.0, 100.0, 1.0).with_loop(true).start();
 
         for _ in 0..10 {
             tween.tick(1.0);
@@ -272,10 +271,7 @@ mod tests {
 
     #[test]
     fn test_yoyo_mode() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.set_yoyo(true);
-        tween.start();
-
+        let mut tween = Tween::new(0.0, 100.0, 1.0).with_yoyo(true).start();
         tween.tick(1.0);
         assert_eq!(tween.value(), 100.0);
         assert!(!tween.is_ended());
@@ -301,10 +297,7 @@ mod tests {
 
     #[test]
     fn test_running_time() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.set_repeat(2);
-        tween.start();
-
+        let mut tween = Tween::new(0.0, 100.0, 1.0).with_repeat(2).start();
         tween.tick(1.0);
         assert_eq!(tween.running_time(), 1.0);
         tween.tick(1.0);
@@ -315,12 +308,10 @@ mod tests {
 
     #[test]
     fn test_apply_updates_object() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
+        let mut tween = Tween::new(0.0, 100.0, 1.0).start();
         let mut obj = Object { position: 0.0 };
 
-        tween.start();
         tween.tick(0.5);
-
         tween.apply(|value| {
             obj.position = value;
         });
@@ -346,11 +337,8 @@ mod tests {
 
     #[test]
     fn test_apply_updates_object_with_yoyo() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.set_yoyo(true);
+        let mut tween = Tween::new(0.0, 100.0, 1.0).with_yoyo(true).start();
         let mut obj = Object { position: 0.0 };
-
-        tween.start();
 
         tween.tick(0.5);
         tween.apply(|value| {
@@ -367,11 +355,8 @@ mod tests {
 
     #[test]
     fn test_apply_multiple_ticks() {
-        let mut tween = Tween::new(0.0, 100.0, 1.0);
-        tween.set_repeat(2);
+        let mut tween = Tween::new(0.0, 100.0, 1.0).with_repeat(2).start();
         let mut obj = Object { position: 0.0 };
-
-        tween.start();
 
         tween.tick(1.0);
         tween.apply(|value| {
