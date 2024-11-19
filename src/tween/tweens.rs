@@ -14,21 +14,21 @@ impl ApplyState {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum RepeatMode {
     Never,
     Forever,
     Times(u32),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum State {
     Idle,
     Started,
     Ended,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Tween<T: Interpolable> {
     from: T,
     to: T,
