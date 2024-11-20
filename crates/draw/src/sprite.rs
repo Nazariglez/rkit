@@ -20,6 +20,17 @@ pub struct Sprite {
     pub(crate) drop_observer: DropObserver,
 }
 
+impl std::fmt::Debug for Sprite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sprite")
+            // .field("id", &self.id)
+            .field("texture", &self.texture)
+            .field("sampler", &self.sampler)
+            .field("frame", &self.frame)
+            .finish()
+    }
+}
+
 impl PartialEq for Sprite {
     fn eq(&self, other: &Self) -> bool {
         self.id() == other.id() && self.frame == other.frame
