@@ -80,6 +80,11 @@ once_cell.workspace = true
 arrayvec.workspace = true
 encase.workspace = true
 
+# used for ui
+downcast-rs = { version = "1.2.1", optional = true }
+scene-graph = { version = "0.1.0", optional = true }
+smallvec = { workspace = true, optional = true }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { version = "2.1.1", optional = true, features = ["js"] }
 
@@ -90,7 +95,7 @@ shipyard = "0.7.3"
 static_assertions = "1.1.0"
 
 [features]
-default = ["random", "draw", "draw-default-font", "audio", "assets", "logs"]
+default = ["random", "draw", "draw-default-font", "audio", "assets", "logs", "ui"]
 # enable loggin
 logs = ["corelib/logs"]
 # enables gamepad api
@@ -109,3 +114,5 @@ assets = ["dep:assets"]
 draw-default-font = ["draw?/default-font"]
 # post process effects
 postfx = []
+# ui elements
+ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec"]

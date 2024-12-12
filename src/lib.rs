@@ -1,3 +1,4 @@
+pub mod tween;
 pub mod utils;
 
 #[cfg(feature = "postfx")]
@@ -5,7 +6,9 @@ pub mod postfx;
 
 #[cfg(feature = "random")]
 pub mod random;
-pub mod tween;
+
+#[cfg(feature = "ui")]
+pub mod ui;
 
 #[doc(inline)]
 pub use corelib::*;
