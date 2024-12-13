@@ -8,8 +8,8 @@ use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
 use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager};
 
-struct MoveLeft;
-struct MoveRight;
+// events
+struct MoveTo(f32);
 struct Stopped;
 
 struct State {
@@ -22,52 +22,29 @@ impl State {
     fn new() -> Self {
         let mut ui = UIManager::default();
 
-        let mut container = Transform2D::default();
-        container
-            .set_pivot(Vec2::splat(0.5))
-            .set_anchor(Vec2::splat(0.5))
-            .set_size(Vec2::splat(300.0))
-            .set_translation(window_size() * 0.5);
-
-        let container_handler = ui.add(
-            Element {
-                moving: false,
-                target: 0.0,
-                color: Color::SILVER,
-            },
-            container,
+        // Create our element
+        let container = ui.add(
+            Element::default(),
+            Transform2D::builder()
+                .set_size(Vec2::splat(300.0))
+                .set_translation(window_size() * 0.5)
+                .into(),
         );
 
-        // move to the left
-        let _ = ui.on(container_handler, |evt: &MoveLeft, data| {
+        // -- Define element event listeners
+        // move event
+        let _listener = ui.on(container, |evt: &MoveTo, data| {
             data.node.moving = true;
-            data.node.target = 200.0;
-        });
-
-        // move to the right
-        let _ = ui.on(container_handler, |evt: &MoveRight, data| {
-            data.node.moving = true;
-            data.node.target = 600.0;
+            data.node.target = evt.0;
         });
 
         // change color when stopped
-        let _ = ui.on(container_handler, |evt: &Stopped, data| {
+        let _listener = ui.on(container, |evt: &Stopped, data| {
             data.node.color = Color::PINK;
         });
 
-        // buttons
-        let mut child_transform = Transform2D::default();
-        child_transform
-            .set_translation(Vec2::splat(150.0))
-            .set_size(Vec2::splat(50.0));
-
         let cam = Camera2D::new(window_size(), Default::default());
-
-        Self {
-            cam,
-            ui,
-            container: container_handler,
-        }
+        Self { cam, ui, container }
     }
 }
 
@@ -76,29 +53,38 @@ fn main() -> Result<(), String> {
 }
 
 fn update(state: &mut State) {
+    // Update camera parameters
     state.cam.set_size(window_size());
     state.cam.set_position(window_size() * 0.5);
     state.cam.update();
 
+    // update UI Manager
     state.ui.update(&state.cam, &mut ());
 
+    // left click move to the left
     if state.ui.clicked(state.container) {
-        state.ui.push_event(MoveLeft);
+        state.ui.push_event(MoveTo(200.0));
     }
 
+    // right click move to the right
     if state.ui.clicked_by(state.container, MouseButton::Right) {
-        state.ui.push_event(MoveRight);
+        state.ui.push_event(MoveTo(600.0));
     }
 
+    // just draw as usual
     let mut draw = create_draw_2d();
     draw.set_camera(&state.cam);
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
+    // this will draw the UIManager elements
     state.ui.render(&mut draw, &mut ());
 
+    // draw to screen as usual
     gfx::render_to_frame(&draw).unwrap();
 }
 
+// Widget
+#[derive(Default)]
 struct Element {
     moving: bool,
     target: f32,

@@ -1,10 +1,8 @@
-use corelib::math::Mat4;
 use draw::Camera2D;
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
-use rkit::time;
 use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager};
 
 #[derive(Default)]
@@ -20,28 +18,19 @@ impl State {
         let mut ui = UIManager::default();
 
         // Parent container
-        let mut parent_transform = Transform2D::default();
-        parent_transform
-            .set_pivot(Vec2::splat(0.5))
-            .set_anchor(Vec2::splat(0.5))
-            .set_size(Vec2::splat(300.0))
-            .set_translation(window_size() * 0.5);
-
         let parent_handler = ui.add(
             Container {
                 fill: None,
                 stroke: Some(Color::WHITE),
                 clicks: 0,
             },
-            parent_transform,
+            Transform2D::builder()
+                .set_size(Vec2::splat(300.0))
+                .set_translation(window_size() * 0.5)
+                .into(),
         );
 
         // Child container
-        let mut child_transform = Transform2D::default();
-        child_transform
-            .set_translation(Vec2::splat(150.0))
-            .set_size(Vec2::splat(50.0));
-
         let child_handler = ui
             .add_to(
                 parent_handler,
@@ -50,7 +39,10 @@ impl State {
                     stroke: None,
                     clicks: 0,
                 },
-                child_transform,
+                Transform2D::builder()
+                    .set_translation(Vec2::splat(150.0))
+                    .set_size(Vec2::splat(50.0))
+                    .into(),
             )
             .unwrap();
 
@@ -70,12 +62,15 @@ fn main() -> Result<(), String> {
 }
 
 fn update(state: &mut State) {
+    // update camera
     state.cam.set_size(window_size());
     state.cam.set_position(window_size() * 0.5);
     state.cam.update();
 
+    // update ui manager
     state.ui.update(&state.cam, &mut ());
 
+    // color elements on hover
     let child_color = state
         .ui
         .cursor_hover(state.child)
@@ -90,6 +85,7 @@ fn update(state: &mut State) {
         .unwrap_or(Color::WHITE);
     state.ui.element_mut(state.parent).unwrap().stroke = Some(parent_color);
 
+    // add clicks to the element (this can be done via events to, check ui_events)
     if state.ui.clicked(state.parent) {
         state.ui.element_mut(state.parent).unwrap().clicks += 1;
     }
@@ -98,11 +94,12 @@ fn update(state: &mut State) {
         state.ui.element_mut(state.child).unwrap().clicks += 1;
     }
 
+    // draw as usual
     let mut draw = create_draw_2d();
     draw.set_camera(&state.cam);
-
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
+    // draw ui manager elements
     state.ui.render(&mut draw, &mut ());
 
     gfx::render_to_frame(&draw).unwrap();
@@ -115,15 +112,6 @@ struct Container {
 }
 
 impl<S> UIElement<S> for Container {
-    fn update(
-        &mut self,
-        transform: &mut Transform2D,
-        _state: &mut S,
-        _events: &mut UIEventQueue<S>,
-    ) {
-        // transform.set_rotation(time::elapsed_f32().sin() * 2.0);
-    }
-
     fn render(&mut self, transform: &Transform2D, draw: &mut Draw2D, state: &S) {
         {
             let mut rect = draw.rect(Vec2::ZERO, transform.size());

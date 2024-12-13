@@ -2,7 +2,7 @@ use encase::ShaderType;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// Represents a color in the sRGB space (alpha is linear)
-#[derive(Default, Debug, Clone, Copy, PartialEq, ShaderType)]
+#[derive(Debug, Clone, Copy, PartialEq, ShaderType)]
 #[align(16)]
 pub struct Color {
     /// Red value
@@ -13,6 +13,12 @@ pub struct Color {
     pub b: f32,
     /// Alpha value
     pub a: f32,
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Color::WHITE
+    }
 }
 
 impl Color {

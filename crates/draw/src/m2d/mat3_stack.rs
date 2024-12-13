@@ -65,6 +65,10 @@ impl Default for Transform2D {
 }
 
 impl Transform2D {
+    pub fn builder() -> Transform2DBuilder {
+        Transform2DBuilder::default()
+    }
+
     pub fn new() -> Self {
         Self {
             translation: Default::default(),
@@ -171,6 +175,63 @@ impl Transform2D {
         self.scale = scale;
         self.dirty = true;
         self
+    }
+}
+
+#[derive(Default)]
+pub struct Transform2DBuilder {
+    transform: Transform2D,
+}
+
+impl Transform2DBuilder {
+    pub fn set_translation(mut self, position: Vec2) -> Self {
+        self.transform.set_translation(position);
+        self
+    }
+
+    pub fn set_rotation(mut self, rotation: f32) -> Self {
+        self.transform.set_rotation(rotation);
+        self
+    }
+
+    pub fn set_scale(mut self, scale: Vec2) -> Self {
+        self.transform.set_scale(scale);
+        self
+    }
+
+    pub fn set_size(mut self, size: Vec2) -> Self {
+        self.transform.set_size(size);
+        self
+    }
+
+    pub fn set_anchor(mut self, anchor: Vec2) -> Self {
+        self.transform.set_anchor(anchor);
+        self
+    }
+
+    pub fn set_pivot(mut self, pivot: Vec2) -> Self {
+        self.transform.set_pivot(pivot);
+        self
+    }
+
+    pub fn set_flip(mut self, flip: BVec2) -> Self {
+        self.transform.set_flip(flip);
+        self
+    }
+
+    pub fn set_skew(mut self, skew: Vec2) -> Self {
+        self.transform.set_skew(skew);
+        self
+    }
+
+    pub fn build(self) -> Transform2D {
+        self.transform
+    }
+}
+
+impl From<Transform2DBuilder> for Transform2D {
+    fn from(builder: Transform2DBuilder) -> Self {
+        builder.build()
     }
 }
 
