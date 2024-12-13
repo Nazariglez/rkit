@@ -14,6 +14,13 @@ use crate::ui::events::{
     EventHandlerFn, EventHandlerFnOnce, EventListener, ListenerType, UIEventQueue,
 };
 
+pub struct UIEventData<'a, T, S: 'static> {
+    pub node: &'a mut T,
+    pub transform: &'a mut Transform2D,
+    pub state: &'a mut S,
+    pub events: &'a mut UIEventQueue<S>,
+}
+
 pub struct UIManager<S: 'static> {
     scene_graph: SceneGraph<Node<S>>,
     events: UIEventQueue<S>,
@@ -242,6 +249,8 @@ impl<S> UIManager<S> {
     }
 
     pub fn update(&mut self, cam: &dyn BaseCam2D, state: &mut S) {
+        self.dispatch_events(state);
+
         // update matrices
         self.set_camera(cam);
 
@@ -261,7 +270,6 @@ impl<S> UIManager<S> {
         });
 
         self.process_inputs();
-        self.dispatch_events(state);
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
@@ -361,7 +369,7 @@ impl<S> UIManager<S> {
     where
         T: UIElement<S> + 'static,
         E: 'static,
-        F: FnMut(&mut T, &E, &mut S, &mut UIEventQueue<S>) + 'static,
+        F: FnMut(&E, UIEventData<T, S>) + 'static,
     {
         let handler_idx = handler
             .raw
@@ -375,9 +383,15 @@ impl<S> UIManager<S> {
             .value
             .handlers;
         let k = TypeId::of::<E>();
-        let cb: Box<EventHandlerFn<E, S>> = Box::new(move |t, e, s, q| {
-            let tt = t.downcast_mut::<T>().unwrap();
-            cb(tt, e, s, q);
+        let cb: Box<EventHandlerFn<E, S>> = Box::new(move |ui_e, evt, transform, state, events| {
+            let node = ui_e.downcast_mut::<T>().unwrap();
+            let data = UIEventData {
+                node,
+                transform,
+                state,
+                events,
+            };
+            cb(evt, data);
         });
 
         self.listener_id += 1;
@@ -665,7 +679,7 @@ fn call_event<S, E>(
                 ListenerType::Mut(cb) => {
                     let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>();
                     if let Some(cb) = cb {
-                        cb(node.inner.as_mut(), evt, state, queue);
+                        cb(node.inner.as_mut(), evt, &mut node.transform, state, queue);
                     }
                 }
             }
