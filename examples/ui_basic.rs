@@ -1,9 +1,8 @@
-use draw::Camera2D;
 use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Draw2D, Transform2D};
+use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
-use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager};
+use rkit::ui::{UIElement, UIHandler, UIManager};
 
 #[derive(Default)]
 struct State {
@@ -72,18 +71,18 @@ fn update(state: &mut State) {
     state.ui.update(&state.cam, &mut ());
 
     // color elements on hover
-    let child_color = state
-        .ui
-        .cursor_hover(state.child)
-        .then_some(Color::GREEN)
-        .unwrap_or(Color::ORANGE);
+    let child_color = if state.ui.cursor_hover(state.child) {
+        Color::GREEN
+    } else {
+        Color::ORANGE
+    };
     state.ui.element_mut(state.child).unwrap().fill = Some(child_color);
 
-    let parent_color = state
-        .ui
-        .cursor_hover(state.parent)
-        .then_some(Color::GREEN)
-        .unwrap_or(Color::WHITE);
+    let parent_color = if state.ui.cursor_hover(state.parent) {
+        Color::GREEN
+    } else {
+        Color::WHITE
+    };
     state.ui.element_mut(state.parent).unwrap().stroke = Some(parent_color);
 
     // add clicks to the element (this can be done via events to, check ui_events)

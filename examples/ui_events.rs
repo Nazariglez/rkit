@@ -1,16 +1,14 @@
-use corelib::input::MouseButton;
-use corelib::math::{vec2, FloatExt};
-use corelib::time;
-use draw::Camera2D;
 use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Draw2D, Transform2D};
+use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
+use rkit::input::MouseButton;
+use rkit::math::{vec2, FloatExt, Vec2};
+use rkit::time;
 use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager};
 
 // events
 struct MoveTo(f32);
-struct Stopped;
+struct Stop;
 
 struct State {
     cam: Camera2D,
@@ -37,10 +35,12 @@ impl State {
         let _listener = ui.on(container, |evt: &MoveTo, data| {
             data.node.moving = true;
             data.node.target = evt.0;
+            data.node.color = Color::SILVER;
         });
 
         // change color when stopped
-        let _listener = ui.on(container, |evt: &Stopped, data| {
+        let _listener = ui.on(container, |evt: &Stop, data| {
+            data.node.moving = false;
             data.node.color = Color::PINK;
         });
 
@@ -98,15 +98,13 @@ impl<S> UIElement<S> for Element {
             return;
         }
 
-        self.color = Color::SILVER;
         let pos = transform.position();
         let offset = pos.x.lerp(self.target, time::delta_f32() * 4.0);
         transform.set_translation(vec2(offset, pos.y));
 
         let distance = (transform.position().x - self.target).abs();
         if distance < 1.0 {
-            self.moving = false;
-            events.send(Stopped);
+            events.send(Stop);
         }
     }
 
