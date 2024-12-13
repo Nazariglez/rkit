@@ -6,6 +6,8 @@ pub trait BaseCam2D {
     fn transform(&self) -> Mat3;
     fn inverse_transform(&self) -> Mat3;
     fn size(&self) -> Vec2;
+    fn local_to_screen(&self, point: Vec2) -> Vec2;
+    fn screen_to_local(&self, point: Vec2) -> Vec2;
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -98,6 +100,28 @@ impl BaseCam2D for Camera2D {
 
     fn size(&self) -> Vec2 {
         self.size
+    }
+
+    fn local_to_screen(&self, point: Vec2) -> Vec2 {
+        let half = self.size() * 0.5;
+        let pos = self.transform() * vec3(point.x, point.y, 1.0);
+        let pos = self.projection() * vec4(pos.x, pos.y, pos.z, 1.0);
+        vec2(half.x + (half.x * pos.x), half.y + (half.y * -pos.y))
+    }
+
+    fn screen_to_local(&self, point: Vec2) -> Vec2 {
+        // normalized coordinates
+        let norm = point / self.size();
+        let pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
+
+        // projected position
+        let pos = self
+            .inverse_projection()
+            .project_point3(vec3(pos.x, pos.y, 1.0));
+
+        // local position
+        self.inverse_transform()
+            .transform_point2(vec2(pos.x, pos.y))
     }
 }
 
@@ -209,28 +233,14 @@ impl Camera2D {
     pub fn local_to_screen(&self, point: Vec2) -> Vec2 {
         debug_assert!(!self.dirty_projection);
         debug_assert!(!self.dirty_transform);
-        let half = self.size * 0.5;
-        let pos = self.transform * vec3(point.x, point.y, 1.0);
-        let pos = self.projection * vec4(pos.x, pos.y, pos.z, 1.0);
-        vec2(half.x + (half.x * pos.x), half.y + (half.y * -pos.y))
+        BaseCam2D::local_to_screen(self, point)
     }
 
     /// Translates a screen point to local coordinates
     pub fn screen_to_local(&self, point: Vec2) -> Vec2 {
         debug_assert!(!self.dirty_projection);
         debug_assert!(!self.dirty_transform);
-
-        // normalized coordinates
-        let norm = point / self.size;
-        let pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-
-        // projected position
-        let pos = self
-            .inverse_projection
-            .project_point3(vec3(pos.x, pos.y, 1.0));
-
-        // local position
-        self.inverse_transform.transform_point2(vec2(pos.x, pos.y))
+        BaseCam2D::screen_to_local(self, point)
     }
 
     pub fn bounds(&self) -> Rect {

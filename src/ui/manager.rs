@@ -1,7 +1,9 @@
-use corelib::input::{KeyCode, MouseButton};
-use corelib::math::Vec2;
-use draw::{BaseCam2D, Camera2D, Draw2D, Transform2D};
-use rustc_hash::FxHashMap;
+use corelib::input::{
+    mouse_btns_down, mouse_btns_pressed, mouse_btns_released, mouse_position, KeyCode, MouseButton,
+};
+use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
+use draw::{BaseCam2D, Draw2D, Transform2D};
+use rustc_hash::{FxHashMap, FxHashSet};
 use scene_graph::{NodeIndex, SceneGraph};
 use smallvec::SmallVec;
 use std::any::TypeId;
@@ -20,20 +22,41 @@ pub struct UIManager<S: 'static> {
 
     // used to avoid allocations when `once` events expire
     to_remove_cb: Vec<usize>,
+
+    // matrix
+    projection: Mat4,
+    inverse_projection: Mat4,
+    root_matrix: Mat3,
+    inverse_root_matrix: Mat3,
+    size: Vec2,
+
+    // input
+    enable_input: bool,
+    screen_mouse_pos: Vec2,
+    last_frame_hover: FxHashSet<UIRawHandler>,
+    hover: FxHashSet<UIRawHandler>,
+    last_frame_down: FxHashSet<(UIRawHandler, MouseButton)>,
+    down: FxHashSet<(UIRawHandler, MouseButton)>,
+
+    pressed: FxHashSet<(UIRawHandler, MouseButton)>,
+    released: FxHashSet<(UIRawHandler, MouseButton)>,
+    start_click: FxHashSet<(UIRawHandler, MouseButton)>,
+    clicked: FxHashSet<(UIRawHandler, MouseButton)>,
 }
 
 impl<S> Default for UIManager<S> {
     fn default() -> Self {
-        Self::new()
+        Self::new(true)
     }
 }
 impl<S> UIManager<S> {
-    pub fn new() -> Self {
-        let mut container = UIRoot;
+    pub fn new(enable_input: bool) -> Self {
         let node = Node {
             raw_id: 0,
-            inner: Box::new(container),
+            inner: Box::new(UIRoot),
             transform: Default::default(),
+            matrix: Mat3::IDENTITY,
+            inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: FxHashMap::default(),
         };
 
@@ -44,20 +67,36 @@ impl<S> UIManager<S> {
             node_id: 0,
 
             to_remove_cb: vec![],
+            projection: Default::default(),
+            inverse_projection: Default::default(),
+            root_matrix: Default::default(),
+            inverse_root_matrix: Default::default(),
+            size: Vec2::ZERO,
+
+            enable_input,
+            screen_mouse_pos: Default::default(),
+            last_frame_hover: Default::default(),
+            hover: Default::default(),
+            last_frame_down: Default::default(),
+            down: Default::default(),
+            pressed: Default::default(),
+            released: Default::default(),
+            start_click: Default::default(),
+            clicked: Default::default(),
         }
     }
 
-    pub fn set_camera(&mut self, cam: &dyn BaseCam2D) {
-        // TODO: camera or projection???
-    }
+    fn set_camera(&mut self, cam: &dyn BaseCam2D) {
+        self.size = cam.size();
+        self.projection = cam.projection();
+        self.inverse_projection = cam.inverse_projection();
+        self.root_matrix = cam.transform();
+        self.inverse_root_matrix = cam.inverse_transform();
 
-    // pub fn set_position(&mut self, pos: Vec2) {
-    //     self.scene_graph.root.transform.set_translation(pos);
-    // }
-    //
-    // pub fn set_size(&mut self, size: Vec2) {
-    //     self.scene_graph.root.transform.set_translation(size);
-    // }
+        if self.enable_input {
+            self.screen_mouse_pos = mouse_position();
+        }
+    }
 
     pub fn add<T: UIElement<S> + 'static>(
         &mut self,
@@ -69,6 +108,8 @@ impl<S> UIManager<S> {
             raw_id: self.node_id,
             inner: Box::new(element),
             transform,
+            matrix: Mat3::IDENTITY,
+            inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
         };
 
@@ -98,6 +139,8 @@ impl<S> UIManager<S> {
             raw_id: self.node_id,
             inner: Box::new(element),
             transform,
+            matrix: Mat3::IDENTITY,
+            inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
         };
         self.scene_graph
@@ -112,13 +155,113 @@ impl<S> UIManager<S> {
             .map_err(|e| e.to_string())
     }
 
-    pub fn update(&mut self, state: &mut S) {
+    fn dispatch_events(&mut self, state: &mut S) {
+        while let Some(event_cb) = self.events.take_event() {
+            event_cb(
+                &mut self.scene_graph,
+                &mut self.events,
+                state,
+                &mut self.to_remove_cb,
+            );
+        }
+    }
+
+    fn process_inputs(&mut self) {
+        if !self.enable_input {
+            return;
+        }
+
+        self.clicked.clear();
+        std::mem::swap(&mut self.last_frame_hover, &mut self.hover);
+        self.hover.clear();
+        std::mem::swap(&mut self.last_frame_down, &mut self.down);
+        self.down.clear();
+
+        let down_btns = mouse_btns_down();
+        let pressed_btns = mouse_btns_pressed();
+        let released_btns = mouse_btns_released();
+        for (_parent, node) in &self.scene_graph {
+            let local = self.node_screen_to_local(node);
+            let contains = self.node_contains_point(local, node);
+            if contains {
+                let raw = UIRawHandler {
+                    raw_id: node.raw_id,
+                    idx: None,
+                };
+
+                self.hover.insert(raw);
+                down_btns.iter().for_each(|btn| {
+                    self.down.insert((raw, btn));
+                });
+
+                pressed_btns.iter().for_each(|btn| {
+                    let id = (raw, btn);
+                    self.pressed.insert(id);
+                    self.start_click.insert(id);
+                });
+
+                released_btns.iter().for_each(|btn| {
+                    let id = (raw, btn);
+                    self.released.insert(id);
+
+                    if self.start_click.contains(&id) {
+                        self.clicked.insert(id);
+                    }
+                });
+            }
+        }
+
+        // clean any node that was pressed with this button
+        released_btns.iter().for_each(|btn| {
+            self.start_click.retain(|(_, b)| btn != *b);
+        });
+    }
+
+    pub fn push_event<E>(&mut self, evt: E)
+    where
+        E: Send + Sync + 'static,
+    {
+        self.events.push(evt);
+    }
+
+    pub fn push_event_to<H, E>(&mut self, handler: H, evt: E)
+    where
+        H: Into<UIRawHandler> + 'static,
+        E: Send + Sync + 'static,
+    {
+        self.events.push_to(handler, evt);
+    }
+
+    fn node_screen_to_local(&self, node: &Node<S>) -> Vec2 {
+        node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection)
+    }
+
+    fn node_contains_point(&self, point: Vec2, node: &Node<S>) -> bool {
+        let size = node.transform.size();
+        point.x >= 0.0 && point.y >= 0.0 && point.x < size.x && point.y < size.y
+    }
+
+    pub fn update(&mut self, cam: &dyn BaseCam2D, state: &mut S) {
+        // update matrices
+        self.set_camera(cam);
+
+        // we got root.matrix from the camera not from the node
         self.scene_graph.root.transform.update();
+        self.scene_graph.root.matrix = self.root_matrix;
+
+        // update and calculate matrices for the scene-graph
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
             node.inner
                 .update(&mut node.transform, state, &mut self.events); // TODO: pass parent?
-            node.transform.update();
+            let matrix = parent.matrix * node.transform.updated_mat3();
+            if matrix != node.matrix {
+                node.matrix = matrix;
+                node.inverse_matrix = matrix.inverse();
+            }
         });
+
+        self.process_inputs();
+        self.dispatch_events(state);
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
@@ -331,13 +474,171 @@ impl<S> UIManager<S> {
         call_event(node, &evt, state, &mut self.events, &mut self.to_remove_cb);
         Ok(())
     }
+
+    pub fn cursor_hover<H>(&mut self, handler: H) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        let idx = match handler.into().idx {
+            Some(idx) => idx,
+            None => return false,
+        };
+        let node = match self.scene_graph.get(idx) {
+            Some(node) => node,
+            None => return false,
+        };
+
+        let raw = UIRawHandler {
+            raw_id: node.value.raw_id,
+            idx: None,
+        };
+
+        self.hover.contains(&raw)
+    }
+
+    pub fn pressed_by<H>(&mut self, handler: H, btn: MouseButton) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        let idx = match handler.into().idx {
+            Some(idx) => idx,
+            None => return false,
+        };
+        let node = match self.scene_graph.get(idx) {
+            Some(node) => node,
+            None => return false,
+        };
+
+        let raw = UIRawHandler {
+            raw_id: node.value.raw_id,
+            idx: None,
+        };
+
+        let id = (raw, btn);
+        self.pressed.contains(&id)
+    }
+
+    pub fn pressed<H>(&mut self, handler: H) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        self.pressed_by(handler, MouseButton::Left)
+    }
+
+    pub fn released_by<H>(&mut self, handler: H, btn: MouseButton) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        let idx = match handler.into().idx {
+            Some(idx) => idx,
+            None => return false,
+        };
+        let node = match self.scene_graph.get(idx) {
+            Some(node) => node,
+            None => return false,
+        };
+
+        let raw = UIRawHandler {
+            raw_id: node.value.raw_id,
+            idx: None,
+        };
+
+        let id = (raw, btn);
+        self.released.contains(&id)
+    }
+
+    pub fn released<H>(&mut self, handler: H) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        self.released_by(handler, MouseButton::Left)
+    }
+
+    pub fn down_by<H>(&mut self, handler: H, btn: MouseButton) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        let idx = match handler.into().idx {
+            Some(idx) => idx,
+            None => return false,
+        };
+        let node = match self.scene_graph.get(idx) {
+            Some(node) => node,
+            None => return false,
+        };
+
+        let raw = UIRawHandler {
+            raw_id: node.value.raw_id,
+            idx: None,
+        };
+
+        let id = (raw, btn);
+        self.down.contains(&id)
+    }
+
+    pub fn down<H>(&mut self, handler: H) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        self.down_by(handler, MouseButton::Left)
+    }
+
+    pub fn clicked_by<H>(&mut self, handler: H, btn: MouseButton) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        let idx = match handler.into().idx {
+            Some(idx) => idx,
+            None => return false,
+        };
+        let node = match self.scene_graph.get(idx) {
+            Some(node) => node,
+            None => return false,
+        };
+
+        let raw = UIRawHandler {
+            raw_id: node.value.raw_id,
+            idx: None,
+        };
+
+        let id = (raw, btn);
+        self.clicked.contains(&id)
+    }
+
+    pub fn clicked<H>(&mut self, handler: H) -> bool
+    where
+        H: Into<UIRawHandler> + 'static,
+    {
+        self.clicked_by(handler, MouseButton::Left)
+    }
 }
 
 pub struct Node<S> {
     raw_id: u64,
     inner: Box<dyn UIElement<S>>,
     transform: Transform2D,
+    matrix: Mat3,
+    inverse_matrix: Mat3,
     handlers: FxHashMap<TypeId, SmallVec<EventListener, 10>>,
+}
+
+impl<S> Node<S> {
+    pub fn screen_to_local(
+        &self,
+        screen_pos: Vec2,
+        screen_size: Vec2,
+        inverse_projection: Mat4,
+    ) -> Vec2 {
+        // normalized coordinates
+        let norm = screen_pos / screen_size;
+        let mouse_pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
+
+        // projected position
+        let pos = inverse_projection.project_point3(vec3(mouse_pos.x, mouse_pos.y, 1.0));
+
+        // local position
+        self.inverse_matrix.transform_point2(vec2(pos.x, pos.y))
+    }
 }
 
 fn call_event<S, E>(
@@ -413,16 +714,6 @@ pub(super) fn iter_call_event<E, S>(
     }
 }
 
-#[derive(Copy, Clone)]
-pub enum UIInput {
-    KeyPressed(KeyCode),
-    KeyReleased(KeyCode),
-    Char(char),
-    MouseBtnPressed(MouseButton),
-    MouseBtnReleased(MouseButton),
-    MouseMove { x: f32, y: f32 },
-}
-
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct UIHandler<T> {
     raw: UIRawHandler,
@@ -460,7 +751,7 @@ impl<T> UIHandler<T> {
     }
 }
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default, Hash)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default, Hash, Debug)]
 pub struct UIRawHandler {
     pub(super) raw_id: u64,
     pub(super) idx: Option<NodeIndex>,
