@@ -26,6 +26,7 @@ impl State {
         let container = ui.add(
             Element::default(),
             Transform2D::builder()
+                .set_anchor(Vec2::splat(0.5))
                 .set_size(Vec2::splat(300.0))
                 .set_translation(window_size() * 0.5)
                 .into(),

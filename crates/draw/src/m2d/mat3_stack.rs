@@ -224,7 +224,8 @@ impl Transform2DBuilder {
         self
     }
 
-    pub fn build(self) -> Transform2D {
+    pub fn build(mut self) -> Transform2D {
+        self.transform.update();
         self.transform
     }
 }
