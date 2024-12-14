@@ -18,7 +18,6 @@ use crate::ui::UIInput;
 
 pub struct UIEventData<'a, T, S: 'static> {
     pub node: &'a mut T,
-    pub transform: &'a mut Transform2D,
     pub state: &'a mut S,
     pub events: &'a mut UIEventQueue<S>,
 }
@@ -62,8 +61,9 @@ impl<S> UIManager<S> {
     pub fn new(enable_input: bool) -> Self {
         let node = Node {
             raw_id: 0,
-            inner: Box::new(UIRoot),
-            transform: Default::default(),
+            inner: Box::new(UIRoot {
+                transform: Transform2D::default(),
+            }),
             matrix: Mat3::IDENTITY,
             inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: FxHashMap::default(),
@@ -107,16 +107,11 @@ impl<S> UIManager<S> {
         }
     }
 
-    pub fn add<T: UIElement<S> + 'static>(
-        &mut self,
-        element: T,
-        transform: Transform2D,
-    ) -> UIHandler<T> {
+    pub fn add<T: UIElement<S> + 'static>(&mut self, element: T) -> UIHandler<T> {
         self.node_id += 1;
         let node = Node {
             raw_id: self.node_id,
             inner: Box::new(element),
-            transform,
             matrix: Mat3::IDENTITY,
             inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
@@ -147,7 +142,6 @@ impl<S> UIManager<S> {
         let node = Node {
             raw_id: self.node_id,
             inner: Box::new(element),
-            transform,
             matrix: Mat3::IDENTITY,
             inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
@@ -198,7 +192,7 @@ impl<S> UIManager<S> {
             let point =
                 node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
             let contains = {
-                let size = node.transform.size();
+                let size = node.inner.transform().size();
                 point.x >= 0.0 && point.y >= 0.0 && point.x < size.x && point.y < size.y
             };
 
@@ -278,14 +272,13 @@ impl<S> UIManager<S> {
         self.set_camera(cam);
 
         // we got root.matrix from the camera not from the node
-        self.scene_graph.root.transform.update();
+        self.scene_graph.root.inner.transform().update();
         self.scene_graph.root.matrix = self.root_matrix;
 
         // update and calculate matrices for the scene-graph
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
-            node.inner
-                .update(&mut node.transform, state, &mut self.events); // TODO: pass parent?
-            let matrix = parent.matrix * node.transform.updated_mat3();
+            node.inner.update(state, &mut self.events); // TODO: pass parent?
+            let matrix = parent.matrix * node.inner.transform().updated_mat3();
             if matrix != node.matrix {
                 node.matrix = matrix;
                 node.inverse_matrix = matrix.inverse();
@@ -296,43 +289,15 @@ impl<S> UIManager<S> {
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
-        draw.push_matrix(self.scene_graph.root.transform.as_mat3());
-        self.scene_graph
-            .root
-            .inner
-            .render(&self.scene_graph.root.transform, draw, state);
+        draw.push_matrix(self.scene_graph.root.inner.transform().as_mat3());
+        self.scene_graph.root.inner.render(draw, state);
         draw.pop_matrix();
 
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
-            draw.push_matrix(parent.transform.as_mat3() * node.transform.as_mat3());
-            node.inner.render(&node.transform, draw, state);
+            draw.push_matrix(parent.inner.transform().as_mat3() * node.inner.transform().as_mat3());
+            node.inner.render(draw, state);
             draw.pop_matrix();
         });
-    }
-    pub fn get<T>(&self, handler: UIHandler<T>) -> Option<(&T, &Transform2D)>
-    where
-        T: UIElement<S> + 'static,
-    {
-        let idx = handler.raw.idx?;
-        self.scene_graph.get(idx).map(|node| {
-            (
-                node.value.inner.downcast_ref::<T>().unwrap(),
-                &node.value.transform,
-            )
-        })
-    }
-
-    pub fn get_mut<T>(&mut self, handler: UIHandler<T>) -> Option<(&mut T, &mut Transform2D)>
-    where
-        T: UIElement<S> + 'static,
-    {
-        let idx = handler.raw.idx?;
-        self.scene_graph.get_mut(idx).map(|node| {
-            (
-                node.value.inner.downcast_mut::<T>().unwrap(),
-                &mut node.value.transform,
-            )
-        })
     }
 
     pub fn element<T>(&self, handler: UIHandler<T>) -> Option<&T>
@@ -353,24 +318,6 @@ impl<S> UIManager<S> {
         self.scene_graph
             .get_mut(idx)
             .map(|node| node.value.inner.downcast_mut::<T>().unwrap())
-    }
-
-    pub fn transform<T>(&self, handler: UIHandler<T>) -> Option<&Transform2D>
-    where
-        T: UIElement<S> + 'static,
-    {
-        let idx = handler.raw.idx?;
-        self.scene_graph.get(idx).map(|node| &node.value.transform)
-    }
-
-    pub fn transform_mut<T>(&mut self, handler: UIHandler<T>) -> Option<&mut Transform2D>
-    where
-        T: UIElement<S> + 'static,
-    {
-        let idx = handler.raw.idx?;
-        self.scene_graph
-            .get_mut(idx)
-            .map(|node| &mut node.value.transform)
     }
 
     pub fn remove<T: UIElement<S> + 'static>(
@@ -406,11 +353,10 @@ impl<S> UIManager<S> {
             .value
             .handlers;
         let k = TypeId::of::<E>();
-        let cb: Box<EventHandlerFn<E, S>> = Box::new(move |ui_e, evt, transform, state, events| {
+        let cb: Box<EventHandlerFn<E, S>> = Box::new(move |ui_e, evt, state, events| {
             let node = ui_e.downcast_mut::<T>().unwrap();
             let data = UIEventData {
                 node,
-                transform,
                 state,
                 events,
             };
@@ -653,7 +599,6 @@ impl<S> UIManager<S> {
 pub struct Node<S> {
     raw_id: u64,
     inner: Box<dyn UIElement<S>>,
-    transform: Transform2D,
     matrix: Mat3,
     inverse_matrix: Mat3,
     handlers: FxHashMap<TypeId, SmallVec<EventListener, 10>>,
@@ -702,7 +647,7 @@ fn call_event<S, E>(
                 ListenerType::Mut(cb) => {
                     let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>();
                     if let Some(cb) = cb {
-                        cb(node.inner.as_mut(), evt, &mut node.transform, state, queue);
+                        cb(node.inner.as_mut(), evt, state, queue);
                     }
                 }
             }

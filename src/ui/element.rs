@@ -15,16 +15,19 @@ pub enum UIInput {
 }
 
 pub trait UIElement<S>: Downcast + Send + Sync {
-    // fn transform(&mut self) -> &mut Transform2D;
-    // fn init(&mut self, transform: &mut Transform2D, state: &mut S, events: &mut UIEventQueue<S>) {}
+    fn transform(&mut self) -> &mut Transform2D;
     fn input(&mut self, input: UIInput, state: &mut S, events: &mut UIEventQueue<S>) {}
-    fn update(&mut self, transform: &mut Transform2D, state: &mut S, events: &mut UIEventQueue<S>) {
-    }
-    fn render(&mut self, transform: &Transform2D, draw: &mut Draw2D, state: &S) {}
-    // fn clean(&mut self, transform: &mut Transform2D, state: &mut S, events: &mut UIEventQueue<S>) {}
+    fn update(&mut self, state: &mut S, events: &mut UIEventQueue<S>) {}
+    fn render(&mut self, draw: &mut Draw2D, state: &S) {}
 }
 
 impl_downcast!(UIElement<S>);
 
-pub struct UIRoot;
-impl<S> UIElement<S> for UIRoot {}
+pub struct UIRoot {
+    pub transform: Transform2D,
+}
+impl<S> UIElement<S> for UIRoot {
+    fn transform(&mut self) -> &mut Transform2D {
+        &mut self.transform
+    }
+}

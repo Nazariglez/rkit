@@ -6,7 +6,7 @@ use std::any::Any;
 use std::collections::VecDeque;
 
 pub(super) type EventHandlerFn<E, S> =
-    dyn FnMut(&mut dyn UIElement<S>, &E, &mut Transform2D, &mut S, &mut UIEventQueue<S>);
+    dyn FnMut(&mut dyn UIElement<S>, &E, &mut S, &mut UIEventQueue<S>);
 
 pub(super) type EventHandlerFnOnce<E, S> =
     dyn FnOnce(&mut dyn UIElement<S>, &E, &mut S, &mut UIEventQueue<S>);
