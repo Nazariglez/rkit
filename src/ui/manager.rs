@@ -3,7 +3,6 @@ use corelib::input::{
 };
 use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
-use log::warn;
 use rustc_hash::{FxHashMap, FxHashSet};
 use scene_graph::{NodeIndex, SceneGraph};
 use smallvec::SmallVec;
@@ -191,10 +190,7 @@ impl<S> UIManager<S> {
         for (_parent, node) in graph {
             let point =
                 node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
-            let contains = {
-                let size = node.inner.transform().size();
-                point.x >= 0.0 && point.y >= 0.0 && point.x < size.x && point.y < size.y
-            };
+            let contains = node.inner.input_box().contains(point);
 
             let raw = UIRawHandler {
                 raw_id: node.raw_id,
@@ -272,13 +268,13 @@ impl<S> UIManager<S> {
         self.set_camera(cam);
 
         // we got root.matrix from the camera not from the node
-        self.scene_graph.root.inner.transform().update();
+        self.scene_graph.root.inner.transform_mut().update();
         self.scene_graph.root.matrix = self.root_matrix;
 
         // update and calculate matrices for the scene-graph
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
             node.inner.update(state, &mut self.events); // TODO: pass parent?
-            let matrix = parent.matrix * node.inner.transform().updated_mat3();
+            let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
             if matrix != node.matrix {
                 node.matrix = matrix;
                 node.inverse_matrix = matrix.inverse();
