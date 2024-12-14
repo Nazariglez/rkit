@@ -3,6 +3,7 @@ use corelib::input::{
 };
 use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
+use log::warn;
 use rustc_hash::{FxHashMap, FxHashSet};
 use scene_graph::{NodeIndex, SceneGraph};
 use smallvec::SmallVec;
@@ -13,6 +14,7 @@ use crate::ui::element::{UIElement, UIRoot};
 use crate::ui::events::{
     EventHandlerFn, EventHandlerFnOnce, EventListener, ListenerType, UIEventQueue,
 };
+use crate::ui::UIInput;
 
 pub struct UIEventData<'a, T, S: 'static> {
     pub node: &'a mut T,
@@ -173,7 +175,7 @@ impl<S> UIManager<S> {
         }
     }
 
-    fn process_inputs(&mut self) {
+    fn process_inputs(&mut self, state: &mut S) {
         if !self.enable_input {
             return;
         }
@@ -184,19 +186,34 @@ impl<S> UIManager<S> {
         std::mem::swap(&mut self.last_frame_down, &mut self.down);
         self.down.clear();
 
+        // reverse the graph
+        let mut graph: SmallVec<(&mut Node<S>, &mut Node<S>), 120> =
+            self.scene_graph.iter_mut().collect();
+        graph.reverse();
+
         let down_btns = mouse_btns_down();
         let pressed_btns = mouse_btns_pressed();
         let released_btns = mouse_btns_released();
-        for (_parent, node) in &self.scene_graph {
-            let local = self.node_screen_to_local(node);
-            let contains = self.node_contains_point(local, node);
+        for (_parent, node) in graph {
+            let point =
+                node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
+            let contains = {
+                let size = node.transform.size();
+                point.x >= 0.0 && point.y >= 0.0 && point.x < size.x && point.y < size.y
+            };
+
+            let raw = UIRawHandler {
+                raw_id: node.raw_id,
+                idx: None,
+            };
+
             if contains {
-                let raw = UIRawHandler {
-                    raw_id: node.raw_id,
-                    idx: None,
-                };
+                if !self.last_frame_hover.contains(&raw) {
+                    node.inner.input(UIInput::Enter, state, &mut self.events);
+                }
 
                 self.hover.insert(raw);
+
                 down_btns.iter().for_each(|btn| {
                     self.down.insert((raw, btn));
                 });
@@ -205,17 +222,32 @@ impl<S> UIManager<S> {
                     let id = (raw, btn);
                     self.pressed.insert(id);
                     self.start_click.insert(id);
+                    node.inner
+                        .input(UIInput::Pressed(btn), state, &mut self.events);
                 });
 
                 released_btns.iter().for_each(|btn| {
                     let id = (raw, btn);
                     self.released.insert(id);
+                    node.inner
+                        .input(UIInput::Released(btn), state, &mut self.events);
 
                     if self.start_click.contains(&id) {
                         self.clicked.insert(id);
+                        node.inner
+                            .input(UIInput::Clicked(btn), state, &mut self.events);
                     }
                 });
+            } else {
+                if self.last_frame_hover.contains(&raw) {
+                    node.inner.input(UIInput::Leave, state, &mut self.events);
+                }
             }
+
+            released_btns.iter().for_each(|btn| {
+                node.inner
+                    .input(UIInput::GlobalRelease(btn), state, &mut self.events);
+            });
         }
 
         // clean any node that was pressed with this button
@@ -239,15 +271,6 @@ impl<S> UIManager<S> {
         self.events.push_to(handler, evt);
     }
 
-    fn node_screen_to_local(&self, node: &Node<S>) -> Vec2 {
-        node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection)
-    }
-
-    fn node_contains_point(&self, point: Vec2, node: &Node<S>) -> bool {
-        let size = node.transform.size();
-        point.x >= 0.0 && point.y >= 0.0 && point.x < size.x && point.y < size.y
-    }
-
     pub fn update(&mut self, cam: &dyn BaseCam2D, state: &mut S) {
         self.dispatch_events(state);
 
@@ -269,7 +292,7 @@ impl<S> UIManager<S> {
             }
         });
 
-        self.process_inputs();
+        self.process_inputs(state);
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
