@@ -119,7 +119,7 @@ impl<S> UIElement<S> for Container {
         &mut self.transform
     }
 
-    fn render(&mut self, draw: &mut Draw2D, state: &S) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &S) {
         {
             let mut rect = draw.rect(Vec2::ZERO, self.transform.size());
             if let Some(fill) = self.fill {

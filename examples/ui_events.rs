@@ -102,7 +102,7 @@ impl<S> UIElement<S> for Element {
         &mut self.transform
     }
 
-    fn update(&mut self, state: &mut S, events: &mut UIEventQueue<S>) {
+    fn update(&mut self, _state: &mut S, events: &mut UIEventQueue<S>) {
         if !self.moving {
             return;
         }
@@ -117,7 +117,7 @@ impl<S> UIElement<S> for Element {
         }
     }
 
-    fn render(&mut self, draw: &mut Draw2D, state: &S) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &S) {
         let size = self.transform.size();
         draw.rect(Vec2::ZERO, size).color(self.color);
 

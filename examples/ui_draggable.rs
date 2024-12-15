@@ -14,7 +14,7 @@ impl State {
         let mut ui = UIManager::default();
 
         // Create our element
-        let _ = ui.add(Element {
+        let _ = ui.add(DraggableNode {
             transform: Transform2D::builder()
                 .set_anchor(Vec2::splat(0.5))
                 .set_size(Vec2::splat(300.0))
@@ -55,12 +55,12 @@ fn update(state: &mut State) {
 
 // Widget
 #[derive(Default)]
-struct Element {
+struct DraggableNode {
     dragging: bool,
     transform: Transform2D,
 }
 
-impl<S> UIElement<S> for Element {
+impl<S> UIElement<S> for DraggableNode {
     fn transform(&self) -> &Transform2D {
         &self.transform
     }
@@ -69,7 +69,7 @@ impl<S> UIElement<S> for Element {
         &mut self.transform
     }
 
-    fn input(&mut self, input: UIInput, state: &mut S, events: &mut UIEventQueue<S>) {
+    fn input(&mut self, input: UIInput, _state: &mut S, _events: &mut UIEventQueue<S>) {
         match input {
             UIInput::DragStart { .. } => {
                 self.dragging = true;
@@ -85,7 +85,7 @@ impl<S> UIElement<S> for Element {
         }
     }
 
-    fn render(&mut self, draw: &mut Draw2D, state: &S) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &S) {
         let size = self.transform.size();
         let (txt, color) = if self.dragging {
             ("Dragging...", Color::GREEN)
