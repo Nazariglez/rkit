@@ -55,7 +55,7 @@ pub struct Transform2D {
     skew_cache_col_1: Option<Vec2>,
 
     dirty: bool,
-    mat3: Mat3,
+    pub(crate) mat3: Mat3,
 }
 
 impl Default for Transform2D {

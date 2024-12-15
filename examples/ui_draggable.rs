@@ -1,19 +1,12 @@
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
-use rkit::input::MouseButton;
-use rkit::math::{vec2, FloatExt, Vec2};
-use rkit::time;
-use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager};
-
-// events
-struct MoveTo(f32);
-struct Stop;
+use rkit::math::Vec2;
+use rkit::ui::{UIElement, UIEventQueue, UIInput, UIManager};
 
 struct State {
     cam: Camera2D,
     ui: UIManager<()>,
-    container: UIHandler<Element>,
 }
 
 impl State {
@@ -21,7 +14,7 @@ impl State {
         let mut ui = UIManager::default();
 
         // Create our element
-        let container = ui.add(Element {
+        let _ = ui.add(Element {
             transform: Transform2D::builder()
                 .set_anchor(Vec2::splat(0.5))
                 .set_size(Vec2::splat(300.0))
@@ -30,22 +23,8 @@ impl State {
             ..Default::default()
         });
 
-        // -- Define element event listeners
-        // move event
-        let _listener = ui.on(container, |evt: &MoveTo, data| {
-            data.node.moving = true;
-            data.node.target = evt.0;
-            data.node.color = Color::SILVER;
-        });
-
-        // change color when stopped
-        let _listener = ui.on(container, |evt: &Stop, data| {
-            data.node.moving = false;
-            data.node.color = Color::PINK;
-        });
-
         let cam = Camera2D::new(window_size(), Default::default());
-        Self { cam, ui, container }
+        Self { cam, ui }
     }
 }
 
@@ -62,16 +41,6 @@ fn update(state: &mut State) {
     // update UI Manager
     state.ui.update(&state.cam, &mut ());
 
-    // left click move to the left
-    if state.ui.clicked(state.container) {
-        state.ui.push_event(MoveTo(200.0));
-    }
-
-    // right click move to the right
-    if state.ui.clicked_by(state.container, MouseButton::Right) {
-        state.ui.push_event(MoveTo(600.0));
-    }
-
     // just draw as usual
     let mut draw = create_draw_2d();
     draw.set_camera(&state.cam);
@@ -87,9 +56,7 @@ fn update(state: &mut State) {
 // Widget
 #[derive(Default)]
 struct Element {
-    moving: bool,
-    target: f32,
-    color: Color,
+    dragging: bool,
     transform: Transform2D,
 }
 
@@ -102,30 +69,36 @@ impl<S> UIElement<S> for Element {
         &mut self.transform
     }
 
-    fn update(&mut self, state: &mut S, events: &mut UIEventQueue<S>) {
-        if !self.moving {
-            return;
-        }
-
-        let pos = self.transform.position();
-        let offset = pos.x.lerp(self.target, time::delta_f32() * 4.0);
-        self.transform.set_translation(vec2(offset, pos.y));
-
-        let distance = (self.transform.position().x - self.target).abs();
-        if distance < 1.0 {
-            events.send(Stop);
+    fn input(&mut self, input: UIInput, state: &mut S, events: &mut UIEventQueue<S>) {
+        match input {
+            UIInput::DragStart { .. } => {
+                self.dragging = true;
+            }
+            UIInput::Dragging { frame_delta, .. } => {
+                let node_pos = self.transform.position();
+                self.transform.set_translation(node_pos + frame_delta);
+            }
+            UIInput::DragEnd { .. } => {
+                self.dragging = false;
+            }
+            _ => {}
         }
     }
 
     fn render(&mut self, draw: &mut Draw2D, state: &S) {
         let size = self.transform.size();
-        draw.rect(Vec2::ZERO, size).color(self.color);
+        let (txt, color) = if self.dragging {
+            ("Dragging...", Color::GREEN)
+        } else {
+            ("Drag Me!", Color::SILVER)
+        };
 
-        draw.text("Left click to move to the left.\n\nRight click to move to the right")
+        draw.rect(Vec2::ZERO, size).color(color);
+        draw.text(txt)
             .anchor(Vec2::splat(0.5))
             .translate(size * 0.5)
             .color(Color::BLACK)
-            .size(22.0)
+            .size(24.0)
             .max_width(size.x * 0.9)
             .h_align_center();
     }

@@ -4,15 +4,33 @@ use corelib::math::{Rect, Vec2};
 use downcast_rs::{impl_downcast, Downcast};
 use draw::{Draw2D, Transform2D};
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum UIInput {
     Hover,
-    Enter,
-    Leave,
-    Pressed(MouseButton),
-    Released(MouseButton),
-    Clicked(MouseButton),
-    GlobalRelease(MouseButton),
+    CursorEnter,
+    CursorLeave,
+    ButtonPressed(MouseButton),
+    ButtonDown(MouseButton),
+    ButtonReleased(MouseButton),
+    ButtonClick(MouseButton),
+    ButtonReleasedAnywhere(MouseButton),
+    Scroll {
+        delta: Vec2,
+    },
+    DragStart {
+        pos: Vec2,
+        btn: MouseButton,
+    },
+    Dragging {
+        start_pos: Vec2,
+        pos: Vec2,
+        frame_delta: Vec2,
+        btn: MouseButton,
+    },
+    DragEnd {
+        pos: Vec2,
+        btn: MouseButton,
+    },
 }
 
 pub trait UIElement<S>: Downcast + Send + Sync {

@@ -1,5 +1,6 @@
 use corelib::input::{
-    mouse_btns_down, mouse_btns_pressed, mouse_btns_released, mouse_position, KeyCode, MouseButton,
+    is_mouse_moving, is_mouse_scrolling, mouse_btns_down, mouse_btns_pressed, mouse_btns_released,
+    mouse_motion_delta, mouse_position, mouse_wheel_delta, KeyCode, MouseButton,
 };
 use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
@@ -44,11 +45,12 @@ pub struct UIManager<S: 'static> {
     hover: FxHashSet<UIRawHandler>,
     last_frame_down: FxHashSet<(UIRawHandler, MouseButton)>,
     down: FxHashSet<(UIRawHandler, MouseButton)>,
-
     pressed: FxHashSet<(UIRawHandler, MouseButton)>,
     released: FxHashSet<(UIRawHandler, MouseButton)>,
-    start_click: FxHashSet<(UIRawHandler, MouseButton)>,
+    start_click: FxHashMap<(UIRawHandler, MouseButton), Vec2>,
     clicked: FxHashSet<(UIRawHandler, MouseButton)>,
+    scrolling: FxHashMap<UIRawHandler, Vec2>,
+    dragging: FxHashSet<(UIRawHandler, MouseButton)>,
 }
 
 impl<S> Default for UIManager<S> {
@@ -64,7 +66,7 @@ impl<S> UIManager<S> {
                 transform: Transform2D::default(),
             }),
             matrix: Mat3::IDENTITY,
-            inverse_matrix: Mat3::IDENTITY.inverse(),
+            root_inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: FxHashMap::default(),
         };
 
@@ -91,6 +93,8 @@ impl<S> UIManager<S> {
             released: Default::default(),
             start_click: Default::default(),
             clicked: Default::default(),
+            scrolling: Default::default(),
+            dragging: Default::default(),
         }
     }
 
@@ -112,7 +116,7 @@ impl<S> UIManager<S> {
             raw_id: self.node_id,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
-            inverse_matrix: Mat3::IDENTITY.inverse(),
+            root_inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
         };
 
@@ -130,7 +134,6 @@ impl<S> UIManager<S> {
         &mut self,
         parent: H,
         element: T,
-        transform: Transform2D,
     ) -> Result<UIHandler<T>, String> {
         let parent_idx = parent
             .into()
@@ -142,7 +145,7 @@ impl<S> UIManager<S> {
             raw_id: self.node_id,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
-            inverse_matrix: Mat3::IDENTITY.inverse(),
+            root_inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
         };
         self.scene_graph
@@ -173,6 +176,7 @@ impl<S> UIManager<S> {
             return;
         }
 
+        self.scrolling.clear();
         self.clicked.clear();
         std::mem::swap(&mut self.last_frame_hover, &mut self.hover);
         self.hover.clear();
@@ -187,7 +191,11 @@ impl<S> UIManager<S> {
         let down_btns = mouse_btns_down();
         let pressed_btns = mouse_btns_pressed();
         let released_btns = mouse_btns_released();
-        for (_parent, node) in graph {
+        let scroll = is_mouse_scrolling().then_some(mouse_wheel_delta());
+        let moving = is_mouse_moving().then_some(mouse_motion_delta());
+        for (parent, node) in graph {
+            let parent_point =
+                parent.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
             let point =
                 node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
             let contains = node.inner.input_box().contains(point);
@@ -199,7 +207,8 @@ impl<S> UIManager<S> {
 
             if contains {
                 if !self.last_frame_hover.contains(&raw) {
-                    node.inner.input(UIInput::Enter, state, &mut self.events);
+                    node.inner
+                        .input(UIInput::CursorEnter, state, &mut self.events);
                 }
 
                 self.hover.insert(raw);
@@ -211,38 +220,94 @@ impl<S> UIManager<S> {
                 pressed_btns.iter().for_each(|btn| {
                     let id = (raw, btn);
                     self.pressed.insert(id);
-                    self.start_click.insert(id);
+                    self.start_click.insert(id, parent_point);
                     node.inner
-                        .input(UIInput::Pressed(btn), state, &mut self.events);
+                        .input(UIInput::ButtonPressed(btn), state, &mut self.events);
                 });
 
                 released_btns.iter().for_each(|btn| {
                     let id = (raw, btn);
                     self.released.insert(id);
                     node.inner
-                        .input(UIInput::Released(btn), state, &mut self.events);
+                        .input(UIInput::ButtonReleased(btn), state, &mut self.events);
 
-                    if self.start_click.contains(&id) {
+                    if self.start_click.contains_key(&id) {
                         self.clicked.insert(id);
                         node.inner
-                            .input(UIInput::Clicked(btn), state, &mut self.events);
+                            .input(UIInput::ButtonClick(btn), state, &mut self.events);
                     }
                 });
+
+                if let Some(delta) = scroll {
+                    self.scrolling.insert(raw, delta);
+                    node.inner
+                        .input(UIInput::Scroll { delta }, state, &mut self.events);
+                }
             } else {
                 if self.last_frame_hover.contains(&raw) {
-                    node.inner.input(UIInput::Leave, state, &mut self.events);
+                    node.inner
+                        .input(UIInput::CursorLeave, state, &mut self.events);
                 }
             }
 
+            if let Some(drag_delta) = moving {
+                self.start_click
+                    .iter()
+                    .filter(|((ui_raw, btn), pos)| *ui_raw == raw)
+                    .for_each(|((raw, btn), pos)| {
+                        let id = (*raw, *btn);
+                        if !self.dragging.contains(&id) {
+                            self.dragging.insert(id);
+                            node.inner.input(
+                                UIInput::DragStart {
+                                    pos: *pos,
+                                    btn: *btn,
+                                },
+                                state,
+                                &mut self.events,
+                            );
+                        }
+
+                        node.inner.input(
+                            UIInput::Dragging {
+                                start_pos: *pos,
+                                pos: parent_point,
+                                frame_delta: drag_delta,
+                                btn: *btn,
+                            },
+                            state,
+                            &mut self.events,
+                        );
+                    })
+            }
+
             released_btns.iter().for_each(|btn| {
-                node.inner
-                    .input(UIInput::GlobalRelease(btn), state, &mut self.events);
+                node.inner.input(
+                    UIInput::ButtonReleasedAnywhere(btn),
+                    state,
+                    &mut self.events,
+                );
+
+                let id = (raw, btn);
+                if self.dragging.contains(&id) {
+                    node.inner.input(
+                        UIInput::DragEnd {
+                            pos: parent_point,
+                            btn,
+                        },
+                        state,
+                        &mut self.events,
+                    );
+
+                    let _ = self.dragging.remove(&id);
+                }
             });
         }
 
         // clean any node that was pressed with this button
         released_btns.iter().for_each(|btn| {
-            self.start_click.retain(|(_, b)| btn != *b);
+            self.start_click.retain(|(_, b), _| btn != *b);
+            self.dragging.retain(|(_, b)| btn != *b);
         });
     }
 
@@ -262,14 +327,14 @@ impl<S> UIManager<S> {
     }
 
     pub fn update(&mut self, cam: &dyn BaseCam2D, state: &mut S) {
+        self.process_inputs(state);
         self.dispatch_events(state);
 
         // update matrices
         self.set_camera(cam);
 
-        // we got root.matrix from the camera not from the node
-        self.scene_graph.root.inner.transform_mut().update();
-        self.scene_graph.root.matrix = self.root_matrix;
+        // update root element matrix
+        self.scene_graph.root.matrix = self.scene_graph.root.inner.transform_mut().updated_mat3();
 
         // update and calculate matrices for the scene-graph
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
@@ -277,20 +342,18 @@ impl<S> UIManager<S> {
             let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
             if matrix != node.matrix {
                 node.matrix = matrix;
-                node.inverse_matrix = matrix.inverse();
+                node.root_inverse_matrix = (self.root_matrix * matrix).inverse();
             }
         });
-
-        self.process_inputs(state);
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
-        draw.push_matrix(self.scene_graph.root.inner.transform().as_mat3());
+        draw.push_matrix(self.scene_graph.root.matrix);
         self.scene_graph.root.inner.render(draw, state);
         draw.pop_matrix();
 
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
-            draw.push_matrix(parent.inner.transform().as_mat3() * node.inner.transform().as_mat3());
+            draw.push_matrix(node.matrix);
             node.inner.render(draw, state);
             draw.pop_matrix();
         });
@@ -596,7 +659,7 @@ pub struct Node<S> {
     raw_id: u64,
     inner: Box<dyn UIElement<S>>,
     matrix: Mat3,
-    inverse_matrix: Mat3,
+    root_inverse_matrix: Mat3,
     handlers: FxHashMap<TypeId, SmallVec<EventListener, 10>>,
 }
 
@@ -615,7 +678,8 @@ impl<S> Node<S> {
         let pos = inverse_projection.project_point3(vec3(mouse_pos.x, mouse_pos.y, 1.0));
 
         // local position
-        self.inverse_matrix.transform_point2(vec2(pos.x, pos.y))
+        self.root_inverse_matrix
+            .transform_point2(vec2(pos.x, pos.y))
     }
 }
 

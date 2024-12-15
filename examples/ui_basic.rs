@@ -17,18 +17,16 @@ impl State {
         let mut ui = UIManager::default();
 
         // Parent container
-        let parent_handler = ui.add(
-            Container {
-                fill: None,
-                stroke: Some(Color::WHITE),
-                clicks: 0,
-            },
-            Transform2D::builder()
+        let parent_handler = ui.add(Container {
+            fill: None,
+            stroke: Some(Color::WHITE),
+            clicks: 0,
+            transform: Transform2D::builder()
                 .set_anchor(Vec2::splat(0.5))
                 .set_size(Vec2::splat(300.0))
                 .set_translation(window_size() * 0.5)
                 .into(),
-        );
+        });
 
         // Child container
         let child_handler = ui
@@ -38,11 +36,11 @@ impl State {
                     fill: Some(Color::ORANGE),
                     stroke: None,
                     clicks: 0,
+                    transform: Transform2D::builder()
+                        .set_translation(Vec2::splat(150.0))
+                        .set_size(Vec2::splat(50.0))
+                        .into(),
                 },
-                Transform2D::builder()
-                    .set_translation(Vec2::splat(150.0))
-                    .set_size(Vec2::splat(50.0))
-                    .into(),
             )
             .unwrap();
 
@@ -109,12 +107,21 @@ struct Container {
     fill: Option<Color>,
     stroke: Option<Color>,
     clicks: usize,
+    transform: Transform2D,
 }
 
 impl<S> UIElement<S> for Container {
-    fn render(&mut self, transform: &Transform2D, draw: &mut Draw2D, state: &S) {
+    fn transform(&self) -> &Transform2D {
+        &self.transform
+    }
+
+    fn transform_mut(&mut self) -> &mut Transform2D {
+        &mut self.transform
+    }
+
+    fn render(&mut self, draw: &mut Draw2D, state: &S) {
         {
-            let mut rect = draw.rect(Vec2::ZERO, transform.size());
+            let mut rect = draw.rect(Vec2::ZERO, self.transform.size());
             if let Some(fill) = self.fill {
                 rect.fill_color(fill).fill();
             }
