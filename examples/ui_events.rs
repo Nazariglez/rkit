@@ -4,7 +4,7 @@ use rkit::gfx::{self, Color};
 use rkit::input::MouseButton;
 use rkit::math::{vec2, FloatExt, Vec2};
 use rkit::time;
-use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager};
+use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager, UINodeMetadata};
 
 // events
 struct MoveTo(f32);
@@ -102,7 +102,7 @@ impl<S> UIElement<S> for Element {
         &mut self.transform
     }
 
-    fn update(&mut self, _state: &mut S, events: &mut UIEventQueue<S>) {
+    fn update(&mut self, _state: &mut S, events: &mut UIEventQueue<S>, _meta: UINodeMetadata) {
         if !self.moving {
             return;
         }
@@ -117,7 +117,7 @@ impl<S> UIElement<S> for Element {
         }
     }
 
-    fn render(&mut self, draw: &mut Draw2D, _state: &S) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &S, _meta: UINodeMetadata) {
         let size = self.transform.size();
         draw.rect(Vec2::ZERO, size).color(self.color);
 

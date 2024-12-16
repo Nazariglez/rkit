@@ -14,7 +14,7 @@ use crate::ui::element::{UIElement, UIRoot};
 use crate::ui::events::{
     EventHandlerFn, EventHandlerFnOnce, EventListener, ListenerType, UIEventQueue,
 };
-use crate::ui::UIInput;
+use crate::ui::{UIInput, UINodeMetadata};
 
 pub struct UIEventData<'a, T, S: 'static> {
     pub node: &'a mut T,
@@ -209,13 +209,27 @@ impl<S> UIManager<S> {
                 idx: None,
             };
 
+            let metadata = UINodeMetadata {
+                handler: raw,
+                parent_handler: UIRawHandler {
+                    raw_id: parent.raw_id,
+                    idx: None,
+                },
+            };
+
             if contains {
                 if !self.last_frame_hover.contains(&raw) {
                     node.inner
-                        .input(UIInput::CursorEnter, state, &mut self.events);
+                        .input(UIInput::CursorEnter, state, &mut self.events, metadata);
                 }
 
                 self.hover.insert(raw);
+                node.inner.input(
+                    UIInput::Hover { pos: point },
+                    state,
+                    &mut self.events,
+                    metadata,
+                );
 
                 down_btns.iter().for_each(|btn| {
                     self.down.insert((raw, btn));
@@ -225,32 +239,44 @@ impl<S> UIManager<S> {
                     let id = (raw, btn);
                     self.pressed.insert(id);
                     self.start_click.insert(id, parent_point);
-                    node.inner
-                        .input(UIInput::ButtonPressed(btn), state, &mut self.events);
+                    node.inner.input(
+                        UIInput::ButtonPressed(btn),
+                        state,
+                        &mut self.events,
+                        metadata,
+                    );
                 });
 
                 released_btns.iter().for_each(|btn| {
                     let id = (raw, btn);
                     self.released.insert(id);
-                    node.inner
-                        .input(UIInput::ButtonReleased(btn), state, &mut self.events);
+                    node.inner.input(
+                        UIInput::ButtonReleased(btn),
+                        state,
+                        &mut self.events,
+                        metadata,
+                    );
 
                     if self.start_click.contains_key(&id) {
                         self.clicked.insert(id);
-                        node.inner
-                            .input(UIInput::ButtonClick(btn), state, &mut self.events);
+                        node.inner.input(
+                            UIInput::ButtonClick(btn),
+                            state,
+                            &mut self.events,
+                            metadata,
+                        );
                     }
                 });
 
                 if let Some(delta) = scroll {
                     self.scrolling.insert(raw, delta);
                     node.inner
-                        .input(UIInput::Scroll { delta }, state, &mut self.events);
+                        .input(UIInput::Scroll { delta }, state, &mut self.events, metadata);
                 }
             } else {
                 if self.last_frame_hover.contains(&raw) {
                     node.inner
-                        .input(UIInput::CursorLeave, state, &mut self.events);
+                        .input(UIInput::CursorLeave, state, &mut self.events, metadata);
                 }
             }
 
@@ -269,6 +295,7 @@ impl<S> UIManager<S> {
                                 },
                                 state,
                                 &mut self.events,
+                                metadata,
                             );
                         }
 
@@ -281,6 +308,7 @@ impl<S> UIManager<S> {
                             },
                             state,
                             &mut self.events,
+                            metadata,
                         );
                     })
             }
@@ -290,6 +318,7 @@ impl<S> UIManager<S> {
                     UIInput::ButtonReleasedAnywhere(btn),
                     state,
                     &mut self.events,
+                    metadata,
                 );
 
                 let id = (raw, btn);
@@ -301,6 +330,7 @@ impl<S> UIManager<S> {
                         },
                         state,
                         &mut self.events,
+                        metadata,
                     );
 
                     let _ = self.dragging.remove(&id);
@@ -342,7 +372,17 @@ impl<S> UIManager<S> {
 
         // update and calculate matrices for the scene-graph
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
-            node.inner.update(state, &mut self.events); // TODO: pass parent?
+            let metadata = UINodeMetadata {
+                handler: UIRawHandler {
+                    raw_id: node.raw_id,
+                    idx: None,
+                },
+                parent_handler: UIRawHandler {
+                    raw_id: parent.raw_id,
+                    idx: None,
+                },
+            };
+            node.inner.update(state, &mut self.events, metadata);
             let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
             if matrix != node.matrix {
                 node.matrix = matrix;
@@ -352,13 +392,23 @@ impl<S> UIManager<S> {
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
-        draw.push_matrix(self.scene_graph.root.matrix);
-        self.scene_graph.root.inner.render(draw, state);
-        draw.pop_matrix();
+        // draw.push_matrix(self.scene_graph.root.matrix);
+        // self.scene_graph.root.inner.render(draw, state);
+        // draw.pop_matrix();
 
         self.scene_graph.iter_mut().for_each(|(parent, node)| {
+            let metadata = UINodeMetadata {
+                handler: UIRawHandler {
+                    raw_id: node.raw_id,
+                    idx: None,
+                },
+                parent_handler: UIRawHandler {
+                    raw_id: parent.raw_id,
+                    idx: None,
+                },
+            };
             draw.push_matrix(node.matrix);
-            node.inner.render(draw, state);
+            node.inner.render(draw, state, metadata);
             draw.pop_matrix();
         });
     }

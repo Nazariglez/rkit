@@ -2,7 +2,7 @@ use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
-use rkit::ui::{UIElement, UIHandler, UIManager};
+use rkit::ui::{UIElement, UIHandler, UIManager, UINodeMetadata};
 
 #[derive(Default)]
 struct State {
@@ -119,7 +119,7 @@ impl<S> UIElement<S> for Container {
         &mut self.transform
     }
 
-    fn render(&mut self, draw: &mut Draw2D, _state: &S) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &S, _meta: UINodeMetadata) {
         {
             let mut rect = draw.rect(Vec2::ZERO, self.transform.size());
             if let Some(fill) = self.fill {
