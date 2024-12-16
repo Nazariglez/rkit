@@ -8,6 +8,15 @@ pub trait BaseCam2D {
     fn size(&self) -> Vec2;
     fn local_to_screen(&self, point: Vec2) -> Vec2;
     fn screen_to_local(&self, point: Vec2) -> Vec2;
+    fn bounds(&self) -> Rect;
+
+    fn is_point_visible(&self, pos: Vec2) -> bool {
+        self.bounds().contains(pos)
+    }
+
+    fn is_rect_visible(&self, rect: Rect) -> bool {
+        self.bounds().intersects(&rect)
+    }
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -122,6 +131,12 @@ impl BaseCam2D for Camera2D {
         // local position
         self.inverse_transform()
             .transform_point2(vec2(pos.x, pos.y))
+    }
+
+    fn bounds(&self) -> Rect {
+        let size = self.size / (self.ratio * self.scale);
+        let origin = self.position - (size * 0.5);
+        Rect::new(origin, size)
     }
 }
 
@@ -241,20 +256,6 @@ impl Camera2D {
         debug_assert!(!self.dirty_projection);
         debug_assert!(!self.dirty_transform);
         BaseCam2D::screen_to_local(self, point)
-    }
-
-    pub fn bounds(&self) -> Rect {
-        let size = self.size / (self.ratio * self.scale);
-        let origin = self.position - (size * 0.5);
-        Rect::new(origin, size)
-    }
-
-    pub fn is_point_visible(&self, pos: Vec2) -> bool {
-        self.bounds().contains(pos)
-    }
-
-    pub fn is_rect_visible(&self, rect: Rect) -> bool {
-        self.bounds().intersects(&rect)
     }
 
     fn calculate_projection(&mut self) {

@@ -100,6 +100,10 @@ impl<S> UIManager<S> {
 
     fn set_camera(&mut self, cam: &dyn BaseCam2D) {
         self.size = cam.size();
+        let root = &mut self.scene_graph.root.inner;
+        root.transform_mut()
+            .set_size(self.size)
+            .set_translation(cam.bounds().min());
         self.projection = cam.projection();
         self.inverse_projection = cam.inverse_projection();
         self.root_matrix = cam.transform();
