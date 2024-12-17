@@ -14,6 +14,7 @@ use crate::ui::element::{UIElement, UIRoot};
 use crate::ui::events::{
     EventHandlerFn, EventHandlerFnOnce, EventListener, ListenerType, UIEventQueue,
 };
+use crate::ui::graph::{UIGraph, UIHandler, UINode};
 use crate::ui::{UIInput, UINodeMetadata};
 
 pub struct UIEventData<'a, T, S: 'static> {
@@ -23,7 +24,7 @@ pub struct UIEventData<'a, T, S: 'static> {
 }
 
 pub struct UIManager<S: 'static> {
-    scene_graph: SceneGraph<Node<S>>,
+    graph: UIGraph<S>,
     events: UIEventQueue<S>,
     listener_id: usize,
     node_id: u64,
@@ -60,7 +61,7 @@ impl<S> Default for UIManager<S> {
 }
 impl<S> UIManager<S> {
     pub fn new(enable_input: bool) -> Self {
-        let node = Node {
+        let node = UINode {
             raw_id: 0,
             inner: Box::new(UIRoot {
                 transform: Transform2D::default(),
@@ -71,7 +72,7 @@ impl<S> UIManager<S> {
         };
 
         Self {
-            scene_graph: SceneGraph::new(node),
+            graph: UIGraph::new(node),
             events: UIEventQueue::new(),
             listener_id: 0,
             node_id: 0,
@@ -98,10 +99,48 @@ impl<S> UIManager<S> {
         }
     }
 
+    #[inline(always)]
+    pub fn add<T: UIElement<S> + 'static>(&mut self, element: T) -> UIHandler<T> {
+        self.graph.add(element)
+    }
+
+    #[inline(always)]
+    pub fn add_to<H: Into<UIRawHandler>, T: UIElement<S> + 'static>(
+        &mut self,
+        parent: H,
+        element: T,
+    ) -> Result<UIHandler<T>, String> {
+        self.graph.add_to(parent, element)
+    }
+
+    #[inline(always)]
+    pub fn element<T>(&self, handler: UIHandler<T>) -> Option<&T>
+    where
+        T: UIElement<S> + 'static,
+    {
+        self.graph.element(handler)
+    }
+
+    #[inline(always)]
+    pub fn element_mut<T>(&mut self, handler: UIHandler<T>) -> Option<&mut T>
+    where
+        T: UIElement<S> + 'static,
+    {
+        self.graph.element_mut(handler)
+    }
+
+    #[inline(always)]
+    pub fn remove<T: UIElement<S> + 'static>(
+        &mut self,
+        handler: UIHandler<T>,
+    ) -> Result<(), String> {
+        self.graph.remove(handler)
+    }
+
     fn set_camera(&mut self, cam: &dyn BaseCam2D) {
         self.size = cam.size();
-        let root = &mut self.scene_graph.root.inner;
-        root.transform_mut()
+        self.graph
+            .root_transform_mut()
             .set_size(self.size)
             .set_translation(cam.bounds().min());
         self.projection = cam.projection();
@@ -114,60 +153,10 @@ impl<S> UIManager<S> {
         }
     }
 
-    pub fn add<T: UIElement<S> + 'static>(&mut self, element: T) -> UIHandler<T> {
-        self.node_id += 1;
-        let node = Node {
-            raw_id: self.node_id,
-            inner: Box::new(element),
-            matrix: Mat3::IDENTITY,
-            root_inverse_matrix: Mat3::IDENTITY.inverse(),
-            handlers: Default::default(),
-        };
-
-        let idx = self.scene_graph.attach_at_root(node);
-        UIHandler {
-            raw: UIRawHandler {
-                raw_id: self.node_id,
-                idx: Some(idx),
-            },
-            _t: PhantomData,
-        }
-    }
-
-    pub fn add_to<H: Into<UIRawHandler>, T: UIElement<S> + 'static>(
-        &mut self,
-        parent: H,
-        element: T,
-    ) -> Result<UIHandler<T>, String> {
-        let parent_idx = parent
-            .into()
-            .idx
-            .ok_or_else(|| "Empty UIHandler".to_string())?;
-
-        self.node_id += 1;
-        let node = Node {
-            raw_id: self.node_id,
-            inner: Box::new(element),
-            matrix: Mat3::IDENTITY,
-            root_inverse_matrix: Mat3::IDENTITY.inverse(),
-            handlers: Default::default(),
-        };
-        self.scene_graph
-            .attach(parent_idx, node)
-            .map(|idx| UIHandler {
-                raw: UIRawHandler {
-                    raw_id: self.node_id,
-                    idx: Some(idx),
-                },
-                _t: PhantomData,
-            })
-            .map_err(|e| e.to_string())
-    }
-
     fn dispatch_events(&mut self, state: &mut S) {
         while let Some(event_cb) = self.events.take_event() {
             event_cb(
-                &mut self.scene_graph,
+                &mut self.graph.scene_graph, // TODO: check this
                 &mut self.events,
                 state,
                 &mut self.to_remove_cb,
@@ -188,8 +177,8 @@ impl<S> UIManager<S> {
         self.down.clear();
 
         // reverse the graph
-        let mut graph: SmallVec<(&mut Node<S>, &mut Node<S>), 120> =
-            self.scene_graph.iter_mut().collect();
+        let mut graph: SmallVec<(&mut UINode<S>, &mut UINode<S>), 120> =
+            self.graph.scene_graph.iter_mut().collect();
         graph.reverse();
 
         let down_btns = mouse_btns_down();
@@ -368,27 +357,30 @@ impl<S> UIManager<S> {
         self.set_camera(cam);
 
         // update root element matrix
-        self.scene_graph.root.matrix = self.scene_graph.root.inner.transform_mut().updated_mat3();
+        self.graph.root_update_matrix();
 
         // update and calculate matrices for the scene-graph
-        self.scene_graph.iter_mut().for_each(|(parent, node)| {
-            let metadata = UINodeMetadata {
-                handler: UIRawHandler {
-                    raw_id: node.raw_id,
-                    idx: None,
-                },
-                parent_handler: UIRawHandler {
-                    raw_id: parent.raw_id,
-                    idx: None,
-                },
-            };
-            node.inner.update(state, &mut self.events, metadata);
-            let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
-            if matrix != node.matrix {
-                node.matrix = matrix;
-                node.root_inverse_matrix = (self.root_matrix * matrix).inverse();
-            }
-        });
+        self.graph
+            .scene_graph
+            .iter_mut()
+            .for_each(|(parent, node)| {
+                let metadata = UINodeMetadata {
+                    handler: UIRawHandler {
+                        raw_id: node.raw_id,
+                        idx: None,
+                    },
+                    parent_handler: UIRawHandler {
+                        raw_id: parent.raw_id,
+                        idx: None,
+                    },
+                };
+                node.inner.update(state, &mut self.events, metadata);
+                let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
+                if matrix != node.matrix {
+                    node.matrix = matrix;
+                    node.root_inverse_matrix = (self.root_matrix * matrix).inverse();
+                }
+            });
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
@@ -396,54 +388,26 @@ impl<S> UIManager<S> {
         // self.scene_graph.root.inner.render(draw, state);
         // draw.pop_matrix();
 
-        self.scene_graph.iter_mut().for_each(|(parent, node)| {
-            let metadata = UINodeMetadata {
-                handler: UIRawHandler {
-                    raw_id: node.raw_id,
-                    idx: None,
-                },
-                parent_handler: UIRawHandler {
-                    raw_id: parent.raw_id,
-                    idx: None,
-                },
-            };
-            draw.push_matrix(node.matrix);
-            node.inner.render(draw, state, metadata);
-            draw.pop_matrix();
-        });
+        self.graph
+            .scene_graph
+            .iter_mut()
+            .for_each(|(parent, node)| {
+                let metadata = UINodeMetadata {
+                    handler: UIRawHandler {
+                        raw_id: node.raw_id,
+                        idx: None,
+                    },
+                    parent_handler: UIRawHandler {
+                        raw_id: parent.raw_id,
+                        idx: None,
+                    },
+                };
+                draw.push_matrix(node.matrix);
+                node.inner.render(draw, state, metadata);
+                draw.pop_matrix();
+            });
     }
 
-    pub fn element<T>(&self, handler: UIHandler<T>) -> Option<&T>
-    where
-        T: UIElement<S> + 'static,
-    {
-        let idx = handler.raw.idx?;
-        self.scene_graph
-            .get(idx)
-            .map(|node| node.value.inner.downcast_ref::<T>().unwrap())
-    }
-
-    pub fn element_mut<T>(&mut self, handler: UIHandler<T>) -> Option<&mut T>
-    where
-        T: UIElement<S> + 'static,
-    {
-        let idx = handler.raw.idx?;
-        self.scene_graph
-            .get_mut(idx)
-            .map(|node| node.value.inner.downcast_mut::<T>().unwrap())
-    }
-
-    pub fn remove<T: UIElement<S> + 'static>(
-        &mut self,
-        handler: UIHandler<T>,
-    ) -> Result<(), String> {
-        let idx = handler
-            .raw
-            .idx
-            .ok_or_else(|| "Empty UIHandler".to_string())?;
-        self.scene_graph.remove(idx);
-        Ok(())
-    }
     pub fn on<T, E, F>(
         &mut self,
         handler: UIHandler<T>,
@@ -460,6 +424,7 @@ impl<S> UIManager<S> {
             .ok_or_else(|| "Empty UIHandler".to_string())?;
 
         let handlers = &mut self
+            .graph
             .scene_graph
             .get_mut(handler_idx)
             .ok_or_else(|| "Invalid UIHandler".to_string())?
@@ -506,6 +471,7 @@ impl<S> UIManager<S> {
             .ok_or_else(|| "Empty UIHandler".to_string())?;
 
         let handlers = &mut self
+            .graph
             .scene_graph
             .get_mut(handler_idx)
             .ok_or_else(|| "Invalid UIHandler".to_string())?
@@ -540,7 +506,7 @@ impl<S> UIManager<S> {
         // TODO: return Result?
         let idx = listener_id.handler.raw.idx;
         if let Some(idx) = idx {
-            if let Some(node) = self.scene_graph.get_mut(idx) {
+            if let Some(node) = self.graph.scene_graph.get_mut(idx) {
                 if let Some(listeners) = node.value.handlers.get_mut(&TypeId::of::<E>()) {
                     listeners.retain(|listener| listener.id != listener_id.id);
                 }
@@ -563,6 +529,7 @@ impl<S> UIManager<S> {
             .idx
             .ok_or_else(|| "Empty UIHandler".to_string())?;
         let node = &mut self
+            .graph
             .scene_graph
             .get_mut(handler_idx)
             .ok_or_else(|| "Invalid UIHandler".to_string())?
@@ -579,7 +546,7 @@ impl<S> UIManager<S> {
             Some(idx) => idx,
             None => return false,
         };
-        let node = match self.scene_graph.get(idx) {
+        let node = match self.graph.scene_graph.get(idx) {
             Some(node) => node,
             None => return false,
         };
@@ -600,7 +567,7 @@ impl<S> UIManager<S> {
             Some(idx) => idx,
             None => return false,
         };
-        let node = match self.scene_graph.get(idx) {
+        let node = match self.graph.scene_graph.get(idx) {
             Some(node) => node,
             None => return false,
         };
@@ -629,7 +596,7 @@ impl<S> UIManager<S> {
             Some(idx) => idx,
             None => return false,
         };
-        let node = match self.scene_graph.get(idx) {
+        let node = match self.graph.scene_graph.get(idx) {
             Some(node) => node,
             None => return false,
         };
@@ -658,7 +625,7 @@ impl<S> UIManager<S> {
             Some(idx) => idx,
             None => return false,
         };
-        let node = match self.scene_graph.get(idx) {
+        let node = match self.graph.scene_graph.get(idx) {
             Some(node) => node,
             None => return false,
         };
@@ -687,7 +654,7 @@ impl<S> UIManager<S> {
             Some(idx) => idx,
             None => return false,
         };
-        let node = match self.scene_graph.get(idx) {
+        let node = match self.graph.scene_graph.get(idx) {
             Some(node) => node,
             None => return false,
         };
@@ -709,36 +676,8 @@ impl<S> UIManager<S> {
     }
 }
 
-pub struct Node<S> {
-    raw_id: u64,
-    inner: Box<dyn UIElement<S>>,
-    matrix: Mat3,
-    root_inverse_matrix: Mat3,
-    handlers: FxHashMap<TypeId, SmallVec<EventListener, 10>>,
-}
-
-impl<S> Node<S> {
-    pub fn screen_to_local(
-        &self,
-        screen_pos: Vec2,
-        screen_size: Vec2,
-        inverse_projection: Mat4,
-    ) -> Vec2 {
-        // normalized coordinates
-        let norm = screen_pos / screen_size;
-        let mouse_pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-
-        // projected position
-        let pos = inverse_projection.project_point3(vec3(mouse_pos.x, mouse_pos.y, 1.0));
-
-        // local position
-        self.root_inverse_matrix
-            .transform_point2(vec2(pos.x, pos.y))
-    }
-}
-
 fn call_event<S, E>(
-    node: &mut Node<S>,
+    node: &mut UINode<S>,
     evt: &E,
     state: &mut S,
     queue: &mut UIEventQueue<S>,
@@ -775,7 +714,7 @@ fn call_event<S, E>(
 
 pub(super) fn iter_call_event<E, S>(
     evt: E,
-    scene_graph: &mut SceneGraph<Node<S>>,
+    scene_graph: &mut SceneGraph<UINode<S>>,
     queue: &mut UIEventQueue<S>,
     state: &mut S,
     to_remove_cb: &mut Vec<usize>,
@@ -807,43 +746,6 @@ pub(super) fn iter_call_event<E, S>(
         if do_break_after {
             break;
         }
-    }
-}
-
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
-pub struct UIHandler<T> {
-    raw: UIRawHandler,
-    _t: PhantomData<T>,
-}
-
-impl<T> Copy for UIHandler<T> {}
-
-impl<T> Clone for UIHandler<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Default for UIHandler<T> {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
-impl<T> UIHandler<T> {
-    pub fn is_empty(&self) -> bool {
-        self.raw.idx.is_none()
-    }
-
-    pub fn empty() -> Self {
-        UIHandler {
-            raw: Default::default(),
-            _t: PhantomData,
-        }
-    }
-
-    pub(super) fn raw_id(&self) -> u64 {
-        self.raw.raw_id
     }
 }
 
