@@ -4,7 +4,7 @@ use rkit::gfx::{self, Color};
 use rkit::input::MouseButton;
 use rkit::math::{vec2, FloatExt, Vec2};
 use rkit::time;
-use rkit::ui::{UIElement, UIEvents, UIHandler, UIManager, UINodeMetadata};
+use rkit::ui::{UIControl, UIElement, UIEvents, UIHandler, UIManager, UINodeMetadata};
 
 // events
 struct MoveTo(f32);

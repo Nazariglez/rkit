@@ -1,20 +1,36 @@
+use corelib::input::MouseButton;
 use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
-use rkit::ui::{UIElement, UIHandler, UIManager, UINodeMetadata};
+use rkit::ui::{
+    UIControl, UIElement, UIEvents, UIGraph, UIHandler, UIInput, UIManager, UINodeMetadata,
+    UIRawHandler,
+};
+
+pub struct Click;
 
 #[derive(Default)]
 struct State {
     cam: Camera2D,
     ui: UIManager<()>,
-    parent: UIHandler<Container>,
-    child: UIHandler<Container>,
 }
 
 impl State {
     fn new() -> Self {
         let mut ui = UIManager::default();
+
+        fn click_cb<S>(
+            _: &Click,
+            handler: &UIRawHandler,
+            graph: &mut UIGraph<S>,
+            state: &mut S,
+            events: &mut UIEvents<S>,
+        ) -> UIControl {
+            let container = graph.element_mut_as::<Container>(handler.typed()).unwrap();
+            container.clicks += 1;
+            UIControl::Consume
+        };
 
         // Parent container
         let parent_handler = ui.add(Container {
@@ -27,6 +43,8 @@ impl State {
                 .set_translation(window_size() * 0.5)
                 .into(),
         });
+
+        ui.on(parent_handler, click_cb);
 
         // Child container
         let child_handler = ui
@@ -44,14 +62,11 @@ impl State {
             )
             .unwrap();
 
+        ui.on(child_handler, click_cb);
+
         let cam = Camera2D::new(window_size(), Default::default());
 
-        Self {
-            cam,
-            ui,
-            parent: parent_handler,
-            child: child_handler,
-        }
+        Self { cam, ui }
     }
 }
 
@@ -67,30 +82,6 @@ fn update(state: &mut State) {
 
     // update ui manager
     state.ui.update(&state.cam, &mut ());
-
-    // color elements on hover
-    let child_color = if state.ui.cursor_hover(state.child) {
-        Color::GREEN
-    } else {
-        Color::ORANGE
-    };
-    state.ui.element_mut_as(state.child).unwrap().fill = Some(child_color);
-
-    let parent_color = if state.ui.cursor_hover(state.parent) {
-        Color::GREEN
-    } else {
-        Color::WHITE
-    };
-    state.ui.element_mut_as(state.parent).unwrap().stroke = Some(parent_color);
-
-    // add clicks to the element (this can be done via events to, check ui_events)
-    if state.ui.clicked(state.parent) {
-        state.ui.element_mut_as(state.parent).unwrap().clicks += 1;
-    }
-
-    if state.ui.clicked(state.child) {
-        state.ui.element_mut_as(state.child).unwrap().clicks += 1;
-    }
 
     // draw as usual
     let mut draw = create_draw_2d();
@@ -117,6 +108,21 @@ impl<S> UIElement<S> for Container {
 
     fn transform_mut(&mut self) -> &mut Transform2D {
         &mut self.transform
+    }
+
+    fn input(
+        &mut self,
+        input: UIInput,
+        state: &mut S,
+        events: &mut UIEvents<S>,
+        metadata: UINodeMetadata,
+    ) {
+        match input {
+            UIInput::ButtonClick(MouseButton::Left) => {
+                events.send(Click);
+            }
+            _ => {}
+        }
     }
 
     fn render(&mut self, draw: &mut Draw2D, _state: &S, _meta: UINodeMetadata) {

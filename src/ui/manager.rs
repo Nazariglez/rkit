@@ -15,12 +15,28 @@ use crate::ui::events::{EventListener, ListenerType};
 use crate::ui::graph::{UIGraph, UIHandler, UINode};
 use crate::ui::{UIEvents, UIInput, UINodeMetadata};
 
+/// Actions to take after trigger and event, the enum must be sorted by priority, higher means more restrictive
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum UIControl {
+    #[default]
+    Continue = 0,
+    SkipSiblings = 1,
+    Consume = 2,
+}
+
+impl From<()> for UIControl {
+    fn from(_value: ()) -> Self {
+        Self::default()
+    }
+}
+
 pub(super) type ListenerStorage =
     FxHashMap<TypeId, FxHashMap<UIRawHandler, SmallVec<EventListener, 5>>>;
 pub(super) type EventHandlerFn<E, S> =
-    dyn FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>);
+    dyn FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> UIControl;
 pub(super) type EventHandlerFnOnce<E, S> =
-    dyn FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>);
+    dyn FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> UIControl;
 
 pub struct UIManager<S: 'static> {
     graph: UIGraph<S>,
@@ -432,15 +448,16 @@ impl<S> UIManager<S> {
             });
     }
 
-    pub fn on<T, E, F>(
+    pub fn on<T, E, F, R>(
         &mut self,
         handler: UIHandler<T>,
-        cb: F,
+        mut cb: F,
     ) -> Result<UIListenerId<T, E>, String>
     where
         T: UIElement<S> + 'static,
         E: 'static,
-        F: FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) + 'static,
+        R: Into<UIControl> + 'static,
+        F: FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> R + 'static,
     {
         let idx = handler
             .raw
@@ -457,7 +474,7 @@ impl<S> UIManager<S> {
             .entry(k)
             .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher::default()));
 
-        let cb: Box<EventHandlerFn<E, S>> = Box::new(cb);
+        let cb: Box<EventHandlerFn<E, S>> = Box::new(move |e, h, g, s, q| cb(e, h, g, s, q).into());
 
         self.listener_id += 1;
         let listener = EventListener {
@@ -500,7 +517,8 @@ impl<S> UIManager<S> {
             .entry(k)
             .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher::default()));
 
-        let cb: Box<EventHandlerFnOnce<E, S>> = Box::new(cb);
+        let cb: Box<EventHandlerFnOnce<E, S>> =
+            Box::new(move |e, h, g, s, q| cb(e, h, g, s, q).into());
 
         self.listener_id += 1;
         let listener = EventListener {
@@ -532,31 +550,6 @@ impl<S> UIManager<S> {
             }
         }
     }
-
-    // pub fn trigger_event<T, E>(
-    //     &mut self,
-    //     handler: UIHandler<T>,
-    //     evt: E,
-    //     state: &mut S,
-    // ) -> Result<(), String>
-    // where
-    //     T: UIElement<S> + 'static,
-    //     E: Send + Sync + 'static,
-    // {
-    //     let handler_idx = handler
-    //         .raw
-    //         .idx
-    //         .ok_or_else(|| "Empty UIHandler".to_string())?;
-    //
-    //     let node = &mut self
-    //         .graph
-    //         .scene_graph
-    //         .get_mut(handler_idx)
-    //         .ok_or_else(|| "Invalid UIHandler".to_string())?
-    //         .value;
-    //     call_event(node, &evt, state, &mut self.events, &mut self.to_remove_cb);
-    //     Ok(())
-    // }
 
     pub fn cursor_hover<H>(&mut self, handler: H) -> bool
     where

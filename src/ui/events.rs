@@ -2,6 +2,7 @@ use crate::ui::graph::{UIGraph, UINode};
 use crate::ui::manager::{
     EventHandlerFn, EventHandlerFnOnce, ListenerStorage, NodeIterInfo, UIRawHandler,
 };
+use crate::ui::UIControl;
 use rustc_hash::FxHashMap;
 use scene_graph::SceneGraph;
 use smallvec::SmallVec;
@@ -51,9 +52,28 @@ impl<S: 'static> UIEvents<S> {
                     return;
                 };
 
-                nodes.iter().for_each(|info| {
-                    dispatch(&evt, &info.node_handler, listeners, graph, state, queue);
-                });
+                let mut skip_siblings = None;
+                for info in nodes {
+                    // only skip siblings when parent is Some
+                    let skip =
+                        skip_siblings.is_some_and(|skip_idx| info.parent_handler == Some(skip_idx));
+                    if skip {
+                        continue;
+                    }
+
+                    skip_siblings = None;
+
+                    // execute event callback
+                    let control =
+                        dispatch(&evt, &info.node_handler, listeners, graph, state, queue);
+                    match control {
+                        UIControl::Continue => {}
+                        UIControl::SkipSiblings => {
+                            skip_siblings = info.parent_handler;
+                        }
+                        UIControl::Consume => break,
+                    }
+                }
             }));
     }
 
@@ -71,7 +91,7 @@ impl<S: 'static> UIEvents<S> {
                 };
 
                 let raw = handler.into();
-                dispatch(&evt, &raw, listeners, graph, state, queue);
+                let _c = dispatch(&evt, &raw, listeners, graph, state, queue);
             }));
     }
 
@@ -137,26 +157,36 @@ fn dispatch<E, S>(
     graph: &mut UIGraph<S>,
     state: &mut S,
     queue: &mut UIEvents<S>,
-) where
+) -> UIControl
+where
     S: 'static,
     E: Send + Sync + 'static,
 {
     let Some(cbs) = listeners.get_mut(&raw) else {
-        return;
+        return UIControl::Continue;
     };
 
-    cbs.iter_mut().for_each(|cb| match &mut cb.typ {
-        ListenerType::Once(opt_cb) => {
-            if let Some(cb) = opt_cb.take() {
-                let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
-                cb(&evt, &raw, graph, state, queue);
+    let mut control = UIControl::Continue;
+    cbs.iter_mut().for_each(|cb| {
+        let c = match &mut cb.typ {
+            ListenerType::Once(opt_cb) => match opt_cb.take() {
+                Some(cb) => {
+                    let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
+                    cb(&evt, &raw, graph, state, queue)
+                }
+                None => UIControl::Continue,
+            },
+            ListenerType::Mut(cb) => {
+                let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>().unwrap();
+                cb(&evt, &raw, graph, state, queue)
             }
-        }
-        ListenerType::Mut(cb) => {
-            let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>().unwrap();
-            cb(&evt, &raw, graph, state, queue);
+        };
+
+        if c > control {
+            control = c;
         }
     });
 
     cbs.retain(|listener| !matches!(listener.typ, ListenerType::Once(None)));
+    control
 }
