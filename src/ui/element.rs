@@ -1,5 +1,4 @@
-use crate::ui::events::UIEventQueue;
-use crate::ui::UIRawHandler;
+use crate::ui::{UIEvents, UIRawHandler};
 use corelib::input::MouseButton;
 use corelib::math::{Rect, Vec2};
 use downcast_rs::{impl_downcast, Downcast};
@@ -52,11 +51,11 @@ pub trait UIElement<S>: Downcast + Send + Sync {
         &mut self,
         input: UIInput,
         state: &mut S,
-        events: &mut UIEventQueue<S>,
+        events: &mut UIEvents<S>,
         metadata: UINodeMetadata,
     ) {
     }
-    fn update(&mut self, state: &mut S, events: &mut UIEventQueue<S>, metadata: UINodeMetadata) {}
+    fn update(&mut self, state: &mut S, events: &mut UIEvents<S>, metadata: UINodeMetadata) {}
     fn render(&mut self, draw: &mut Draw2D, state: &S, metadata: UINodeMetadata) {}
 }
 

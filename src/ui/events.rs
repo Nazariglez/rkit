@@ -1,16 +1,13 @@
-use crate::ui::element::UIElement;
 use crate::ui::graph::{UIGraph, UINode};
-use crate::ui::manager::{iter_call_event, ListenerStorage, NodeIterInfo, UIRawHandler};
+use crate::ui::manager::{
+    EventHandlerFn, EventHandlerFnOnce, ListenerStorage, NodeIterInfo, UIRawHandler,
+};
+use rustc_hash::FxHashMap;
 use scene_graph::SceneGraph;
+use smallvec::SmallVec;
 use std::any::Any;
 use std::any::TypeId;
 use std::collections::VecDeque;
-
-pub(super) type EventHandlerFn<E, S> =
-    dyn FnMut(&mut dyn UIElement<S>, &E, &mut S, &mut UIEventQueue<S>);
-
-pub(super) type EventHandlerFnOnce<E, S> =
-    dyn FnOnce(&mut dyn UIElement<S>, &E, &mut S, &mut UIEventQueue<S>);
 
 pub(super) struct EventListener {
     pub id: usize,
@@ -47,44 +44,17 @@ impl<S: 'static> Default for UIEvents<S> {
 impl<S: 'static> UIEvents<S> {
     /// Send a new event to the queue
     pub fn send<E: Send + Sync + 'static>(&mut self, evt: E) {
-        self.events.push_front(Box::new(
-            move |nodes, storage, manager, queue, state| {
-                println!("inside event");
+        self.events
+            .push_front(Box::new(move |nodes, storage, graph, queue, state| {
                 let k = TypeId::of::<E>();
                 let Some(listeners) = storage.get_mut(&k) else {
                     return;
                 };
 
-                println!("here1 {:?}", listeners.len());
-
                 nodes.iter().for_each(|info| {
-                    println!("looking for {:?}", info.node_handler);
-                    let Some(cbs) = listeners.get_mut(&info.node_handler) else {
-                        return;
-                    };
-                    println!("here2");
-
-                    cbs.iter_mut().for_each(|cb| {
-                        match &mut cb.typ {
-                            ListenerType::Once(opt_cb) => {
-                                //TODO: set *to_remove = true;
-                                if let Some(cb) = opt_cb.take() {
-                                    let cb =
-                                        cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
-                                    // cb(node.inner.as_mut(), evt, state, queue);
-                                }
-                                // TODO: clean once listeners or clean None
-                            }
-                            ListenerType::Mut(cb) => {
-                                // TODO
-                                println!("here3!");
-                            }
-                        }
-                    });
+                    dispatch(&evt, &info.node_handler, listeners, graph, state, queue);
                 });
-                // iter_call_event(evt, scene_graph, queue, state, to_remove, placeholder);
-            },
-        ));
+            }));
     }
 
     /// Send a new event to a unique node
@@ -93,17 +63,49 @@ impl<S: 'static> UIEvents<S> {
         handler: H,
         evt: E,
     ) {
-        // self.events
-        //     .push_front(Box::new(move |scene_graph, queue, state, to_remove| {
-        //         iter_call_event(
-        //             evt,
-        //             scene_graph,
-        //             queue,
-        //             state,
-        //             to_remove,
-        //             Some(handler.into().raw_id),
-        //         );
-        //     }));
+        self.events
+            .push_front(Box::new(move |nodes, storage, graph, queue, state| {
+                let k = TypeId::of::<E>();
+                let Some(listeners) = storage.get_mut(&k) else {
+                    return;
+                };
+
+                let raw = handler.into();
+                dispatch(&evt, &raw, listeners, graph, state, queue);
+            }));
+    }
+
+    /// Send a new event to the start of th queue
+    pub fn push<E: Send + Sync + 'static>(&mut self, evt: E) {
+        self.events
+            .push_back(Box::new(move |nodes, storage, graph, queue, state| {
+                let k = TypeId::of::<E>();
+                let Some(listeners) = storage.get_mut(&k) else {
+                    return;
+                };
+
+                nodes.iter().for_each(|info| {
+                    dispatch(&evt, &info.node_handler, listeners, graph, state, queue);
+                });
+            }));
+    }
+
+    /// Send a new event to the start of the queue targeting only a unique node
+    pub fn push_to<H: Into<UIRawHandler> + 'static, E: Send + Sync + 'static>(
+        &mut self,
+        handler: H,
+        evt: E,
+    ) {
+        self.events
+            .push_back(Box::new(move |nodes, storage, graph, queue, state| {
+                let k = TypeId::of::<E>();
+                let Some(listeners) = storage.get_mut(&k) else {
+                    return;
+                };
+
+                let raw = handler.into();
+                dispatch(&evt, &raw, listeners, graph, state, queue);
+            }));
     }
 
     /// Take the first event of the queue
@@ -122,92 +124,39 @@ impl<S: 'static> UIEvents<S> {
     > {
         self.events.pop_front()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
 }
 
-#[derive(Default)]
-pub struct UIEventQueue<S: 'static> {
-    pub(super) events: VecDeque<
-        Box<dyn FnOnce(&mut SceneGraph<UINode<S>>, &mut UIEventQueue<S>, &mut S, &mut Vec<usize>)>,
-    >,
-    pub(super) current_event_consumed: bool,
-}
+fn dispatch<E, S>(
+    evt: &E,
+    raw: &UIRawHandler,
+    listeners: &mut FxHashMap<UIRawHandler, SmallVec<EventListener, 5>>,
+    graph: &mut UIGraph<S>,
+    state: &mut S,
+    queue: &mut UIEvents<S>,
+) where
+    S: 'static,
+    E: Send + Sync + 'static,
+{
+    let Some(cbs) = listeners.get_mut(&raw) else {
+        return;
+    };
 
-impl<S: 'static> UIEventQueue<S> {
-    pub(super) fn new() -> Self {
-        Self {
-            events: VecDeque::new(),
-            current_event_consumed: false,
+    cbs.iter_mut().for_each(|cb| match &mut cb.typ {
+        ListenerType::Once(opt_cb) => {
+            if let Some(cb) = opt_cb.take() {
+                let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
+                cb(&evt, &raw, graph, state, queue);
+            }
         }
-    }
+        ListenerType::Mut(cb) => {
+            let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>().unwrap();
+            cb(&evt, &raw, graph, state, queue);
+        }
+    });
 
-    /// Push events in the order that should be executed
-    pub(super) fn push<E: Send + Sync + 'static>(&mut self, evt: E) {
-        self.events
-            .push_back(Box::new(move |scene_graph, queue, state, to_remove| {
-                let placeholder: Option<u64> = None;
-                iter_call_event(evt, scene_graph, queue, state, to_remove, placeholder);
-            }));
-    }
-
-    /// Push events in the order that should be executed
-    pub(super) fn push_to<H: Into<UIRawHandler> + 'static, E: Send + Sync + 'static>(
-        &mut self,
-        handler: H,
-        evt: E,
-    ) {
-        self.events
-            .push_back(Box::new(move |scene_graph, queue, state, to_remove| {
-                iter_call_event(
-                    evt,
-                    scene_graph,
-                    queue,
-                    state,
-                    to_remove,
-                    Some(handler.into().raw_id),
-                );
-            }));
-    }
-
-    /// Take the first event of the queue
-    pub(super) fn take_event(
-        &mut self,
-    ) -> Option<
-        Box<dyn FnOnce(&mut SceneGraph<UINode<S>>, &mut UIEventQueue<S>, &mut S, &mut Vec<usize>)>,
-    > {
-        self.current_event_consumed = false;
-        self.events.pop_front()
-    }
-
-    /// Mark the current event as consumed, so we stop the callbacks
-    pub fn consume_event(&mut self) {
-        self.current_event_consumed = true;
-    }
-
-    /// Send a new event to the queue
-    pub fn send<E: Send + Sync + 'static>(&mut self, evt: E) {
-        self.events
-            .push_front(Box::new(move |scene_graph, queue, state, to_remove| {
-                let placeholder: Option<u64> = None;
-                iter_call_event(evt, scene_graph, queue, state, to_remove, placeholder);
-            }));
-    }
-
-    /// Send a new event to a unique node
-    pub fn send_to<H: Into<UIRawHandler> + 'static, E: Send + Sync + 'static>(
-        &mut self,
-        handler: H,
-        evt: E,
-    ) {
-        self.events
-            .push_front(Box::new(move |scene_graph, queue, state, to_remove| {
-                iter_call_event(
-                    evt,
-                    scene_graph,
-                    queue,
-                    state,
-                    to_remove,
-                    Some(handler.into().raw_id),
-                );
-            }));
-    }
+    cbs.retain(|listener| !matches!(listener.typ, ListenerType::Once(None)));
 }

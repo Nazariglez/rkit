@@ -1,41 +1,34 @@
 use corelib::input::{
     is_mouse_moving, is_mouse_scrolling, mouse_btns_down, mouse_btns_pressed, mouse_btns_released,
-    mouse_motion_delta, mouse_position, mouse_wheel_delta, KeyCode, MouseButton,
+    mouse_motion_delta, mouse_position, mouse_wheel_delta, MouseButton,
 };
-use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
+use corelib::math::{Mat3, Mat4, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use scene_graph::{NodeIndex, SceneGraph};
+use scene_graph::NodeIndex;
 use smallvec::SmallVec;
 use std::any::TypeId;
 use std::marker::PhantomData;
 
 use crate::ui::element::{UIElement, UIRoot};
-use crate::ui::events::{
-    EventHandlerFn, EventHandlerFnOnce, EventListener, ListenerType, UIEventQueue,
-};
+use crate::ui::events::{EventListener, ListenerType};
 use crate::ui::graph::{UIGraph, UIHandler, UINode};
 use crate::ui::{UIEvents, UIInput, UINodeMetadata};
 
-pub struct UIEventData<'a, T, S: 'static> {
-    pub node: &'a mut T,
-    pub state: &'a mut S,
-    pub events: &'a mut UIEventQueue<S>,
-}
-
 pub(super) type ListenerStorage =
     FxHashMap<TypeId, FxHashMap<UIRawHandler, SmallVec<EventListener, 5>>>;
-pub(super) type EventListenHandler<E, S> =
-    dyn FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEventQueue<S>);
+pub(super) type EventHandlerFn<E, S> =
+    dyn FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>);
+pub(super) type EventHandlerFnOnce<E, S> =
+    dyn FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>);
 
 pub struct UIManager<S: 'static> {
     graph: UIGraph<S>,
-    events: UIEventQueue<S>,
-    events2: UIEvents<S>,
+    events: UIEvents<S>,
     listener_id: usize,
-    node_id: u64,
 
     listeners: ListenerStorage,
+    temp_iter_handlers: Vec<NodeIterInfo>,
 
     // used to avoid allocations when `once` events expire
     to_remove_cb: Vec<usize>,
@@ -70,7 +63,7 @@ impl<S> Default for UIManager<S> {
 impl<S> UIManager<S> {
     pub fn new(enable_input: bool) -> Self {
         let node = UINode {
-            raw_id: 0,
+            idx: Some(NodeIndex::Root),
             inner: Box::new(UIRoot {
                 transform: Transform2D::default(),
             }),
@@ -81,12 +74,11 @@ impl<S> UIManager<S> {
 
         Self {
             graph: UIGraph::new(node),
-            events: UIEventQueue::new(),
-            events2: UIEvents::default(),
+            events: UIEvents::default(),
             listener_id: 0,
-            node_id: 0,
 
             listeners: FxHashMap::with_capacity_and_hasher(10, FxBuildHasher::default()),
+            temp_iter_handlers: vec![],
 
             to_remove_cb: vec![],
             projection: Default::default(),
@@ -125,17 +117,33 @@ impl<S> UIManager<S> {
     }
 
     #[inline(always)]
-    pub fn element<T>(&self, handler: UIHandler<T>) -> Option<&T>
+    pub fn element_as<T>(&self, handler: UIHandler<T>) -> Option<&T>
     where
         T: UIElement<S> + 'static,
+    {
+        self.graph.element_as(handler)
+    }
+
+    #[inline(always)]
+    pub fn element_mut_as<T>(&mut self, handler: UIHandler<T>) -> Option<&mut T>
+    where
+        T: UIElement<S> + 'static,
+    {
+        self.graph.element_mut_as(handler)
+    }
+
+    #[inline(always)]
+    pub fn element<H>(&self, handler: H) -> Option<&dyn UIElement<S>>
+    where
+        H: Into<UIRawHandler>,
     {
         self.graph.element(handler)
     }
 
     #[inline(always)]
-    pub fn element_mut<T>(&mut self, handler: UIHandler<T>) -> Option<&mut T>
+    pub fn element_mut<H>(&mut self, handler: H) -> Option<&mut dyn UIElement<S>>
     where
-        T: UIElement<S> + 'static,
+        H: Into<UIRawHandler>,
     {
         self.graph.element_mut(handler)
     }
@@ -165,39 +173,38 @@ impl<S> UIManager<S> {
     }
 
     fn dispatch_events(&mut self, state: &mut S) {
-        while let Some(event_cb) = self.events.take_event() {
-            event_cb(
-                &mut self.graph.scene_graph, // TODO: check this
-                &mut self.events,
-                state,
-                &mut self.to_remove_cb,
-            );
-        }
-    }
+        // clean removed in last frame
+        self.graph.removed.iter().for_each(|raw| {
+            self.listeners.iter_mut().for_each(|(_, listeners)| {
+                let _ = listeners.remove(&raw);
+            });
+        });
+        self.graph.removed.clear();
 
-    fn dispatch_events2(&mut self, state: &mut S) {
-        let slice = self
-            .graph
-            .scene_graph
-            .iter()
-            .map(|(parent, node)| NodeIterInfo {
-                parent_handler: Some(UIRawHandler {
-                    raw_id: parent.raw_id,
-                    idx: None,
-                }),
-                node_handler: UIRawHandler {
-                    raw_id: node.raw_id,
-                    idx: None,
-                },
-            })
-            .collect::<Vec<_>>();
-        while let Some(evt_cb) = self.events2.take_event() {
-            println!("Dispatch events2");
+        if self.events.is_empty() {
+            return;
+        }
+
+        // iter through events in reverse order
+        self.temp_iter_handlers.clear();
+        self.temp_iter_handlers
+            .extend(
+                self.graph
+                    .scene_graph
+                    .iter()
+                    .map(|(parent, node)| NodeIterInfo {
+                        parent_handler: Some(UIRawHandler { idx: parent.idx }),
+                        node_handler: UIRawHandler { idx: node.idx },
+                    }),
+            );
+        self.temp_iter_handlers.reverse();
+
+        while let Some(evt_cb) = self.events.take_event() {
             evt_cb(
-                &slice,
+                &self.temp_iter_handlers,
                 &mut self.listeners,
                 &mut self.graph,
-                &mut self.events2,
+                &mut self.events,
                 state,
             );
         }
@@ -232,17 +239,11 @@ impl<S> UIManager<S> {
                 node.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
             let contains = node.inner.input_box().contains(point);
 
-            let raw = UIRawHandler {
-                raw_id: node.raw_id,
-                idx: None,
-            };
+            let raw = UIRawHandler { idx: node.idx };
 
             let metadata = UINodeMetadata {
                 handler: raw,
-                parent_handler: UIRawHandler {
-                    raw_id: parent.raw_id,
-                    idx: None,
-                },
+                parent_handler: UIRawHandler { idx: parent.idx },
             };
 
             if contains {
@@ -377,28 +378,20 @@ impl<S> UIManager<S> {
     where
         E: Send + Sync + 'static,
     {
-        self.events2.send(evt);
+        self.events.send(evt);
     }
 
-    pub fn push_event<E>(&mut self, evt: E)
-    where
-        E: Send + Sync + 'static,
-    {
-        self.events.push(evt);
-    }
-
-    pub fn push_event_to<H, E>(&mut self, handler: H, evt: E)
+    pub fn send_event_to<H, E>(&mut self, handler: H, evt: E)
     where
         H: Into<UIRawHandler> + 'static,
         E: Send + Sync + 'static,
     {
-        self.events.push_to(handler, evt);
+        self.events.send_to(handler, evt);
     }
 
     pub fn update(&mut self, cam: &dyn BaseCam2D, state: &mut S) {
         self.process_inputs(state);
         self.dispatch_events(state);
-        self.dispatch_events2(state);
 
         // update matrices
         self.set_camera(cam);
@@ -412,14 +405,8 @@ impl<S> UIManager<S> {
             .iter_mut()
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
-                    handler: UIRawHandler {
-                        raw_id: node.raw_id,
-                        idx: None,
-                    },
-                    parent_handler: UIRawHandler {
-                        raw_id: parent.raw_id,
-                        idx: None,
-                    },
+                    handler: UIRawHandler { idx: node.idx },
+                    parent_handler: UIRawHandler { idx: parent.idx },
                 };
                 node.inner.update(state, &mut self.events, metadata);
                 let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
@@ -431,23 +418,13 @@ impl<S> UIManager<S> {
     }
 
     pub fn render(&mut self, draw: &mut Draw2D, state: &mut S) {
-        // draw.push_matrix(self.scene_graph.root.matrix);
-        // self.scene_graph.root.inner.render(draw, state);
-        // draw.pop_matrix();
-
         self.graph
             .scene_graph
             .iter_mut()
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
-                    handler: UIRawHandler {
-                        raw_id: node.raw_id,
-                        idx: None,
-                    },
-                    parent_handler: UIRawHandler {
-                        raw_id: parent.raw_id,
-                        idx: None,
-                    },
+                    handler: UIRawHandler { idx: node.idx },
+                    parent_handler: UIRawHandler { idx: parent.idx },
                 };
                 draw.push_matrix(node.matrix);
                 node.inner.render(draw, state, metadata);
@@ -455,32 +432,32 @@ impl<S> UIManager<S> {
             });
     }
 
-    pub fn listen<T, E, F>(
+    pub fn on<T, E, F>(
         &mut self,
         handler: UIHandler<T>,
-        mut cb: F,
+        cb: F,
     ) -> Result<UIListenerId<T, E>, String>
     where
         T: UIElement<S> + 'static,
         E: 'static,
-        F: FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEventQueue<S>) + 'static,
+        F: FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) + 'static,
     {
-        // TODO: remove this or check that exists, that's all
-        let handler_idx = handler
+        let idx = handler
             .raw
             .idx
             .ok_or_else(|| "Empty UIHandler".to_string())?;
+
+        if !self.graph.scene_graph.contains(idx) {
+            return Err("Invalid UIHandler".to_string());
+        }
 
         let k = TypeId::of::<E>();
         let handlers = self
             .listeners
             .entry(k)
             .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher::default()));
-        //
-        // let cb: Box<EventListenHandler<E, S>> = Box::new(move |event,handler, graph, state, events| {
-        //    // TODO
-        //     println!("Here!");
-        // });
+
+        let cb: Box<EventHandlerFn<E, S>> = Box::new(cb);
 
         self.listener_id += 1;
         let listener = EventListener {
@@ -488,58 +465,8 @@ impl<S> UIManager<S> {
             typ: ListenerType::Mut(Box::new(cb)),
         };
 
-        // TODO: on_rmeove node, remove listeners attached to it's id
-
-        let raw: UIRawHandler = handler.to_raw_handler();
-        println!("Listen {:?}", raw);
+        let raw: UIRawHandler = handler.raw();
         handlers.entry(raw).or_default().push(listener);
-
-        Ok(UIListenerId {
-            id: self.listener_id,
-            handler,
-            _e: PhantomData,
-        })
-    }
-
-    pub fn on<T, E, F>(
-        &mut self,
-        handler: UIHandler<T>,
-        mut cb: F,
-    ) -> Result<UIListenerId<T, E>, String>
-    where
-        T: UIElement<S> + 'static,
-        E: 'static,
-        F: FnMut(&E, UIEventData<T, S>) + 'static,
-    {
-        let handler_idx = handler
-            .raw
-            .idx
-            .ok_or_else(|| "Empty UIHandler".to_string())?;
-
-        let handlers = &mut self
-            .graph
-            .scene_graph
-            .get_mut(handler_idx)
-            .ok_or_else(|| "Invalid UIHandler".to_string())?
-            .value
-            .handlers;
-        let k = TypeId::of::<E>();
-        let cb: Box<EventHandlerFn<E, S>> = Box::new(move |ui_e, evt, state, events| {
-            let node = ui_e.downcast_mut::<T>().unwrap();
-            let data = UIEventData {
-                node,
-                state,
-                events,
-            };
-            cb(evt, data);
-        });
-
-        self.listener_id += 1;
-        let listener = EventListener {
-            id: self.listener_id,
-            typ: ListenerType::Mut(Box::new(cb)),
-        };
-        handlers.entry(k).or_default().push(listener);
 
         Ok(UIListenerId {
             id: self.listener_id,
@@ -556,32 +483,33 @@ impl<S> UIManager<S> {
     where
         T: UIElement<S> + 'static,
         E: 'static,
-        F: FnOnce(&mut T, &E, &mut S, &mut UIEventQueue<S>) + 'static,
+        F: FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) + 'static,
     {
-        let handler_idx = handler
+        let idx = handler
             .raw
             .idx
             .ok_or_else(|| "Empty UIHandler".to_string())?;
 
-        let handlers = &mut self
-            .graph
-            .scene_graph
-            .get_mut(handler_idx)
-            .ok_or_else(|| "Invalid UIHandler".to_string())?
-            .value
-            .handlers;
+        if !self.graph.scene_graph.contains(idx) {
+            return Err("Invalid UIHandler".to_string());
+        }
+
         let k = TypeId::of::<E>();
-        let cb: Box<EventHandlerFnOnce<E, S>> = Box::new(move |t, e, s, q| {
-            let tt = t.downcast_mut::<T>().unwrap();
-            cb(tt, e, s, q);
-        });
+        let handlers = self
+            .listeners
+            .entry(k)
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher::default()));
+
+        let cb: Box<EventHandlerFnOnce<E, S>> = Box::new(cb);
 
         self.listener_id += 1;
         let listener = EventListener {
             id: self.listener_id,
             typ: ListenerType::Once(Some(Box::new(cb))),
         };
-        handlers.entry(k).or_default().push(listener);
+
+        let raw: UIRawHandler = handler.raw();
+        handlers.entry(raw).or_default().push(listener);
 
         Ok(UIListenerId {
             id: self.listener_id,
@@ -596,9 +524,7 @@ impl<S> UIManager<S> {
         E: 'static,
         S: 'static,
     {
-        // TODO: return Result?
-        let idx = listener_id.handler.raw.idx;
-        if let Some(idx) = idx {
+        if let Some(idx) = listener_id.handler.raw.idx {
             if let Some(node) = self.graph.scene_graph.get_mut(idx) {
                 if let Some(listeners) = node.value.handlers.get_mut(&TypeId::of::<E>()) {
                     listeners.retain(|listener| listener.id != listener_id.id);
@@ -607,36 +533,30 @@ impl<S> UIManager<S> {
         }
     }
 
-    pub fn trigger_event<T, E>(
-        &mut self,
-        handler: UIHandler<T>,
-        evt: E,
-        state: &mut S,
-    ) -> Result<(), String>
-    where
-        T: UIElement<S> + 'static,
-        E: Send + Sync + 'static,
-    {
-        let handler_idx = handler
-            .raw
-            .idx
-            .ok_or_else(|| "Empty UIHandler".to_string())?;
-        let node = &mut self
-            .graph
-            .scene_graph
-            .get_mut(handler_idx)
-            .ok_or_else(|| "Invalid UIHandler".to_string())?
-            .value;
-        call_event(node, &evt, state, &mut self.events, &mut self.to_remove_cb);
-        Ok(())
-    }
-
-    fn consume_events(&mut self) {
-        let mut events: SmallVec<(&(), UIRawHandler), 150> = SmallVec::default();
-        let mut graph: SmallVec<(&mut UINode<S>, &mut UINode<S>), 120> =
-            self.graph.scene_graph.iter_mut().collect();
-        graph.reverse();
-    }
+    // pub fn trigger_event<T, E>(
+    //     &mut self,
+    //     handler: UIHandler<T>,
+    //     evt: E,
+    //     state: &mut S,
+    // ) -> Result<(), String>
+    // where
+    //     T: UIElement<S> + 'static,
+    //     E: Send + Sync + 'static,
+    // {
+    //     let handler_idx = handler
+    //         .raw
+    //         .idx
+    //         .ok_or_else(|| "Empty UIHandler".to_string())?;
+    //
+    //     let node = &mut self
+    //         .graph
+    //         .scene_graph
+    //         .get_mut(handler_idx)
+    //         .ok_or_else(|| "Invalid UIHandler".to_string())?
+    //         .value;
+    //     call_event(node, &evt, state, &mut self.events, &mut self.to_remove_cb);
+    //     Ok(())
+    // }
 
     pub fn cursor_hover<H>(&mut self, handler: H) -> bool
     where
@@ -652,8 +572,7 @@ impl<S> UIManager<S> {
         };
 
         let raw = UIRawHandler {
-            raw_id: node.value.raw_id,
-            idx: None,
+            idx: node.value.idx,
         };
 
         self.hover.contains(&raw)
@@ -673,8 +592,7 @@ impl<S> UIManager<S> {
         };
 
         let raw = UIRawHandler {
-            raw_id: node.value.raw_id,
-            idx: None,
+            idx: node.value.idx,
         };
 
         let id = (raw, btn);
@@ -702,8 +620,7 @@ impl<S> UIManager<S> {
         };
 
         let raw = UIRawHandler {
-            raw_id: node.value.raw_id,
-            idx: None,
+            idx: node.value.idx,
         };
 
         let id = (raw, btn);
@@ -731,8 +648,7 @@ impl<S> UIManager<S> {
         };
 
         let raw = UIRawHandler {
-            raw_id: node.value.raw_id,
-            idx: None,
+            idx: node.value.idx,
         };
 
         let id = (raw, btn);
@@ -760,8 +676,7 @@ impl<S> UIManager<S> {
         };
 
         let raw = UIRawHandler {
-            raw_id: node.value.raw_id,
-            idx: None,
+            idx: node.value.idx,
         };
 
         let id = (raw, btn);
@@ -776,101 +691,13 @@ impl<S> UIManager<S> {
     }
 }
 
-fn call_event<S, E>(
-    node: &mut UINode<S>,
-    evt: &E,
-    state: &mut S,
-    queue: &mut UIEventQueue<S>,
-    to_remove_cb: &mut Vec<usize>,
-) where
-    E: 'static,
-    S: 'static,
-{
-    let k = TypeId::of::<E>();
-    if let Some(listeners) = node.handlers.get_mut(&k) {
-        for listener in listeners.iter_mut() {
-            match &mut listener.typ {
-                ListenerType::Once(opt_cb) => {
-                    if let Some(cb) = opt_cb.take() {
-                        let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
-                        cb(node.inner.as_mut(), evt, state, queue);
-                    }
-                    to_remove_cb.push(listener.id);
-                }
-                ListenerType::Mut(cb) => {
-                    let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>();
-                    if let Some(cb) = cb {
-                        cb(node.inner.as_mut(), evt, state, queue);
-                    }
-                }
-            }
-        }
-
-        listeners.retain(|listener| !to_remove_cb.contains(&listener.id));
-
-        to_remove_cb.clear();
-    }
-}
-
-// fn iter_listeners_event<S, E>(
-//     evt: E,
-//     graph: &mut UIGraph<S>,
-//     state: &mut S,
-//     queue: &mut UIEventQueue<S>,
-// ) where
-//     E: Send + Sync + 'static,
-//     S: 'static, {
-//     // reverse the graph
-//     let mut graph: SmallVec<(&mut UINode<S>, &mut UINode<S>), 120> =
-//         graph.scene_graph.iter_mut().collect();
-//     graph.reverse();
-// }
-
-pub(super) fn iter_call_event<E, S>(
-    evt: E,
-    scene_graph: &mut SceneGraph<UINode<S>>,
-    queue: &mut UIEventQueue<S>,
-    state: &mut S,
-    to_remove_cb: &mut Vec<usize>,
-    raw_id: Option<u64>,
-) where
-    E: Send + Sync + 'static,
-    S: 'static,
-{
-    for (_parent, child) in scene_graph.iter_mut() {
-        let do_break_after = match raw_id {
-            Some(id) => {
-                if id == child.raw_id {
-                    // do not keep iterating, break after process this event
-                    true
-                } else {
-                    // skip this node
-                    continue;
-                }
-            }
-            None => false,
-        };
-        // if the event is marked as consumed, then do not execute the rest of callbacks
-        if queue.current_event_consumed {
-            break;
-        }
-
-        call_event(child, &evt, state, queue, to_remove_cb);
-
-        if do_break_after {
-            break;
-        }
-    }
-}
-
-#[derive(Copy, Clone, Default, Hash, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Debug, Eq, PartialEq)]
 pub struct UIRawHandler {
-    pub(super) raw_id: u64,
     pub(super) idx: Option<NodeIndex>,
 }
 
 impl UIRawHandler {
-    pub fn to_typed_handler<T>(self) -> UIHandler<T> {
+    pub fn typed<T>(self) -> UIHandler<T> {
         UIHandler::from(self)
     }
 }
@@ -884,7 +711,7 @@ impl<T> From<UIRawHandler> for UIHandler<T> {
     }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct UIListenerId<T, E> {
     id: usize,
     handler: UIHandler<T>,

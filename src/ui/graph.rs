@@ -3,14 +3,14 @@ use crate::ui::{UIElement, UIRawHandler};
 use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
 use draw::Transform2D;
 use rustc_hash::FxHashMap;
-use scene_graph::SceneGraph;
+use scene_graph::{NodeIndex, SceneGraph};
 use smallvec::SmallVec;
 use std::any::TypeId;
 use std::marker::PhantomData;
 
 pub struct UIGraph<S: 'static> {
     pub(super) scene_graph: SceneGraph<UINode<S>>,
-    node_id: u64,
+    pub(super) removed: Vec<UIRawHandler>,
 }
 
 impl<S> UIGraph<S>
@@ -20,7 +20,7 @@ where
     pub fn new(root: UINode<S>) -> Self {
         Self {
             scene_graph: SceneGraph::new(root),
-            node_id: 0,
+            removed: vec![],
         }
     }
 
@@ -33,9 +33,8 @@ where
     }
 
     pub fn add<T: UIElement<S> + 'static>(&mut self, element: T) -> UIHandler<T> {
-        self.node_id += 1;
         let node = UINode {
-            raw_id: self.node_id,
+            idx: None,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
             root_inverse_matrix: Mat3::IDENTITY.inverse(),
@@ -43,11 +42,10 @@ where
         };
 
         let idx = self.scene_graph.attach_at_root(node);
+        self.scene_graph.get_mut(idx).unwrap().value.idx = Some(idx);
+
         UIHandler {
-            raw: UIRawHandler {
-                raw_id: self.node_id,
-                idx: Some(idx),
-            },
+            raw: UIRawHandler { idx: Some(idx) },
             _t: PhantomData,
         }
     }
@@ -62,27 +60,68 @@ where
             .idx
             .ok_or_else(|| "Empty UIHandler".to_string())?;
 
-        self.node_id += 1;
         let node = UINode {
-            raw_id: self.node_id,
+            idx: None,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
             root_inverse_matrix: Mat3::IDENTITY.inverse(),
             handlers: Default::default(),
         };
-        self.scene_graph
+        let idx = self
+            .scene_graph
             .attach(parent_idx, node)
-            .map(|idx| UIHandler {
-                raw: UIRawHandler {
-                    raw_id: self.node_id,
-                    idx: Some(idx),
-                },
-                _t: PhantomData,
-            })
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+
+        self.scene_graph.get_mut(idx).unwrap().value.idx = Some(idx);
+        Ok(UIHandler {
+            raw: UIRawHandler { idx: Some(idx) },
+            _t: PhantomData,
+        })
     }
 
-    pub fn element<T>(&self, handler: UIHandler<T>) -> Option<&T>
+    pub fn element<H>(&self, handler: H) -> Option<&dyn UIElement<S>>
+    where
+        H: Into<UIRawHandler>,
+    {
+        let idx = handler.into().idx?;
+        self.scene_graph
+            .get(idx)
+            .map(|node| node.value.inner.as_ref())
+    }
+
+    pub fn element_mut<H>(&mut self, handler: H) -> Option<&mut dyn UIElement<S>>
+    where
+        H: Into<UIRawHandler>,
+    {
+        let idx = handler.into().idx?;
+        self.scene_graph
+            .get_mut(idx)
+            .map(|node| node.value.inner.as_mut())
+    }
+
+    pub fn parent<H>(&self, handler: H) -> Option<&dyn UIElement<S>>
+    where
+        H: Into<UIRawHandler>,
+    {
+        let idx = handler.into().idx?;
+        let parent_idx = self.scene_graph.parent(idx)?;
+        self.scene_graph
+            .get(parent_idx)
+            .map(|node| node.value.inner.as_ref())
+    }
+
+    pub fn parent_mut<H>(&mut self, handler: H) -> Option<&mut dyn UIElement<S>>
+    where
+        H: Into<UIRawHandler>,
+    {
+        let idx = handler.into().idx?;
+        let parent_idx = self.scene_graph.parent(idx)?;
+        self.scene_graph
+            .get_mut(parent_idx)
+            .map(|node| node.value.inner.as_mut())
+    }
+
+    pub fn element_as<T>(&self, handler: UIHandler<T>) -> Option<&T>
     where
         T: UIElement<S> + 'static,
     {
@@ -92,7 +131,7 @@ where
             .map(|node| node.value.inner.downcast_ref::<T>().unwrap())
     }
 
-    pub fn element_mut<T>(&mut self, handler: UIHandler<T>) -> Option<&mut T>
+    pub fn element_mut_as<T>(&mut self, handler: UIHandler<T>) -> Option<&mut T>
     where
         T: UIElement<S> + 'static,
     {
@@ -111,12 +150,13 @@ where
             .idx
             .ok_or_else(|| "Empty UIHandler".to_string())?;
         self.scene_graph.remove(idx);
+        self.removed.push(handler.raw);
         Ok(())
     }
 }
 
 pub struct UINode<S> {
-    pub(super) raw_id: u64,
+    pub(super) idx: Option<NodeIndex>,
     pub(super) inner: Box<dyn UIElement<S>>,
     pub(super) matrix: Mat3,
     pub(super) root_inverse_matrix: Mat3,
@@ -143,10 +183,19 @@ impl<S> UINode<S> {
     }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct UIHandler<T> {
     pub(super) raw: UIRawHandler,
     pub(super) _t: PhantomData<T>,
+}
+
+impl<T> Default for UIHandler<T> {
+    fn default() -> Self {
+        Self {
+            raw: UIRawHandler { idx: None },
+            _t: PhantomData::default(),
+        }
+    }
 }
 
 impl<T> Copy for UIHandler<T> {}
@@ -157,29 +206,8 @@ impl<T> Clone for UIHandler<T> {
     }
 }
 
-impl<T> Default for UIHandler<T> {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
 impl<T> UIHandler<T> {
-    pub fn is_empty(&self) -> bool {
-        self.raw.idx.is_none()
-    }
-
-    pub fn empty() -> Self {
-        UIHandler {
-            raw: Default::default(),
-            _t: PhantomData,
-        }
-    }
-
-    pub fn to_raw_handler(self) -> UIRawHandler {
-        UIRawHandler::from(self)
-    }
-
-    pub(super) fn raw_id(&self) -> u64 {
-        self.raw.raw_id
+    pub fn raw(self) -> UIRawHandler {
+        self.raw
     }
 }

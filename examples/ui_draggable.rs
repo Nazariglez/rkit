@@ -2,7 +2,7 @@ use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
-use rkit::ui::{UIElement, UIEventQueue, UIInput, UIManager, UINodeMetadata};
+use rkit::ui::{UIElement, UIEvents, UIInput, UIManager, UINodeMetadata};
 
 struct State {
     cam: Camera2D,
@@ -73,7 +73,7 @@ impl<S> UIElement<S> for DraggableNode {
         &mut self,
         input: UIInput,
         _state: &mut S,
-        _events: &mut UIEventQueue<S>,
+        _events: &mut UIEvents<S>,
         _meta: UINodeMetadata,
     ) {
         match input {

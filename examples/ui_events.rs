@@ -4,7 +4,7 @@ use rkit::gfx::{self, Color};
 use rkit::input::MouseButton;
 use rkit::math::{vec2, FloatExt, Vec2};
 use rkit::time;
-use rkit::ui::{UIElement, UIEventQueue, UIHandler, UIManager, UINodeMetadata};
+use rkit::ui::{UIElement, UIEvents, UIHandler, UIManager, UINodeMetadata};
 
 // events
 struct MoveTo(f32);
@@ -32,23 +32,24 @@ impl State {
 
         // -- Define element event listeners
         // move event
-        let _listener = ui.on(container, |evt: &MoveTo, data| {
-            data.node.moving = true;
-            data.node.target = evt.0;
-            data.node.color = Color::SILVER;
-        });
+        let _listener = ui.on(
+            container,
+            |&MoveTo(pos), handler, graph, _state, _events| {
+                if let Some(node) = graph.element_mut_as::<Element>(handler.typed()) {
+                    node.moving = true;
+                    node.target = pos;
+                    node.color = Color::SILVER;
+                }
+            },
+        );
 
         // change color when stopped
-        let _listener = ui.on(container, |evt: &Stop, data| {
-            data.node.moving = false;
-            data.node.color = Color::PINK;
+        let _listener = ui.on(container, |_evt: &Stop, handler, graph, _state, _events| {
+            if let Some(node) = graph.element_mut_as::<Element>(handler.typed()) {
+                node.moving = false;
+                node.color = Color::PINK;
+            }
         });
-
-        let _listener = ui.listen(container, |evt: &Stop, handler, graph, state, events| {
-            println!("Yes inside the cb!");
-        });
-
-        ui.send_event(Stop);
 
         let cam = Camera2D::new(window_size(), Default::default());
         Self { cam, ui, container }
@@ -70,12 +71,12 @@ fn update(state: &mut State) {
 
     // left click move to the left
     if state.ui.clicked(state.container) {
-        state.ui.push_event(MoveTo(200.0));
+        state.ui.send_event(MoveTo(200.0));
     }
 
     // right click move to the right
     if state.ui.clicked_by(state.container, MouseButton::Right) {
-        state.ui.push_event(MoveTo(600.0));
+        state.ui.send_event(MoveTo(600.0));
     }
 
     // just draw as usual
@@ -108,7 +109,7 @@ impl<S> UIElement<S> for Element {
         &mut self.transform
     }
 
-    fn update(&mut self, _state: &mut S, events: &mut UIEventQueue<S>, _meta: UINodeMetadata) {
+    fn update(&mut self, _state: &mut S, events: &mut UIEvents<S>, _meta: UINodeMetadata) {
         if !self.moving {
             return;
         }
