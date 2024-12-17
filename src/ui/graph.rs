@@ -146,7 +146,7 @@ impl<S> UINode<S> {
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct UIHandler<T> {
     pub(super) raw: UIRawHandler,
-    _t: PhantomData<T>,
+    pub(super) _t: PhantomData<T>,
 }
 
 impl<T> Copy for UIHandler<T> {}
@@ -173,6 +173,10 @@ impl<T> UIHandler<T> {
             raw: Default::default(),
             _t: PhantomData,
         }
+    }
+
+    pub fn to_raw_handler(self) -> UIRawHandler {
+        UIRawHandler::from(self)
     }
 
     pub(super) fn raw_id(&self) -> u64 {

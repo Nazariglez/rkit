@@ -44,6 +44,12 @@ impl State {
             data.node.color = Color::PINK;
         });
 
+        let _listener = ui.listen(container, |evt: &Stop, handler, graph, state, events| {
+            println!("Yes inside the cb!");
+        });
+
+        ui.send_event(Stop);
+
         let cam = Camera2D::new(window_size(), Default::default());
         Self { cam, ui, container }
     }
