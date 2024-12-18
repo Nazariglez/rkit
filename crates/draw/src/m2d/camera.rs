@@ -60,13 +60,13 @@ impl Default for Camera2D {
             size: Vec2::ONE,
 
             projection: Mat4::IDENTITY,
-            inverse_projection: Mat4::IDENTITY.inverse(),
+            inverse_projection: Mat4::IDENTITY,
             dirty_projection: true,
 
             ratio: Vec2::ONE,
 
             transform: Mat3::IDENTITY,
-            inverse_transform: Mat3::IDENTITY.inverse(),
+            inverse_transform: Mat3::IDENTITY,
 
             mode: ScreenMode::Normal,
             dirty_transform: true,

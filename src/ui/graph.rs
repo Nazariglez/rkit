@@ -35,9 +35,11 @@ where
     pub fn add<T: UIElement<S> + 'static>(&mut self, element: T) -> UIHandler<T> {
         let node = UINode {
             idx: None,
+            first_relayout: false,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
-            root_inverse_matrix: Mat3::IDENTITY.inverse(),
+            root_inverse_matrix: Mat3::IDENTITY,
+            is_visible: true,
             handlers: Default::default(),
         };
 
@@ -62,9 +64,11 @@ where
 
         let node = UINode {
             idx: None,
+            first_relayout: false,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
-            root_inverse_matrix: Mat3::IDENTITY.inverse(),
+            root_inverse_matrix: Mat3::IDENTITY,
+            is_visible: true,
             handlers: Default::default(),
         };
         let idx = self
@@ -157,9 +161,11 @@ where
 
 pub struct UINode<S> {
     pub(super) idx: Option<NodeIndex>,
+    pub(super) first_relayout: bool,
     pub(super) inner: Box<dyn UIElement<S>>,
     pub(super) matrix: Mat3,
     pub(super) root_inverse_matrix: Mat3,
+    pub(super) is_visible: bool,
     pub(super) handlers: FxHashMap<TypeId, SmallVec<EventListener, 10>>,
 }
 

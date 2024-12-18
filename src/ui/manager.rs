@@ -77,11 +77,13 @@ impl<S> UIManager<S> {
     pub fn new(enable_input: bool) -> Self {
         let node = UINode {
             idx: Some(NodeIndex::Root),
+            first_relayout: false,
             inner: Box::new(UIRoot {
                 transform: Transform2D::default(),
             }),
             matrix: Mat3::IDENTITY,
-            root_inverse_matrix: Mat3::IDENTITY.inverse(),
+            root_inverse_matrix: Mat3::IDENTITY,
+            is_visible: true,
             handlers: FxHashMap::default(),
         };
 
@@ -239,12 +241,36 @@ impl<S> UIManager<S> {
             self.graph.scene_graph.iter_mut().collect();
         graph.reverse();
 
+        // TODO: consume and skip events
+        enum ControlEvents {
+            Hover,
+            Enter,
+            Leave,
+            Down,
+            Pressed,
+            Released,
+            Scroll,
+            DragStart,
+            Dragging,
+            DragEnd,
+        }
+
+        struct ProcessControl {
+            consume: SmallVec<ControlEvents, 10>,
+            skip: SmallVec<(ControlEvents, UIRawHandler), 10>, // add any node that must be skipped to skip also the children
+        }
+
         let down_btns = mouse_btns_down();
         let pressed_btns = mouse_btns_pressed();
         let released_btns = mouse_btns_released();
         let scroll = is_mouse_scrolling().then_some(mouse_wheel_delta());
         let moving = is_mouse_moving().then_some(mouse_motion_delta());
         for (parent, node) in graph {
+            let can_process = node.is_visible && node.inner.input_enabled();
+            if !can_process {
+                continue;
+            }
+
             let parent_point =
                 parent.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
             let point =
@@ -377,6 +403,9 @@ impl<S> UIManager<S> {
             });
         }
 
+        // TODO: consume events on input callback
+        // TODO: global events to be consumed outside of the ui system?
+
         // clean any node that was pressed with this button
         released_btns.iter().for_each(|btn| {
             self.start_click.retain(|(_, b), _| btn != *b);
@@ -400,6 +429,14 @@ impl<S> UIManager<S> {
     }
 
     pub fn update(&mut self, cam: &dyn BaseCam2D, state: &mut S) {
+        // TODO: this could be done in the update iteration if we move process inputs to the end of the frame?
+        // process visible state
+        self.graph
+            .scene_graph
+            .iter_mut()
+            .for_each(|(parent, child)| process_visibility(parent, child));
+
+        // process inputs and dispatch events
         self.process_inputs(state);
         self.dispatch_events(state);
 
@@ -413,6 +450,7 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
+            .filter(|(parent, child)| child.is_visible)
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
                     handler: UIRawHandler { idx: node.idx },
@@ -420,16 +458,14 @@ impl<S> UIManager<S> {
                 };
                 node.inner.update(state, &mut self.events, metadata);
                 let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
-                if matrix != node.matrix {
+                if matrix != node.matrix || !node.first_relayout {
+                    node.first_relayout = true;
                     node.matrix = matrix;
                     node.root_inverse_matrix = (self.root_matrix * matrix).inverse();
                     node.inner.relayout(
                         state,
                         &mut self.events,
-                        Rect::new(
-                            Vec2::ZERO,
-                            parent.inner.transform().size(),
-                        ),
+                        Rect::new(Vec2::ZERO, parent.inner.transform().size()),
                     );
                 }
             });
@@ -439,6 +475,7 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
+            .filter(|(parent, child)| child.is_visible)
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
                     handler: UIRawHandler { idx: node.idx },
@@ -731,4 +768,9 @@ impl<T> From<UIHandler<T>> for UIRawHandler {
 pub(super) struct NodeIterInfo {
     pub parent_handler: Option<UIRawHandler>,
     pub node_handler: UIRawHandler,
+}
+
+#[inline]
+fn process_visibility<S: 'static>(parent: &mut UINode<S>, child: &mut UINode<S>) {
+    child.is_visible = parent.is_visible && child.inner.visible();
 }

@@ -44,6 +44,12 @@ pub enum UIInput {
 pub trait UIElement<S>: Downcast + Send + Sync {
     fn transform(&self) -> &Transform2D;
     fn transform_mut(&mut self) -> &mut Transform2D;
+    fn visible(&self) -> bool {
+        true
+    }
+    fn input_enabled(&self) -> bool {
+        false
+    }
     fn input_box(&self) -> Rect {
         Rect::new(Vec2::ZERO, self.transform().size())
     }
