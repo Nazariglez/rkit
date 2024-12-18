@@ -55,6 +55,7 @@ pub trait UIElement<S>: Downcast + Send + Sync {
         _metadata: UINodeMetadata,
     ) {
     }
+    fn relayout(&mut self, _state: &mut S, _events: &mut UIEvents<S>, _parent_bounds: Rect) {}
     fn update(&mut self, _state: &mut S, _events: &mut UIEvents<S>, _metadata: UINodeMetadata) {}
     fn render(&mut self, _draw: &mut Draw2D, _state: &S, _metadata: UINodeMetadata) {}
 }

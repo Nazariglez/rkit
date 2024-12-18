@@ -1,6 +1,7 @@
 use crate::tween::{ApplyState, Interpolable, Tween};
 use rustc_hash::FxHashMap;
 
+#[derive(Debug)]
 pub struct TweenMap<K, V>
 where
     K: std::hash::Hash + Eq,
@@ -80,7 +81,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tween::{Tween};
+    use crate::tween::Tween;
 
     #[test]
     fn test_insert_and_get() {

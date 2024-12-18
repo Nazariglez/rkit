@@ -2,7 +2,7 @@ use corelib::input::{
     is_mouse_moving, is_mouse_scrolling, mouse_btns_down, mouse_btns_pressed, mouse_btns_released,
     mouse_motion_delta, mouse_position, mouse_wheel_delta, MouseButton,
 };
-use corelib::math::{Mat3, Mat4, Vec2};
+use corelib::math::{Mat3, Mat4, Rect, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use scene_graph::NodeIndex;
@@ -172,7 +172,7 @@ impl<S> UIManager<S> {
         self.size = cam.size();
         self.graph
             .root_transform_mut()
-            .set_size(self.size)
+            .set_size(cam.bounds().size)
             .set_translation(cam.bounds().min());
         self.projection = cam.projection();
         self.inverse_projection = cam.inverse_projection();
@@ -423,6 +423,14 @@ impl<S> UIManager<S> {
                 if matrix != node.matrix {
                     node.matrix = matrix;
                     node.root_inverse_matrix = (self.root_matrix * matrix).inverse();
+                    node.inner.relayout(
+                        state,
+                        &mut self.events,
+                        Rect::new(
+                            Vec2::ZERO,
+                            parent.inner.transform().size(),
+                        ),
+                    );
                 }
             });
     }

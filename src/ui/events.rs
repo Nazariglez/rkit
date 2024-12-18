@@ -19,18 +19,11 @@ pub(super) enum ListenerType {
     Mut(Box<dyn Any>),
 }
 
-type EvtCb<S> = dyn FnOnce(
-    &[NodeIterInfo],
-    &mut ListenerStorage,
-    &mut UIGraph<S>,
-    &mut UIEvents<S>,
-    &mut S,
-);
+type EvtCb<S> =
+    dyn FnOnce(&[NodeIterInfo], &mut ListenerStorage, &mut UIGraph<S>, &mut UIEvents<S>, &mut S);
 
 pub struct UIEvents<S: 'static> {
-    pub(super) events: VecDeque<
-        Box<EvtCb<S>>,
-    >,
+    pub(super) events: VecDeque<Box<EvtCb<S>>>,
 }
 
 impl<S: 'static> Default for UIEvents<S> {
@@ -128,13 +121,7 @@ impl<S: 'static> UIEvents<S> {
     }
 
     /// Take the first event of the queue
-    pub(super) fn take_event(
-        &mut self,
-    ) -> Option<
-        Box<
-            EvtCb<S>,
-        >,
-    > {
+    pub(super) fn take_event(&mut self) -> Option<Box<EvtCb<S>>> {
         self.events.pop_front()
     }
 
