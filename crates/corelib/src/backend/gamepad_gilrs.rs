@@ -1,5 +1,3 @@
-#![cfg(feature = "gamepad")]
-
 use crate::input::{GamepadAxis, GamepadButton, GamepadState};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use gilrs::{Axis, Button, Event, EventType, GamepadId, Gilrs};

@@ -167,7 +167,7 @@ pub trait AsRenderer {
     }
 }
 
-impl<'a> AsRenderer for Renderer<'a> {
+impl AsRenderer for Renderer<'_> {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
         self.flush(self, target)
     }

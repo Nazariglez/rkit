@@ -49,14 +49,14 @@ pub trait UIElement<S>: Downcast + Send + Sync {
     }
     fn input(
         &mut self,
-        input: UIInput,
-        state: &mut S,
-        events: &mut UIEvents<S>,
-        metadata: UINodeMetadata,
+        _input: UIInput,
+        _state: &mut S,
+        _events: &mut UIEvents<S>,
+        _metadata: UINodeMetadata,
     ) {
     }
-    fn update(&mut self, state: &mut S, events: &mut UIEvents<S>, metadata: UINodeMetadata) {}
-    fn render(&mut self, draw: &mut Draw2D, state: &S, metadata: UINodeMetadata) {}
+    fn update(&mut self, _state: &mut S, _events: &mut UIEvents<S>, _metadata: UINodeMetadata) {}
+    fn render(&mut self, _draw: &mut Draw2D, _state: &S, _metadata: UINodeMetadata) {}
 }
 
 impl_downcast!(UIElement<S>);

@@ -172,7 +172,7 @@ impl PostProcessSys {
     ) -> Result<(), String> {
         // skip process if there is no effects
         let is_empty = info.effects.is_empty();
-        let all_disabled = info.effects.iter().find(|fx| fx.is_enabled()).is_none();
+        let all_disabled = !info.effects.iter().any(|fx| fx.is_enabled());
         if !is_presenting_frame && (is_empty || all_disabled) {
             return match target {
                 None => gfx::render_to_frame(info.render),

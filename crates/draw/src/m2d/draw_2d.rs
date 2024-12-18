@@ -33,7 +33,7 @@ pub trait AsBindGroups {
     fn to_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>;
 }
 
-impl<'a> AsBindGroups for &'a [BindGroup] {
+impl AsBindGroups for &[BindGroup] {
     fn to_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> {
         debug_assert!(
             self.len() <= MAX_BIND_GROUPS_PER_PIPELINE,
@@ -468,7 +468,7 @@ impl Draw2D {
     }
 
     // - text
-    pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D> {
+    pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D<'a>> {
         Drawing::new(self, Text2D::new(text))
     }
 

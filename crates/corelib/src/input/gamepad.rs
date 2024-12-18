@@ -1,4 +1,3 @@
-#![cfg(feature = "gamepad")]
 // TODO gamepad (web and native must have same API, also events onConnect, etc...)
 
 // pub enum GamepadType {
@@ -34,7 +33,6 @@ impl GamepadId {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount)]
 #[repr(u8)]
 pub enum GamepadButton {
@@ -114,7 +112,6 @@ impl std::fmt::Debug for GamepadButtonList {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount, FromRepr, EnumIter,
 )]
@@ -255,6 +252,7 @@ impl GamepadList {
         self.ids.iter()
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter<'a>(self) -> impl IntoIterator<Item = GamepadId> + 'a {
         self.ids.into_iter()
     }

@@ -80,7 +80,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tween::{EaseFn, Tween, LINEAR};
+    use crate::tween::{Tween};
 
     #[test]
     fn test_insert_and_get() {

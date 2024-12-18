@@ -46,9 +46,6 @@ pub struct UIManager<S: 'static> {
     listeners: ListenerStorage,
     temp_iter_handlers: Vec<NodeIterInfo>,
 
-    // used to avoid allocations when `once` events expire
-    to_remove_cb: Vec<usize>,
-
     // matrix
     projection: Mat4,
     inverse_projection: Mat4,
@@ -93,10 +90,9 @@ impl<S> UIManager<S> {
             events: UIEvents::default(),
             listener_id: 0,
 
-            listeners: FxHashMap::with_capacity_and_hasher(10, FxBuildHasher::default()),
+            listeners: FxHashMap::with_capacity_and_hasher(10, FxBuildHasher),
             temp_iter_handlers: vec![],
 
-            to_remove_cb: vec![],
             projection: Default::default(),
             inverse_projection: Default::default(),
             root_matrix: Default::default(),
@@ -192,7 +188,7 @@ impl<S> UIManager<S> {
         // clean removed in last frame
         self.graph.removed.iter().for_each(|raw| {
             self.listeners.iter_mut().for_each(|(_, listeners)| {
-                let _ = listeners.remove(&raw);
+                let _ = listeners.remove(raw);
             });
         });
         self.graph.removed.clear();
@@ -318,17 +314,15 @@ impl<S> UIManager<S> {
                     node.inner
                         .input(UIInput::Scroll { delta }, state, &mut self.events, metadata);
                 }
-            } else {
-                if self.last_frame_hover.contains(&raw) {
-                    node.inner
-                        .input(UIInput::CursorLeave, state, &mut self.events, metadata);
-                }
+            } else if self.last_frame_hover.contains(&raw) {
+                node.inner
+                    .input(UIInput::CursorLeave, state, &mut self.events, metadata);
             }
 
             if let Some(drag_delta) = moving {
                 self.start_click
                     .iter()
-                    .filter(|((ui_raw, btn), pos)| *ui_raw == raw)
+                    .filter(|((ui_raw, _btn), _pos)| *ui_raw == raw)
                     .for_each(|((raw, btn), pos)| {
                         let id = (*raw, *btn);
                         if !self.dragging.contains(&id) {
@@ -472,7 +466,7 @@ impl<S> UIManager<S> {
         let handlers = self
             .listeners
             .entry(k)
-            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher::default()));
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher));
 
         let cb: Box<EventHandlerFn<E, S>> = Box::new(move |e, h, g, s, q| cb(e, h, g, s, q).into());
 
@@ -492,7 +486,7 @@ impl<S> UIManager<S> {
         })
     }
 
-    pub fn once<T, E, F>(
+    pub fn once<T, E, F, R>(
         &mut self,
         handler: UIHandler<T>,
         cb: F,
@@ -500,7 +494,8 @@ impl<S> UIManager<S> {
     where
         T: UIElement<S> + 'static,
         E: 'static,
-        F: FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) + 'static,
+        R: Into<UIControl> + 'static,
+        F: FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> R + 'static,
     {
         let idx = handler
             .raw
@@ -515,7 +510,7 @@ impl<S> UIManager<S> {
         let handlers = self
             .listeners
             .entry(k)
-            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher::default()));
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher));
 
         let cb: Box<EventHandlerFnOnce<E, S>> =
             Box::new(move |e, h, g, s, q| cb(e, h, g, s, q).into());
@@ -699,7 +694,7 @@ impl<T> From<UIRawHandler> for UIHandler<T> {
     fn from(value: UIRawHandler) -> Self {
         Self {
             raw: value,
-            _t: PhantomData::default(),
+            _t: PhantomData,
         }
     }
 }

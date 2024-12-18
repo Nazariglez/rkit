@@ -193,7 +193,7 @@ impl<T> Default for UIHandler<T> {
     fn default() -> Self {
         Self {
             raw: UIRawHandler { idx: None },
-            _t: PhantomData::default(),
+            _t: PhantomData,
         }
     }
 }

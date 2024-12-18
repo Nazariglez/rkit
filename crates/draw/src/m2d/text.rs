@@ -274,7 +274,7 @@ impl<'a> Text2D<'a> {
     }
 }
 
-impl<'a> Element2D for Text2D<'a> {
+impl Element2D for Text2D<'_> {
     fn process(&self, draw: &mut Draw2D) {
         let info = TextInfo {
             pos: self.position,

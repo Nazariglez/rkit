@@ -1,10 +1,9 @@
-use crate::ui::graph::{UIGraph, UINode};
+use crate::ui::graph::UIGraph;
 use crate::ui::manager::{
     EventHandlerFn, EventHandlerFnOnce, ListenerStorage, NodeIterInfo, UIRawHandler,
 };
 use crate::ui::UIControl;
 use rustc_hash::FxHashMap;
-use scene_graph::SceneGraph;
 use smallvec::SmallVec;
 use std::any::Any;
 use std::any::TypeId;
@@ -20,17 +19,17 @@ pub(super) enum ListenerType {
     Mut(Box<dyn Any>),
 }
 
+type EvtCb<S> = dyn FnOnce(
+    &[NodeIterInfo],
+    &mut ListenerStorage,
+    &mut UIGraph<S>,
+    &mut UIEvents<S>,
+    &mut S,
+);
+
 pub struct UIEvents<S: 'static> {
     pub(super) events: VecDeque<
-        Box<
-            dyn FnOnce(
-                &[NodeIterInfo],
-                &mut ListenerStorage,
-                &mut UIGraph<S>,
-                &mut UIEvents<S>,
-                &mut S,
-            ),
-        >,
+        Box<EvtCb<S>>,
     >,
 }
 
@@ -84,7 +83,7 @@ impl<S: 'static> UIEvents<S> {
         evt: E,
     ) {
         self.events
-            .push_front(Box::new(move |nodes, storage, graph, queue, state| {
+            .push_front(Box::new(move |_nodes, storage, graph, queue, state| {
                 let k = TypeId::of::<E>();
                 let Some(listeners) = storage.get_mut(&k) else {
                     return;
@@ -117,7 +116,7 @@ impl<S: 'static> UIEvents<S> {
         evt: E,
     ) {
         self.events
-            .push_back(Box::new(move |nodes, storage, graph, queue, state| {
+            .push_back(Box::new(move |_nodes, storage, graph, queue, state| {
                 let k = TypeId::of::<E>();
                 let Some(listeners) = storage.get_mut(&k) else {
                     return;
@@ -133,13 +132,7 @@ impl<S: 'static> UIEvents<S> {
         &mut self,
     ) -> Option<
         Box<
-            dyn FnOnce(
-                &[NodeIterInfo],
-                &mut ListenerStorage,
-                &mut UIGraph<S>,
-                &mut UIEvents<S>,
-                &mut S,
-            ),
+            EvtCb<S>,
         >,
     > {
         self.events.pop_front()
@@ -162,7 +155,7 @@ where
     S: 'static,
     E: Send + Sync + 'static,
 {
-    let Some(cbs) = listeners.get_mut(&raw) else {
+    let Some(cbs) = listeners.get_mut(raw) else {
         return UIControl::Continue;
     };
 
@@ -172,13 +165,13 @@ where
             ListenerType::Once(opt_cb) => match opt_cb.take() {
                 Some(cb) => {
                     let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
-                    cb(&evt, &raw, graph, state, queue)
+                    cb(evt, raw, graph, state, queue)
                 }
                 None => UIControl::Continue,
             },
             ListenerType::Mut(cb) => {
                 let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>().unwrap();
-                cb(&evt, &raw, graph, state, queue)
+                cb(evt, raw, graph, state, queue)
             }
         };
 

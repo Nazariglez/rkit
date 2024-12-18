@@ -24,7 +24,7 @@ where
     pub nearest_sampler: bool,
 }
 
-impl<'a, R> AsRenderer for PostProcess<'a, R>
+impl<R> AsRenderer for PostProcess<'_, R>
 where
     R: AsRenderer,
 {
