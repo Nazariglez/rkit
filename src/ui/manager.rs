@@ -37,6 +37,10 @@ pub(super) type EventHandlerFn<E, S> =
     dyn FnMut(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> UIControl;
 pub(super) type EventHandlerFnOnce<E, S> =
     dyn FnOnce(&E, &UIRawHandler, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> UIControl;
+pub(super) type EventGlobalHandlerFn<E, S> =
+    dyn FnMut(&E, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> UIControl;
+pub(super) type EventGlobalHandlerFnOnce<E, S> =
+    dyn FnOnce(&E, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> UIControl;
 
 pub struct UIManager<S: 'static> {
     graph: UIGraph<S>,
@@ -537,6 +541,36 @@ impl<S> UIManager<S> {
             });
     }
 
+    pub fn listen<E, F, R>(&mut self, mut cb: F) -> Result<UIListenerId<(), E>, String>
+    where
+        E: 'static,
+        R: Into<UIControl> + 'static,
+        F: FnMut(&E, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> R + 'static,
+    {
+        let k = TypeId::of::<E>();
+        let handlers = self
+            .listeners
+            .entry(k)
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher));
+
+        let cb: Box<EventGlobalHandlerFn<E, S>> = Box::new(move |e, g, s, q| cb(e, g, s, q).into());
+
+        self.listener_id += 1;
+        let listener = EventListener {
+            id: self.listener_id,
+            typ: ListenerType::Mut(Box::new(cb)),
+        };
+
+        let raw: UIRawHandler = UIRawHandler { idx: None };
+        handlers.entry(raw).or_default().push(listener);
+
+        Ok(UIListenerId {
+            id: self.listener_id,
+            handler: UIHandler::<()>::default(),
+            _e: Default::default(),
+        })
+    }
+
     pub fn on<T, E, F, R>(
         &mut self,
         handler: UIHandler<T>,
@@ -578,6 +612,37 @@ impl<S> UIManager<S> {
             id: self.listener_id,
             handler,
             _e: PhantomData,
+        })
+    }
+
+    pub fn listen_once<E, F, R>(&mut self, mut cb: F) -> Result<UIListenerId<(), E>, String>
+    where
+        E: 'static,
+        R: Into<UIControl> + 'static,
+        F: FnOnce(&E, &mut UIGraph<S>, &mut S, &mut UIEvents<S>) -> R + 'static,
+    {
+        let k = TypeId::of::<E>();
+        let handlers = self
+            .listeners
+            .entry(k)
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(5, FxBuildHasher));
+
+        let cb: Box<EventGlobalHandlerFnOnce<E, S>> =
+            Box::new(move |e, g, s, q| cb(e, g, s, q).into());
+
+        self.listener_id += 1;
+        let listener = EventListener {
+            id: self.listener_id,
+            typ: ListenerType::Once(Some(Box::new(cb))),
+        };
+
+        let raw: UIRawHandler = UIRawHandler { idx: None };
+        handlers.entry(raw).or_default().push(listener);
+
+        Ok(UIListenerId {
+            id: self.listener_id,
+            handler: UIHandler::<()>::default(),
+            _e: Default::default(),
         })
     }
 
@@ -782,6 +847,10 @@ pub struct UIRawHandler {
 impl UIRawHandler {
     pub fn typed<T>(self) -> UIHandler<T> {
         UIHandler::from(self)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.idx.is_none()
     }
 }
 

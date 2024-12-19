@@ -12,6 +12,8 @@ struct State {
     child: UIHandler<Container>,
 }
 
+struct Click;
+
 impl State {
     fn new() -> Self {
         let mut ui = UIManager::default();

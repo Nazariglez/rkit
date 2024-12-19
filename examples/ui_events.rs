@@ -101,6 +101,9 @@ struct Element {
 }
 
 impl<S> UIElement<S> for Element {
+    fn input_enabled(&self) -> bool {
+        true
+    }
     fn transform(&self) -> &Transform2D {
         &self.transform
     }

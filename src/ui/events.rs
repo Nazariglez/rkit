@@ -1,8 +1,9 @@
 use crate::ui::graph::UIGraph;
 use crate::ui::manager::{
-    EventHandlerFn, EventHandlerFnOnce, ListenerStorage, NodeIterInfo, UIRawHandler,
+    EventGlobalHandlerFn, EventGlobalHandlerFnOnce, EventHandlerFn, EventHandlerFnOnce,
+    ListenerStorage, NodeIterInfo, UIRawHandler,
 };
-use crate::ui::UIControl;
+use crate::ui::{UIControl, UIHandler};
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use std::any::Any;
@@ -44,6 +45,21 @@ impl<S: 'static> UIEvents<S> {
                     return;
                 };
 
+                // execute event as global callback
+                let control = dispatch(
+                    &evt,
+                    &UIRawHandler { idx: None },
+                    listeners,
+                    graph,
+                    state,
+                    queue,
+                );
+                match control {
+                    UIControl::Consume => return,
+                    _ => {}
+                }
+
+                // iterate through nodes and execute callbacks
                 let mut skip_siblings = None;
                 for info in nodes {
                     // only skip siblings when parent is Some
@@ -67,6 +83,11 @@ impl<S: 'static> UIEvents<S> {
                     }
                 }
             }));
+    }
+
+    /// Send an only global event
+    pub fn send_global<E: Send + Sync + 'static>(&mut self, evt: E) {
+        self.send_to(UIRawHandler { idx: None }, evt)
     }
 
     /// Send a new event to a unique node
@@ -96,10 +117,48 @@ impl<S: 'static> UIEvents<S> {
                     return;
                 };
 
-                nodes.iter().for_each(|info| {
-                    dispatch(&evt, &info.node_handler, listeners, graph, state, queue);
-                });
+                let control = dispatch(
+                    &evt,
+                    &UIRawHandler { idx: None },
+                    listeners,
+                    graph,
+                    state,
+                    queue,
+                );
+                match control {
+                    UIControl::Consume => return,
+                    _ => {}
+                }
+
+                // iterate through nodes and execute callbacks
+                let mut skip_siblings = None;
+                for info in nodes {
+                    // only skip siblings when parent is Some
+                    let skip =
+                        skip_siblings.is_some_and(|skip_idx| info.parent_handler == Some(skip_idx));
+                    if skip {
+                        continue;
+                    }
+
+                    skip_siblings = None;
+
+                    // execute event callback
+                    let control =
+                        dispatch(&evt, &info.node_handler, listeners, graph, state, queue);
+                    match control {
+                        UIControl::Continue => {}
+                        UIControl::SkipSiblings => {
+                            skip_siblings = info.parent_handler;
+                        }
+                        UIControl::Consume => break,
+                    }
+                }
             }));
+    }
+
+    /// Send an only global event to the start of the queue
+    pub fn push_global<E: Send + Sync + 'static>(&mut self, evt: E) {
+        self.push_to(UIRawHandler { idx: None }, evt)
     }
 
     /// Send a new event to the start of the queue targeting only a unique node
@@ -116,7 +175,7 @@ impl<S: 'static> UIEvents<S> {
                 };
 
                 let raw = handler.into();
-                dispatch(&evt, &raw, listeners, graph, state, queue);
+                let _c = dispatch(&evt, &raw, listeners, graph, state, queue);
             }));
     }
 
@@ -151,14 +210,28 @@ where
         let c = match &mut cb.typ {
             ListenerType::Once(opt_cb) => match opt_cb.take() {
                 Some(cb) => {
-                    let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
-                    cb(evt, raw, graph, state, queue)
+                    if raw.is_empty() {
+                        let cb = cb
+                            .downcast::<Box<EventGlobalHandlerFnOnce<E, S>>>()
+                            .unwrap();
+                        cb(evt, graph, state, queue)
+                    } else {
+                        let cb = cb.downcast::<Box<EventHandlerFnOnce<E, S>>>().unwrap();
+                        cb(evt, raw, graph, state, queue)
+                    }
                 }
                 None => UIControl::Continue,
             },
             ListenerType::Mut(cb) => {
-                let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>().unwrap();
-                cb(evt, raw, graph, state, queue)
+                if raw.is_empty() {
+                    let cb = cb
+                        .downcast_mut::<Box<EventGlobalHandlerFn<E, S>>>()
+                        .unwrap();
+                    cb(evt, graph, state, queue)
+                } else {
+                    let cb = cb.downcast_mut::<Box<EventHandlerFn<E, S>>>().unwrap();
+                    cb(evt, raw, graph, state, queue)
+                }
             }
         };
 

@@ -2,7 +2,7 @@ use rkit::app::window_size;
 use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
-use rkit::ui::{UIElement, UIEvents, UIInput, UIManager, UINodeMetadata};
+use rkit::ui::{UIControl, UIElement, UIEvents, UIInput, UIManager, UINodeMetadata};
 
 struct State {
     cam: Camera2D,
@@ -61,6 +61,9 @@ struct DraggableNode {
 }
 
 impl<S> UIElement<S> for DraggableNode {
+    fn input_enabled(&self) -> bool {
+        true
+    }
     fn transform(&self) -> &Transform2D {
         &self.transform
     }
@@ -75,7 +78,7 @@ impl<S> UIElement<S> for DraggableNode {
         _state: &mut S,
         _events: &mut UIEvents<S>,
         _meta: UINodeMetadata,
-    ) {
+    ) -> UIControl {
         match input {
             UIInput::DragStart { .. } => {
                 self.dragging = true;
@@ -89,6 +92,8 @@ impl<S> UIElement<S> for DraggableNode {
             }
             _ => {}
         }
+
+        UIControl::Consume
     }
 
     fn render(&mut self, draw: &mut Draw2D, _state: &S, _meta: UINodeMetadata) {
