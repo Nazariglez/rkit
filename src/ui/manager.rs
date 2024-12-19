@@ -241,24 +241,10 @@ impl<S> UIManager<S> {
             self.graph.scene_graph.iter_mut().collect();
         graph.reverse();
 
-        // TODO: consume and skip events
-        enum ControlEvents {
-            Hover,
-            Enter,
-            Leave,
-            Down,
-            Pressed,
-            Released,
-            Scroll,
-            DragStart,
-            Dragging,
-            DragEnd,
-        }
-
-        struct ProcessControl {
-            consume: SmallVec<ControlEvents, 10>,
-            skip: SmallVec<(ControlEvents, UIRawHandler), 10>, // add any node that must be skipped to skip also the children
-        }
+        let mut control = ProcessControl {
+            consume: Default::default(),
+            skip: Default::default(),
+        };
 
         let down_btns = mouse_btns_down();
         let pressed_btns = mouse_btns_pressed();
@@ -278,6 +264,7 @@ impl<S> UIManager<S> {
             let contains = node.inner.input_box().contains(point);
 
             let raw = UIRawHandler { idx: node.idx };
+            let parent_raw = UIRawHandler { idx: parent.idx };
 
             let metadata = UINodeMetadata {
                 handler: raw,
@@ -286,119 +273,182 @@ impl<S> UIManager<S> {
 
             if contains {
                 if !self.last_frame_hover.contains(&raw) {
-                    node.inner
-                        .input(UIInput::CursorEnter, state, &mut self.events, metadata);
-                }
-
-                self.hover.insert(raw);
-                node.inner.input(
-                    UIInput::Hover { pos: point },
-                    state,
-                    &mut self.events,
-                    metadata,
-                );
-
-                down_btns.iter().for_each(|btn| {
-                    self.down.insert((raw, btn));
-                });
-
-                pressed_btns.iter().for_each(|btn| {
-                    let id = (raw, btn);
-                    self.pressed.insert(id);
-                    self.start_click.insert(id, parent_point);
-                    node.inner.input(
-                        UIInput::ButtonPressed(btn),
-                        state,
-                        &mut self.events,
-                        metadata,
-                    );
-                });
-
-                released_btns.iter().for_each(|btn| {
-                    let id = (raw, btn);
-                    self.released.insert(id);
-                    node.inner.input(
-                        UIInput::ButtonReleased(btn),
-                        state,
-                        &mut self.events,
-                        metadata,
-                    );
-
-                    if self.start_click.contains_key(&id) {
-                        self.clicked.insert(id);
-                        node.inner.input(
-                            UIInput::ButtonClick(btn),
+                    if control.can_trigger(ControlEvents::Enter, raw, parent_raw) {
+                        let crtl = node.inner.input(
+                            UIInput::CursorEnter,
                             state,
                             &mut self.events,
                             metadata,
                         );
+                        control.store_control(ControlEvents::Enter, crtl, raw, parent_raw);
+                    }
+                }
+
+                if control.can_trigger(ControlEvents::Hover, raw, parent_raw) {
+                    self.hover.insert(raw);
+                    let crtl = node.inner.input(
+                        UIInput::Hover { pos: point },
+                        state,
+                        &mut self.events,
+                        metadata,
+                    );
+                    control.store_control(ControlEvents::Hover, crtl, raw, parent_raw);
+                }
+
+                down_btns.iter().for_each(|btn| {
+                    if control.can_trigger(ControlEvents::Down(btn), raw, parent_raw) {
+                        self.down.insert((raw, btn));
+                        let crtl = node.inner.input(
+                            UIInput::ButtonDown(btn),
+                            state,
+                            &mut self.events,
+                            metadata,
+                        );
+                        control.store_control(ControlEvents::Down(btn), crtl, raw, parent_raw);
+                    }
+                });
+
+                pressed_btns.iter().for_each(|btn| {
+                    if control.can_trigger(ControlEvents::Pressed(btn), raw, parent_raw) {
+                        let id = (raw, btn);
+                        self.pressed.insert(id);
+                        self.start_click.insert(id, parent_point);
+                        let crtl = node.inner.input(
+                            UIInput::ButtonPressed(btn),
+                            state,
+                            &mut self.events,
+                            metadata,
+                        );
+                        control.store_control(ControlEvents::Pressed(btn), crtl, raw, parent_raw);
+                    }
+                });
+
+                released_btns.iter().for_each(|btn| {
+                    let id = (raw, btn);
+                    if control.can_trigger(ControlEvents::Released(btn), raw, parent_raw) {
+                        self.released.insert(id);
+                        let crtl = node.inner.input(
+                            UIInput::ButtonReleased(btn),
+                            state,
+                            &mut self.events,
+                            metadata,
+                        );
+                        control.store_control(ControlEvents::Released(btn), crtl, raw, parent_raw);
+                    }
+
+                    if control.can_trigger(ControlEvents::Click(btn), raw, parent_raw) {
+                        if self.start_click.contains_key(&id) {
+                            self.clicked.insert(id);
+                            let crtl = node.inner.input(
+                                UIInput::ButtonClick(btn),
+                                state,
+                                &mut self.events,
+                                metadata,
+                            );
+                            control.store_control(ControlEvents::Click(btn), crtl, raw, parent_raw);
+                        }
                     }
                 });
 
                 if let Some(delta) = scroll {
-                    self.scrolling.insert(raw, delta);
-                    node.inner
-                        .input(UIInput::Scroll { delta }, state, &mut self.events, metadata);
+                    if control.can_trigger(ControlEvents::Scroll, raw, parent_raw) {
+                        self.scrolling.insert(raw, delta);
+                        let crtl = node.inner.input(
+                            UIInput::Scroll { delta },
+                            state,
+                            &mut self.events,
+                            metadata,
+                        );
+                        control.store_control(ControlEvents::Scroll, crtl, raw, parent_raw);
+                    }
                 }
             } else if self.last_frame_hover.contains(&raw) {
-                node.inner
-                    .input(UIInput::CursorLeave, state, &mut self.events, metadata);
+                if control.can_trigger(ControlEvents::Leave, raw, parent_raw) {
+                    let crtl =
+                        node.inner
+                            .input(UIInput::CursorLeave, state, &mut self.events, metadata);
+                    control.store_control(ControlEvents::Leave, crtl, raw, parent_raw);
+                }
             }
 
             if let Some(drag_delta) = moving {
                 self.start_click
                     .iter()
                     .filter(|((ui_raw, _btn), _pos)| *ui_raw == raw)
-                    .for_each(|((raw, btn), pos)| {
-                        let id = (*raw, *btn);
+                    .for_each(|(&(raw, btn), pos)| {
+                        let id = (raw, btn);
                         if !self.dragging.contains(&id) {
-                            self.dragging.insert(id);
-                            node.inner.input(
-                                UIInput::DragStart {
-                                    pos: *pos,
-                                    btn: *btn,
+                            if control.can_trigger(ControlEvents::DragStart(btn), raw, parent_raw) {
+                                self.dragging.insert(id);
+                                let crtl = node.inner.input(
+                                    UIInput::DragStart { pos: *pos, btn },
+                                    state,
+                                    &mut self.events,
+                                    metadata,
+                                );
+                                control.store_control(
+                                    ControlEvents::DragStart(btn),
+                                    crtl,
+                                    raw,
+                                    parent_raw,
+                                );
+                            }
+                        }
+
+                        if control.can_trigger(ControlEvents::Dragging(btn), raw, parent_raw) {
+                            let crtl = node.inner.input(
+                                UIInput::Dragging {
+                                    start_pos: *pos,
+                                    pos: parent_point,
+                                    frame_delta: drag_delta,
+                                    btn,
                                 },
                                 state,
                                 &mut self.events,
                                 metadata,
                             );
+                            control.store_control(
+                                ControlEvents::Dragging(btn),
+                                crtl,
+                                raw,
+                                parent_raw,
+                            );
                         }
+                    });
+            }
 
-                        node.inner.input(
-                            UIInput::Dragging {
-                                start_pos: *pos,
+            released_btns.iter().for_each(|btn| {
+                if control.can_trigger(ControlEvents::ReleasedAnywhere(btn), raw, parent_raw) {
+                    let crtl = node.inner.input(
+                        UIInput::ButtonReleasedAnywhere(btn),
+                        state,
+                        &mut self.events,
+                        metadata,
+                    );
+                    control.store_control(
+                        ControlEvents::ReleasedAnywhere(btn),
+                        crtl,
+                        raw,
+                        parent_raw,
+                    );
+                }
+
+                let id = (raw, btn);
+                if self.dragging.contains(&id) {
+                    if control.can_trigger(ControlEvents::DragEnd(btn), raw, parent_raw) {
+                        let crtl = node.inner.input(
+                            UIInput::DragEnd {
                                 pos: parent_point,
-                                frame_delta: drag_delta,
-                                btn: *btn,
+                                btn,
                             },
                             state,
                             &mut self.events,
                             metadata,
                         );
-                    })
-            }
+                        control.store_control(ControlEvents::DragEnd(btn), crtl, raw, parent_raw);
 
-            released_btns.iter().for_each(|btn| {
-                node.inner.input(
-                    UIInput::ButtonReleasedAnywhere(btn),
-                    state,
-                    &mut self.events,
-                    metadata,
-                );
-
-                let id = (raw, btn);
-                if self.dragging.contains(&id) {
-                    node.inner.input(
-                        UIInput::DragEnd {
-                            pos: parent_point,
-                            btn,
-                        },
-                        state,
-                        &mut self.events,
-                        metadata,
-                    );
-
-                    let _ = self.dragging.remove(&id);
+                        let _ = self.dragging.remove(&id);
+                    }
                 }
             });
         }
@@ -773,4 +823,64 @@ pub(super) struct NodeIterInfo {
 #[inline]
 fn process_visibility<S: 'static>(parent: &mut UINode<S>, child: &mut UINode<S>) {
     child.is_visible = parent.is_visible && child.inner.visible();
+}
+
+#[derive(Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
+enum ControlEvents {
+    Hover,
+    Enter,
+    Leave,
+    Click(MouseButton),
+    Down(MouseButton),
+    Pressed(MouseButton),
+    Released(MouseButton),
+    ReleasedAnywhere(MouseButton),
+    Scroll,
+    DragStart(MouseButton),
+    Dragging(MouseButton),
+    DragEnd(MouseButton),
+}
+
+struct ProcessControl {
+    consume: SmallVec<ControlEvents, 10>,
+    skip: SmallVec<(ControlEvents, UIRawHandler), 50>, // add any node that must be skipped to skip also the children
+}
+
+impl ProcessControl {
+    pub fn store_control(
+        &mut self,
+        evt: ControlEvents,
+        control: UIControl,
+        node: UIRawHandler,
+        parent: UIRawHandler,
+    ) {
+        match control {
+            UIControl::SkipSiblings => self.skip(evt, node, parent),
+            UIControl::Consume => self.consume(evt),
+            UIControl::Continue => {}
+        }
+    }
+    pub fn consume(&mut self, evt: ControlEvents) {
+        self.consume.push(evt);
+    }
+
+    pub fn skip(&mut self, evt: ControlEvents, node: UIRawHandler, parent: UIRawHandler) {
+        self.skip.push((evt, node));
+        self.skip.push((evt, parent));
+    }
+
+    pub fn can_trigger(
+        &self,
+        evt: ControlEvents,
+        node: UIRawHandler,
+        parent: UIRawHandler,
+    ) -> bool {
+        if self.consume.contains(&evt) {
+            return false;
+        }
+
+        let can_node = !self.skip.contains(&(evt, node));
+        let can_parent = !self.skip.contains(&(evt, parent));
+        can_node && can_parent
+    }
 }

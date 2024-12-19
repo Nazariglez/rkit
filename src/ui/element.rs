@@ -1,4 +1,4 @@
-use crate::ui::{UIEvents, UIRawHandler};
+use crate::ui::{UIControl, UIEvents, UIRawHandler};
 use corelib::input::MouseButton;
 use corelib::math::{Rect, Vec2};
 use downcast_rs::{impl_downcast, Downcast};
@@ -55,11 +55,15 @@ pub trait UIElement<S>: Downcast + Send + Sync {
     }
     fn input(
         &mut self,
-        _input: UIInput,
+        input: UIInput,
         _state: &mut S,
         _events: &mut UIEvents<S>,
         _metadata: UINodeMetadata,
-    ) {
+    ) -> UIControl {
+        match input {
+            UIInput::ButtonReleasedAnywhere(_) => UIControl::Continue,
+            _ => UIControl::Consume,
+        }
     }
     fn relayout(&mut self, _state: &mut S, _events: &mut UIEvents<S>, _parent_bounds: Rect) {}
     fn update(&mut self, _state: &mut S, _events: &mut UIEvents<S>, _metadata: UINodeMetadata) {}
