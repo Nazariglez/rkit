@@ -2743,6 +2743,7 @@ dependencies = [
  "draw",
  "encase",
  "fastrand",
+ "heapless",
  "log",
  "macros",
  "once_cell",
@@ -2751,6 +2752,8 @@ dependencies = [
  "shipyard",
  "smallvec 2.0.0-alpha.7",
  "static_assertions",
+ "strum",
+ "strum_macros",
  "utils",
 ]
 

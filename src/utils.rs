@@ -3,6 +3,8 @@ pub use ::utils::drop_signal::*;
 #[doc(inline)]
 pub use ::utils::fast_cache::*;
 #[doc(inline)]
+pub use ::utils::helpers::*;
+#[doc(inline)]
 pub use ::utils::ring_buffer::*;
 
 pub mod local_pool {

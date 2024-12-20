@@ -80,6 +80,9 @@ impl<S: 'static> UIEvents<S> {
                             skip_siblings = info.parent_handler;
                         }
                         UIControl::Consume => break,
+                        UIControl::SkipOverlap => {
+                            todo!()
+                        }
                     }
                 }
             }));
@@ -151,6 +154,9 @@ impl<S: 'static> UIEvents<S> {
                             skip_siblings = info.parent_handler;
                         }
                         UIControl::Consume => break,
+                        UIControl::SkipOverlap => {
+                            todo!()
+                        }
                     }
                 }
             }));

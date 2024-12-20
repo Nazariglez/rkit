@@ -4,25 +4,48 @@ use corelib::input::{
 };
 use corelib::math::{Mat3, Mat4, Rect, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
+use heapless::{FnvIndexMap, FnvIndexSet};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use scene_graph::NodeIndex;
 use smallvec::SmallVec;
 use std::any::TypeId;
 use std::marker::PhantomData;
+use strum::EnumCount;
+use strum_macros::{EnumCount, EnumIter, FromRepr};
+use utils::helpers::next_pot2;
 
 use crate::ui::element::{UIElement, UIRoot};
 use crate::ui::events::{EventListener, ListenerType};
 use crate::ui::graph::{UIGraph, UIHandler, UINode};
 use crate::ui::{UIEvents, UIInput, UINodeMetadata};
 
-/// Actions to take after trigger and event, the enum must be sorted by priority, higher means more restrictive
+/// Defines the actions to take after an input event is triggered.
+///
+/// The variants of this enum are sorted by priority, with higher values indicating more restrictive actions.
+/// The priority order ensures that more restrictive actions override less restrictive ones during event processing.
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum UIControl {
+    /// Continue normal event propagation.
+    ///
+    /// - All siblings, parents, and ancestors will process the event unless explicitly stopped by other logic.
     #[default]
     Continue = 0,
+
+    /// Skip processing of sibling elements.
+    ///
+    /// - Sibling nodes of the current element in the same parent container will not process the event.
     SkipSiblings = 1,
-    Consume = 2,
+
+    /// Skip processing for overlapping nodes.
+    ///
+    /// - Prevents events from being processed by other nodes that overlap spatially with the current element.
+    SkipOverlap = 2,
+
+    /// Fully consume the event.
+    ///
+    /// - The event will not propagate further in any phase.
+    Consume = 3,
 }
 
 impl From<()> for UIControl {
@@ -233,6 +256,8 @@ impl<S> UIManager<S> {
             return;
         }
 
+        println!("-------- process inputs ---------");
+
         self.scrolling.clear();
         self.clicked.clear();
         std::mem::swap(&mut self.last_frame_hover, &mut self.hover);
@@ -245,10 +270,7 @@ impl<S> UIManager<S> {
             self.graph.scene_graph.iter_mut().collect();
         graph.reverse();
 
-        let mut control = ProcessControl {
-            consume: Default::default(),
-            skip: Default::default(),
-        };
+        let mut control = ProcessControl::default();
 
         let down_btns = mouse_btns_down();
         let pressed_btns = mouse_btns_pressed();
@@ -260,6 +282,8 @@ impl<S> UIManager<S> {
             if !can_process {
                 continue;
             }
+
+            println!("process: p:{:?} - c:{:?}", parent.idx, node.idx);
 
             let parent_point =
                 parent.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
@@ -894,7 +918,7 @@ fn process_visibility<S: 'static>(parent: &mut UINode<S>, child: &mut UINode<S>)
     child.is_visible = parent.is_visible && child.inner.visible();
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Ord, Eq, Debug, EnumCount)]
 enum ControlEvents {
     Hover,
     Enter,
@@ -910,9 +934,21 @@ enum ControlEvents {
     DragEnd(MouseButton),
 }
 
+impl ControlEvents {
+    pub const fn pot2_count() -> usize {
+        let base_count = Self::COUNT;
+        let mouse_count = MouseButton::COUNT;
+        let variants_using_mouse = 8;
+        let count = mouse_count * variants_using_mouse + base_count;
+        next_pot2(count)
+    }
+}
+
+#[derive(Default)]
 struct ProcessControl {
     consume: SmallVec<ControlEvents, 10>,
-    skip: SmallVec<(ControlEvents, UIRawHandler), 50>, // add any node that must be skipped to skip also the children
+    skip: SmallVec<(ControlEvents, UIRawHandler), 50>,
+    stop: FnvIndexMap<ControlEvents, SmallVec<Vec2, 5>, { ControlEvents::pot2_count() }>,
 }
 
 impl ProcessControl {
@@ -924,22 +960,32 @@ impl ProcessControl {
         parent: UIRawHandler,
     ) {
         match control {
-            UIControl::SkipSiblings => self.skip(evt, node, parent),
-            UIControl::Consume => self.consume(evt),
+            UIControl::SkipSiblings => self.skip(evt, parent),
+            UIControl::Consume => {
+                self.consume(evt);
+                if matches!(evt, ControlEvents::Hover) {
+                    self.skip(ControlEvents::Enter, parent);
+                    self.skip(ControlEvents::Leave, parent);
+                }
+            }
             UIControl::Continue => {}
+            UIControl::SkipOverlap => {
+                todo!()
+            }
         }
     }
     pub fn consume(&mut self, evt: ControlEvents) {
         self.consume.push(evt);
+        println!("Consume {evt:?}");
     }
 
-    pub fn skip(&mut self, evt: ControlEvents, node: UIRawHandler, parent: UIRawHandler) {
-        self.skip.push((evt, node));
+    pub fn skip(&mut self, evt: ControlEvents, parent: UIRawHandler) {
         self.skip.push((evt, parent));
+        println!("Skip {evt:?} - n: {:?}", parent.idx);
     }
 
     pub fn can_trigger(
-        &self,
+        &mut self,
         evt: ControlEvents,
         node: UIRawHandler,
         parent: UIRawHandler,

@@ -1,10 +1,11 @@
 use crate::option_usize_env;
-use crate::utils::{next_pot2, EnumSet};
+use crate::utils::EnumSet;
 use arrayvec::ArrayVec;
 use nohash_hasher::IsEnabled;
 use smol_str::SmolStr;
 use std::hash::Hasher;
 use strum_macros::EnumCount;
+use utils::helpers::next_pot2;
 
 // Passing this env variable we can control the size of the hashset to reduce memory consume.
 // 16 keys at once seems more than enough, most keyboard are 6kro (6 at once), some gaming

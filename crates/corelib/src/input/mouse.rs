@@ -1,9 +1,10 @@
 use crate::math::Vec2;
-use crate::utils::{next_pot2, EnumSet};
+use crate::utils::EnumSet;
 use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
 use strum_macros::EnumCount;
+use utils::helpers::next_pot2;
 
 const MOUSE_BUTTON_COUNT_POT2: usize = next_pot2(MouseButton::COUNT);
 

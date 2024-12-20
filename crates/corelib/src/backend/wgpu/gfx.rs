@@ -15,11 +15,11 @@ use crate::gfx::{
 };
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2};
-use crate::utils::next_pot2;
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
 use std::borrow::Cow;
 use std::sync::Arc;
+use utils::helpers::next_pot2;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
