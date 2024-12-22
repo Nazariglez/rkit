@@ -44,7 +44,10 @@ pub enum UIInput {
 pub trait UIElement<S>: Downcast + Send + Sync {
     fn transform(&self) -> &Transform2D;
     fn transform_mut(&mut self) -> &mut Transform2D;
-    fn visible(&self) -> bool {
+    fn alpha(&self) -> f32 {
+        1.0
+    }
+    fn enabled(&self) -> bool {
         true
     }
     fn input_enabled(&self) -> bool {

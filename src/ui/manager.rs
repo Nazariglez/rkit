@@ -104,14 +104,14 @@ impl<S> UIManager<S> {
     pub fn new(enable_input: bool) -> Self {
         let node = UINode {
             idx: Some(NodeIndex::Root),
-            first_relayout: false,
+            initialized_layout: false,
             inner: Box::new(UIRoot {
                 transform: Transform2D::default(),
             }),
             matrix: Mat3::IDENTITY,
             root_inverse_matrix: Mat3::IDENTITY,
-            is_visible: true,
-            handlers: FxHashMap::default(),
+            is_enabled: true,
+            alpha: 1.0,
         };
 
         Self {
@@ -276,7 +276,7 @@ impl<S> UIManager<S> {
         let scroll = is_mouse_scrolling().then_some(mouse_wheel_delta());
         let moving = is_mouse_moving().then_some(mouse_motion_delta());
         for (parent, node) in graph {
-            let can_process = node.is_visible && node.inner.input_enabled();
+            let can_process = node.is_enabled && node.inner.input_enabled();
             if !can_process {
                 continue;
             }
@@ -501,7 +501,7 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
-            .for_each(|(parent, child)| process_visibility(parent, child));
+            .for_each(|(parent, child)| process_enable_state(parent, child));
 
         // process inputs and dispatch events
         self.process_inputs(state);
@@ -517,16 +517,19 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
-            .filter(|(parent, child)| child.is_visible)
+            .filter(|(parent, child)| child.is_enabled)
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
                     handler: UIRawHandler { idx: node.idx },
                     parent_handler: UIRawHandler { idx: parent.idx },
                 };
+
                 node.inner.update(state, &mut self.events, metadata);
+                node.alpha = parent.alpha * node.inner.alpha();
+
                 let matrix = parent.matrix * node.inner.transform_mut().updated_mat3();
-                if matrix != node.matrix || !node.first_relayout {
-                    node.first_relayout = true;
+                if matrix != node.matrix || !node.initialized_layout {
+                    node.initialized_layout = true;
                     node.matrix = matrix;
                     node.root_inverse_matrix = (self.root_matrix * matrix).inverse();
                     node.inner.relayout(
@@ -542,15 +545,17 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
-            .filter(|(parent, child)| child.is_visible)
+            .filter(|(parent, child)| child.is_enabled && child.alpha > 0.0)
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
                     handler: UIRawHandler { idx: node.idx },
                     parent_handler: UIRawHandler { idx: parent.idx },
                 };
+                draw.set_alpha(node.alpha);
                 draw.push_matrix(node.matrix);
                 node.inner.render(draw, state, metadata);
                 draw.pop_matrix();
+                draw.set_alpha(1.0);
             });
     }
 
@@ -710,12 +715,16 @@ impl<S> UIManager<S> {
         E: 'static,
         S: 'static,
     {
-        if let Some(idx) = listener_id.handler.raw.idx {
-            if let Some(node) = self.graph.scene_graph.get_mut(idx) {
-                if let Some(listeners) = node.value.handlers.get_mut(&TypeId::of::<E>()) {
-                    listeners.retain(|listener| listener.id != listener_id.id);
-                }
-            }
+        let listeners = listener_id
+            .handler
+            .raw
+            .idx
+            .and_then(|idx| self.graph.scene_graph.get_mut(idx))
+            .and_then(|node| self.listeners.get_mut(&TypeId::of::<E>()))
+            .and_then(|listener_map| listener_map.get_mut(&listener_id.handler.raw));
+
+        if let Some(listeners) = listeners {
+            listeners.retain(|listener| listener.id != listener_id.id);
         }
     }
 
@@ -903,8 +912,8 @@ pub(super) struct NodeIterInfo {
 }
 
 #[inline]
-fn process_visibility<S: 'static>(parent: &mut UINode<S>, child: &mut UINode<S>) {
-    child.is_visible = parent.is_visible && child.inner.visible();
+fn process_enable_state<S: 'static>(parent: &mut UINode<S>, child: &mut UINode<S>) {
+    child.is_enabled = parent.is_enabled && child.inner.enabled();
 }
 
 #[derive(Copy, Clone, Hash, PartialEq, PartialOrd, Ord, Eq, Debug, EnumCount)]

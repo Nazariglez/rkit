@@ -1,11 +1,7 @@
-use crate::ui::events::EventListener;
 use crate::ui::{UIElement, UIRawHandler};
 use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
 use draw::Transform2D;
-use rustc_hash::FxHashMap;
 use scene_graph::{NodeIndex, SceneGraph};
-use smallvec::SmallVec;
-use std::any::TypeId;
 use std::marker::PhantomData;
 
 pub struct UIGraph<S: 'static> {
@@ -35,12 +31,12 @@ where
     pub fn add<T: UIElement<S> + 'static>(&mut self, element: T) -> UIHandler<T> {
         let node = UINode {
             idx: None,
-            first_relayout: false,
+            initialized_layout: false,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
             root_inverse_matrix: Mat3::IDENTITY,
-            is_visible: true,
-            handlers: Default::default(),
+            is_enabled: true,
+            alpha: 1.0,
         };
 
         let idx = self.scene_graph.attach_at_root(node);
@@ -64,12 +60,12 @@ where
 
         let node = UINode {
             idx: None,
-            first_relayout: false,
+            initialized_layout: false,
             inner: Box::new(element),
             matrix: Mat3::IDENTITY,
             root_inverse_matrix: Mat3::IDENTITY,
-            is_visible: true,
-            handlers: Default::default(),
+            is_enabled: true,
+            alpha: 1.0,
         };
         let idx = self
             .scene_graph
@@ -161,12 +157,12 @@ where
 
 pub struct UINode<S> {
     pub(super) idx: Option<NodeIndex>,
-    pub(super) first_relayout: bool,
+    pub(super) initialized_layout: bool,
     pub(super) inner: Box<dyn UIElement<S>>,
     pub(super) matrix: Mat3,
     pub(super) root_inverse_matrix: Mat3,
-    pub(super) is_visible: bool,
-    pub(super) handlers: FxHashMap<TypeId, SmallVec<EventListener, 10>>,
+    pub(super) is_enabled: bool,
+    pub(super) alpha: f32,
 }
 
 impl<S> UINode<S> {
