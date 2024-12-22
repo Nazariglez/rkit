@@ -256,8 +256,6 @@ impl<S> UIManager<S> {
             return;
         }
 
-        println!("-------- process inputs ---------");
-
         self.scrolling.clear();
         self.clicked.clear();
         std::mem::swap(&mut self.last_frame_hover, &mut self.hover);
@@ -283,8 +281,6 @@ impl<S> UIManager<S> {
                 continue;
             }
 
-            println!("process: p:{:?} - c:{:?}", parent.idx, node.idx);
-
             let parent_point =
                 parent.screen_to_local(self.screen_mouse_pos, self.size, self.inverse_projection);
             let point =
@@ -301,18 +297,18 @@ impl<S> UIManager<S> {
 
             if contains {
                 if !self.last_frame_hover.contains(&raw) {
-                    if control.can_trigger(ControlEvents::Enter, raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::Enter, parent_raw, contains) {
                         let crtl = node.inner.input(
                             UIInput::CursorEnter,
                             state,
                             &mut self.events,
                             metadata,
                         );
-                        control.store_control(ControlEvents::Enter, crtl, raw, parent_raw);
+                        control.store_control(ControlEvents::Enter, crtl, parent_raw);
                     }
                 }
 
-                if control.can_trigger(ControlEvents::Hover, raw, parent_raw) {
+                if control.can_trigger(ControlEvents::Hover, parent_raw, contains) {
                     self.hover.insert(raw);
                     let crtl = node.inner.input(
                         UIInput::Hover { pos: point },
@@ -320,11 +316,11 @@ impl<S> UIManager<S> {
                         &mut self.events,
                         metadata,
                     );
-                    control.store_control(ControlEvents::Hover, crtl, raw, parent_raw);
+                    control.store_control(ControlEvents::Hover, crtl, parent_raw);
                 }
 
                 down_btns.iter().for_each(|btn| {
-                    if control.can_trigger(ControlEvents::Down(btn), raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::Down(btn), parent_raw, contains) {
                         self.down.insert((raw, btn));
                         let crtl = node.inner.input(
                             UIInput::ButtonDown(btn),
@@ -332,12 +328,12 @@ impl<S> UIManager<S> {
                             &mut self.events,
                             metadata,
                         );
-                        control.store_control(ControlEvents::Down(btn), crtl, raw, parent_raw);
+                        control.store_control(ControlEvents::Down(btn), crtl, parent_raw);
                     }
                 });
 
                 pressed_btns.iter().for_each(|btn| {
-                    if control.can_trigger(ControlEvents::Pressed(btn), raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::Pressed(btn), parent_raw, contains) {
                         let id = (raw, btn);
                         self.pressed.insert(id);
                         self.start_click.insert(id, parent_point);
@@ -347,13 +343,13 @@ impl<S> UIManager<S> {
                             &mut self.events,
                             metadata,
                         );
-                        control.store_control(ControlEvents::Pressed(btn), crtl, raw, parent_raw);
+                        control.store_control(ControlEvents::Pressed(btn), crtl, parent_raw);
                     }
                 });
 
                 released_btns.iter().for_each(|btn| {
                     let id = (raw, btn);
-                    if control.can_trigger(ControlEvents::Released(btn), raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::Released(btn), parent_raw, contains) {
                         self.released.insert(id);
                         let crtl = node.inner.input(
                             UIInput::ButtonReleased(btn),
@@ -361,10 +357,10 @@ impl<S> UIManager<S> {
                             &mut self.events,
                             metadata,
                         );
-                        control.store_control(ControlEvents::Released(btn), crtl, raw, parent_raw);
+                        control.store_control(ControlEvents::Released(btn), crtl, parent_raw);
                     }
 
-                    if control.can_trigger(ControlEvents::Click(btn), raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::Click(btn), parent_raw, contains) {
                         if self.start_click.contains_key(&id) {
                             self.clicked.insert(id);
                             let crtl = node.inner.input(
@@ -373,13 +369,13 @@ impl<S> UIManager<S> {
                                 &mut self.events,
                                 metadata,
                             );
-                            control.store_control(ControlEvents::Click(btn), crtl, raw, parent_raw);
+                            control.store_control(ControlEvents::Click(btn), crtl, parent_raw);
                         }
                     }
                 });
 
                 if let Some(delta) = scroll {
-                    if control.can_trigger(ControlEvents::Scroll, raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::Scroll, parent_raw, contains) {
                         self.scrolling.insert(raw, delta);
                         let crtl = node.inner.input(
                             UIInput::Scroll { delta },
@@ -387,15 +383,15 @@ impl<S> UIManager<S> {
                             &mut self.events,
                             metadata,
                         );
-                        control.store_control(ControlEvents::Scroll, crtl, raw, parent_raw);
+                        control.store_control(ControlEvents::Scroll, crtl, parent_raw);
                     }
                 }
             } else if self.last_frame_hover.contains(&raw) {
-                if control.can_trigger(ControlEvents::Leave, raw, parent_raw) {
+                if control.can_trigger(ControlEvents::Leave, parent_raw, contains) {
                     let crtl =
                         node.inner
                             .input(UIInput::CursorLeave, state, &mut self.events, metadata);
-                    control.store_control(ControlEvents::Leave, crtl, raw, parent_raw);
+                    control.store_control(ControlEvents::Leave, crtl, parent_raw);
                 }
             }
 
@@ -406,7 +402,11 @@ impl<S> UIManager<S> {
                     .for_each(|(&(raw, btn), pos)| {
                         let id = (raw, btn);
                         if !self.dragging.contains(&id) {
-                            if control.can_trigger(ControlEvents::DragStart(btn), raw, parent_raw) {
+                            if control.can_trigger(
+                                ControlEvents::DragStart(btn),
+                                parent_raw,
+                                contains,
+                            ) {
                                 self.dragging.insert(id);
                                 let crtl = node.inner.input(
                                     UIInput::DragStart { pos: *pos, btn },
@@ -417,13 +417,12 @@ impl<S> UIManager<S> {
                                 control.store_control(
                                     ControlEvents::DragStart(btn),
                                     crtl,
-                                    raw,
                                     parent_raw,
                                 );
                             }
                         }
 
-                        if control.can_trigger(ControlEvents::Dragging(btn), raw, parent_raw) {
+                        if control.can_trigger(ControlEvents::Dragging(btn), parent_raw, contains) {
                             let crtl = node.inner.input(
                                 UIInput::Dragging {
                                     start_pos: *pos,
@@ -435,35 +434,25 @@ impl<S> UIManager<S> {
                                 &mut self.events,
                                 metadata,
                             );
-                            control.store_control(
-                                ControlEvents::Dragging(btn),
-                                crtl,
-                                raw,
-                                parent_raw,
-                            );
+                            control.store_control(ControlEvents::Dragging(btn), crtl, parent_raw);
                         }
                     });
             }
 
             released_btns.iter().for_each(|btn| {
-                if control.can_trigger(ControlEvents::ReleasedAnywhere(btn), raw, parent_raw) {
+                if control.can_trigger(ControlEvents::ReleasedAnywhere(btn), parent_raw, contains) {
                     let crtl = node.inner.input(
                         UIInput::ButtonReleasedAnywhere(btn),
                         state,
                         &mut self.events,
                         metadata,
                     );
-                    control.store_control(
-                        ControlEvents::ReleasedAnywhere(btn),
-                        crtl,
-                        raw,
-                        parent_raw,
-                    );
+                    control.store_control(ControlEvents::ReleasedAnywhere(btn), crtl, parent_raw);
                 }
 
                 let id = (raw, btn);
                 if self.dragging.contains(&id) {
-                    if control.can_trigger(ControlEvents::DragEnd(btn), raw, parent_raw) {
+                    if control.can_trigger(ControlEvents::DragEnd(btn), parent_raw, contains) {
                         let crtl = node.inner.input(
                             UIInput::DragEnd {
                                 pos: parent_point,
@@ -473,7 +462,7 @@ impl<S> UIManager<S> {
                             &mut self.events,
                             metadata,
                         );
-                        control.store_control(ControlEvents::DragEnd(btn), crtl, raw, parent_raw);
+                        control.store_control(ControlEvents::DragEnd(btn), crtl, parent_raw);
 
                         let _ = self.dragging.remove(&id);
                     }
@@ -918,7 +907,7 @@ fn process_visibility<S: 'static>(parent: &mut UINode<S>, child: &mut UINode<S>)
     child.is_visible = parent.is_visible && child.inner.visible();
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Ord, Eq, Debug, EnumCount)]
+#[derive(Copy, Clone, Hash, PartialEq, PartialOrd, Ord, Eq, Debug, EnumCount)]
 enum ControlEvents {
     Hover,
     Enter,
@@ -947,55 +936,64 @@ impl ControlEvents {
 #[derive(Default)]
 struct ProcessControl {
     consume: SmallVec<ControlEvents, 10>,
-    skip: SmallVec<(ControlEvents, UIRawHandler), 50>,
-    stop: FnvIndexMap<ControlEvents, SmallVec<Vec2, 5>, { ControlEvents::pot2_count() }>,
+    skip_siblings: SmallVec<(ControlEvents, UIRawHandler), 50>,
+    skip_overlap: FnvIndexSet<ControlEvents, { ControlEvents::pot2_count() }>,
 }
 
 impl ProcessControl {
-    pub fn store_control(
-        &mut self,
-        evt: ControlEvents,
-        control: UIControl,
-        node: UIRawHandler,
-        parent: UIRawHandler,
-    ) {
+    pub fn store_control(&mut self, evt: ControlEvents, control: UIControl, parent: UIRawHandler) {
         match control {
-            UIControl::SkipSiblings => self.skip(evt, parent),
-            UIControl::Consume => {
-                self.consume(evt);
-                if matches!(evt, ControlEvents::Hover) {
-                    self.skip(ControlEvents::Enter, parent);
-                    self.skip(ControlEvents::Leave, parent);
-                }
-            }
             UIControl::Continue => {}
-            UIControl::SkipOverlap => {
-                todo!()
-            }
+            UIControl::SkipSiblings => self.skip_siblings(evt, parent),
+            UIControl::SkipOverlap => self.skip_overlap(evt),
+            UIControl::Consume => self.consume(evt),
         }
     }
     pub fn consume(&mut self, evt: ControlEvents) {
         self.consume.push(evt);
-        println!("Consume {evt:?}");
+        if matches!(evt, ControlEvents::Hover) {
+            self.skip_overlap.insert(ControlEvents::Enter);
+            self.skip_overlap.insert(ControlEvents::Leave);
+        }
     }
 
-    pub fn skip(&mut self, evt: ControlEvents, parent: UIRawHandler) {
-        self.skip.push((evt, parent));
-        println!("Skip {evt:?} - n: {:?}", parent.idx);
+    pub fn skip_siblings(&mut self, evt: ControlEvents, parent: UIRawHandler) {
+        self.skip_siblings.push((evt, parent));
+    }
+
+    pub fn skip_overlap(&mut self, evt: ControlEvents) {
+        let res = self.skip_overlap.insert(evt);
+        debug_assert!(res.is_ok());
+        match res {
+            Ok(_) => {
+                if matches!(evt, ControlEvents::Hover) {
+                    self.skip_overlap.insert(ControlEvents::Enter);
+                    self.skip_overlap.insert(ControlEvents::Leave);
+                }
+            }
+            Err(e) => {
+                log::error!("Cannot set {e:?} into ProcessControl::skip_overlap");
+            }
+        }
     }
 
     pub fn can_trigger(
         &mut self,
         evt: ControlEvents,
-        node: UIRawHandler,
         parent: UIRawHandler,
+        contains: bool,
     ) -> bool {
-        if self.consume.contains(&evt) {
+        let is_consumed = self.consume.contains(&evt);
+        if is_consumed {
             return false;
         }
 
-        let can_node = !self.skip.contains(&(evt, node));
-        let can_parent = !self.skip.contains(&(evt, parent));
-        can_node && can_parent
+        let is_overlapping = contains && self.skip_overlap.contains(&evt);
+        if is_overlapping {
+            return false;
+        }
+
+        let skip_sibling = !self.skip_siblings.contains(&(evt, parent));
+        skip_sibling
     }
 }
