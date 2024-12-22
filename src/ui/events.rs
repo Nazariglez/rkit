@@ -3,7 +3,7 @@ use crate::ui::manager::{
     EventGlobalHandlerFn, EventGlobalHandlerFnOnce, EventHandlerFn, EventHandlerFnOnce,
     ListenerStorage, NodeIterInfo, UIRawHandler,
 };
-use crate::ui::{UIControl, UIHandler};
+use crate::ui::UIControl;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use std::any::Any;
@@ -54,9 +54,8 @@ impl<S: 'static> UIEvents<S> {
                     state,
                     queue,
                 );
-                match control {
-                    UIControl::Consume => return,
-                    _ => {}
+                if let UIControl::Consume = control {
+                    return;
                 }
 
                 // iterate through nodes and execute callbacks
@@ -128,9 +127,8 @@ impl<S: 'static> UIEvents<S> {
                     state,
                     queue,
                 );
-                match control {
-                    UIControl::Consume => return,
-                    _ => {}
+                if let UIControl::Consume = control {
+                    return;
                 }
 
                 // iterate through nodes and execute callbacks

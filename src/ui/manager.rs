@@ -4,14 +4,14 @@ use corelib::input::{
 };
 use corelib::math::{Mat3, Mat4, Rect, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
-use heapless::{FnvIndexMap, FnvIndexSet};
+use heapless::FnvIndexSet;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use scene_graph::NodeIndex;
 use smallvec::SmallVec;
 use std::any::TypeId;
 use std::marker::PhantomData;
 use strum::EnumCount;
-use strum_macros::{EnumCount, EnumIter, FromRepr};
+use strum_macros::EnumCount;
 use utils::helpers::next_pot2;
 
 use crate::ui::element::{UIElement, UIRoot};
@@ -296,16 +296,13 @@ impl<S> UIManager<S> {
             };
 
             if contains {
-                if !self.last_frame_hover.contains(&raw) {
-                    if control.can_trigger(ControlEvents::Enter, parent_raw, contains) {
-                        let crtl = node.inner.input(
-                            UIInput::CursorEnter,
-                            state,
-                            &mut self.events,
-                            metadata,
-                        );
-                        control.store_control(ControlEvents::Enter, crtl, parent_raw);
-                    }
+                if !self.last_frame_hover.contains(&raw)
+                    && control.can_trigger(ControlEvents::Enter, parent_raw, contains)
+                {
+                    let crtl =
+                        node.inner
+                            .input(UIInput::CursorEnter, state, &mut self.events, metadata);
+                    control.store_control(ControlEvents::Enter, crtl, parent_raw);
                 }
 
                 if control.can_trigger(ControlEvents::Hover, parent_raw, contains) {
@@ -360,17 +357,17 @@ impl<S> UIManager<S> {
                         control.store_control(ControlEvents::Released(btn), crtl, parent_raw);
                     }
 
-                    if control.can_trigger(ControlEvents::Click(btn), parent_raw, contains) {
-                        if self.start_click.contains_key(&id) {
-                            self.clicked.insert(id);
-                            let crtl = node.inner.input(
-                                UIInput::ButtonClick(btn),
-                                state,
-                                &mut self.events,
-                                metadata,
-                            );
-                            control.store_control(ControlEvents::Click(btn), crtl, parent_raw);
-                        }
+                    if control.can_trigger(ControlEvents::Click(btn), parent_raw, contains)
+                        && self.start_click.contains_key(&id)
+                    {
+                        self.clicked.insert(id);
+                        let crtl = node.inner.input(
+                            UIInput::ButtonClick(btn),
+                            state,
+                            &mut self.events,
+                            metadata,
+                        );
+                        control.store_control(ControlEvents::Click(btn), crtl, parent_raw);
                     }
                 });
 
@@ -386,13 +383,13 @@ impl<S> UIManager<S> {
                         control.store_control(ControlEvents::Scroll, crtl, parent_raw);
                     }
                 }
-            } else if self.last_frame_hover.contains(&raw) {
-                if control.can_trigger(ControlEvents::Leave, parent_raw, contains) {
-                    let crtl =
-                        node.inner
-                            .input(UIInput::CursorLeave, state, &mut self.events, metadata);
-                    control.store_control(ControlEvents::Leave, crtl, parent_raw);
-                }
+            } else if self.last_frame_hover.contains(&raw)
+                && control.can_trigger(ControlEvents::Leave, parent_raw, contains)
+            {
+                let crtl =
+                    node.inner
+                        .input(UIInput::CursorLeave, state, &mut self.events, metadata);
+                control.store_control(ControlEvents::Leave, crtl, parent_raw);
             }
 
             if let Some(drag_delta) = moving {
@@ -401,25 +398,21 @@ impl<S> UIManager<S> {
                     .filter(|((ui_raw, _btn), _pos)| *ui_raw == raw)
                     .for_each(|(&(raw, btn), pos)| {
                         let id = (raw, btn);
-                        if !self.dragging.contains(&id) {
-                            if control.can_trigger(
+                        if !self.dragging.contains(&id)
+                            && control.can_trigger(
                                 ControlEvents::DragStart(btn),
                                 parent_raw,
                                 contains,
-                            ) {
-                                self.dragging.insert(id);
-                                let crtl = node.inner.input(
-                                    UIInput::DragStart { pos: *pos, btn },
-                                    state,
-                                    &mut self.events,
-                                    metadata,
-                                );
-                                control.store_control(
-                                    ControlEvents::DragStart(btn),
-                                    crtl,
-                                    parent_raw,
-                                );
-                            }
+                            )
+                        {
+                            self.dragging.insert(id);
+                            let crtl = node.inner.input(
+                                UIInput::DragStart { pos: *pos, btn },
+                                state,
+                                &mut self.events,
+                                metadata,
+                            );
+                            control.store_control(ControlEvents::DragStart(btn), crtl, parent_raw);
                         }
 
                         if control.can_trigger(ControlEvents::Dragging(btn), parent_raw, contains) {
@@ -451,21 +444,21 @@ impl<S> UIManager<S> {
                 }
 
                 let id = (raw, btn);
-                if self.dragging.contains(&id) {
-                    if control.can_trigger(ControlEvents::DragEnd(btn), parent_raw, contains) {
-                        let crtl = node.inner.input(
-                            UIInput::DragEnd {
-                                pos: parent_point,
-                                btn,
-                            },
-                            state,
-                            &mut self.events,
-                            metadata,
-                        );
-                        control.store_control(ControlEvents::DragEnd(btn), crtl, parent_raw);
+                if self.dragging.contains(&id)
+                    && control.can_trigger(ControlEvents::DragEnd(btn), parent_raw, contains)
+                {
+                    let crtl = node.inner.input(
+                        UIInput::DragEnd {
+                            pos: parent_point,
+                            btn,
+                        },
+                        state,
+                        &mut self.events,
+                        metadata,
+                    );
+                    control.store_control(ControlEvents::DragEnd(btn), crtl, parent_raw);
 
-                        let _ = self.dragging.remove(&id);
-                    }
+                    let _ = self.dragging.remove(&id);
                 }
             });
         }
@@ -517,7 +510,7 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
-            .filter(|(parent, child)| child.is_enabled)
+            .filter(|(_parent, child)| child.is_enabled)
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
                     handler: UIRawHandler { idx: node.idx },
@@ -545,7 +538,7 @@ impl<S> UIManager<S> {
         self.graph
             .scene_graph
             .iter_mut()
-            .filter(|(parent, child)| child.is_enabled && child.alpha > 0.0)
+            .filter(|(_parent, child)| child.is_enabled && child.alpha > 0.0)
             .for_each(|(parent, node)| {
                 let metadata = UINodeMetadata {
                     handler: UIRawHandler { idx: node.idx },
@@ -633,7 +626,7 @@ impl<S> UIManager<S> {
         })
     }
 
-    pub fn listen_once<E, F, R>(&mut self, mut cb: F) -> Result<UIListenerId<(), E>, String>
+    pub fn listen_once<E, F, R>(&mut self, cb: F) -> Result<UIListenerId<(), E>, String>
     where
         E: 'static,
         R: Into<UIControl> + 'static,
@@ -719,8 +712,9 @@ impl<S> UIManager<S> {
             .handler
             .raw
             .idx
-            .and_then(|idx| self.graph.scene_graph.get_mut(idx))
-            .and_then(|node| self.listeners.get_mut(&TypeId::of::<E>()))
+            .is_some_and(|idx| self.graph.scene_graph.contains(idx))
+            .then(|| self.listeners.get_mut(&TypeId::of::<E>()))
+            .and_then(|listener_map| listener_map)
             .and_then(|listener_map| listener_map.get_mut(&listener_id.handler.raw));
 
         if let Some(listeners) = listeners {
@@ -961,8 +955,8 @@ impl ProcessControl {
     pub fn consume(&mut self, evt: ControlEvents) {
         self.consume.push(evt);
         if matches!(evt, ControlEvents::Hover) {
-            self.skip_overlap.insert(ControlEvents::Enter);
-            self.skip_overlap.insert(ControlEvents::Leave);
+            let _ = self.skip_overlap.insert(ControlEvents::Enter);
+            let _ = self.skip_overlap.insert(ControlEvents::Leave);
         }
     }
 
@@ -976,8 +970,8 @@ impl ProcessControl {
         match res {
             Ok(_) => {
                 if matches!(evt, ControlEvents::Hover) {
-                    self.skip_overlap.insert(ControlEvents::Enter);
-                    self.skip_overlap.insert(ControlEvents::Leave);
+                    let _ = self.skip_overlap.insert(ControlEvents::Enter);
+                    let _ = self.skip_overlap.insert(ControlEvents::Leave);
                 }
             }
             Err(e) => {
@@ -1002,7 +996,6 @@ impl ProcessControl {
             return false;
         }
 
-        let skip_sibling = !self.skip_siblings.contains(&(evt, parent));
-        skip_sibling
+        !self.skip_siblings.contains(&(evt, parent))
     }
 }
