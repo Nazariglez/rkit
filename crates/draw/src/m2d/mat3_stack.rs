@@ -161,6 +161,9 @@ impl Transform2D {
         self.dirty = true;
         self
     }
+    pub fn set_origin(&mut self, origin: Vec2) -> &mut Self {
+        self.set_anchor(origin).set_pivot(origin)
+    }
     pub fn set_flip(&mut self, flip: BVec2) -> &mut Self {
         self.flip = flip;
         self.dirty = true;
@@ -212,6 +215,10 @@ impl Transform2DBuilder {
     pub fn set_pivot(mut self, pivot: Vec2) -> Self {
         self.transform.set_pivot(pivot);
         self
+    }
+
+    pub fn set_origin(self, origin: Vec2) -> Self {
+        self.set_pivot(origin).set_anchor(origin)
     }
 
     pub fn set_flip(mut self, flip: BVec2) -> Self {
