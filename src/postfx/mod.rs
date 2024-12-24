@@ -1,3 +1,4 @@
+mod alpha_fx;
 mod blur_fx;
 mod color_replace_fx;
 mod gray_scale_fx;
@@ -10,6 +11,7 @@ use crate::gfx;
 use crate::gfx::AsRenderer;
 use sys::SYS;
 
+pub use alpha_fx::*;
 pub use blur_fx::*;
 pub use color_replace_fx::*;
 pub use gray_scale_fx::*;
