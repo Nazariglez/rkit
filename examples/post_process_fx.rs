@@ -121,12 +121,7 @@ fn update(s: &mut State) {
     s.filters.update().unwrap();
 
     // Render the PostProcess
-    gfx::render_to_frame(&PostProcess {
-        effects: &s.filters.filters(),
-        render: &draw,
-        nearest_sampler: true,
-    })
-    .unwrap();
+    gfx::render_to_frame(&PostProcess::new(&draw, &s.filters.filters())).unwrap();
 
     draw_ui(s);
 }

@@ -22,6 +22,31 @@ where
     pub effects: &'a [&'a dyn PostFx],
     pub render: &'a R,
     pub nearest_sampler: bool,
+    pub clear_target: bool,
+}
+
+impl<'a, R> PostProcess<'a, R>
+where
+    R: AsRenderer,
+{
+    pub fn new(render: &'a R, effects: &'a [&'a dyn PostFx]) -> Self {
+        Self {
+            effects,
+            render,
+            nearest_sampler: false,
+            clear_target: true,
+        }
+    }
+
+    pub fn nearest_sampler(mut self, nearest: bool) -> Self {
+        self.nearest_sampler = nearest;
+        self
+    }
+
+    pub fn clear_target(mut self, clear: bool) -> Self {
+        self.clear_target = clear;
+        self
+    }
 }
 
 impl<R> AsRenderer for PostProcess<'_, R>

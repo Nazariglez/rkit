@@ -312,11 +312,16 @@ impl PostProcessSys {
         });
 
         let mut renderer = Renderer::new();
-        renderer
+        let rpass = renderer
             .begin_pass()
             .pipeline(&self.pip)
-            .bindings(&[bind_group])
-            .draw(0..6);
+            .bindings(&[bind_group]);
+
+        if info.clear_target {
+            rpass.clear_color(Color::TRANSPARENT);
+        }
+
+        rpass.draw(0..6);
 
         match target {
             None => gfx::render_to_frame(&renderer),
@@ -328,6 +333,7 @@ impl PostProcessSys {
         &mut self,
         effects: &[&dyn PostFx],
         nearest: bool,
+        clear_target: bool,
     ) -> Result<(), String> {
         debug_assert!(
             self.frame_rt.is_some(),
@@ -338,6 +344,7 @@ impl PostProcessSys {
                 effects,
                 render: &Renderer::new(),
                 nearest_sampler: nearest,
+                clear_target,
             },
             true,
             None,

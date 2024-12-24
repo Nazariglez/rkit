@@ -30,6 +30,11 @@ where
 }
 
 #[inline]
-pub fn present_pfx_frame(effects: &[&dyn PostFx], nearest_sampler: bool) -> Result<(), String> {
-    SYS.borrow_mut().present_pfx_frame(effects, nearest_sampler)
+pub fn present_pfx_frame(
+    effects: &[&dyn PostFx],
+    nearest_sampler: bool,
+    clear_target: bool,
+) -> Result<(), String> {
+    SYS.borrow_mut()
+        .present_pfx_frame(effects, nearest_sampler, clear_target)
 }
