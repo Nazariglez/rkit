@@ -472,12 +472,15 @@ impl Draw2D {
         Drawing::new(self, Text2D::new(text))
     }
 
-    // pub fn fps(&mut self) -> Drawing<'_, Text2D> {
-    //     Drawing::new(self, Text2D::new(""))
-    // }
-
     pub fn stats(&self) -> DrawStats {
         self.stats
+    }
+
+    pub fn clone_transform(&self) -> Self {
+        let mut draw = Draw2D::new(self.size);
+        draw.set_projection(self.projection);
+        draw.matrix_stack = self.matrix_stack.clone();
+        draw
     }
 }
 
