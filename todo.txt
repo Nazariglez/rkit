@@ -2,7 +2,7 @@
     * tween examples
     * load images with premultiplied alpha
     * audio clean sounds must be automatic with core events after frames, improve audio examples
-    * blending, and masking
+    * blending, and masking, filters and sort-layers on draw2d
     * points and to_owned/cache
     * multisampling? mipmapping?
     * egui

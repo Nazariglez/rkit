@@ -24,3 +24,5 @@ pub use audio;
 #[doc(inline)]
 #[cfg(feature = "assets")]
 pub use assets;
+
+pub use macros;
