@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 #[derive(Clone)]
 pub(crate) struct Mat3Stack {
     base: Mat3,
-    stack: SmallVec<Mat3, 20>,
+    stack: SmallVec<Mat3, 30>,
 }
 
 impl Default for Mat3Stack {
@@ -37,6 +37,10 @@ impl Mat3Stack {
 
     pub fn clear(&mut self) {
         self.stack.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.stack.len()
     }
 }
 

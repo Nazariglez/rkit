@@ -1,6 +1,6 @@
 use corelib::input::{
     is_mouse_moving, is_mouse_scrolling, mouse_btns_down, mouse_btns_pressed, mouse_btns_released,
-    mouse_motion_delta, mouse_position, mouse_wheel_delta, MouseButton,
+    mouse_position, mouse_wheel_delta, MouseButton,
 };
 use corelib::math::{Mat3, Mat4, Rect, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
@@ -92,7 +92,7 @@ pub struct UIManager<S: 'static> {
     start_click: FxHashMap<(UIRawHandler, MouseButton), Vec2>,
     clicked: FxHashSet<(UIRawHandler, MouseButton)>,
     scrolling: FxHashMap<UIRawHandler, Vec2>,
-    dragging: FxHashSet<(UIRawHandler, MouseButton)>,
+    dragging: FxHashMap<(UIRawHandler, MouseButton), Vec2>,
 }
 
 impl<S> Default for UIManager<S> {
@@ -198,6 +198,7 @@ impl<S> UIManager<S> {
     }
 
     fn set_camera(&mut self, cam: &dyn BaseCam2D) {
+        // TODO: store cam bounds and if outside of bounds skip render of nodes
         self.size = cam.size();
         self.graph
             .root_transform_mut()
@@ -274,7 +275,7 @@ impl<S> UIManager<S> {
         let pressed_btns = mouse_btns_pressed();
         let released_btns = mouse_btns_released();
         let scroll = is_mouse_scrolling().then_some(mouse_wheel_delta());
-        let moving = is_mouse_moving().then_some(mouse_motion_delta());
+        let moving = is_mouse_moving();
         for (parent, node) in graph {
             let can_process = node.is_enabled && node.inner.input_enabled();
             if !can_process {
@@ -392,20 +393,20 @@ impl<S> UIManager<S> {
                 control.store_control(ControlEvents::Leave, crtl, parent_raw);
             }
 
-            if let Some(drag_delta) = moving {
+            if moving {
                 self.start_click
                     .iter()
                     .filter(|((ui_raw, _btn), _pos)| *ui_raw == raw)
                     .for_each(|(&(raw, btn), pos)| {
                         let id = (raw, btn);
-                        if !self.dragging.contains(&id)
+                        if !self.dragging.contains_key(&id)
                             && control.can_trigger(
                                 ControlEvents::DragStart(btn),
                                 parent_raw,
                                 contains,
                             )
                         {
-                            self.dragging.insert(id);
+                            self.dragging.insert(id, parent_point);
                             let crtl = node.inner.input(
                                 UIInput::DragStart { pos: *pos, btn },
                                 state,
@@ -415,12 +416,14 @@ impl<S> UIManager<S> {
                             control.store_control(ControlEvents::DragStart(btn), crtl, parent_raw);
                         }
 
+                        let last_drag_pos = self.dragging.get_mut(&id).unwrap();
                         if control.can_trigger(ControlEvents::Dragging(btn), parent_raw, contains) {
+                            let frame_delta = parent_point - *last_drag_pos;
                             let crtl = node.inner.input(
                                 UIInput::Dragging {
                                     start_pos: *pos,
                                     pos: parent_point,
-                                    frame_delta: drag_delta,
+                                    frame_delta,
                                     btn,
                                 },
                                 state,
@@ -429,6 +432,8 @@ impl<S> UIManager<S> {
                             );
                             control.store_control(ControlEvents::Dragging(btn), crtl, parent_raw);
                         }
+
+                        *last_drag_pos = parent_point;
                     });
             }
 
@@ -444,7 +449,7 @@ impl<S> UIManager<S> {
                 }
 
                 let id = (raw, btn);
-                if self.dragging.contains(&id)
+                if self.dragging.contains_key(&id)
                     && control.can_trigger(ControlEvents::DragEnd(btn), parent_raw, contains)
                 {
                     let crtl = node.inner.input(
@@ -469,7 +474,7 @@ impl<S> UIManager<S> {
         // clean any node that was pressed with this button
         released_btns.iter().for_each(|btn| {
             self.start_click.retain(|(_, b), _| btn != *b);
-            self.dragging.retain(|(_, b)| btn != *b);
+            self.dragging.retain(|(_, b), _| btn != *b);
         });
     }
 

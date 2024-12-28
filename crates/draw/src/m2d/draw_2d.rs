@@ -382,6 +382,10 @@ impl Draw2D {
         self.inverse_transform = None;
     }
 
+    pub fn matrix_stack_len(&self) -> usize {
+        self.matrix_stack.len()
+    }
+
     /// Translate a local point to screen coordinates
     pub fn local_to_screen(&self, point: Vec2) -> Vec2 {
         let half = self.size * 0.5;
