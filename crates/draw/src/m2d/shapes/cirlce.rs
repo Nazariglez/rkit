@@ -6,6 +6,7 @@ use lyon::math::point;
 use lyon::path::{Path, Winding};
 use lyon::tessellation::*;
 use macros::Drawable2D;
+use num::Zero;
 
 #[derive(Drawable2D)]
 pub struct Circle2D {
@@ -29,6 +30,7 @@ pub struct Circle2D {
 
 impl Circle2D {
     pub fn new(radius: f32) -> Self {
+        debug_assert!(!radius.is_zero(), "Circle radius cannot be 0");
         Self {
             color: Color::WHITE,
             pos: Vec2::splat(0.0),
