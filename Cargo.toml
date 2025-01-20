@@ -78,7 +78,6 @@ fastrand = { version = "2.3.0", optional = true }
 # used on filters TODO maybe this must be optional under the filter feature?
 atomic_refcell.workspace = true
 once_cell.workspace = true
-arrayvec.workspace = true
 encase.workspace = true
 
 # used for ui

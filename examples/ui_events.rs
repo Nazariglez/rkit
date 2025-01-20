@@ -127,7 +127,7 @@ impl<S> UIElement<S> for Element {
         }
     }
 
-    fn render(&mut self, draw: &mut Draw2D, _state: &S, _meta: UINodeMetadata) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &mut S, _meta: UINodeMetadata) {
         let size = self.transform.size();
         draw.rect(Vec2::ZERO, size).color(self.color);
 

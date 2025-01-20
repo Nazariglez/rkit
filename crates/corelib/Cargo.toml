@@ -14,7 +14,6 @@ heapless.workspace = true
 atomic_refcell.workspace = true
 arrayvec.workspace = true
 smol_str.workspace = true
-lazy_static.workspace = true
 bytemuck.workspace = true
 smallvec.workspace = true
 once_cell.workspace = true
@@ -42,14 +41,12 @@ instant = { version = "0.1.13", features = ["wasm-bindgen"] }
 image = { version = "0.25.5", default-features = false, features = ["png", "jpeg", "webp", "rayon"] }
 
 ## deps only for this crate
-bitflags = "2.8.0"
 strum.workspace = true
 strum_macros.workspace = true
 crossbeam-channel = "0.5.14"
 
 # loggin
 fern = { version = "0.7.1", optional = true, features = ["colored"] }
-env_logger = "0.11.6"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 time = { version = "0.3.37", optional = true, features = ["formatting", "local-offset"] }

@@ -1,4 +1,4 @@
-use draw::ScreenMode;
+use draw::{BaseCam2D, ScreenMode};
 use rkit::app::{window_size, WindowConfig};
 use rkit::draw::create_draw_2d;
 use rkit::draw::Camera2D;

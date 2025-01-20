@@ -3,7 +3,6 @@ name = "audio"
 edition = "2021"
 
 [dependencies]
-utils.workspace = true
 corelib.workspace = true
 
 # Kira does include by default "mp3" and "flac" features,
@@ -14,7 +13,6 @@ kira = { version = "0.9.5", default-features = false, features = ["cpal", "ogg",
 log.workspace = true
 once_cell.workspace = true
 atomic_refcell.workspace = true
-rayon.workspace = true
 rustc-hash.workspace = true
 smallvec.workspace = true
 num.workspace = true

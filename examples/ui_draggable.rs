@@ -96,7 +96,7 @@ impl<S> UIElement<S> for DraggableNode {
         UIControl::Consume
     }
 
-    fn render(&mut self, draw: &mut Draw2D, _state: &S, _meta: UINodeMetadata) {
+    fn render(&mut self, draw: &mut Draw2D, _state: &mut S, _meta: UINodeMetadata) {
         let size = self.transform.size();
         let (txt, color) = if self.dragging {
             ("Dragging...", Color::GREEN)
