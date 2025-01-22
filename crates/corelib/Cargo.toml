@@ -35,7 +35,7 @@ wgpu = { version = "23.0", features = ["fragile-send-sync-non-atomic-wasm"] }
 gilrs = { version = "0.11", optional = true }
 
 # Instant compatible with wasm
-instant = { version = "0.1.13", features = ["wasm-bindgen"] }
+web-time = "1.1.0"
 
 # Process images
 image = { version = "0.25.5", default-features = false, features = ["png", "jpeg", "webp", "rayon"] }
