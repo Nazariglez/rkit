@@ -7,12 +7,7 @@ use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
-use crate::gfx::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
-    BufferDescriptor, BufferUsage, Color, InnerBuffer, Limits, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture,
-    TextureData, TextureDescriptor, TextureFormat, TextureId,
-};
+use crate::gfx::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer, BufferDescriptor, BufferUsage, Color, InnerBuffer, Limits, RenderPipeline, RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture, TextureData, TextureDescriptor, TextureFormat, TextureId, GpuStats};
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2};
 use arrayvec::ArrayVec;
@@ -41,6 +36,9 @@ pub(crate) struct GfxBackend {
 
     // used as intermediate for surface and pipeline texture formats
     offscreen: Option<OffscreenSurfaceData>,
+
+    last_frame_stats: GpuStats,
+    current_stats: GpuStats,
 }
 
 // This is a hack for wasm32 browsers where there is no threads
@@ -96,6 +94,9 @@ impl GfxBackendImpl for GfxBackend {
 
     fn present_frame(&mut self) {
         self.present_to_screen();
+
+        // new stats
+        self.last_frame_stats = std::mem::take(&mut self.current_stats);
     }
 
     fn render(&mut self, renderer: &Renderer) -> Result<(), String> {
@@ -261,6 +262,7 @@ impl GfxBackendImpl for GfxBackend {
 
         if !renderer.passes.is_empty() {
             self.ctx.queue.submit(Some(encoder.finish()));
+            self.current_stats.draw_calls += 1;
         }
 
         Ok(())
@@ -588,6 +590,7 @@ impl GfxBackendImpl for GfxBackend {
                 encoder.copy_buffer_to_buffer(&buffer.inner.borrow().raw, 0, &raw, 0, offset);
 
                 self.ctx.queue.submit(Some(encoder.finish()));
+                self.current_stats.draw_calls += 1;
             }
 
             *buffer.inner.borrow_mut() = InnerBuffer {
@@ -737,6 +740,10 @@ impl GfxBackendImpl for GfxBackend {
             max_texture_size_3d: raw_limits.max_texture_dimension_3d,
         }
     }
+
+    fn stats(&self) -> GpuStats {
+        self.last_frame_stats
+    }
 }
 
 #[inline(always)]
@@ -792,6 +799,8 @@ impl GfxBackend {
             surface,
             frame: None,
             offscreen: None,
+            last_frame_stats: GpuStats::default(),
+            current_stats: GpuStats::default(),
         };
 
         let offscreen = OffscreenSurfaceData::new(&mut bck, pixelated)?;
@@ -961,6 +970,7 @@ impl GfxBackend {
                     let DrawFrame { frame, encoder, .. } = df;
 
                     self.ctx.queue.submit(Some(encoder.finish()));
+                    self.current_stats.draw_calls += 1;
                     frame.present();
                 }
             }

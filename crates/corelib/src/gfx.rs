@@ -8,6 +8,7 @@ mod limits;
 mod pipeline;
 mod renderer;
 mod texture;
+mod stats;
 
 pub use crate::backend::gfx::*;
 use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
@@ -20,6 +21,7 @@ pub use limits::*;
 pub use pipeline::*;
 pub use renderer::*;
 pub use texture::*;
+pub use stats::*;
 
 // - Gfx
 #[inline]
@@ -91,4 +93,9 @@ pub fn create_render_texture<'a>() -> RenderTextureBuilder<'a> {
 #[inline]
 pub fn limits() -> Limits {
     get_mut_backend().gfx().limits()
+}
+
+#[inline]
+pub fn last_frame_stats() -> GpuStats {
+    get_mut_backend().gfx().stats()
 }

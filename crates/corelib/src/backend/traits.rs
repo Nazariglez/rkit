@@ -1,8 +1,4 @@
-use crate::gfx::{
-    BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, Limits, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
-    SamplerDescriptor, Texture, TextureData, TextureDescriptor,
-};
+use crate::gfx::{BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, Limits, RenderPipeline, RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler, SamplerDescriptor, Texture, TextureData, TextureDescriptor, GpuStats};
 use crate::input::{KeyboardState, MouseState};
 use crate::math::UVec2;
 use crate::math::Vec2;
@@ -100,4 +96,5 @@ pub(crate) trait GfxBackendImpl {
         desc: RenderTextureDescriptor,
     ) -> Result<RenderTexture, String>;
     fn limits(&self) -> Limits;
+    fn stats(&self) -> GpuStats;
 }
