@@ -2,7 +2,9 @@ use crate::ecs::app::App;
 use crate::ecs::prelude::*;
 use crate::ecs::schedule::ScheduleLabel;
 
-pub trait Screen: Resource + std::fmt::Debug + std::hash::Hash + Clone + Eq + Send + 'static {
+pub trait Screen:
+    Resource + std::fmt::Debug + std::hash::Hash + Clone + Eq + Send + 'static
+{
     fn add_schedules(self, app: App) -> App {
         app
     }

@@ -39,6 +39,16 @@ impl App {
         app.add_plugin(BaseSchedules)
     }
 
+    pub fn with_window(mut self, config: WindowConfig) -> Self {
+        self.window_config = config;
+        self
+    }
+
+    pub fn with_log(mut self, config: LogConfig) -> Self {
+        self.log_config = config;
+        self
+    }
+
     pub fn add_plugin(self, config: impl Plugin) -> Self {
         config.apply(self)
     }
