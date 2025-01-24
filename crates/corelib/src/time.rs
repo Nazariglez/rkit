@@ -1,8 +1,8 @@
 use atomic_refcell::AtomicRefCell;
 use utils::ring_buffer::RingBuffer;
 
-pub use web_time::{Duration, Instant};
 use once_cell::sync::Lazy;
+pub use web_time::{Duration, Instant};
 
 static TIME_STATE: Lazy<AtomicRefCell<Time>> = Lazy::new(|| AtomicRefCell::new(Time::default()));
 

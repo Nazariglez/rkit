@@ -7,7 +7,12 @@ use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
-use crate::gfx::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer, BufferDescriptor, BufferUsage, Color, InnerBuffer, Limits, RenderPipeline, RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture, TextureData, TextureDescriptor, TextureFormat, TextureId, GpuStats};
+use crate::gfx::{
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
+    BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, RenderPipeline,
+    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture,
+    TextureData, TextureDescriptor, TextureFormat, TextureId,
+};
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2};
 use arrayvec::ArrayVec;

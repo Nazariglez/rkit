@@ -7,8 +7,8 @@ pub mod consts;
 mod limits;
 mod pipeline;
 mod renderer;
-mod texture;
 mod stats;
+mod texture;
 
 pub use crate::backend::gfx::*;
 use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
@@ -20,8 +20,8 @@ pub use color::*;
 pub use limits::*;
 pub use pipeline::*;
 pub use renderer::*;
-pub use texture::*;
 pub use stats::*;
+pub use texture::*;
 
 // - Gfx
 #[inline]

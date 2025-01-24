@@ -10,6 +10,9 @@ pub mod random;
 #[cfg(feature = "ui")]
 pub mod ui;
 
+#[cfg(feature = "ecs")]
+pub mod ecs;
+
 #[doc(inline)]
 pub use corelib::*;
 
