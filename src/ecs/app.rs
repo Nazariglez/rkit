@@ -51,6 +51,11 @@ impl App {
         self
     }
 
+    pub fn with_screen<S: Screen>(mut self, screen: S) -> Self {
+        self.world.insert_resource(screen);
+        S::add_schedules(self)
+    }
+
     pub fn add_plugin(self, config: impl Plugin) -> Self {
         config.apply(self)
     }

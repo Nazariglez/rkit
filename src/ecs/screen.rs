@@ -5,19 +5,19 @@ use crate::ecs::schedule::ScheduleLabel;
 pub trait Screen:
     Resource + std::fmt::Debug + std::hash::Hash + Clone + Eq + Send + 'static
 {
-    fn add_schedules(self, app: App) -> App {
+    fn add_schedules(app: App) -> App {
         app
     }
 }
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnExit<S: Screen>(S);
+pub struct OnExit<S: Screen>(pub S);
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnEnter<S: Screen>(S);
+pub struct OnEnter<S: Screen>(pub S);
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnTransition<S: Screen> {
+pub struct OnChange<S: Screen> {
     pub from: S,
     pub to: S,
 }
@@ -27,13 +27,13 @@ pub fn in_screen<S: Screen>(screen: S) -> impl FnMut(Option<Res<S>>) -> bool + C
 }
 
 #[derive(Clone, Copy)]
-pub struct ChangeScreen<S: Screen>(S);
+pub struct ChangeScreen<S: Screen>(pub S);
 
 impl<S: Screen> Command for ChangeScreen<S> {
     fn apply(self, world: &mut World) {
         if let Some(last_screen) = world.remove_resource::<S>() {
             world.run_schedule(OnExit(last_screen.clone()));
-            world.run_schedule(OnTransition {
+            world.run_schedule(OnChange {
                 from: last_screen,
                 to: self.0.clone(),
             });

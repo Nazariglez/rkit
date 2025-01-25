@@ -32,13 +32,16 @@ impl Plugin for FixedUpdate {
 }
 
 macro_rules! add_schedules {
- ($app:expr, $( $schedule:expr ),* $(,)?) => {
+    ($app:expr, $( $schedule:ident : $multi_threaded:expr ),* $(,)?) => {
         $(
             {
                 let mut schedule = Schedule::new($schedule);
-                schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+                if !$multi_threaded {
+                    schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+                }
                 $app.world.add_schedule(schedule);
-                println!("added {:?}", $schedule);
+                // FIXME: this is not printer because logs are not initialized yet...
+                log::debug!("Added schedule {:?}, multithread: {:?}", stringify!($schedule), $multi_threaded);
             }
         )*
     };
@@ -49,19 +52,19 @@ impl Plugin for BaseSchedules {
     fn apply(self, mut app: App) -> App {
         add_schedules!(
             app,
-            OnSetup,
-            OnEnginePreFrame,
-            OnEnginePostFrame,
-            OnPreFrame,
-            OnPostFrame,
-            OnPreUpdate,
-            OnUpdate,
-            OnPostUpdate,
-            OnPreRender,
-            OnRender,
-            OnPostRender,
-            OnAudio,
-            OnCleanup,
+            OnSetup: false,
+            OnEnginePreFrame: false,
+            OnEnginePostFrame: false,
+            OnPreFrame: false,
+            OnPostFrame: false,
+            OnPreUpdate: false,
+            OnUpdate: false,
+            OnPostUpdate: false,
+            OnPreRender: false,
+            OnRender: false,
+            OnPostRender: false,
+            OnAudio: false,
+            OnCleanup: false,
         );
         app
     }

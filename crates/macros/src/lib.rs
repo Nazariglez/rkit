@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Data, DeriveInput, Fields, LitInt, Token, Type};
+use syn::{parse_macro_input, Data, DataEnum, DeriveInput, Fields, LitInt, Token, Type, Variant};
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
@@ -356,4 +356,61 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(interpolate_impl)
+}
+
+#[cfg(feature = "ecs")]
+#[proc_macro_derive(Screen)]
+pub fn derive_iter_variants(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let enum_name = input.ident;
+
+    // Extract generics, lifetimes, and where clauses
+    let generics = input.generics.clone();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // Ensure the input is an enum
+    let variants = if let Data::Enum(DataEnum { variants, .. }) = input.data {
+        variants
+    } else {
+        return syn::Error::new_spanned(enum_name, "Screen derive can only be derived for enums")
+            .to_compile_error()
+            .into();
+    };
+
+    // Collect variant names
+    let variant_names: Vec<_> = variants.iter().map(|Variant { ident, .. }| ident).collect();
+
+    // Generate the implementation for the Screen trait and Resource trait
+    let expanded = quote! {
+        impl #impl_generics Screen for #enum_name #ty_generics #where_clause {
+            fn add_schedules(mut app: App) -> App {
+                let variants = vec![
+                    #(Self::#variant_names),*
+                ];
+
+                variants.iter().for_each(|from_variant| {
+                    // TODO: multithread?
+                    let mut schedule = Schedule::new(OnEnter(from_variant.clone()));
+                    schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+                    app.world.add_schedule(schedule);
+
+                    let mut schedule = Schedule::new(OnExit(from_variant.clone()));
+                    schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+                    app.world.add_schedule(schedule);
+
+                    variants.iter().for_each(|to_variant| {
+                        let mut schedule = Schedule::new(OnChange{ from: from_variant.clone(), to: to_variant.clone() });
+                        schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+                        app.world.add_schedule(schedule);
+                    });
+                });
+
+                app
+            }
+        }
+
+        impl #impl_generics Resource for #enum_name #ty_generics #where_clause {}
+    };
+
+    TokenStream::from(expanded)
 }

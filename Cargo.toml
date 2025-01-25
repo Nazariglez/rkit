@@ -123,4 +123,4 @@ postfx = []
 # ui elements
 ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec", "dep:heapless", "dep:strum", "dep:strum_macros"]
 # enable ecs/app
-ecs = ["dep:bevy_ecs", "dep:bevy_tasks"]
+ecs = ["dep:bevy_ecs", "dep:bevy_tasks", "macros/ecs"]
