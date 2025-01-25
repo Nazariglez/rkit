@@ -1,5 +1,3 @@
-#![cfg(feature = "ecs")]
-
 mod app;
 mod plugin;
 mod schedules;

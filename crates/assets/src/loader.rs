@@ -37,13 +37,13 @@ impl AssetLoader {
     pub fn is_loaded(&self, id: AssetId) -> bool {
         self.states
             .get(id.0)
-            .map_or(false, |s| matches!(s.state, AssetState::Loaded(_)))
+            .is_some_and(|s| matches!(s.state, AssetState::Loaded(_)))
     }
 
     pub fn is_loading(&self, id: AssetId) -> bool {
         self.states
             .get(id.0)
-            .map_or(false, |s| matches!(s.state, AssetState::Loading))
+            .is_some_and(|s| matches!(s.state, AssetState::Loading))
     }
 
     pub(crate) fn parse<T, F>(

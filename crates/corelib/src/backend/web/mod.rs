@@ -279,9 +279,7 @@ impl BackendImpl<GfxBackend> for WebBackend {
     }
 
     fn is_cursor_locked(&self) -> bool {
-        self.win
-            .as_ref()
-            .map_or(false, |w| *w.cursor_locked.borrow())
+        self.win.as_ref().is_some_and(|w| *w.cursor_locked.borrow())
     }
     fn set_cursor_visible(&mut self, visible: bool) {
         // TODO store last mode to put it back instead of default

@@ -17,6 +17,12 @@ pub struct App {
     pub(crate) log_config: LogConfig,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         let world = World::new();

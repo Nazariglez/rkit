@@ -127,7 +127,7 @@ impl WebWindow {
         // TODO how fast is this? maybe is better to use a Rc<RefCell<bool>>?
         self.document
             .fullscreen_element()
-            .map_or(false, |el| &el == self.canvas.as_ref())
+            .is_some_and(|el| &el == self.canvas.as_ref())
     }
 
     pub fn toggle_fullscreen(&mut self) {
