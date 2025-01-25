@@ -73,7 +73,7 @@ impl App {
         self
     }
 
-    pub fn run(mut self) -> Result<(), String> {
+    pub fn run(self) -> Result<(), String> {
         let Self {
             mut world,
             fixed_updates,

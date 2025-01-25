@@ -13,7 +13,7 @@ use arrayvec::ArrayVec;
 use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
-use strum_macros::{EnumCount, EnumIter, FromRepr};
+use strum_macros::{EnumIter, FromRepr};
 use utils::helpers::next_pot2;
 
 const GAMEPAD_BUTTON_COUNT_POT2: usize = next_pot2(GamepadButton::COUNT);
