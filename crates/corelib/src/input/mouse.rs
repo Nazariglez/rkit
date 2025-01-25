@@ -3,12 +3,9 @@ use crate::utils::EnumSet;
 use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
-use strum_macros::EnumCount;
 use utils::helpers::next_pot2;
 
-const MOUSE_BUTTON_COUNT_POT2: usize = next_pot2(MouseButton::COUNT);
-
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, EnumCount)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, strum_macros::EnumCount)]
 #[repr(u8)]
 pub enum MouseButton {
     Left,
@@ -20,6 +17,8 @@ pub enum MouseButton {
     // Unknown is the last value
     Unknown,
 }
+
+const MOUSE_BUTTON_COUNT_POT2: usize = next_pot2(MouseButton::COUNT);
 
 #[derive(Default, Clone)]
 pub struct MouseButtonList {

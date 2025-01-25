@@ -1,4 +1,3 @@
-use crate::ecs::prelude::*;
 use crate::ecs::schedule::ScheduleLabel;
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]

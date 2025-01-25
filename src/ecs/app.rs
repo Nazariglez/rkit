@@ -19,16 +19,7 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let mut world = World::new();
-
-        // Screen::iter().for_each(|screen| {
-        //     world.add_schedule(Schedule::new(OnEnter(screen)));
-        //     world.add_schedule(Schedule::new(OnExit(screen)));
-        //
-        //     Screen::iter().for_each(|to| {
-        //         world.add_schedule(Schedule::new(OnTransition { from: screen, to }));
-        //     });
-        // });
+        let world = World::new();
 
         let app = Self {
             world,
@@ -102,7 +93,7 @@ impl App {
         });
 
         for fps in fixed_updates {
-            builder = builder.fixed_update((1.0 / (fps as f32)), move |world: &mut World| {
+            builder = builder.fixed_update(1.0 / (fps as f32), move |world: &mut World| {
                 world.run_schedule(OnPreFixedUpdate(fps));
                 world.run_schedule(OnFixedUpdate(fps));
                 world.run_schedule(OnPostFixedUpdate(fps));
