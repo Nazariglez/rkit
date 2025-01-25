@@ -11,7 +11,8 @@ pub trait Plugin {
     fn apply(self, app: App) -> App;
 }
 
-impl Plugin for OnFixedUpdate {
+pub struct FixedUpdate(pub u8);
+impl Plugin for FixedUpdate {
     fn apply(self, mut app: App) -> App {
         let fps = self.0;
 

@@ -1,9 +1,9 @@
-use corelib::gfx::Color;
-use corelib::math::{vec2, Vec2};
-use corelib::{gfx, time};
 use draw::create_draw_2d;
 use rkit::ecs::prelude::*;
 use rkit::ecs::{App, OnCleanup, OnRender, OnSetup, OnUpdate};
+use rkit::gfx::Color;
+use rkit::math::{vec2, Vec2};
+use rkit::{gfx, time};
 
 fn main() -> Result<(), String> {
     App::new()
@@ -27,7 +27,7 @@ fn setup_system(mut cmds: Commands) {
 fn update_system(mut query: Query<&mut Rect>) {
     let elapsed = time::elapsed_f32() * 2.0;
     let anim = vec2(elapsed.sin(), elapsed.cos());
-    query.iter_mut().for_each(|mut rect| {
+    query.par_iter_mut().for_each(|mut rect| {
         rect.0 = Vec2::splat(200.0) + anim * 50.0;
     });
 }

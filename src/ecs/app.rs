@@ -7,6 +7,7 @@ use crate::ecs::schedules::{
     OnPreUpdate, OnRender, OnSetup, OnUpdate,
 };
 use crate::ecs::screen::{in_screen, Screen};
+use bevy_tasks::{ComputeTaskPool, TaskPool};
 use corelib::app::{LogConfig, WindowConfig};
 
 pub struct App {
@@ -36,6 +37,7 @@ impl App {
             log_config: Default::default(),
         };
 
+        ComputeTaskPool::get_or_init(TaskPool::default);
         app.add_plugin(BaseSchedules)
     }
 

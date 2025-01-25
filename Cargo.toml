@@ -89,6 +89,7 @@ strum_macros = { workspace = true, optional = true }
 heapless = { workspace = true, optional = true }
 
 bevy_ecs = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
+bevy_tasks = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { version = "2.3.0", optional = true, features = ["js"] }
@@ -122,4 +123,4 @@ postfx = []
 # ui elements
 ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec", "dep:heapless", "dep:strum", "dep:strum_macros"]
 # enable ecs/app
-ecs = ["dep:bevy_ecs"]
+ecs = ["dep:bevy_ecs", "dep:bevy_tasks"]
