@@ -1,4 +1,4 @@
-pub use crate::ecs::schedule::{ExecutorKind, ScheduleLabel};
+pub use bevy_ecs::schedule::{ExecutorKind, ScheduleLabel};
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnSetup;

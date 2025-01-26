@@ -1,6 +1,6 @@
 use crate::ecs::app::App;
 use crate::ecs::prelude::*;
-use crate::ecs::schedule::ScheduleLabel;
+use bevy_ecs::schedule::ScheduleLabel;
 
 pub trait Screen:
     Resource + std::fmt::Debug + std::hash::Hash + Clone + Eq + Send + 'static

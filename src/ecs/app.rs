@@ -1,6 +1,6 @@
 use super::prelude::*;
 use crate::ecs::plugin::{BaseSchedules, Plugin};
-use crate::ecs::schedule::ScheduleLabel;
+use bevy_ecs::schedule::ScheduleLabel;
 use crate::ecs::schedules::{
     OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
     OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
