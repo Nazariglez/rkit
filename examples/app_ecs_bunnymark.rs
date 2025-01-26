@@ -1,7 +1,6 @@
 use corelib::input::{is_key_pressed, is_mouse_btn_down, MouseButton};
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::ecs::prelude::*;
-use rkit::ecs::{App, FixedUpdate, OnCleanup, OnFixedUpdate, OnRender, OnSetup, OnUpdate};
 use rkit::gfx::Color;
 use rkit::math::{vec2, Vec2};
 use rkit::random::Rng;
@@ -15,17 +14,17 @@ fn main() -> Result<(), String> {
         .run()
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Deref)]
 struct Pos(Vec2);
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Deref)]
 struct Vel(Vec2);
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Deref)]
 struct BunnyColor(Color);
-#[derive(Resource)]
+#[derive(Resource, Deref)]
 struct Random(Rng);
-#[derive(Resource)]
+#[derive(Resource, Deref)]
 struct Image(Sprite);
-#[derive(Resource)]
+#[derive(Resource, Deref)]
 struct Counter(usize);
 
 fn setup_system(mut cmds: Commands) {
@@ -51,25 +50,25 @@ fn setup_system(mut cmds: Commands) {
 fn update_system(mut query: Query<(&mut Pos, &mut Vel)>, mut rng: ResMut<Random>) {
     query.iter_mut().for_each(|(mut pos, mut speed)| {
         pos.0 += speed.0;
-        speed.0.y += 0.75;
+        speed.y += 0.75;
 
-        if pos.0.x > 800.0 {
-            speed.0.x *= -1.0;
-            pos.0.x = 800.0;
-        } else if pos.0.x < 0.0 {
-            speed.0.x *= -1.0;
-            pos.0.x = 0.0
+        if pos.x > 800.0 {
+            speed.x *= -1.0;
+            pos.x = 800.0;
+        } else if pos.x < 0.0 {
+            speed.x *= -1.0;
+            pos.x = 0.0
         }
 
-        if pos.0.y > 600.0 {
-            speed.0.y *= -0.85;
-            pos.0.y = 600.0;
-            if rng.0.gen::<bool>() {
-                speed.0.y -= rng.0.range(0.0..6.0);
+        if pos.y > 600.0 {
+            speed.y *= -0.85;
+            pos.y = 600.0;
+            if rng.gen::<bool>() {
+                speed.y -= rng.range(0.0..6.0);
             }
-        } else if pos.0.y < 0.0 {
-            speed.0.y = 0.0;
-            pos.0.y = 0.0;
+        } else if pos.y < 0.0 {
+            speed.y = 0.0;
+            pos.y = 0.0;
         }
     });
 }
@@ -79,7 +78,7 @@ fn draw_system(query: Query<(&Pos, &BunnyColor)>, img: Res<Image>, counter: Res<
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
     query.iter().for_each(|(Pos(pos), BunnyColor(color))| {
-        draw.image(&img.0).position(*pos).color(*color);
+        draw.image(&img).position(*pos).color(*color);
     });
 
     draw.text(&format!("Bunnies: {}\nFPS: {:.2}", counter.0, time::fps()))

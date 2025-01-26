@@ -2,7 +2,11 @@ use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Data, DataEnum, DeriveInput, Fields, LitInt, Token, Type, Variant};
+use syn::spanned::Spanned;
+use syn::{
+    parse_macro_input, Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, LitInt,
+    Meta, Token, Type, Variant,
+};
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
@@ -410,6 +414,129 @@ pub fn derive_iter_variants(input: TokenStream) -> TokenStream {
         }
 
         impl #impl_generics Resource for #enum_name #ty_generics #where_clause {}
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Deref, attributes(deref))]
+pub fn derive_deref_macro(input: TokenStream) -> TokenStream {
+    // Parse the input tokens into a syntax tree
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let struct_name = input.ident.clone();
+    let generics = input.generics.clone();
+    let where_clause = &generics.where_clause;
+
+    // We only support structs. If it's an enum or union, error out.
+    let data_struct = match input.data.clone() {
+        Data::Struct(ds) => ds,
+        _ => {
+            return Error::new(input.span(), "DerefMacro can only be derived for structs")
+                .to_compile_error()
+                .into();
+        }
+    };
+
+    // Extract the fields of the struct
+    let (field_count, fields_info): (usize, Vec<_>) = match data_struct.fields {
+        Fields::Unnamed(ref fields_unnamed) => {
+            let info = fields_unnamed
+                .unnamed
+                .iter()
+                .enumerate()
+                .map(|(idx, f)| {
+                    (
+                        f.ty.clone(),
+                        // The access to this field: self.0, self.1, etc.
+                        quote! { #idx },
+                        // Whether this field has the `#[deref]` attribute
+                        f.attrs.iter().any(|attr| attr.path().is_ident("deref")),
+                    )
+                })
+                .collect();
+            (fields_unnamed.unnamed.len(), info)
+        }
+        Fields::Named(ref fields_named) => {
+            let info = fields_named
+                .named
+                .iter()
+                .map(|f| {
+                    let ident = f.ident.as_ref().unwrap();
+                    let ty = f.ty.clone();
+                    (
+                        ty,
+                        // The access to this field: self.my_field
+                        quote! { #ident },
+                        // Whether this field has the `#[deref]` attribute
+                        f.attrs.iter().any(|attr| attr.path().is_ident("deref")),
+                    )
+                })
+                .collect();
+            (fields_named.named.len(), info)
+        }
+        Fields::Unit => {
+            // A unit struct has no fields, so it cannot deref to anything
+            return Error::new(
+                input.span(),
+                "DerefMacro cannot be derived for unit structs",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+
+    // Determine which field to use as the `Target` for Deref
+    let (target_ty, target_access) = if field_count == 1 {
+        // If there's exactly one field, we always use it, whether or not it has the #[deref] attribute
+        let (ty, access, _) = fields_info.into_iter().next().unwrap();
+        (ty, access)
+    } else {
+        // If there are multiple fields, exactly one of them must have #[deref]
+        let mut candidate = None;
+        for (ty, access, has_attr) in &fields_info {
+            if *has_attr {
+                if candidate.is_some() {
+                    return Error::new(
+                        input.span(),
+                        "Multiple fields marked with #[deref]. Only one allowed.",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+                // Found our candidate
+                candidate = Some((ty.clone(), access.clone()));
+            }
+        }
+        match candidate {
+            Some((ty, access)) => (ty, access),
+            None => {
+                return Error::new(
+                    input.span(),
+                    "Multiple fields but no #[deref] attribute found. \
+                     Mark exactly one field with #[deref] or have only one field total.",
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+    };
+
+    // Generate the impl blocks
+    let expanded = quote! {
+        impl #generics ::core::ops::Deref for #struct_name #generics #where_clause {
+            type Target = #target_ty;
+
+            fn deref(&self) -> &Self::Target {
+                &self.#target_access
+            }
+        }
+
+        impl #generics ::core::ops::DerefMut for #struct_name #generics #where_clause {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.#target_access
+            }
+        }
     };
 
     TokenStream::from(expanded)

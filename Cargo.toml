@@ -88,6 +88,7 @@ strum = { workspace = true, optional = true }
 strum_macros = { workspace = true, optional = true }
 heapless = { workspace = true, optional = true }
 
+# ecs deps
 bevy_ecs = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
 bevy_tasks = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
 

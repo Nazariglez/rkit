@@ -1,10 +1,12 @@
 mod alpha_fx;
 mod blur_fx;
 mod color_replace_fx;
+mod crt_fx;
 mod gray_scale_fx;
 mod pfx;
 mod pixelate_fx;
 mod rgb_split_fx;
+mod shadow_fx;
 mod sys;
 
 use crate::gfx;
@@ -14,10 +16,12 @@ use sys::SYS;
 pub use alpha_fx::*;
 pub use blur_fx::*;
 pub use color_replace_fx::*;
+pub use crt_fx::*;
 pub use gray_scale_fx::*;
 pub use pfx::*;
 pub use pixelate_fx::*;
 pub use rgb_split_fx::*;
+pub use shadow_fx::*;
 pub use sys::{IOPostFxData, InOutTextures};
 
 #[inline]

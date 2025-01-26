@@ -1,4 +1,4 @@
-use crate::ecs::schedule::ScheduleLabel;
+pub use crate::ecs::schedule::{ExecutorKind, ScheduleLabel};
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnSetup;
