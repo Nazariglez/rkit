@@ -90,6 +90,20 @@ impl App {
         self
     }
 
+    #[track_caller]
+    pub fn configure_sets(
+       mut self,
+        label: impl ScheduleLabel,
+        sets: impl IntoSystemSetConfigs,
+    ) -> Self {
+        self.world
+            .try_schedule_scope(label, move |_world, schedule| {
+                schedule.configure_sets(sets);
+            })
+            .unwrap();
+        self
+    }
+
     #[inline]
     #[track_caller]
     pub fn insert_resource<R: Resource>(&mut self, value: R) {
