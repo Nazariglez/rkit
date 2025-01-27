@@ -8,6 +8,7 @@ use rkit::{gfx, random, time};
 
 fn main() -> Result<(), String> {
     App::new()
+        .add_plugin(WindowPlugin::default().title("BunnyMark"))
         .add_systems(OnSetup, setup_system)
         .add_systems(OnUpdate, (update_system, add_bunnies_system))
         .add_systems(OnRender, draw_system)

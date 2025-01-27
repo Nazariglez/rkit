@@ -1,13 +1,16 @@
 pub use bevy_ecs::schedule::{ExecutorKind, ScheduleLabel};
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnSetup;
+pub struct OnEngineSetup;
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnEnginePreFrame;
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnEnginePostFrame;
+
+#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct OnSetup;
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnPreFrame;

@@ -10,6 +10,8 @@ use crate::gfx::GfxBackend;
 use crate::input::{KeyboardState, MouseState};
 use crate::math::Vec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use encase::ShaderType;
+use glam::vec2;
 use once_cell::sync::Lazy;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -228,7 +230,12 @@ impl BackendImpl<GfxBackend> for WebBackend {
             .set_max_size(size.x as _, size.y as _);
     }
     fn screen_size(&self) -> Vec2 {
-        todo!()
+        self.win
+            .as_ref()
+            .and_then(|w| w.window.screen().ok())
+            .map_or(Vec2::ZERO, |screen| {
+                vec2(screen.width().unwrap() as _, screen.height().unwrap() as _)
+            })
     }
     fn is_fullscreen(&self) -> bool {
         self.win.as_ref().unwrap().is_fullscreen()
@@ -240,19 +247,28 @@ impl BackendImpl<GfxBackend> for WebBackend {
         self.win.as_ref().unwrap().dpi
     }
     fn position(&self) -> Vec2 {
-        todo!()
+        Vec2::ZERO
     }
     fn set_position(&mut self, _x: f32, _y: f32) {
-        todo!()
+        // not supported on browser
+        // TODO: log once on the console?
     }
     fn is_focused(&self) -> bool {
-        todo!()
+        self.win.as_ref().is_some_and(|w| {
+            w.document.has_focus().ok().is_some_and(|_| {
+                w.document
+                    .active_element()
+                    .is_some_and(|el| el.id() == w.canvas.id())
+            })
+        })
     }
     fn is_maximized(&self) -> bool {
-        todo!()
+        // no-op
+        false
     }
     fn is_minimized(&self) -> bool {
-        todo!()
+        // no-op
+        false
     }
     fn is_pixelated(&self) -> bool {
         self.win.as_ref().unwrap().pixelated

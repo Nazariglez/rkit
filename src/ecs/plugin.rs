@@ -4,6 +4,7 @@ use crate::ecs::schedules::{
     OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
     OnPreUpdate, OnRender, OnSetup, OnUpdate,
 };
+use crate::prelude::OnEngineSetup;
 use bevy_ecs::prelude::Schedule;
 use bevy_ecs::schedule::ExecutorKind;
 
@@ -52,15 +53,16 @@ impl Plugin for BaseSchedules {
     fn apply(self, mut app: App) -> App {
         add_schedules!(
             app,
-            OnSetup: false,
+            OnEngineSetup: false,
             OnEnginePreFrame: false,
             OnEnginePostFrame: false,
-            OnPreFrame: false,
-            OnPostFrame: false,
-            OnPreUpdate: false,
-            OnUpdate: false,
-            OnPostUpdate: false,
-            OnPreRender: false,
+            OnSetup: false,
+            OnPreFrame: true,
+            OnPostFrame: true,
+            OnPreUpdate: true,
+            OnUpdate: true,
+            OnPostUpdate: true,
+            OnPreRender: true,
             OnRender: false,
             OnPostRender: false,
             OnAudio: false,

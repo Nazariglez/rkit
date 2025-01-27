@@ -1,12 +1,12 @@
 use super::prelude::*;
 use crate::ecs::plugin::{BaseSchedules, Plugin};
-use bevy_ecs::schedule::ScheduleLabel;
 use crate::ecs::schedules::{
     OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
     OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
     OnPreUpdate, OnRender, OnSetup, OnUpdate,
 };
 use crate::ecs::screen::{in_screen, Screen};
+use bevy_ecs::schedule::ScheduleLabel;
 use bevy_tasks::{ComputeTaskPool, TaskPool};
 use corelib::app::{LogConfig, WindowConfig};
 
@@ -38,24 +38,33 @@ impl App {
         app.add_plugin(BaseSchedules)
     }
 
-    pub fn with_window(mut self, config: WindowConfig) -> Self {
+    #[inline]
+
+    pub(crate) fn with_window(mut self, config: WindowConfig) -> Self {
         self.window_config = config;
         self
     }
 
-    pub fn with_log(mut self, config: LogConfig) -> Self {
+    #[inline]
+
+    pub(crate) fn with_log(mut self, config: LogConfig) -> Self {
         self.log_config = config;
         self
     }
 
+    #[inline]
     pub fn with_screen<S: Screen>(mut self, screen: S) -> Self {
-        self.world.insert_resource(screen);
-        S::add_schedules(self)
+        S::add_schedules(self).add_systems(OnEngineSetup, move |mut cmds: Commands| {
+            cmds.queue(ChangeScreen(screen.clone()))
+        })
     }
 
+    #[inline]
     pub fn add_plugin(self, config: impl Plugin) -> Self {
         config.apply(self)
     }
+
+    #[inline]
 
     pub fn add_screen_systems<S: Screen, M>(
         self,
@@ -65,6 +74,8 @@ impl App {
     ) -> Self {
         self.add_systems(label, (systems).run_if(in_screen(screen)))
     }
+
+    #[inline]
 
     pub fn add_systems<M>(
         mut self,
@@ -79,6 +90,12 @@ impl App {
         self
     }
 
+    #[inline]
+    #[track_caller]
+    pub fn insert_resource<R: Resource>(&mut self, value: R) {
+        self.world.insert_resource(value);
+    }
+
     pub fn run(self) -> Result<(), String> {
         let Self {
             mut world,
@@ -87,6 +104,7 @@ impl App {
             log_config,
         } = self;
         let mut builder = crate::init_with(|| {
+            world.run_schedule(OnEngineSetup);
             world.run_schedule(OnSetup);
             world
         });

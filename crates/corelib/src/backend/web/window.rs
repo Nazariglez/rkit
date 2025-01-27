@@ -18,6 +18,7 @@ use wgpu::rwh::{HandleError, HasWindowHandle, WindowHandle};
 
 pub(crate) struct WebWindow {
     pub canvas: HtmlCanvasElement,
+    pub window: web_sys::Window,
     pub document: Document,
     pub parent: Element,
     pub dpi: f32,
@@ -103,6 +104,7 @@ impl WebWindow {
 
         let mut win = Self {
             canvas,
+            window,
             document,
             parent: canvas_parent,
             dpi: dpi as f32,

@@ -12,7 +12,6 @@ pub use logger::LogConfig;
 use crate::events::{CoreEvent, CORE_EVENTS_MAP};
 
 // -- Window section
-
 /// Return the window's title
 #[inline]
 pub fn window_title() -> String {

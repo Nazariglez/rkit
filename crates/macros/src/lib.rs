@@ -527,12 +527,14 @@ pub fn derive_deref_macro(input: TokenStream) -> TokenStream {
         impl #generics ::core::ops::Deref for #struct_name #generics #where_clause {
             type Target = #target_ty;
 
+            #[inline]
             fn deref(&self) -> &Self::Target {
                 &self.#target_access
             }
         }
 
         impl #generics ::core::ops::DerefMut for #struct_name #generics #where_clause {
+            #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
                 &mut self.#target_access
             }
