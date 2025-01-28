@@ -1,4 +1,5 @@
 pub mod app;
+pub mod input;
 pub mod log;
 pub mod plugin;
 pub mod prelude;

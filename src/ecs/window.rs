@@ -4,20 +4,27 @@ use corelib::app::*;
 use corelib::math::{uvec2, UVec2, Vec2};
 use macros::Deref;
 
-#[derive(Resource, Deref, Default)]
-pub struct WindowPlugin(WindowConfig);
+#[derive(Default)]
+pub struct AddWindowPlugin;
 
-impl Plugin for WindowPlugin {
+impl Plugin for AddWindowPlugin {
     fn apply(self, mut app: App) -> App {
-        app.insert_resource(Window::default());
-        app.with_window(self.0)
-            .add_systems(OnEngineSetup, init_window_system)
+        app.add_systems(OnEngineSetup, init_window_system)
             .add_systems(OnEnginePreFrame, populate_window_system)
             .add_systems(OnEnginePostFrame, sync_window_system)
     }
 }
 
-impl WindowPlugin {
+#[derive(Default, Debug, Resource, Deref)]
+pub struct AddWindowConfigPlugin(WindowConfig);
+
+impl Plugin for AddWindowConfigPlugin {
+    fn apply(self, app: App) -> App {
+        app.with_window(self.0)
+    }
+}
+
+impl AddWindowConfigPlugin {
     /// Set the window's title
     pub fn title(mut self, title: &str) -> Self {
         self.title = title.to_string();
@@ -98,6 +105,10 @@ impl Window {
     }
 
     pub fn set_title(&mut self, title: &str) {
+        if title == self.title.as_str() {
+            return;
+        }
+
         self.title = title.to_string();
         self.dirty = true;
     }
@@ -107,16 +118,28 @@ impl Window {
     }
 
     pub fn set_size(&mut self, size: Vec2) {
+        if self.size == size {
+            return;
+        }
+
         self.size = size;
         self.dirty = true;
     }
 
     pub fn set_min_size(&mut self, size: Vec2) {
+        if self.min_size == Some(size) {
+            return;
+        }
+
         self.min_size = Some(size);
         self.dirty = true;
     }
 
     pub fn set_max_size(&mut self, size: Vec2) {
+        if self.max_size == Some(size) {
+            return;
+        }
+
         self.max_size = Some(size);
         self.dirty = true;
     }
@@ -134,6 +157,10 @@ impl Window {
     }
 
     pub fn set_fullscreen(&mut self, fullscreen: bool) {
+        if self.fullscreen == fullscreen {
+            return;
+        }
+
         self.fullscreen = fullscreen;
         self.dirty = true;
     }
@@ -147,6 +174,10 @@ impl Window {
     }
 
     pub fn set_position(&mut self, position: Vec2) {
+        if self.position == position {
+            return;
+        }
+
         self.position = position;
         self.dirty = true;
     }
@@ -177,17 +208,23 @@ impl Window {
     }
 }
 
-fn init_window_system(mut win: ResMut<Window>) {
-    win.title = window_title();
-    win.size = window_size();
-    win.fullscreen = is_window_fullscreen();
-    win.focused = is_window_focused();
-    win.pixelated = is_window_pixelated();
-    win.dpi_scale = window_dpi_scale();
-    win.screen_size = screen_size();
-    win.position = window_position();
-    win.minimized = is_window_minimized();
-    win.maximized = is_window_maximized();
+fn init_window_system(mut cmds: Commands) {
+    cmds.insert_resource(Window {
+        dirty: false,
+        size: window_size(),
+        title: window_title(),
+        min_size: None,
+        max_size: None,
+        fullscreen: is_window_fullscreen(),
+        dpi_scale: window_dpi_scale(),
+        position: window_position(),
+        focused: is_window_focused(),
+        maximized: is_window_maximized(),
+        minimized: is_window_minimized(),
+        screen_size: screen_size(),
+        pixelated: is_window_pixelated(),
+        close_request: false,
+    });
 }
 
 fn populate_window_system(mut win: ResMut<Window>) {

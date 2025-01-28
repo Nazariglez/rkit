@@ -39,14 +39,12 @@ impl App {
     }
 
     #[inline]
-
     pub(crate) fn with_window(mut self, config: WindowConfig) -> Self {
         self.window_config = config;
         self
     }
 
     #[inline]
-
     pub(crate) fn with_log(mut self, config: LogConfig) -> Self {
         self.log_config = config;
         self
@@ -65,7 +63,6 @@ impl App {
     }
 
     #[inline]
-
     pub fn add_screen_systems<S: Screen, M>(
         self,
         screen: S,
@@ -76,7 +73,7 @@ impl App {
     }
 
     #[inline]
-
+    #[track_caller]
     pub fn add_systems<M>(
         mut self,
         label: impl ScheduleLabel,
@@ -90,9 +87,10 @@ impl App {
         self
     }
 
+    #[inline]
     #[track_caller]
     pub fn configure_sets(
-       mut self,
+        mut self,
         label: impl ScheduleLabel,
         sets: impl IntoSystemSetConfigs,
     ) -> Self {

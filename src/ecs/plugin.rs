@@ -1,10 +1,11 @@
 use super::app::App;
+use crate::ecs::input::{AddKeyboardPlugin, AddMousePlugin};
 use crate::ecs::schedules::{
     OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
     OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
     OnPreUpdate, OnRender, OnSetup, OnUpdate,
 };
-use crate::prelude::OnEngineSetup;
+use crate::prelude::{AddTimePlugin, AddWindowPlugin, OnEngineSetup};
 use bevy_ecs::prelude::Schedule;
 use bevy_ecs::schedule::ExecutorKind;
 
@@ -48,7 +49,7 @@ macro_rules! add_schedules {
     };
 }
 
-pub struct BaseSchedules;
+pub(crate) struct BaseSchedules;
 impl Plugin for BaseSchedules {
     fn apply(self, mut app: App) -> App {
         add_schedules!(
@@ -62,12 +63,52 @@ impl Plugin for BaseSchedules {
             OnPreUpdate: true,
             OnUpdate: true,
             OnPostUpdate: true,
-            OnPreRender: true,
+            OnPreRender: false,
             OnRender: false,
             OnPostRender: false,
             OnAudio: false,
             OnCleanup: false,
         );
+        app
+    }
+}
+
+pub struct AddMainPlugins {
+    window: bool,
+    time: bool,
+    mouse: bool,
+    keyboard: bool,
+}
+
+impl Default for AddMainPlugins {
+    fn default() -> Self {
+        Self {
+            window: true,
+            time: true,
+            mouse: true,
+            keyboard: true,
+        }
+    }
+}
+
+impl Plugin for AddMainPlugins {
+    fn apply(self, mut app: App) -> App {
+        if self.window {
+            app = app.add_plugin(AddWindowPlugin);
+        }
+
+        if self.time {
+            app = app.add_plugin(AddTimePlugin);
+        }
+
+        if self.mouse {
+            app = app.add_plugin(AddMousePlugin);
+        }
+
+        if self.keyboard {
+            app = app.add_plugin(AddKeyboardPlugin);
+        }
+
         app
     }
 }
