@@ -5,9 +5,12 @@ use corelib::input::{
     hide_cursor, is_cursor_locked, is_cursor_on_screen, is_cursor_visible, is_mouse_moving,
     is_mouse_scrolling, keys_down, keys_pressed, keys_released, lock_cursor, mouse_btns_down,
     mouse_btns_pressed, mouse_btns_released, mouse_motion_delta, mouse_position, mouse_wheel_delta,
-    show_cursor, unlock_cursor, KeyCode, KeyCodeList, MouseButton, MouseButtonList,
+    show_cursor, unlock_cursor,
 };
 use corelib::math::Vec2;
+
+// re-export common use types
+pub use corelib::input::{KeyCode, KeyCodeList, MouseButton, MouseButtonList};
 
 // -- Mouse
 pub struct AddMousePlugin;

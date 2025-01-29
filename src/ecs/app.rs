@@ -6,6 +6,7 @@ use crate::ecs::schedules::{
     OnPreUpdate, OnRender, OnSetup, OnUpdate,
 };
 use crate::ecs::screen::{in_screen, Screen};
+use bevy_ecs::event::EventRegistry;
 use bevy_ecs::schedule::ScheduleLabel;
 use bevy_tasks::{ComputeTaskPool, TaskPool};
 use corelib::app::{LogConfig, WindowConfig};
@@ -36,6 +37,7 @@ impl App {
 
         ComputeTaskPool::get_or_init(TaskPool::default);
         app.add_plugin(BaseSchedules)
+            .add_systems(OnEnginePreFrame, bevy_ecs::event::event_update_system)
     }
 
     #[inline]
@@ -104,8 +106,18 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn insert_resource<R: Resource>(&mut self, value: R) {
+    pub fn add_event<E: Event>(mut self) -> Self {
+        if !self.world.contains_resource::<Events<E>>() {
+            EventRegistry::register_event::<E>(&mut self.world);
+        }
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn add_resource<R: Resource>(mut self, value: R) -> Self {
         self.world.insert_resource(value);
+        self
     }
 
     pub fn run(self) -> Result<(), String> {
