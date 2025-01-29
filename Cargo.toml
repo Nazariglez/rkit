@@ -127,6 +127,6 @@ draw-default-font = ["draw?/default-font"]
 # post process effects
 postfx = []
 # ui elements
-ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec", "dep:heapless", "dep:strum", "dep:strum_macros"]
+ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec", "dep:heapless", "dep:strum", "dep:strum_macros", "dep:taffy"]
 # enable ecs/app
-ecs = ["dep:bevy_ecs", "dep:bevy_tasks", "macros/ecs", "dep:web-time", "dep:taffy"]
+ecs = ["dep:bevy_ecs", "dep:bevy_tasks", "macros/ecs", "dep:web-time"]

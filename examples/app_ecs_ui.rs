@@ -1,13 +1,13 @@
-use std::fmt::Alignment;
-use std::ops::Rem;
 use draw::{create_draw_2d, Draw2D, Transform2DBuilder};
 use rkit::gfx::Color;
 use rkit::math::{vec2, Vec2};
 use rkit::prelude::*;
 use rkit::{gfx, time};
+use std::fmt::Alignment;
+use std::ops::Rem;
 
-use taffy::prelude::*;
 use corelib::math::Vec3;
+use taffy::prelude::*;
 
 #[derive(Resource, Default)]
 pub struct TTree {
@@ -31,38 +31,47 @@ fn draw_system(mut tree: ResMut<TTree>, win: Res<Window>) {
     let size = win.size();
     let tree = &mut tree.tree;
     let header_node = tree
-        .new_leaf(
-            Style {
-                size: Size { width: length(size.x), height: length(100.0) },
-                ..Default::default()
+        .new_leaf(Style {
+            size: Size {
+                width: length(size.x),
+                height: length(100.0),
             },
-        ).unwrap();
+            ..Default::default()
+        })
+        .unwrap();
 
     let body_node = tree
-        .new_leaf(
-            Style {
-                size: Size { width: length(size.x), height: auto() },
-                flex_grow: 1.0,
-                display: Display::Flex,
-                align_items: Some(AlignItems::Center),
-                justify_content: Some(JustifyContent::Center),
-                ..Default::default()
+        .new_leaf(Style {
+            size: Size {
+                width: length(size.x),
+                height: auto(),
             },
-        ).unwrap();
+            flex_grow: 1.0,
+            display: Display::Flex,
+            align_items: Some(AlignItems::Center),
+            justify_content: Some(JustifyContent::Center),
+            ..Default::default()
+        })
+        .unwrap();
 
     let footer_node = tree
-        .new_leaf(
-            Style {
-                size: Size { width: length(size.x), height: length(100.0) }, // Fixed height
-                ..Default::default()
-            },
-        ).unwrap();
+        .new_leaf(Style {
+            size: Size {
+                width: length(size.x),
+                height: length(100.0),
+            }, // Fixed height
+            ..Default::default()
+        })
+        .unwrap();
 
     let root_node = tree
         .new_with_children(
             Style {
                 flex_direction: FlexDirection::Column,
-                size: Size { width: length(size.x), height: length(size.y) },
+                size: Size {
+                    width: length(size.x),
+                    height: length(size.y),
+                },
                 ..Default::default()
             },
             &[header_node, body_node, footer_node],
@@ -70,27 +79,36 @@ fn draw_system(mut tree: ResMut<TTree>, win: Res<Window>) {
         .unwrap();
 
     // new
-    let content = tree.new_leaf(
-        Style {
-        size: Size { width: percent(0.9), height: percent(0.9) },
+    let content = tree
+        .new_leaf(Style {
+            size: Size {
+                width: percent(0.9),
+                height: percent(0.9),
+            },
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
             justify_content: Some(JustifyContent::SpaceBetween),
-            gap: Size { width: length(20.0), height: length(0.0) },
+            gap: Size {
+                width: length(20.0),
+                height: length(0.0),
+            },
             padding: Rect::length(30.0),
-        ..Default::default()
-    }
-    ).unwrap();
+            ..Default::default()
+        })
+        .unwrap();
     tree.set_children(body_node, &[content]);
 
     for _ in (0..5) {
-        let col = tree.new_leaf(
-            Style {
+        let col = tree
+            .new_leaf(Style {
                 flex_grow: 1.0,
-                size: Size { width: auto(), height: percent(1.0) },
+                size: Size {
+                    width: auto(),
+                    height: percent(1.0),
+                },
                 ..Default::default()
-            }
-        ).unwrap();
+            })
+            .unwrap();
 
         tree.add_child(content, col);
     }
@@ -122,13 +140,23 @@ fn draw_system(mut tree: ResMut<TTree>, win: Res<Window>) {
         Color::PINK,
     ];
 
-    fn draw_node(node_id: NodeId, tree: &mut TaffyTree<()>, draw: &mut Draw2D, mut color_idx: usize) {
+    fn draw_node(
+        node_id: NodeId,
+        tree: &mut TaffyTree<()>,
+        draw: &mut Draw2D,
+        mut color_idx: usize,
+    ) {
         let c = COLORS[color_idx.rem(COLORS.len())];
         println!("c {c:?} idx {color_idx}");
 
         let layout = tree.layout(node_id).unwrap();
         println!("\n{node_id:?}:\n{layout:?}");
-        draw.push_matrix(Transform2DBuilder::default().set_translation(vec2(layout.location.x, layout.location.y)).build().as_mat3());
+        draw.push_matrix(
+            Transform2DBuilder::default()
+                .set_translation(vec2(layout.location.x, layout.location.y))
+                .build()
+                .as_mat3(),
+        );
 
         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
             .color(c);
