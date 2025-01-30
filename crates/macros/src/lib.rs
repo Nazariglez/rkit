@@ -71,6 +71,11 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
                 self
             }
 
+            pub fn origin(&mut self, point: Vec2) -> &mut Self {
+                self.anchor(point)
+                    .pivot(point)
+            }
+
             pub fn flip_x(&mut self, flip: bool) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_flip(bvec2(flip, t.flip().y));

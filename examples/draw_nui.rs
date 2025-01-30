@@ -6,6 +6,7 @@ use rkit::nui::{self, *};
 #[derive(Default)]
 struct State {
     aa: u32,
+    theme: u32,
 }
 
 fn main() -> Result<(), String> {
@@ -16,19 +17,20 @@ fn main() -> Result<(), String> {
 #[track_caller]
 fn update(state: &mut State) {
     let mut draw = create_draw_2d();
-    draw.ui()
-        //     //.cursor(mouse_position())
-        //     //.theme(whatever)
-        //     //.data(whatever)
-        .show(|ctx| {
-            Container.add_to_ctx(ctx);
-        });
+    draw.ui().show(|ctx| {
+        Container.add_to_ctx(ctx);
+        state.aa += 1;
+    });
+    draw.ui_with(&state.theme).show(|ctx| {
+        Container.add_to_ctx(ctx);
+        state.aa += 1;
+    });
     println!("{}", state.aa);
     gfx::render_to_frame(&draw).unwrap();
 }
 pub struct Container;
-impl NuiWidget for Container {
-    fn ui(&self, ctx: &mut NuiContext) {
+impl<T> NuiWidget<T> for Container {
+    fn ui(&self, ctx: &mut NuiContext<T>) {
         // Root
         nui::Node::new("root")
             .left_right()
