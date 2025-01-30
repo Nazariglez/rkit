@@ -1,20 +1,29 @@
 use corelib::math::vec2;
-use rkit::app::window_size;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
 use rkit::nui::{self, *};
 
+#[derive(Default)]
+struct State {
+    aa: u32,
+}
+
 fn main() -> Result<(), String> {
-    rkit::init().update(update).run()
+    rkit::init_with(State::default).update(update).run()
 }
 
 #[inline]
 #[track_caller]
-fn update() {
+fn update(state: &mut State) {
     let mut draw = create_draw_2d();
-    // draw.ui(|ctx| Container.add_to_ctx(ctx));
-    NuiLayout::new(&mut draw).show(|ctx| Container.add_to_ctx(ctx));
+    draw.ui()
+        //     //.cursor(mouse_position())
+        //     //.theme(whatever)
+        //     //.data(whatever)
+        .show(|ctx| {
+            Container.add_to_ctx(ctx);
+        });
+    println!("{}", state.aa);
     gfx::render_to_frame(&draw).unwrap();
 }
 pub struct Container;

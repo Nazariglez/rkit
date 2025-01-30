@@ -9,6 +9,16 @@ use std::ops::Rem;
 use taffy::prelude::{auto, length, TaffyMaxContent};
 use taffy::{AlignItems, FlexDirection, JustifyContent, Layout, NodeId, Size, Style, TaffyTree};
 
+pub trait Draw2DUiExt {
+    fn ui(&mut self) -> NuiLayout;
+}
+
+impl Draw2DUiExt for Draw2D {
+    fn ui(&mut self) -> NuiLayout {
+        NuiLayout::new(self)
+    }
+}
+
 pub struct NuiLayout<'a> {
     draw: &'a mut Draw2D,
     // mouse_info: MouseInfo,
@@ -17,7 +27,7 @@ pub struct NuiLayout<'a> {
 }
 
 impl<'a> NuiLayout<'a> {
-    pub fn new(draw: &'a mut Draw2D) -> Self {
+    fn new(draw: &'a mut Draw2D) -> Self {
         Self { draw }
     }
     pub fn show<F: FnOnce(&mut NuiContext)>(self, cb: F) {
