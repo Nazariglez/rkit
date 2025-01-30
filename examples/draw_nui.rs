@@ -12,70 +12,40 @@ fn main() -> Result<(), String> {
 #[inline]
 #[track_caller]
 fn update() {
-    nui::layout(window_size(), |ctx| {
-        Container.show_with(ctx, |ctx| {
-            Container.show(ctx);
-        });
-        // Container.show(ctx);
-/*        // Root
-        nui::Node::new("root")
-            .left_right()
-            .size(ctx.size())
-            .color(Color::WHITE)
-            .content_horizontal_center()
-            .content_gap(vec2(20.0, 0.0))
-            .show_with(ctx, |ctx| {
-                // first column
-                nui::Node::new("child1")
-                    .size(vec2(100.0, 100.0))
-                    .color(Color::RED)
-                    .content_horizontal_center()
-                    .show_with(ctx, |ctx| {
-                        // column content
-                        nui::Node::new("inner_child")
-                            .color(Color::GREEN)
-                            .size(vec2(20.0, 40.0))
-                            .show(ctx);
-                    });
-
-                // second column
-                nui::Node::new("child2")
-                    .size(vec2(100.0, 100.0))
-                    .color(Color::BLUE)
-                    .show(ctx);
-            });*/
-    });
+    let mut draw = create_draw_2d();
+    // draw.ui(|ctx| Container.add_to_ctx(ctx));
+    NuiLayout::new(&mut draw).show(|ctx| Container.add_to_ctx(ctx));
+    gfx::render_to_frame(&draw).unwrap();
 }
-
 pub struct Container;
 impl NuiWidget for Container {
-    fn ui(&self, ctx: &mut NuiContext) -> NodeInfo {
-        // println!("{:?}", ctx.size());
+    fn ui(&self, ctx: &mut NuiContext) {
+        // Root
         nui::Node::new("root")
             .left_right()
             .size(ctx.size())
-            .color(Color::WHITE)
+            .color(Color::ORANGE)
             .content_horizontal_center()
             .content_gap(vec2(20.0, 0.0))
-            .show_with(ctx, |ctx| {
+            .add_to_ctx_with(ctx, |ctx| {
                 // first column
                 nui::Node::new("child1")
                     .size(vec2(100.0, 100.0))
                     .color(Color::RED)
                     .content_horizontal_center()
-                    .show_with(ctx, |ctx| {
+                    .add_to_ctx_with(ctx, |ctx| {
                         // column content
                         nui::Node::new("inner_child")
                             .color(Color::GREEN)
                             .size(vec2(20.0, 40.0))
-                            .show(ctx);
+                            .add_to_ctx(ctx);
                     });
 
                 // second column
                 nui::Node::new("child2")
                     .size(vec2(100.0, 100.0))
                     .color(Color::BLUE)
-                    .show(ctx);
-            })
+                    .add_to_ctx(ctx);
+            });
     }
 }

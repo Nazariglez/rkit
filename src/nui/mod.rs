@@ -9,31 +9,62 @@ use std::ops::Rem;
 use taffy::prelude::{auto, length, TaffyMaxContent};
 use taffy::{AlignItems, FlexDirection, JustifyContent, Layout, NodeId, Size, Style, TaffyTree};
 
+pub struct NuiLayout<'a> {
+    draw: &'a mut Draw2D,
+    // mouse_info: MouseInfo,
+    // theme: Theme,
+    // data: CustomData
+}
+
+impl<'a> NuiLayout<'a> {
+    pub fn new(draw: &'a mut Draw2D) -> Self {
+        Self { draw }
+    }
+    pub fn show<F: FnOnce(&mut NuiContext)>(self, cb: F) {
+        // TODO use all the context here and do the thing
+        let Self { draw } = self;
+        layout(draw, cb);
+    }
+}
+
 #[derive(Default)]
 pub struct NodeInfo {
-    pub style: Style
+    pub style: Style,
+}
+
+pub trait NuiNode {
+    fn style(&self) -> Style {
+        Style::default()
+    }
+    fn render(&self, draw: &mut Draw2D, layout: Layout) {}
+
+    fn add_to_ctx_with<F: FnOnce(&mut NuiContext)>(self, ctx: &mut NuiContext, cb: F)
+    where
+        Self: Sized + 'static,
+    {
+        ctx.add_node_with(self, cb);
+    }
+
+    fn add_to_ctx(self, ctx: &mut NuiContext)
+    where
+        Self: Sized + 'static,
+    {
+        ctx.add_node(self);
+    }
 }
 
 pub trait NuiWidget {
-    // fn id(&self) -> &'static str { "" }
-    fn ui(&self, ctx: &mut NuiContext) -> NodeInfo;
-    fn render(&self, draw: &mut Draw2D, layout: Layout) {}
+    fn ui(&self, ctx: &mut NuiContext);
 
-     fn show_with<F: FnOnce(&mut NuiContext)>(self, ctx: &mut NuiContext, cb: F) -> NodeInfo where Self: Sized + 'static{
-         let info = self.ui(ctx);
-        ctx.append_with(self, cb, &info);
-         info
-    }
-
-    fn show(self, ctx: &mut NuiContext) -> NodeInfo where Self: Sized + 'static {
-        let info = self.ui(ctx);
-        ctx.append(self, &info);
-        info
+    fn add_to_ctx(self, ctx: &mut NuiContext)
+    where
+        Self: Sized + 'static,
+    {
+        ctx.add_widget(self);
     }
 }
-
 pub struct NuiContext {
-    nodes: FxHashMap<NodeId, Box<dyn NuiWidget>>,
+    nodes: FxHashMap<NodeId, Box<dyn NuiNode>>,
     node_stack: Vec<NodeId>,
     tree: TaffyTree<()>,
     size: Vec2,
@@ -70,16 +101,15 @@ fn taffy_style_from(ns: NodeStyle) -> Style {
 }
 
 impl NuiContext {
-    fn append_with<F: FnOnce(&mut Self), N: NuiWidget + 'static>(&mut self, node: N, cb: F, info: &NodeInfo) {
-        let node_id = self.append(node, info);
+    fn add_node_with<F: FnOnce(&mut Self), N: NuiNode + 'static>(&mut self, node: N, cb: F) {
+        let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
         self.node_stack.pop();
     }
 
-    fn append<N: NuiWidget + 'static>(&mut self, node: N, info: &NodeInfo) -> NodeId {
-        // let info = node.ui(self);
-        let style = info.style.clone(); //taffy_style_from(info.style);
+    fn add_node<N: NuiNode + 'static>(&mut self, node: N) -> NodeId {
+        let style = node.style();
         let node_id = self.tree.new_leaf(style).unwrap();
         self.nodes.insert(node_id, Box::new(node));
 
@@ -88,6 +118,13 @@ impl NuiContext {
             .unwrap();
 
         node_id
+    }
+
+    fn add_widget<W>(&mut self, widget: W)
+    where
+        W: NuiWidget + 'static,
+    {
+        widget.ui(self);
     }
 
     pub fn size(&self) -> Vec2 {
@@ -117,16 +154,15 @@ impl Default for NodeStyle {
 }
 
 #[derive(Default)]
-pub struct Node {
+pub struct Node<'a> {
     id: Option<&'static str>,
     style: NodeStyle,
+    dr: Option<&'a dyn FnOnce()>,
 }
 
-impl NuiWidget for Node {
-    fn ui(&self, _ctx: &mut NuiContext) -> NodeInfo {
-        NodeInfo {
-            style: taffy_style_from(self.style),
-        }
+impl<'a> NuiNode for Node<'a> {
+    fn style(&self) -> Style {
+        taffy_style_from(self.style)
     }
 
     fn render(&self, draw: &mut Draw2D, layout: Layout) {
@@ -135,7 +171,7 @@ impl NuiWidget for Node {
     }
 }
 
-impl Node {
+impl<'a> Node<'a> {
     pub fn new(id: &'static str) -> Self {
         Self {
             id: Some(id),
@@ -172,11 +208,10 @@ impl Node {
         self.style.size = Some(size);
         self
     }
-
-
 }
 
-pub fn layout<F: FnOnce(&mut NuiContext)>(size: Vec2, cb: F) {
+fn layout<F: FnOnce(&mut NuiContext)>(draw: &mut Draw2D, cb: F) {
+    let size = draw.size();
     let mut tree = TaffyTree::<()>::new();
     let root_id = tree
         .new_leaf(Style {
@@ -204,12 +239,9 @@ pub fn layout<F: FnOnce(&mut NuiContext)>(size: Vec2, cb: F) {
 
     tree.compute_layout(root_id, Size::MAX_CONTENT).unwrap();
 
-    let mut draw = create_draw_2d();
-    draw.clear(Color::BLACK);
-
     fn draw_node(
         node_id: NodeId,
-        nodes: &FxHashMap<NodeId, Box<dyn NuiWidget>>,
+        nodes: &FxHashMap<NodeId, Box<dyn NuiNode>>,
         tree: &mut TaffyTree<()>,
         draw: &mut Draw2D,
     ) {
@@ -234,8 +266,6 @@ pub fn layout<F: FnOnce(&mut NuiContext)>(size: Vec2, cb: F) {
     }
 
     println!("--------------------");
-    draw_node(root_id, &nodes, &mut tree, &mut draw);
+    draw_node(root_id, &nodes, &mut tree, draw);
     println!("++++++++++++++++++++");
-
-    gfx::render_to_frame(&draw).unwrap();
 }
