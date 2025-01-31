@@ -1,14 +1,15 @@
 mod style;
 
+use corelib::gfx::Color;
+use corelib::math::{vec2, Vec2, bvec2, BVec2};
+use draw::{create_draw_2d, Draw2D, Transform2D, Transform2DBuilder};
+use rustc_hash::{FxHashMap, FxHasher};
 use std::hash::{Hash, Hasher};
 use std::hint::black_box;
-use corelib::gfx::Color;
-use corelib::math::{vec2, Vec2};
-use draw::{create_draw_2d, Draw2D, Transform2DBuilder};
-use rustc_hash::{FxHasher, FxHashMap};
 use std::ops::Rem;
 use taffy::prelude::{auto, length, TaffyMaxContent};
 use taffy::{AlignItems, FlexDirection, JustifyContent, Layout, NodeId, Size, Style, TaffyTree};
+use crate::macros::Drawable2D;
 
 // TODO: cache global
 
@@ -30,16 +31,87 @@ impl Draw2DUiExt for Draw2D {
 pub struct NuiLayout<'a, T> {
     draw: &'a mut Draw2D,
     data: &'a T,
+    size: Option<Vec2>,
+    cache_id: Option<&'static str>,
+
+    transform2d: Option<Transform2D>,
     // mouse_info: MouseInfo,
 }
 
 impl<'a, T> NuiLayout<'a, T> {
     fn new(draw: &'a mut Draw2D, data: &'a T) -> Self {
-        Self { draw, data }
+        Self {
+            draw,
+            data,
+            size: None,
+            cache_id: None,
+            transform2d: None,
+        }
+    }
+    pub fn size(mut self, size: Vec2) -> Self {
+        self.size = Some(size);
+        self
+    }
+    pub fn cache(mut self, id: &'static str) -> Self {
+        self.cache_id = Some(id);
+        self
     }
     pub fn show<F: FnOnce(&mut NuiContext<T>)>(self, cb: F) {
-        let Self { draw, data } = self;
-        layout(draw, data, cb);
+        layout(self, cb);
+    }
+
+    // transform
+    pub fn translate(mut self, pos: Vec2) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_translation(pos);
+        self
+    }
+
+    pub fn anchor(mut self, point: Vec2) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_anchor(point);
+        self
+    }
+
+    pub fn pivot(mut self, point: Vec2) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_pivot(point);
+        self
+    }
+
+    pub fn origin(mut self, point: Vec2) -> Self {
+        self.anchor(point)
+            .pivot(point)
+    }
+
+    pub fn flip_x(mut self, flip: bool) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_flip(bvec2(flip, t.flip().y));
+        self
+    }
+
+    pub fn flip_y(mut self, flip: bool) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_flip(bvec2(t.flip().x, flip));
+        self
+    }
+
+    pub fn skew(mut self, skew: Vec2) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_skew(skew);
+        self
+    }
+
+    pub fn scale(mut self, scale: Vec2) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_scale(scale);
+        self
+    }
+
+    pub fn rotation(mut self, rot: f32) -> Self {
+        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        t.set_rotation(rot);
+        self
     }
 }
 
@@ -308,13 +380,11 @@ impl Default for NodeStyle {
 }
 
 #[derive(Default)]
-pub struct Node<'a> {
-    id: Option<&'static str>,
+pub struct Node {
     style: NodeStyle,
-    dr: Option<&'a dyn FnOnce()>,
 }
 
-impl<'a> NuiNode for Node<'a> {
+impl NuiNode for Node {
     fn style(&self) -> Style {
         taffy_style_from(self.style)
     }
@@ -325,12 +395,9 @@ impl<'a> NuiNode for Node<'a> {
     }
 }
 
-impl<'a> Node<'a> {
-    pub fn new(id: &'static str) -> Self {
-        Self {
-            id: Some(id),
-            ..Default::default()
-        }
+impl Node {
+    pub fn new() -> Self {
+       Self::default()
     }
 
     pub fn color(mut self, color: Color) -> Self {
@@ -364,8 +431,15 @@ impl<'a> Node<'a> {
     }
 }
 
-fn layout<D, F: FnOnce(&mut NuiContext<D>)>(draw: &mut Draw2D, data: &D, cb: F) {
-    let size = draw.size();
+fn layout<D, F: FnOnce(&mut NuiContext<D>)>(
+    layout: NuiLayout<D>,
+    cb: F,
+) {
+    let NuiLayout {
+        draw, data, size, cache_id, transform2d
+    } = layout;
+    let size = size.unwrap_or(draw.size());
+
     let mut tree = TaffyTree::<()>::new();
     let root_id = tree
         .new_leaf(Style {
@@ -393,8 +467,6 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(draw: &mut Draw2D, data: &D, cb: F) 
     } = ctx;
 
     tree.compute_layout(root_id, Size::MAX_CONTENT).unwrap();
-
-    // println!("computed {} nodes", nodes.len());
 
     fn draw_node<T>(
         node_id: NodeId,
@@ -426,7 +498,16 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(draw: &mut Draw2D, data: &D, cb: F) 
         draw.pop_matrix();
     }
 
+    let use_transform = transform2d.is_some();
+    if let Some(mut transform) = transform2d {
+        transform.set_size(size);
+        draw.push_matrix(transform.updated_mat3());
+    }
     // println!("--------------------");
     draw_node(root_id, &nodes, &mut tree, draw, data);
+
+    if use_transform {
+        draw.pop_matrix();
+    }
     // println!("++++++++++++++++++++");
 }
