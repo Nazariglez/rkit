@@ -2,6 +2,7 @@ use corelib::math::{vec2, Vec2};
 use corelib::time;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
+use rkit::nui::prelude::*;
 use rkit::nui::{self, *};
 use std::time::Duration;
 
