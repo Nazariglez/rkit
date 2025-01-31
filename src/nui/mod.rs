@@ -1,12 +1,16 @@
 mod style;
 
+use std::hash::{Hash, Hasher};
+use std::hint::black_box;
 use corelib::gfx::Color;
 use corelib::math::{vec2, Vec2};
 use draw::{create_draw_2d, Draw2D, Transform2DBuilder};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHasher, FxHashMap};
 use std::ops::Rem;
 use taffy::prelude::{auto, length, TaffyMaxContent};
 use taffy::{AlignItems, FlexDirection, JustifyContent, Layout, NodeId, Size, Style, TaffyTree};
+
+// TODO: cache global
 
 pub trait Draw2DUiExt {
     fn ui(&mut self) -> NuiLayout<()>;
@@ -51,14 +55,14 @@ pub trait NuiNode {
     }
     fn render(&self, draw: &mut Draw2D, layout: Layout) {}
 
-    fn add_to_ctx_with<D, F: FnOnce(&mut NuiContext<D>)>(self, ctx: &mut NuiContext<D>, cb: F)
+    fn add_with_children<D, F: FnOnce(&mut NuiContext<D>)>(self, ctx: &mut NuiContext<D>, cb: F)
     where
         Self: Sized + 'static,
     {
         ctx.add_node_with(NuiNodeType::Node(Box::new(self)), cb);
     }
 
-    fn add_to_ctx<D>(self, ctx: &mut NuiContext<D>)
+    fn add<D>(self, ctx: &mut NuiContext<D>)
     where
         Self: Sized + 'static,
     {
@@ -72,14 +76,14 @@ pub trait NuiNodeWithData<T> {
     }
     fn render(&self, draw: &mut Draw2D, layout: Layout, data: &T) {}
 
-    fn add_to_ctx_with<F: FnOnce(&mut NuiContext<T>)>(self, ctx: &mut NuiContext<T>, cb: F)
+    fn add_with_children<F: FnOnce(&mut NuiContext<T>)>(self, ctx: &mut NuiContext<T>, cb: F)
     where
         Self: Sized + 'static,
     {
         ctx.add_node_with(NuiNodeType::WithData(Box::new(self)), cb);
     }
 
-    fn add_to_ctx(self, ctx: &mut NuiContext<T>)
+    fn add(self, ctx: &mut NuiContext<T>)
     where
         Self: Sized + 'static,
     {
@@ -93,18 +97,18 @@ pub enum NuiNodeType<D> {
 }
 
 pub trait NuiWidget<T> {
-    fn ui(&self, ctx: &mut NuiContext<T>);
+    fn ui(self, ctx: &mut NuiContext<T>);
 
-    fn add_to_ctx(self, ctx: &mut NuiContext<T>)
+    fn add(self, ctx: &mut NuiContext<T>)
     where
         Self: Sized + 'static,
     {
         ctx.add_widget(self);
     }
 }
-pub struct NuiContext<'a, D> {
-    data: &'a D,
-    nodes: FxHashMap<NodeId, NuiNodeType<D>>,
+pub struct NuiContext<'a, T> {
+    data: &'a T,
+    nodes: FxHashMap<NodeId, NuiNodeType<T>>,
     node_stack: Vec<NodeId>,
     tree: TaffyTree<()>,
     size: Vec2,
@@ -140,19 +144,118 @@ fn taffy_style_from(ns: NodeStyle) -> Style {
     }
 }
 
-impl<S> NuiContext<'_, S> {
-    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: NuiNodeType<S>, cb: F) {
+impl<T> NuiContext<'_, T> {
+    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: NuiNodeType<T>, cb: F) {
         let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
         self.node_stack.pop();
     }
 
-    fn add_node(&mut self, node: NuiNodeType<S>) -> NodeId {
+    fn add_node(&mut self, node: NuiNodeType<T>) -> NodeId {
+        #[derive(Hash, Default)]
+        struct SS {
+            a1: i32,
+            a2: i32,
+            a3: i32,
+            a4: i32,
+            a5: i32,
+            a6: i32,
+            a7: i32,
+            a8: i32,
+            a9: i32,
+            a10: i32,
+            a11: i32,
+            a12: i32,
+            a13: i32,
+            a14: i32,
+            a15: i32,
+            a16: i32,
+            a17: i32,
+            a18: i32,
+            a19: i32,
+            a20: i32,
+            a21: i32,
+            a22: i32,
+            a23: i32,
+            a24: i32,
+            a25: i32,
+            a26: i32,
+            a27: i32,
+            a28: i32,
+            a29: i32,
+            a30: i32,
+            a31: i32,
+            a32: i32,
+            a33: i32,
+            a34: i32,
+            a35: i32,
+            a36: i32,
+            a37: i32,
+            a38: i32,
+            a39: i32,
+            a40: i32,
+            a41: i32,
+            a42: i32,
+            a43: i32,
+            a44: i32,
+            a45: i32,
+            a46: i32,
+            a47: i32,
+            a48: i32,
+            a49: i32,
+            a50: i32,
+            a51: i32,
+            a52: i32,
+            a53: i32,
+            a54: i32,
+            a55: i32,
+            a56: i32,
+            a57: i32,
+            a58: i32,
+            a59: i32,
+            a60: i32,
+            a61: i32,
+            a62: i32,
+            a63: i32,
+            a64: i32,
+            a65: i32,
+            a66: i32,
+            a67: i32,
+            a68: i32,
+            a69: i32,
+            a70: i32,
+            a71: i32,
+            a72: i32,
+            a73: i32,
+            a74: i32,
+            a75: i32,
+            a76: i32,
+            a77: i32,
+            a78: i32,
+            a79: i32,
+            a80: i32,
+            a81: i32,
+            a82: i32,
+            a83: i32,
+            a84: i32,
+            a85: i32,
+            a86: i32,
+            a87: i32,
+            a88: i32,
+            a89: i32,
+            a90: i32,
+        }
         let style = match &node {
             NuiNodeType::Node(n) => n.style(),
             NuiNodeType::WithData(n) => n.style(self.data),
         };
+
+        // let mut hasher = FxHasher::default();
+        // SS::default().hash(&mut hasher);
+        // let hash = hasher.finish();
+        // black_box(hash);
+
         let node_id = self.tree.new_leaf(style).unwrap();
         self.nodes.insert(node_id, node);
 
@@ -165,13 +268,21 @@ impl<S> NuiContext<'_, S> {
 
     fn add_widget<W>(&mut self, widget: W)
     where
-        W: NuiWidget<S> + 'static,
+        W: NuiWidget<T> + 'static,
     {
         widget.ui(self);
     }
 
     pub fn size(&self) -> Vec2 {
         self.size
+    }
+
+    pub fn data(&self) -> &T {
+        self.data
+    }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
     }
 }
 
@@ -283,6 +394,8 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(draw: &mut Draw2D, data: &D, cb: F) 
 
     tree.compute_layout(root_id, Size::MAX_CONTENT).unwrap();
 
+    // println!("computed {} nodes", nodes.len());
+
     fn draw_node<T>(
         node_id: NodeId,
         nodes: &FxHashMap<NodeId, NuiNodeType<T>>,
@@ -291,7 +404,7 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(draw: &mut Draw2D, data: &D, cb: F) 
         data: &T,
     ) {
         let layout = tree.layout(node_id).unwrap();
-        println!("\n{node_id:?}:\n{layout:?}");
+        // println!("\n{node_id:?}:\n{layout:?}");
         draw.push_matrix(
             Transform2DBuilder::default()
                 .set_translation(vec2(layout.location.x, layout.location.y))
@@ -313,7 +426,7 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(draw: &mut Draw2D, data: &D, cb: F) 
         draw.pop_matrix();
     }
 
-    println!("--------------------");
+    // println!("--------------------");
     draw_node(root_id, &nodes, &mut tree, draw, data);
-    println!("++++++++++++++++++++");
+    // println!("++++++++++++++++++++");
 }

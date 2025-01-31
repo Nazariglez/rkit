@@ -62,6 +62,7 @@ wasm-bindgen = "0.2.100"
 strum = "0.26.3"
 strum_macros = "0.26.4"
 web-time = { version = "1.1.0", default-features = false }
+fastrand = "2.3.0"
 
 [dependencies]
 corelib.workspace = true
@@ -74,7 +75,7 @@ assets = { workspace = true, optional = true }
 log.workspace = true
 rustc-hash.workspace = true
 
-fastrand = { version = "2.3.0", optional = true }
+fastrand = { workspace = true, optional = true }
 
 # used on filters TODO maybe this must be optional under the filter feature?
 atomic_refcell.workspace = true
@@ -95,10 +96,8 @@ bevy_tasks = { version = "0.15", default-features = false, features = ["multi_th
 web-time = { workspace = true, optional = true }
 taffy = { version = "0.7.5", optional = true }
 
-rand = "0.9.0"
-
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-fastrand = { version = "2.3.0", optional = true, features = ["js"] }
+fastrand = { workspace = true, optional = true, features = ["js"] }
 
 [dev-dependencies]
 log.workspace = true
