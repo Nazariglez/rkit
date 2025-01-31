@@ -27,11 +27,11 @@ fn update(state: &mut State) {
         // .flip_x(true)
         // .scale(Vec2::splat(0.5))
         .show(|ctx| {
-        for _ in 0..5000 {
-            Container.add(ctx);
-        }
-        nodes = ctx.len();
-    });
+            for _ in 0..200 {
+                Container.add(ctx);
+            }
+            nodes = ctx.len();
+        });
 
     gfx::render_to_frame(&draw).unwrap();
     state.measure += now.elapsed();

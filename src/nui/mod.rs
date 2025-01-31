@@ -1,15 +1,18 @@
 mod style;
 
+use bumpalo::Bump;
 use corelib::gfx::Color;
-use corelib::math::{vec2, Vec2, bvec2, BVec2};
+use corelib::math::{bvec2, vec2, BVec2, Vec2};
+use corelib::time;
 use draw::{create_draw_2d, Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::{FxHashMap, FxHasher};
 use std::hash::{Hash, Hasher};
-use std::hint::black_box;
 use std::ops::Rem;
 use taffy::prelude::{auto, length, TaffyMaxContent};
-use taffy::{AlignItems, FlexDirection, JustifyContent, Layout, NodeId, Size, Style, TaffyTree};
-use crate::macros::Drawable2D;
+use taffy::{
+    AlignItems, AvailableSpace, FlexDirection, JustifyContent, Layout, NodeId, Size, Style,
+    TaffyTree,
+};
 
 // TODO: cache global
 
@@ -62,54 +65,69 @@ impl<'a, T> NuiLayout<'a, T> {
 
     // transform
     pub fn translate(mut self, pos: Vec2) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_translation(pos);
         self
     }
 
     pub fn anchor(mut self, point: Vec2) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_anchor(point);
         self
     }
 
     pub fn pivot(mut self, point: Vec2) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_pivot(point);
         self
     }
 
     pub fn origin(mut self, point: Vec2) -> Self {
-        self.anchor(point)
-            .pivot(point)
+        self.anchor(point).pivot(point)
     }
 
     pub fn flip_x(mut self, flip: bool) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_flip(bvec2(flip, t.flip().y));
         self
     }
 
     pub fn flip_y(mut self, flip: bool) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_flip(bvec2(t.flip().x, flip));
         self
     }
 
     pub fn skew(mut self, skew: Vec2) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_skew(skew);
         self
     }
 
     pub fn scale(mut self, scale: Vec2) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_scale(scale);
         self
     }
 
     pub fn rotation(mut self, rot: f32) -> Self {
-        let t = self.transform2d.get_or_insert_with(|| Transform2D::default());
+        let t = self
+            .transform2d
+            .get_or_insert_with(|| Transform2D::default());
         t.set_rotation(rot);
         self
     }
@@ -131,14 +149,14 @@ pub trait NuiNode {
     where
         Self: Sized + 'static,
     {
-        ctx.add_node_with(NuiNodeType::Node(Box::new(self)), cb);
+        ctx.add_node_with(self, cb);
     }
 
     fn add<D>(self, ctx: &mut NuiContext<D>)
     where
         Self: Sized + 'static,
     {
-        ctx.add_node(NuiNodeType::Node(Box::new(self)));
+        ctx.add_node(self);
     }
 }
 
@@ -152,20 +170,20 @@ pub trait NuiNodeWithData<T> {
     where
         Self: Sized + 'static,
     {
-        ctx.add_node_with(NuiNodeType::WithData(Box::new(self)), cb);
+        ctx.add_data_node_with(self, cb);
     }
 
     fn add(self, ctx: &mut NuiContext<T>)
     where
         Self: Sized + 'static,
     {
-        ctx.add_node(NuiNodeType::WithData(Box::new(self)));
+        ctx.add_data_node(self);
     }
 }
 
-pub enum NuiNodeType<D> {
-    Node(Box<dyn NuiNode>),
-    WithData(Box<dyn NuiNodeWithData<D>>),
+pub enum NuiNodeType<'a, D> {
+    Node(&'a dyn NuiNode),
+    WithData(&'a dyn NuiNodeWithData<D>),
 }
 
 pub trait NuiWidget<T> {
@@ -180,7 +198,8 @@ pub trait NuiWidget<T> {
 }
 pub struct NuiContext<'a, T> {
     data: &'a T,
-    nodes: FxHashMap<NodeId, NuiNodeType<T>>,
+    bump: &'a Bump,
+    nodes: &'a mut FxHashMap<NodeId, NuiNodeType<'a, T>>,
     node_stack: Vec<NodeId>,
     tree: TaffyTree<()>,
     size: Vec2,
@@ -216,117 +235,40 @@ fn taffy_style_from(ns: NodeStyle) -> Style {
     }
 }
 
-impl<T> NuiContext<'_, T> {
-    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: NuiNodeType<T>, cb: F) {
+impl<'a, T> NuiContext<'a, T> {
+    fn add_node_with<F: FnOnce(&mut Self), N: NuiNode + 'a>(&mut self, node: N, cb: F) {
         let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
         self.node_stack.pop();
     }
 
-    fn add_node(&mut self, node: NuiNodeType<T>) -> NodeId {
-        #[derive(Hash, Default)]
-        struct SS {
-            a1: i32,
-            a2: i32,
-            a3: i32,
-            a4: i32,
-            a5: i32,
-            a6: i32,
-            a7: i32,
-            a8: i32,
-            a9: i32,
-            a10: i32,
-            a11: i32,
-            a12: i32,
-            a13: i32,
-            a14: i32,
-            a15: i32,
-            a16: i32,
-            a17: i32,
-            a18: i32,
-            a19: i32,
-            a20: i32,
-            a21: i32,
-            a22: i32,
-            a23: i32,
-            a24: i32,
-            a25: i32,
-            a26: i32,
-            a27: i32,
-            a28: i32,
-            a29: i32,
-            a30: i32,
-            a31: i32,
-            a32: i32,
-            a33: i32,
-            a34: i32,
-            a35: i32,
-            a36: i32,
-            a37: i32,
-            a38: i32,
-            a39: i32,
-            a40: i32,
-            a41: i32,
-            a42: i32,
-            a43: i32,
-            a44: i32,
-            a45: i32,
-            a46: i32,
-            a47: i32,
-            a48: i32,
-            a49: i32,
-            a50: i32,
-            a51: i32,
-            a52: i32,
-            a53: i32,
-            a54: i32,
-            a55: i32,
-            a56: i32,
-            a57: i32,
-            a58: i32,
-            a59: i32,
-            a60: i32,
-            a61: i32,
-            a62: i32,
-            a63: i32,
-            a64: i32,
-            a65: i32,
-            a66: i32,
-            a67: i32,
-            a68: i32,
-            a69: i32,
-            a70: i32,
-            a71: i32,
-            a72: i32,
-            a73: i32,
-            a74: i32,
-            a75: i32,
-            a76: i32,
-            a77: i32,
-            a78: i32,
-            a79: i32,
-            a80: i32,
-            a81: i32,
-            a82: i32,
-            a83: i32,
-            a84: i32,
-            a85: i32,
-            a86: i32,
-            a87: i32,
-            a88: i32,
-            a89: i32,
-            a90: i32,
-        }
+    fn add_node<N: NuiNode + 'a>(&mut self, node: N) -> NodeId {
+        let obj = self.bump.alloc(node) as &dyn NuiNode;
+        self.insert_node(NuiNodeType::Node(obj))
+    }
+
+    fn add_data_node_with<F: FnOnce(&mut Self), N: NuiNodeWithData<T> + 'a>(
+        &mut self,
+        node: N,
+        cb: F,
+    ) {
+        let node_id = self.add_data_node(node);
+        self.node_stack.push(node_id);
+        cb(self);
+        self.node_stack.pop();
+    }
+
+    fn add_data_node<N: NuiNodeWithData<T> + 'a>(&mut self, node: N) -> NodeId {
+        let obj = self.bump.alloc(node) as &dyn NuiNodeWithData<T>;
+        self.insert_node(NuiNodeType::WithData(obj))
+    }
+
+    fn insert_node(&mut self, node: NuiNodeType<'a, T>) -> NodeId {
         let style = match &node {
             NuiNodeType::Node(n) => n.style(),
             NuiNodeType::WithData(n) => n.style(self.data),
         };
-
-        // let mut hasher = FxHasher::default();
-        // SS::default().hash(&mut hasher);
-        // let hash = hasher.finish();
-        // black_box(hash);
 
         let node_id = self.tree.new_leaf(style).unwrap();
         self.nodes.insert(node_id, node);
@@ -397,7 +339,7 @@ impl NuiNode for Node {
 
 impl Node {
     pub fn new() -> Self {
-       Self::default()
+        Self::default()
     }
 
     pub fn color(mut self, color: Color) -> Self {
@@ -431,12 +373,13 @@ impl Node {
     }
 }
 
-fn layout<D, F: FnOnce(&mut NuiContext<D>)>(
-    layout: NuiLayout<D>,
-    cb: F,
-) {
+fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb: F) {
     let NuiLayout {
-        draw, data, size, cache_id, transform2d
+        draw,
+        data,
+        size,
+        cache_id,
+        transform2d,
     } = layout;
     let size = size.unwrap_or(draw.size());
 
@@ -452,21 +395,39 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(
         })
         .unwrap();
 
+    let bump = Bump::new();
+    let mut nodes = FxHashMap::default();
+
+    let mut node_stack = Vec::with_capacity(200);
+    node_stack.push(root_id);
+
     let mut ctx = NuiContext {
         data,
-        nodes: Default::default(),
-        node_stack: vec![root_id],
+        bump: &bump,
+        nodes: &mut nodes,
+        node_stack,
         tree,
         size,
     };
 
+    let now = time::now();
     cb(&mut ctx);
+    println!("definition elapsed: {:?}", now.elapsed());
 
     let NuiContext {
         mut tree, nodes, ..
     } = ctx;
 
-    tree.compute_layout(root_id, Size::MAX_CONTENT).unwrap();
+    let now = time::now();
+    tree.compute_layout(
+        root_id,
+        Size {
+            width: AvailableSpace::Definite(size.x),
+            height: AvailableSpace::Definite(size.y),
+        },
+    )
+    .unwrap();
+    println!("layout elapsed {:?}", now.elapsed());
 
     fn draw_node<T>(
         node_id: NodeId,
@@ -498,6 +459,8 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(
         draw.pop_matrix();
     }
 
+    let now = time::now();
+
     let use_transform = transform2d.is_some();
     if let Some(mut transform) = transform2d {
         transform.set_size(size);
@@ -509,5 +472,6 @@ fn layout<D, F: FnOnce(&mut NuiContext<D>)>(
     if use_transform {
         draw.pop_matrix();
     }
+    println!("draw elapsed {:?}", now.elapsed());
     // println!("++++++++++++++++++++");
 }
