@@ -1,4 +1,3 @@
-use crate::nui::{layout, NuiContext, NuiNodeType};
 use bumpalo::Bump;
 use corelib::math::{bvec2, vec2, Vec2};
 use corelib::time;
@@ -6,6 +5,10 @@ use draw::{Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::FxHashMap;
 use taffy::prelude::length;
 use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree};
+
+use crate::nui::node::NuiNodeType;
+
+use super::NuiContext;
 
 pub trait Draw2DUiExt {
     fn ui(&mut self) -> NuiLayout<()>;
@@ -50,6 +53,7 @@ impl<'a, T> NuiLayout<'a, T> {
         self.cache_id = Some(id);
         self
     }
+
     pub fn show<F: FnOnce(&mut NuiContext<T>)>(self, cb: F) {
         layout(self, cb);
     }

@@ -3,6 +3,8 @@ use taffy::prelude::TaffyZero;
 use taffy::style as tstyle;
 use taffy::Style as TStyle;
 
+// TODO: layout style
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Style {
     pub layout: LayoutStyle,
@@ -50,17 +52,19 @@ impl Style {
     }
 
     #[inline]
+    pub fn flex_wrap(mut self) -> Self {
+        self.layout.flex_wrap = FlexWrap::Wrap;
+        self
+    }
+
+    #[inline]
     pub fn flex_grow(mut self, value: f32) -> Self {
-        debug_assert!(value >= 0.0, "flex_grow should be >= 0.0");
-        debug_assert!(value <= 0.0, "flex_grow should be <= 0.0");
         self.layout.flex_grow = value;
         self
     }
 
     #[inline]
     pub fn flex_shrink(mut self, value: f32) -> Self {
-        debug_assert!(value >= 0.0, "flex_shrink should be >= 0.0");
-        debug_assert!(value <= 0.0, "flex_shrink should be <= 0.0");
         self.layout.flex_shrink = value;
         self
     }
@@ -96,16 +100,15 @@ impl Style {
     }
 
     #[inline]
-    pub fn size(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.width = unit;
-        self.layout.height = unit;
+    pub fn size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
+        self.layout.width = x.into();
+        self.layout.height = y.into();
         self
     }
 
     #[inline]
     pub fn size_auto(self) -> Self {
-        self.size(Unit::Auto)
+        self.size(auto(), auto())
     }
 
     #[inline]
@@ -133,10 +136,9 @@ impl Style {
     }
 
     #[inline]
-    pub fn min_size(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.min_width = unit;
-        self.layout.min_height = unit;
+    pub fn min_size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
+        self.layout.min_width = x.into();
+        self.layout.min_height = y.into();
         self
     }
 
@@ -165,10 +167,9 @@ impl Style {
     }
 
     #[inline]
-    pub fn max_size(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.max_width = unit;
-        self.layout.max_height = unit;
+    pub fn max_size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
+        self.layout.max_width = x.into();
+        self.layout.max_height = y.into();
         self
     }
 
@@ -317,50 +318,230 @@ impl Style {
     }
 
     #[inline]
-    pub fn align_content_start(mut self) -> Self {
-        self.layout.align_content = Some(Align::Start);
+    pub fn align_items_start(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::Start);
         self
     }
 
     #[inline]
-    pub fn align_content_center(mut self) -> Self {
-        self.layout.align_content = Some(Align::Center);
+    pub fn align_items_end(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::End);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_flex_start(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::FlexStart);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_flex_end(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::FlexEnd);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_center(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::Center);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_baseline(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_stretch(mut self) -> Self {
+        self.layout.align_items = Some(AlignItems::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_start(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::Start);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_end(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::End);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_flex_start(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::FlexStart);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_flex_end(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::FlexEnd);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_center(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::Center);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_baseline(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_stretch(mut self) -> Self {
+        self.layout.align_self = Some(AlignSelf::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_start(mut self) -> Self {
+        self.layout.justify_items = Some(JustifyItems::Start);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_end(mut self) -> Self {
+        self.layout.justify_items = Some(JustifyItems::End);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_center(mut self) -> Self {
+        self.layout.justify_items = Some(JustifyItems::Center);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_baseline(mut self) -> Self {
+        self.layout.justify_items = Some(JustifyItems::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_stretch(mut self) -> Self {
+        self.layout.justify_items = Some(JustifyItems::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_start(mut self) -> Self {
+        self.layout.justify_self = Some(JustifySelf::Start);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_end(mut self) -> Self {
+        self.layout.justify_self = Some(JustifySelf::End);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_center(mut self) -> Self {
+        self.layout.justify_self = Some(JustifySelf::Center);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_baseline(mut self) -> Self {
+        self.layout.justify_self = Some(JustifySelf::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_stretch(mut self) -> Self {
+        self.layout.justify_self = Some(JustifySelf::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_start(mut self) -> Self {
+        self.layout.align_content = Some(AlignContent::Start);
         self
     }
 
     #[inline]
     pub fn align_content_end(mut self) -> Self {
-        self.layout.align_content = Some(Align::End);
+        self.layout.align_content = Some(AlignContent::End);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_center(mut self) -> Self {
+        self.layout.align_content = Some(AlignContent::Center);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_stretch(mut self) -> Self {
+        self.layout.align_content = Some(AlignContent::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_space_between(mut self) -> Self {
+        self.layout.align_content = Some(AlignContent::SpaceBetween);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_space_evenly(mut self) -> Self {
+        self.layout.align_content = Some(AlignContent::SpaceEvenly);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_space_around(mut self) -> Self {
+        self.layout.align_content = Some(AlignContent::SpaceAround);
         self
     }
 
     #[inline]
     pub fn justify_content_start(mut self) -> Self {
-        self.layout.justify_content = Some(Justify::Start);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_center(mut self) -> Self {
-        self.layout.justify_content = Some(Justify::Center);
+        self.layout.justify_content = Some(JustifyContent::Start);
         self
     }
 
     #[inline]
     pub fn justify_content_end(mut self) -> Self {
-        self.layout.justify_content = Some(Justify::End);
+        self.layout.justify_content = Some(JustifyContent::End);
         self
     }
 
     #[inline]
-    pub fn justify_content_between(mut self) -> Self {
-        self.layout.justify_content = Some(Justify::Between);
+    pub fn justify_content_center(mut self) -> Self {
+        self.layout.justify_content = Some(JustifyContent::Center);
         self
     }
 
     #[inline]
-    pub fn justify_content_evenly(mut self) -> Self {
-        self.layout.justify_content = Some(Justify::Evenly);
+    pub fn justify_content_stretch(mut self) -> Self {
+        self.layout.justify_content = Some(JustifyContent::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_space_between(mut self) -> Self {
+        self.layout.justify_content = Some(JustifyContent::SpaceBetween);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_space_evenly(mut self) -> Self {
+        self.layout.justify_content = Some(JustifyContent::SpaceEvenly);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_space_around(mut self) -> Self {
+        self.layout.justify_content = Some(JustifyContent::SpaceAround);
         self
     }
 }
@@ -374,6 +555,7 @@ pub struct LayoutStyle {
     pub flex_grow: f32,
     pub flex_shrink: f32,
     pub flex_basis: Unit,
+    pub flex_wrap: FlexWrap,
 
     pub top: Unit,
     pub bottom: Unit,
@@ -402,8 +584,12 @@ pub struct LayoutStyle {
     pub padding_left: Unit,
     pub padding_right: Unit,
 
-    pub align_content: Option<Align>,
-    pub justify_content: Option<Justify>,
+    pub align_items: Option<AlignItems>,
+    pub align_self: Option<AlignSelf>,
+    pub justify_items: Option<JustifyItems>,
+    pub justify_self: Option<JustifySelf>,
+    pub align_content: Option<AlignContent>,
+    pub justify_content: Option<JustifyContent>,
 }
 
 impl Default for LayoutStyle {
@@ -415,6 +601,7 @@ impl Default for LayoutStyle {
             flex_grow: 0.0,
             flex_shrink: 1.0,
             flex_basis: Unit::Auto,
+            flex_wrap: FlexWrap::NoWrap,
             top: Unit::ZERO,
             bottom: Unit::ZERO,
             left: Unit::ZERO,
@@ -438,36 +625,30 @@ impl Default for LayoutStyle {
 
             align_content: None,
             justify_content: None,
+            align_items: None,
+            align_self: None,
+            justify_items: None,
+            justify_self: None,
         }
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Align {
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum FlexWrap {
     #[default]
-    Start,
-    Center,
-    End,
+    NoWrap,
+    Wrap,
+    Reverse,
 }
 
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Justify {
-    #[default]
-    Start,
-    Center,
-    End,
-    Between,
-    Evenly,
-}
-
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Mode {
     #[default]
     Relative,
     Absolute,
 }
 
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Display {
     #[default]
     Flex,
@@ -482,6 +663,36 @@ pub enum Unit {
     Pixel(f32),
     Relative(f32),
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum AlignItems {
+    Start,
+    End,
+    FlexStart,
+    FlexEnd,
+    Center,
+    Baseline,
+    Stretch,
+}
+
+pub type JustifyItems = AlignItems;
+pub type AlignSelf = AlignItems;
+pub type JustifySelf = AlignItems;
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum AlignContent {
+    Start,
+    End,
+    FlexStart,
+    FlexEnd,
+    Center,
+    Stretch,
+    SpaceBetween,
+    SpaceEvenly,
+    SpaceAround,
+}
+
+pub type JustifyContent = AlignContent;
 
 #[inline]
 pub fn px(unit: f32) -> Unit {
@@ -589,12 +800,64 @@ pub(super) fn taffy_style_from(style: &LayoutStyle) -> TStyle {
             top: px_pct_from(style.padding_top),
             bottom: px_pct_from(style.padding_bottom),
         },
-        // align_items: todo!(),
-        // align_self: todo!(),
-        // justify_items: todo!(),
-        // justify_self: todo!(),
-        // align_content: todo!(),
-        // justify_content: todo!(),
+        align_items: style.align_items.map(|a| match a {
+            AlignItems::Start => tstyle::AlignItems::Start,
+            AlignItems::End => tstyle::AlignItems::End,
+            AlignItems::FlexStart => tstyle::AlignItems::FlexStart,
+            AlignItems::FlexEnd => tstyle::AlignItems::FlexEnd,
+            AlignItems::Center => tstyle::AlignItems::Center,
+            AlignItems::Baseline => tstyle::AlignItems::Baseline,
+            AlignItems::Stretch => tstyle::AlignItems::Stretch,
+        }),
+        align_self: style.align_self.map(|a| match a {
+            AlignSelf::Start => tstyle::AlignSelf::Start,
+            AlignSelf::End => tstyle::AlignSelf::End,
+            AlignSelf::FlexStart => tstyle::AlignSelf::FlexStart,
+            AlignSelf::FlexEnd => tstyle::AlignSelf::FlexEnd,
+            AlignSelf::Center => tstyle::AlignSelf::Center,
+            AlignSelf::Baseline => tstyle::AlignSelf::Baseline,
+            AlignSelf::Stretch => tstyle::AlignSelf::Stretch,
+        }),
+        justify_items: style.justify_items.map(|j| match j {
+            JustifyItems::Start => tstyle::JustifyItems::Start,
+            JustifyItems::End => tstyle::JustifyItems::End,
+            JustifyItems::Center => tstyle::JustifyItems::Center,
+            JustifyItems::Baseline => tstyle::JustifyItems::Baseline,
+            JustifyItems::Stretch => tstyle::JustifyItems::Stretch,
+            JustifyItems::FlexStart => tstyle::JustifyItems::FlexStart,
+            JustifyItems::FlexEnd => tstyle::JustifyItems::FlexEnd,
+        }),
+        justify_self: style.justify_self.map(|j| match j {
+            JustifySelf::Start => tstyle::JustifySelf::Start,
+            JustifySelf::End => tstyle::JustifySelf::End,
+            JustifySelf::Center => tstyle::JustifySelf::Center,
+            JustifySelf::Baseline => tstyle::JustifySelf::Baseline,
+            JustifySelf::Stretch => tstyle::JustifySelf::Stretch,
+            JustifySelf::FlexStart => tstyle::JustifySelf::FlexStart,
+            JustifySelf::FlexEnd => tstyle::JustifySelf::FlexEnd,
+        }),
+        align_content: style.align_content.map(|a| match a {
+            AlignContent::Start => tstyle::AlignContent::Start,
+            AlignContent::End => tstyle::AlignContent::End,
+            AlignContent::FlexStart => tstyle::AlignContent::FlexStart,
+            AlignContent::FlexEnd => tstyle::AlignContent::FlexEnd,
+            AlignContent::Center => tstyle::AlignContent::Center,
+            AlignContent::Stretch => tstyle::AlignContent::Stretch,
+            AlignContent::SpaceBetween => tstyle::AlignContent::SpaceBetween,
+            AlignContent::SpaceEvenly => tstyle::AlignContent::SpaceEvenly,
+            AlignContent::SpaceAround => tstyle::AlignContent::SpaceAround,
+        }),
+        justify_content: style.justify_content.map(|j| match j {
+            JustifyContent::Start => tstyle::JustifyContent::Start,
+            JustifyContent::End => tstyle::JustifyContent::End,
+            JustifyContent::Center => tstyle::JustifyContent::Center,
+            JustifyContent::Stretch => tstyle::JustifyContent::Stretch,
+            JustifyContent::SpaceBetween => tstyle::JustifyContent::SpaceBetween,
+            JustifyContent::SpaceEvenly => tstyle::JustifyContent::SpaceEvenly,
+            JustifyContent::SpaceAround => tstyle::JustifyContent::SpaceAround,
+            JustifyContent::FlexStart => tstyle::JustifyContent::FlexStart,
+            JustifyContent::FlexEnd => tstyle::JustifyContent::FlexEnd,
+        }),
         gap: geom::Size {
             width: px_pct_from(style.gap_horizontal),
             height: px_pct_from(style.gap_vertical),
@@ -603,7 +866,11 @@ pub(super) fn taffy_style_from(style: &LayoutStyle) -> TStyle {
             FlexDirection::Row => tstyle::FlexDirection::Row,
             FlexDirection::Col => tstyle::FlexDirection::Column,
         },
-        // flex_wrap: todo!(),
+        flex_wrap: match style.flex_wrap {
+            FlexWrap::NoWrap => tstyle::FlexWrap::NoWrap,
+            FlexWrap::Wrap => tstyle::FlexWrap::Wrap,
+            FlexWrap::Reverse => tstyle::FlexWrap::WrapReverse,
+        },
         flex_basis: dimension_from(style.flex_basis),
         flex_grow: style.flex_grow,
         flex_shrink: style.flex_shrink,

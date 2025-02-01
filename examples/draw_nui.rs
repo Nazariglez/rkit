@@ -5,6 +5,7 @@ use rkit::gfx::{self, Color};
 use rkit::nui::prelude::*;
 use rkit::nui::{self, *};
 use std::time::Duration;
+use taffy::CoreStyle;
 
 #[derive(Default)]
 struct State {
@@ -28,9 +29,9 @@ fn update(state: &mut State) {
         // .flip_x(true)
         // .scale(Vec2::splat(0.5))
         .show(|ctx| {
-            for _ in 0..200 {
-                Container.add(ctx);
-            }
+            // for _ in 0..200 {
+            Container.add(ctx);
+            // }
             nodes = ctx.len();
         });
 
@@ -51,33 +52,35 @@ fn update(state: &mut State) {
 pub struct Container;
 impl<T> NuiWidget<T> for Container {
     fn ui(self, ctx: &mut NuiContext<T>) {
-        // let s = std::mem::size_of::<Node>();
-        // println!("size: {s}");
         // Root
         nui::Node::new()
-            .left_right()
-            .size(ctx.size())
-            .color(Color::ORANGE)
-            .content_horizontal_center()
-            .content_gap(vec2(20.0, 0.0))
+            .set_style(
+                Style::default()
+                    .flex_row()
+                    .size(px(800.0), px(600.0))
+                    .align_items_center()
+                    .justify_content_center()
+                    .gap_x(px(20.0)),
+            )
             .add_with_children(ctx, |ctx| {
                 // first column
                 nui::Node::new()
-                    .size(vec2(100.0, 100.0))
-                    .color(Color::RED)
-                    .content_horizontal_center()
+                    .set_style(
+                        Style::default()
+                            .size(px(100.0), px(100.0))
+                            .align_items_center()
+                            .justify_content_center(),
+                    )
                     .add_with_children(ctx, |ctx| {
                         // column content
                         nui::Node::new()
-                            .color(Color::GREEN)
-                            .size(vec2(20.0, 40.0))
+                            .set_style(Style::default().size(px(40.0), px(20.0)))
                             .add(ctx);
                     });
 
                 // second column
                 nui::Node::new()
-                    .size(vec2(100.0, 100.0))
-                    .color(Color::BLUE)
+                    .set_style(Style::default().size(px(100.0), px(100.0)))
                     .add(ctx);
             });
     }
