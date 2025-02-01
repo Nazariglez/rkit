@@ -41,34 +41,34 @@ enum CtxId {
     Node(NodeId),
 }
 
-pub struct NuiContext<'a, T> {
+pub struct NuiContext<'data, 'arena, T> {
     temp_id: u64,
-    data: &'a T,
-    bump: &'a Bump,
-    nodes: &'a mut FxHashMap<CtxId, &'a mut dyn CallRenderCallback>,
+    data: &'data T,
+    bump: &'arena Bump,
+    nodes: &'arena mut FxHashMap<CtxId, &'arena mut dyn CallRenderCallback>,
     node_stack: Vec<NodeId>,
     tree: TaffyTree<()>,
     size: Vec2,
 }
 
-impl<'a, T> NuiContext<'a, T> {
-    fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'a>(&mut self, temp_id: u64, cb: F) {
+impl<'data, 'arena, T> NuiContext<'data, 'arena, T> {
+    fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'arena>(&mut self, temp_id: u64, cb: F) {
         let obj = self.bump.alloc(RenderCallback { cb: Some(cb) }) as &mut dyn CallRenderCallback;
         self.nodes.insert(CtxId::Temp(temp_id), obj);
     }
 
-    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: Node<T>, cb: F) {
+    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: Node<'data, 'arena, T>, cb: F) {
         let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
         self.node_stack.pop();
     }
 
-    fn add_node(&mut self, node: Node<T>) -> NodeId {
+    fn add_node(&mut self, node: Node<'data, 'arena, T>) -> NodeId {
         self.insert_node(node)
     }
 
-    fn insert_node(&mut self, mut node: Node<T>) -> NodeId {
+    fn insert_node(&mut self, mut node: Node<'data, 'arena, T>) -> NodeId {
         let style = node.style;
 
         let node_id = self.tree.new_leaf(taffy_style_from(&style.layout)).unwrap();
@@ -89,9 +89,9 @@ impl<'a, T> NuiContext<'a, T> {
         node_id
     }
 
-    fn add_widget<W>(&'a mut self, widget: W)
+    fn add_widget<W>(&'data mut self, widget: W)
     where
-        W: NuiWidget<T> + 'static,
+        W: NuiWidget<T> + 'data,
     {
         widget.ui(self);
     }
