@@ -1,7 +1,10 @@
+use corelib::math::vec2;
+use corelib::math::Vec2;
 use taffy::Layout;
 
 use super::{style::Style, NuiContext};
 use crate::draw::*;
+use crate::random;
 
 pub trait NuiNode {
     fn style(&self) -> Style {
@@ -58,5 +61,47 @@ pub trait NuiWidget<T> {
         Self: Sized + 'static,
     {
         ctx.add_widget(self);
+    }
+}
+
+pub struct Node<'a> {
+    style: Style,
+    render: Option<&'a dyn FnOnce(&mut Draw2D, Layout)>,
+}
+
+impl Default for Node<'_> {
+    fn default() -> Self {
+        Self {
+            style: Default::default(),
+            render: Default::default(),
+        }
+    }
+}
+
+impl<'a> NuiNode for Node<'a> {
+    fn style(&self) -> Style {
+        self.style
+    }
+
+    fn render(&self, draw: &mut Draw2D, layout: Layout) {
+        let color: [f32; 3] = [random::gen(), random::gen(), random::gen()];
+        draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
+            .color(color.into());
+    }
+}
+
+impl<'a> Node<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set_style(mut self, style: Style) -> Self {
+        self.style = style;
+        self
+    }
+
+    pub fn on_render<F: FnOnce(&mut Draw2D, Layout)>(mut self, render: &'a F) -> Self {
+        self.render = Some(render);
+        self
     }
 }

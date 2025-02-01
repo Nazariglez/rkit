@@ -4,18 +4,11 @@ pub mod prelude;
 pub mod style;
 
 use bumpalo::Bump;
-use corelib::math::{bvec2, vec2, BVec2, Vec2};
-use draw::{create_draw_2d, Draw2D, Transform2D, Transform2DBuilder};
+use corelib::math::Vec2;
 use node::{NuiNode, NuiNodeType, NuiNodeWithData, NuiWidget};
-use rustc_hash::{FxHashMap, FxHasher};
-use std::hash::{Hash, Hasher};
-use style::{taffy_style_from, Style};
-use taffy::prelude::{auto, length, TaffyMaxContent};
-use taffy::{
-    AlignItems, AvailableSpace, FlexDirection, JustifyContent, Layout, NodeId, Size, TaffyTree,
-};
-
-use crate::random;
+use rustc_hash::FxHashMap;
+use style::taffy_style_from;
+use taffy::{NodeId, TaffyTree};
 
 // TODO: cache global
 
@@ -90,33 +83,5 @@ impl<'a, T> NuiContext<'a, T> {
 
     pub fn len(&self) -> usize {
         self.nodes.len()
-    }
-}
-
-#[derive(Default)]
-pub struct Node {
-    style: Style,
-}
-
-impl NuiNode for Node {
-    fn style(&self) -> Style {
-        self.style
-    }
-
-    fn render(&self, draw: &mut Draw2D, layout: Layout) {
-        let color: [f32; 3] = [random::gen(), random::gen(), random::gen()];
-        draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
-            .color(color.into());
-    }
-}
-
-impl Node {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set_style(mut self, style: Style) -> Self {
-        self.style = style;
-        self
     }
 }

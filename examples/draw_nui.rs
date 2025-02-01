@@ -5,7 +5,6 @@ use rkit::gfx::{self, Color};
 use rkit::nui::prelude::*;
 use rkit::nui::{self, *};
 use std::time::Duration;
-use taffy::CoreStyle;
 
 #[derive(Default)]
 struct State {
@@ -53,7 +52,8 @@ pub struct Container;
 impl<T> NuiWidget<T> for Container {
     fn ui(self, ctx: &mut NuiContext<T>) {
         // Root
-        nui::Node::new()
+        Node::new()
+            .on_render(&|d, l| println!("whatever"))
             .set_style(
                 Style::default()
                     .flex_row()
@@ -64,7 +64,7 @@ impl<T> NuiWidget<T> for Container {
             )
             .add_with_children(ctx, |ctx| {
                 // first column
-                nui::Node::new()
+                Node::new()
                     .set_style(
                         Style::default()
                             .size(px(100.0), px(100.0))
@@ -73,13 +73,13 @@ impl<T> NuiWidget<T> for Container {
                     )
                     .add_with_children(ctx, |ctx| {
                         // column content
-                        nui::Node::new()
+                        Node::new()
                             .set_style(Style::default().size(px(40.0), px(20.0)))
                             .add(ctx);
                     });
 
                 // second column
-                nui::Node::new()
+                Node::new()
                     .set_style(Style::default().size(px(100.0), px(100.0)))
                     .add(ctx);
             });
