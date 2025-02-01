@@ -4,24 +4,27 @@ use super::{style::Style, NuiContext};
 use crate::draw::*;
 
 pub trait NuiWidget<T> {
-    fn ui<'layout, 'ctx>(self, ctx: &'layout mut NuiContext<'layout, 'ctx, T>);
+    fn ui<'data, 'arena>(self, ctx: &'data mut NuiContext<'data, 'arena, T>);
 
-    fn add<'layout, 'ctx>(self, ctx: &'layout mut NuiContext<'layout, 'ctx, T>)
+    fn add<'data, 'arena>(self, ctx: &'data mut NuiContext<'data, 'arena, T>)
     where
-        Self: Sized + 'ctx,
+        Self: Sized + 'arena,
     {
         ctx.add_widget(self);
     }
 }
 
-pub struct Node<'layout, 'ctx, T> {
+pub struct Node<'data, 'arena, T> {
     pub(super) temp_id: u64,
-    pub(super) ctx: Option<&'ctx mut NuiContext<'layout, 'ctx, T>>,
+    pub(super) ctx: Option<&'arena mut NuiContext<'data, 'arena, T>>,
     pub(super) style: Style,
 }
 
-impl<'layout, 'ctx, T> Node<'layout, 'ctx, T> {
-    pub fn new(ctx: &'layout mut NuiContext<'layout, 'ctx, T>) -> Self {
+impl<'data, 'arena, T> Node<'data, 'arena, T>
+where
+    'arena: 'data,
+{
+    pub fn new(ctx: &'arena mut NuiContext<'data, 'arena, T>) -> Self {
         ctx.temp_id += 1;
         Self {
             temp_id: ctx.temp_id,
@@ -35,7 +38,7 @@ impl<'layout, 'ctx, T> Node<'layout, 'ctx, T> {
         self
     }
 
-    pub fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'ctx>(mut self, cb: F) -> Self {
+    pub fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'arena>(mut self, cb: F) -> Self {
         if let Some(ctx) = &mut self.ctx {
             ctx.on_render(self.temp_id, cb);
         }
@@ -48,7 +51,7 @@ impl<'layout, 'ctx, T> Node<'layout, 'ctx, T> {
 
     pub fn add_with_children<F: FnOnce(&mut NuiContext<T>)>(mut self, cb: F)
     where
-        Self: Sized + 'ctx,
+        Self: Sized + 'arena,
     {
         let ctx = self.ctx.take().unwrap();
         ctx.add_node_with(self, cb);
@@ -56,7 +59,7 @@ impl<'layout, 'ctx, T> Node<'layout, 'ctx, T> {
 
     pub fn add(mut self)
     where
-        Self: Sized + 'ctx,
+        Self: Sized + 'arena,
     {
         let ctx = self.ctx.take().unwrap();
         ctx.add_node(self);

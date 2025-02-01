@@ -10,23 +10,31 @@ use crate::nui::{CallRenderCallback, CtxId, RenderCallback};
 
 use super::NuiContext;
 
+const EMPTY_DATA: () = ();
+
 pub trait Draw2DUiExt {
-    fn ui<'layout>(&'layout mut self) -> NuiLayout<()>;
-    fn ui_with<'layout, T>(&'layout mut self, data: &'layout T) -> NuiLayout<T>;
+    fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()>;
+    fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
+    where
+        'data: 'draw;
 }
 
 impl Draw2DUiExt for Draw2D {
-    fn ui<'layout>(&'layout mut self) -> NuiLayout<()> {
-        self.ui_with(&())
+    fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()> {
+        // self.ui_with(&EMPTY_DATA)
+        todo!()
     }
 
-    fn ui_with<'layout, T>(&'layout mut self, data: &'layout T) -> NuiLayout<T> {
+    fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
+    where
+        'data: 'draw,
+    {
         NuiLayout::new(self, data)
     }
 }
 
-pub struct NuiLayout<'data, T> {
-    draw: &'data mut Draw2D,
+pub struct NuiLayout<'data, 'draw, T> {
+    draw: &'draw mut Draw2D,
     data: &'data T,
     size: Option<Vec2>,
 
@@ -34,8 +42,8 @@ pub struct NuiLayout<'data, T> {
     // mouse_info: MouseInfo,
 }
 
-impl<'data, T> NuiLayout<'data, T> {
-    fn new(draw: &'data mut Draw2D, data: &'data T) -> Self {
+impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
+    fn new(draw: &'draw mut Draw2D, data: &'data T) -> Self {
         Self {
             draw,
             data,
@@ -48,7 +56,7 @@ impl<'data, T> NuiLayout<'data, T> {
         self
     }
 
-    pub fn show<'arena: 'data, F: FnOnce(&'data mut NuiContext<'data, 'arena, T>)>(self, cb: F) {
+    pub fn show<F: for<'arena> FnOnce(&mut NuiContext<'data, 'arena, T>)>(self, cb: F) {
         // layout(self, cb);
         let NuiLayout {
             draw,
@@ -87,7 +95,7 @@ impl<'data, T> NuiLayout<'data, T> {
         };
 
         let now = time::now();
-        // cb(&mut ctx);
+        cb(&mut ctx);
         println!("definition elapsed: {:?}", now.elapsed());
 
         let NuiContext {
