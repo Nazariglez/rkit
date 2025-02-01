@@ -1,62 +1,12 @@
-use corelib::math::vec2;
-use corelib::math::Vec2;
 use taffy::Layout;
 
 use super::{style::Style, NuiContext};
 use crate::draw::*;
-use crate::random;
-
-pub trait NuiNode {
-    fn style(&self) -> Style {
-        Style::default()
-    }
-    fn render(&self, draw: &mut Draw2D, layout: Layout) {}
-
-    fn add_with_children<D, F: FnOnce(&mut NuiContext<D>)>(self, ctx: &mut NuiContext<D>, cb: F)
-    where
-        Self: Sized + 'static,
-    {
-        ctx.add_node_with(self, cb);
-    }
-
-    fn add<D>(self, ctx: &mut NuiContext<D>)
-    where
-        Self: Sized + 'static,
-    {
-        ctx.add_node(self);
-    }
-}
-
-pub trait NuiNodeWithData<T> {
-    fn style(&self, data: &T) -> Style {
-        Style::default()
-    }
-    fn render(&self, draw: &mut Draw2D, layout: Layout, data: &T) {}
-
-    fn add_with_children<F: FnOnce(&mut NuiContext<T>)>(self, ctx: &mut NuiContext<T>, cb: F)
-    where
-        Self: Sized + 'static,
-    {
-        ctx.add_data_node_with(self, cb);
-    }
-
-    fn add(self, ctx: &mut NuiContext<T>)
-    where
-        Self: Sized + 'static,
-    {
-        ctx.add_data_node(self);
-    }
-}
-
-pub enum NuiNodeType<'a, D> {
-    Node(&'a dyn NuiNode),
-    WithData(&'a dyn NuiNodeWithData<D>),
-}
 
 pub trait NuiWidget<T> {
-    fn ui(self, ctx: &mut NuiContext<T>);
+    fn ui<'a>(self, ctx: &'a mut NuiContext<'a, T>);
 
-    fn add(self, ctx: &mut NuiContext<T>)
+    fn add<'a>(self, ctx: &'a mut NuiContext<'a, T>)
     where
         Self: Sized + 'static,
     {
@@ -64,35 +14,20 @@ pub trait NuiWidget<T> {
     }
 }
 
-pub struct Node<'a> {
-    style: Style,
-    render: Option<&'a dyn FnOnce(&mut Draw2D, Layout)>,
+pub struct Node<'a, T> {
+    pub(super) temp_id: u64,
+    pub(super) ctx: Option<&'a mut NuiContext<'a, T>>,
+    pub(super) style: Style,
 }
 
-impl Default for Node<'_> {
-    fn default() -> Self {
+impl<'a, T> Node<'a, T> {
+    pub fn new(ctx: &'a mut NuiContext<'a, T>) -> Self {
+        ctx.temp_id += 1;
         Self {
-            style: Default::default(),
-            render: Default::default(),
+            temp_id: ctx.temp_id,
+            ctx: Some(ctx),
+            style: Style::default(),
         }
-    }
-}
-
-impl<'a> NuiNode for Node<'a> {
-    fn style(&self) -> Style {
-        self.style
-    }
-
-    fn render(&self, draw: &mut Draw2D, layout: Layout) {
-        let color: [f32; 3] = [random::gen(), random::gen(), random::gen()];
-        draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
-            .color(color.into());
-    }
-}
-
-impl<'a> Node<'a> {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     pub fn set_style(mut self, style: Style) -> Self {
@@ -100,8 +35,30 @@ impl<'a> Node<'a> {
         self
     }
 
-    pub fn on_render<F: FnOnce(&mut Draw2D, Layout)>(mut self, render: &'a F) -> Self {
-        self.render = Some(render);
+    pub fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'a>(mut self, cb: F) -> Self {
+        if let Some(ctx) = &mut self.ctx {
+            ctx.on_render(self.temp_id, cb);
+        }
         self
+    }
+
+    pub fn style(&self) -> Style {
+        Style::default()
+    }
+
+    pub fn add_with_children<F: FnOnce(&mut NuiContext<T>)>(mut self, cb: F)
+    where
+        Self: Sized + 'static,
+    {
+        let ctx = self.ctx.take().unwrap();
+        ctx.add_node_with(self, cb);
+    }
+
+    pub fn add(mut self)
+    where
+        Self: Sized + 'static,
+    {
+        let ctx = self.ctx.take().unwrap();
+        ctx.add_node(self);
     }
 }

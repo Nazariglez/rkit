@@ -23,16 +23,12 @@ fn update(state: &mut State) {
     let mut draw = create_draw_2d();
     let mut nodes = 0;
     let now = time::now();
-    draw.ui()
-        // .origin(Vec2::splat(0.5))
-        // .flip_x(true)
-        // .scale(Vec2::splat(0.5))
-        .show(|ctx| {
-            // for _ in 0..200 {
-            Container.add(ctx);
-            // }
-            nodes = ctx.len();
-        });
+    draw.ui().show(|ctx| {
+        // for _ in 0..200 {
+        Container.add(ctx);
+        // }
+        // nodes = ctx.len();
+    });
 
     gfx::render_to_frame(&draw).unwrap();
     state.measure += now.elapsed();
@@ -50,10 +46,10 @@ fn update(state: &mut State) {
 }
 pub struct Container;
 impl<T> NuiWidget<T> for Container {
-    fn ui(self, ctx: &mut NuiContext<T>) {
+    fn ui<'a>(self, ctx: &'a mut NuiContext<'a, T>) {
         // Root
-        Node::new()
-            .on_render(&|d, l| println!("whatever"))
+        Node::new(ctx)
+            // .on_render(&|d, l| println!("whatever"))
             .set_style(
                 Style::default()
                     .flex_row()
@@ -62,26 +58,26 @@ impl<T> NuiWidget<T> for Container {
                     .justify_content_center()
                     .gap_x(px(20.0)),
             )
-            .add_with_children(ctx, |ctx| {
+            .add_with_children(|ctx| {
                 // first column
-                Node::new()
+                Node::new(ctx)
                     .set_style(
                         Style::default()
                             .size(px(100.0), px(100.0))
                             .align_items_center()
                             .justify_content_center(),
                     )
-                    .add_with_children(ctx, |ctx| {
+                    .add_with_children(|ctx| {
                         // column content
-                        Node::new()
+                        Node::new(ctx)
                             .set_style(Style::default().size(px(40.0), px(20.0)))
-                            .add(ctx);
+                            .add();
                     });
 
                 // second column
-                Node::new()
+                Node::new(ctx)
                     .set_style(Style::default().size(px(100.0), px(100.0)))
-                    .add(ctx);
+                    .add();
             });
     }
 }

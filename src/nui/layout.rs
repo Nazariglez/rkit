@@ -6,17 +6,17 @@ use rustc_hash::FxHashMap;
 use taffy::prelude::length;
 use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree};
 
-use crate::nui::node::NuiNodeType;
+use crate::nui::{CallRenderCallback, CtxId, RenderCallback};
 
 use super::NuiContext;
 
 pub trait Draw2DUiExt {
-    fn ui(&mut self) -> NuiLayout<()>;
+    fn ui<'a>(&'a mut self) -> NuiLayout<()>;
     fn ui_with<'a, T>(&'a mut self, data: &'a T) -> NuiLayout<T>;
 }
 
 impl Draw2DUiExt for Draw2D {
-    fn ui(&mut self) -> NuiLayout<()> {
+    fn ui<'a>(&'a mut self) -> NuiLayout<()> {
         self.ui_with(&())
     }
 
@@ -54,7 +54,7 @@ impl<'a, T> NuiLayout<'a, T> {
         self
     }
 
-    pub fn show<F: FnOnce(&mut NuiContext<T>)>(self, cb: F) {
+    pub fn show<F: FnOnce(&'a mut NuiContext<'a, T>)>(self, cb: F) {
         layout(self, cb);
     }
 
@@ -128,7 +128,10 @@ impl<'a, T> NuiLayout<'a, T> {
     }
 }
 
-pub(super) fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb: F) {
+pub(super) fn layout<'a, D: 'a, F: FnOnce(&'a mut NuiContext<'a, D>)>(
+    layout: NuiLayout<'a, D>,
+    cb: F,
+) {
     let NuiLayout {
         draw,
         data,
@@ -157,6 +160,7 @@ pub(super) fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb:
     node_stack.push(root_id);
 
     let mut ctx = NuiContext {
+        temp_id: 0,
         data,
         bump: &bump,
         nodes: &mut nodes,
@@ -170,7 +174,9 @@ pub(super) fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb:
     println!("definition elapsed: {:?}", now.elapsed());
 
     let NuiContext {
-        mut tree, nodes, ..
+        mut tree,
+        mut nodes,
+        ..
     } = ctx;
 
     let now = time::now();
@@ -186,7 +192,7 @@ pub(super) fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb:
 
     fn draw_node<T>(
         node_id: NodeId,
-        nodes: &FxHashMap<NodeId, NuiNodeType<T>>,
+        callbacks: &mut FxHashMap<CtxId, &mut dyn CallRenderCallback>,
         tree: &mut TaffyTree<()>,
         draw: &mut Draw2D,
         data: &T,
@@ -200,15 +206,12 @@ pub(super) fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb:
                 .as_mat3(),
         );
 
-        if let Some(node) = nodes.get(&node_id) {
-            match node {
-                NuiNodeType::Node(node) => node.render(draw, *layout),
-                NuiNodeType::WithData(node) => node.render(draw, *layout, data),
-            }
+        if let Some(cbs) = callbacks.get_mut(&CtxId::Node(node_id)) {
+            cbs.call(draw, *layout);
         }
 
         for child_id in tree.children(node_id).unwrap() {
-            draw_node(child_id, nodes, tree, draw, data);
+            draw_node(child_id, callbacks, tree, draw, data);
         }
 
         draw.pop_matrix();
@@ -222,7 +225,7 @@ pub(super) fn layout<D, F: FnOnce(&mut NuiContext<D>)>(layout: NuiLayout<D>, cb:
         draw.push_matrix(transform.updated_mat3());
     }
     // println!("--------------------");
-    draw_node(root_id, &nodes, &mut tree, draw, data);
+    draw_node(root_id, &mut nodes, &mut tree, draw, data);
 
     if use_transform {
         draw.pop_matrix();
