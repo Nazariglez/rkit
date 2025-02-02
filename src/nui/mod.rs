@@ -57,8 +57,17 @@ impl<'data, T> NuiContext<'data, T> {
     //     let obj = self.bump.alloc(RenderCallback { cb: Some(cb) }) as &mut dyn CallRenderCallback;
     //     self.nodes.insert(CtxId::Temp(temp_id), obj);
     // }
+    //
+    #[inline]
+    pub fn node<'a>(&'a mut self) -> Node<'data, 'a, T> {
+        Node::new(self)
+    }
 
-    fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'static>(&mut self, temp_id: u64, cb: F) {
+    fn on_render<'arena, F: FnOnce(&mut Draw2D, Layout) + 'static>(
+        &'arena mut self,
+        temp_id: u64,
+        cb: F,
+    ) {
         self.nodes.insert(
             CtxId::Temp(temp_id),
             Box::new(RenderCallback { cb: Some(cb) }),
@@ -72,6 +81,7 @@ impl<'data, T> NuiContext<'data, T> {
         self.node_stack.pop();
     }
 
+    #[inline]
     fn add_node<'a>(&'a mut self, node: Node<'data, 'a, T>) -> NodeId {
         self.insert_node(node)
     }
@@ -97,6 +107,7 @@ impl<'data, T> NuiContext<'data, T> {
         node_id
     }
 
+    #[inline]
     fn add_widget<W>(&mut self, widget: W)
     where
         W: NuiWidget<T>,
@@ -104,14 +115,17 @@ impl<'data, T> NuiContext<'data, T> {
         widget.ui(self);
     }
 
+    #[inline]
     pub fn size(&self) -> Vec2 {
         self.size
     }
 
+    #[inline]
     pub fn data(&self) -> &T {
         self.data
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.nodes.len()
     }

@@ -52,7 +52,7 @@ pub struct Container;
 impl<T> NuiWidget<T> for Container {
     fn ui(self, ctx: &mut NuiContext<'_, T>) {
         // Root
-        Node::new(ctx)
+        ctx.node()
             .on_render(|draw, layout| {
                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                     .color(Color::RED);
@@ -68,7 +68,7 @@ impl<T> NuiWidget<T> for Container {
             )
             .add_with_children(|ctx| {
                 // first column
-                Node::new(ctx)
+                ctx.node()
                     .on_render(|draw, layout| {
                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                             .color(Color::YELLOW);
@@ -81,7 +81,7 @@ impl<T> NuiWidget<T> for Container {
                     )
                     .add_with_children(|ctx| {
                         // column content
-                        Node::new(ctx)
+                        ctx.node()
                             .on_render(|draw, layout| {
                                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                                     .color(Color::BLUE);
@@ -91,7 +91,7 @@ impl<T> NuiWidget<T> for Container {
                     });
 
                 // second column
-                Node::new(ctx)
+                ctx.node()
                     .on_render(|draw, layout| {
                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                             .color(Color::GREEN);
