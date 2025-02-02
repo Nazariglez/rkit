@@ -13,16 +13,15 @@ use super::NuiContext;
 const EMPTY_DATA: () = ();
 
 pub trait Draw2DUiExt {
-    fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()>;
+    fn ui<'draw>(&'draw mut self) -> NuiLayout<'_, 'draw, ()>;
     fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
     where
         'data: 'draw;
 }
 
 impl Draw2DUiExt for Draw2D {
-    fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()> {
-        // self.ui_with(&EMPTY_DATA)
-        todo!()
+    fn ui<'draw>(&'draw mut self) -> NuiLayout<'_, 'draw, ()> {
+        self.ui_with(&())
     }
 
     fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
@@ -56,7 +55,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
         self
     }
 
-    pub fn show<F: for<'arena> FnOnce(&mut NuiContext<'data, 'arena, T>)>(self, cb: F) {
+    pub fn show<F: FnOnce(&mut NuiContext<'data, T>)>(self, cb: F) {
         // layout(self, cb);
         let NuiLayout {
             draw,
@@ -87,8 +86,9 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
         let mut ctx = NuiContext {
             temp_id: 0,
             data,
-            bump: &bump,
-            nodes: &mut nodes,
+            // bump: &bump,
+            // nodes: &mut nodes,
+            nodes,
             node_stack,
             tree,
             size,
@@ -117,13 +117,13 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
 
         fn draw_node<T>(
             node_id: NodeId,
-            callbacks: &mut FxHashMap<CtxId, &mut dyn CallRenderCallback>,
+            callbacks: &mut FxHashMap<CtxId, Box<dyn CallRenderCallback>>,
             tree: &mut TaffyTree<()>,
             draw: &mut Draw2D,
             data: &T,
         ) {
             let layout = tree.layout(node_id).unwrap();
-            // println!("\n{node_id:?}:\n{layout:?}");
+            println!("\n{node_id:?}:\n{layout:?}");
             draw.push_matrix(
                 Transform2DBuilder::default()
                     .set_translation(vec2(layout.location.x, layout.location.y))
@@ -149,7 +149,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             transform.set_size(size);
             draw.push_matrix(transform.updated_mat3());
         }
-        // println!("--------------------");
+        println!("--------------------");
         draw_node(root_id, &mut nodes, &mut tree, draw, data);
 
         if use_transform {
