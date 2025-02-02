@@ -96,7 +96,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
 
         let now = time::now();
         cb(&mut ctx);
-        println!("definition elapsed: {:?}", now.elapsed());
+        // println!("definition elapsed: {:?}", now.elapsed());
 
         let NuiContext {
             mut tree,
@@ -113,7 +113,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             },
         )
         .unwrap();
-        println!("layout elapsed {:?}", now.elapsed());
+        // println!("layout elapsed {:?}", now.elapsed());
 
         fn draw_node<T>(
             node_id: NodeId,
@@ -123,7 +123,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             data: &T,
         ) {
             let layout = tree.layout(node_id).unwrap();
-            println!("\n{node_id:?}:\n{layout:?}");
+            // println!("\n{node_id:?}:\n{layout:?}");
             draw.push_matrix(
                 Transform2DBuilder::default()
                     .set_translation(vec2(layout.location.x, layout.location.y))
@@ -149,13 +149,13 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             transform.set_size(size);
             draw.push_matrix(transform.updated_mat3());
         }
-        println!("--------------------");
+        // println!("--------------------");
         draw_node(root_id, &mut nodes, &mut tree, draw, data);
 
         if use_transform {
             draw.pop_matrix();
         }
-        println!("draw elapsed {:?}", now.elapsed());
+        // println!("draw elapsed {:?}", now.elapsed());
     }
 
     // transform

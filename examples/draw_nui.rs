@@ -24,10 +24,10 @@ fn update(state: &mut State) {
     let mut nodes = 0;
     let now = time::now();
     draw.ui().show(|ctx| {
-        // for _ in 0..200 {
-        Container.add(ctx);
-        // }
-        // nodes = ctx.len();
+        for _ in 0..5000 {
+            Container.add(ctx);
+        }
+        nodes = ctx.len();
         //
         // Node::new(ctx)
         //     .set_style(Style::default().size(px(100.0), px(100.0)))
@@ -50,7 +50,7 @@ fn update(state: &mut State) {
 }
 pub struct Container;
 impl<T> NuiWidget<T> for Container {
-    fn ui<'draw>(self, ctx: &mut NuiContext<'draw, T>) {
+    fn ui(self, ctx: &mut NuiContext<'_, T>) {
         // Root
         Node::new(ctx)
             .on_render(|draw, layout| {
