@@ -21,12 +21,13 @@ fn main() -> Result<(), String> {
 #[track_caller]
 fn update(state: &mut State) {
     let mut draw = create_draw_2d();
+    draw.clear(Color::WHITE);
     let mut nodes = 0;
     let now = time::now();
     draw.ui().show(|ctx| {
-        for _ in 0..5000 {
-            Container.add(ctx);
-        }
+        // for _ in 0..5000 {
+        Container { left: 10.0 }.add(ctx);
+        // }
         nodes = ctx.len();
         //
         // Node::new(ctx)
@@ -48,7 +49,9 @@ fn update(state: &mut State) {
         state.n = 0;
     }
 }
-pub struct Container;
+pub struct Container {
+    left: f32,
+}
 impl<T> NuiWidget<T> for Container {
     fn ui(self, ctx: &mut NuiContext<'_, T>) {
         // Root
@@ -64,6 +67,7 @@ impl<T> NuiWidget<T> for Container {
                     .size(px(800.0), px(600.0))
                     .align_items_center()
                     .justify_content_center()
+                    .left(self.left)
                     .gap_x(px(20.0)),
             )
             .add_with_children(|ctx| {

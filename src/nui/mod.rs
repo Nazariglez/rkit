@@ -3,16 +3,59 @@ pub mod node;
 pub mod prelude;
 pub mod style;
 
-use bumpalo::Bump;
+use std::cell::RefCell;
+
 use corelib::math::Vec2;
 use draw::Draw2D;
 use node::{Node, NuiWidget};
 use rustc_hash::FxHashMap;
-use style::taffy_style_from;
+use style::{taffy_style_from, Style};
 use taffy::{Layout, NodeId, TaffyTree};
 
-// TODO: cache global
-//
+thread_local! {
+    pub(super) static CACHE: RefCell<NuiCache> = {
+        corelib::app::on_sys_pre_update(|| {
+            CACHE.with_borrow_mut(|cache| {
+                cache.cache_id = 0;
+            });
+        });
+        RefCell::new(NuiCache::default())
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+enum CacheId {
+    Anonymous(u64),
+    Named(&'static str),
+}
+
+#[derive(Default)]
+struct NuiCache {
+    cache_id: u64,
+    layouts: FxHashMap<CacheId, (Vec<Style>, TaffyTree<()>)>,
+}
+
+impl NuiCache {
+    pub fn gen_id(&mut self) -> CacheId {
+        self.cache_id += 1;
+        CacheId::Anonymous(self.cache_id)
+    }
+
+    pub fn is_cache_valid(&self, layout: CacheId, styles: &[Style]) -> bool {
+        self.layouts
+            .get(&layout)
+            .is_some_and(|(s, _)| s.as_slice() == styles)
+    }
+
+    pub fn add_cache(&mut self, layout: CacheId, styles: Vec<Style>, tree: TaffyTree<()>) {
+        self.layouts.insert(layout, (styles, tree));
+    }
+
+    pub fn reset(&mut self) {
+        self.layouts.clear();
+    }
+}
+
 struct RenderCallback<T>
 where
     T: FnOnce(&mut Draw2D, Layout),
@@ -44,20 +87,14 @@ enum CtxId {
 pub struct NuiContext<'data, T> {
     temp_id: u64,
     data: &'data T,
-    // bump: &'arena Bump,
-    // nodes: &'arena mut FxHashMap<CtxId, &'arena mut dyn CallRenderCallback>,
     nodes: FxHashMap<CtxId, Box<dyn CallRenderCallback>>,
     node_stack: Vec<NodeId>,
+    cache_styles: Vec<Style>,
     tree: TaffyTree<()>,
     size: Vec2,
 }
 
 impl<'data, T> NuiContext<'data, T> {
-    // fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'arena>(&mut self, temp_id: u64, cb: F) {
-    //     let obj = self.bump.alloc(RenderCallback { cb: Some(cb) }) as &mut dyn CallRenderCallback;
-    //     self.nodes.insert(CtxId::Temp(temp_id), obj);
-    // }
-    //
     #[inline]
     pub fn node<'a>(&'a mut self) -> Node<'data, 'a, T> {
         Node::new(self)
@@ -100,6 +137,7 @@ impl<'data, T> NuiContext<'data, T> {
             }
         };
 
+        self.cache_styles.push(node.style);
         self.tree
             .add_child(*self.node_stack.last().unwrap(), node_id)
             .unwrap();

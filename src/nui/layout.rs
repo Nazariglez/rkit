@@ -8,7 +8,7 @@ use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree};
 
 use crate::nui::{CallRenderCallback, CtxId, RenderCallback};
 
-use super::NuiContext;
+use super::{CacheId, NuiContext, CACHE};
 
 const EMPTY_DATA: () = ();
 
@@ -33,6 +33,7 @@ impl Draw2DUiExt for Draw2D {
 }
 
 pub struct NuiLayout<'data, 'draw, T> {
+    id: CacheId,
     draw: &'draw mut Draw2D,
     data: &'data T,
     size: Option<Vec2>,
@@ -43,7 +44,9 @@ pub struct NuiLayout<'data, 'draw, T> {
 
 impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
     fn new(draw: &'draw mut Draw2D, data: &'data T) -> Self {
+        let id = CACHE.with_borrow_mut(|cache| cache.gen_id());
         Self {
+            id,
             draw,
             data,
             size: None,
@@ -58,6 +61,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
     pub fn show<F: FnOnce(&mut NuiContext<'data, T>)>(self, cb: F) {
         // layout(self, cb);
         let NuiLayout {
+            id: layout_id,
             draw,
             data,
             size,
@@ -77,21 +81,17 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             })
             .unwrap();
 
-        let bump = Bump::new();
-        let mut nodes = FxHashMap::default();
-
         let mut node_stack = Vec::with_capacity(200);
         node_stack.push(root_id);
 
         let mut ctx = NuiContext {
             temp_id: 0,
             data,
-            // bump: &bump,
-            // nodes: &mut nodes,
-            nodes,
+            nodes: FxHashMap::default(),
             node_stack,
             tree,
             size,
+            cache_styles: vec![],
         };
 
         let now = time::now();
@@ -101,24 +101,32 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
         let NuiContext {
             mut tree,
             mut nodes,
+            cache_styles,
             ..
         } = ctx;
 
+        let is_valid_cache =
+            CACHE.with_borrow(|cache| cache.is_cache_valid(layout_id, &cache_styles));
+        if !is_valid_cache {
+            tree.compute_layout(
+                root_id,
+                Size {
+                    width: AvailableSpace::Definite(size.x),
+                    height: AvailableSpace::Definite(size.y),
+                },
+            )
+            .unwrap();
+
+            CACHE.with_borrow_mut(|cache| cache.add_cache(layout_id, cache_styles, tree));
+        }
+
         let now = time::now();
-        tree.compute_layout(
-            root_id,
-            Size {
-                width: AvailableSpace::Definite(size.x),
-                height: AvailableSpace::Definite(size.y),
-            },
-        )
-        .unwrap();
         // println!("layout elapsed {:?}", now.elapsed());
 
         fn draw_node<T>(
             node_id: NodeId,
             callbacks: &mut FxHashMap<CtxId, Box<dyn CallRenderCallback>>,
-            tree: &mut TaffyTree<()>,
+            tree: &TaffyTree<()>,
             draw: &mut Draw2D,
             data: &T,
         ) {
@@ -150,7 +158,11 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             draw.push_matrix(transform.updated_mat3());
         }
         // println!("--------------------");
-        draw_node(root_id, &mut nodes, &mut tree, draw, data);
+        CACHE.with_borrow(|cache| {
+            if let Some(tree) = cache.layouts.get(&layout_id).as_ref().map(|(_, tree)| tree) {
+                draw_node(root_id, &mut nodes, tree, draw, data);
+            }
+        });
 
         if use_transform {
             draw.pop_matrix();
