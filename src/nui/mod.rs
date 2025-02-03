@@ -3,7 +3,7 @@ pub mod node;
 pub mod prelude;
 pub mod style;
 
-use std::cell::RefCell;
+use std::{cell::RefCell, marker::PhantomData};
 
 use corelib::math::Vec2;
 use draw::Draw2D;
@@ -88,7 +88,8 @@ enum CtxId {
     Node(NodeId),
 }
 
-pub struct NuiContext<'data, T> {
+pub struct NuiContext<'data, 'cb, T> {
+    _p: PhantomData<&'cb ()>,
     temp_id: u64,
     data: &'data T,
     nodes: FxHashMap<CtxId, Box<dyn CallRenderCallback>>,
@@ -98,9 +99,9 @@ pub struct NuiContext<'data, T> {
     size: Vec2,
 }
 
-impl<'data, T> NuiContext<'data, T> {
+impl<'data, 'cb, T> NuiContext<'data, 'cb, T> {
     #[inline]
-    pub fn node<'a>(&'a mut self) -> Node<'data, 'a, T> {
+    pub fn node<'ctx>(&'ctx mut self) -> Node<'data, 'ctx, 'cb, T> {
         Node::new(self)
     }
 
@@ -111,7 +112,11 @@ impl<'data, T> NuiContext<'data, T> {
         );
     }
 
-    fn add_node_with<'a, F: FnOnce(&mut Self)>(&'a mut self, node: Node<'data, 'a, T>, cb: F) {
+    fn add_node_with<'ctx, F: FnOnce(&mut Self)>(
+        &'ctx mut self,
+        node: Node<'data, 'ctx, 'cb, T>,
+        cb: F,
+    ) {
         let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
@@ -119,11 +124,11 @@ impl<'data, T> NuiContext<'data, T> {
     }
 
     #[inline]
-    fn add_node<'a>(&'a mut self, node: Node<'data, 'a, T>) -> NodeId {
+    fn add_node<'ctx>(&'ctx mut self, node: Node<'data, 'ctx, 'cb, T>) -> NodeId {
         self.insert_node(node)
     }
 
-    fn insert_node<'a>(&'a mut self, mut node: Node<'data, 'a, T>) -> NodeId {
+    fn insert_node<'ctx>(&'ctx mut self, mut node: Node<'data, 'ctx, 'cb, T>) -> NodeId {
         let style = node.style;
 
         let node_id = self.tree.new_leaf(taffy_style_from(&style.layout)).unwrap();

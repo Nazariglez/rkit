@@ -4,9 +4,9 @@ use super::{style::Style, NuiContext};
 use crate::draw::*;
 
 pub trait NuiWidget<T> {
-    fn ui<'data>(self, ctx: &mut NuiContext<'data, T>);
+    fn ui<'data>(self, ctx: &mut NuiContext<'data, '_, T>);
 
-    fn add<'data>(self, ctx: &mut NuiContext<'data, T>)
+    fn add<'data>(self, ctx: &mut NuiContext<'data, '_, T>)
     where
         Self: Sized + 'data,
     {
@@ -14,14 +14,14 @@ pub trait NuiWidget<T> {
     }
 }
 
-pub struct Node<'data, 'arena, T> {
+pub struct Node<'data, 'arena, 'cb, T> {
     pub(super) temp_id: u64,
-    pub(super) ctx: Option<&'arena mut NuiContext<'data, T>>,
+    pub(super) ctx: Option<&'arena mut NuiContext<'data, 'cb, T>>,
     pub(super) style: Style,
 }
 
-impl<'data, 'arena, T> Node<'data, 'arena, T> {
-    pub fn new(ctx: &'arena mut NuiContext<'data, T>) -> Self {
+impl<'data, 'arena, 'cb, T> Node<'data, 'arena, 'cb, T> {
+    pub fn new(ctx: &'arena mut NuiContext<'data, 'cb, T>) -> Self {
         ctx.temp_id += 1;
         Self {
             temp_id: ctx.temp_id,
@@ -38,6 +38,13 @@ impl<'data, 'arena, T> Node<'data, 'arena, T> {
     pub fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'static>(mut self, cb: F) -> Self {
         if let Some(ctx) = &mut self.ctx {
             ctx.on_render(self.temp_id, cb);
+        }
+        self
+    }
+
+    pub fn on_render2<F: FnOnce(&mut Draw2D, Layout) + 'cb>(mut self, cb: F) -> Self {
+        if let Some(ctx) = &mut self.ctx {
+            // ctx.on_render(self.temp_id, cb);
         }
         self
     }

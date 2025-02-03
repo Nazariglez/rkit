@@ -70,7 +70,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
         self
     }
 
-    pub fn show<F: FnOnce(&mut NuiContext<'data, T>)>(self, cb: F) {
+    pub fn show<'cb, F: FnOnce(&mut NuiContext<'data, 'cb, T>) + 'cb>(self, cb: F) {
         let NuiLayout {
             id: layout_id,
             cache_disabled,
@@ -94,6 +94,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             .unwrap();
 
         let mut ctx = NuiContext {
+            _p: Default::default(),
             temp_id: 0,
             data,
             nodes: FxHashMap::default(),

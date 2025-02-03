@@ -12,6 +12,7 @@ struct State {
     measure: Duration,
     n: u32,
     left: f32,
+    count: usize,
 }
 
 fn main() -> Result<(), String> {
@@ -26,9 +27,10 @@ fn update(state: &mut State) {
     let mut nodes = 0;
     let now = time::now();
     draw.ui().show(|ctx| {
-        for _ in 0..5000 {
-            Container { left: state.left }.add(ctx);
-        }
+        // for _ in 0..250 {
+        Container { left: state.left }.add(ctx);
+        // }
+        ctx.node().on_render2(|d, l| state.count += 1);
         nodes = ctx.len();
     });
 
@@ -52,7 +54,7 @@ pub struct Container {
     left: f32,
 }
 impl<T> NuiWidget<T> for Container {
-    fn ui(self, ctx: &mut NuiContext<'_, T>) {
+    fn ui(self, ctx: &mut NuiContext<'_, '_, T>) {
         // Root
         ctx.node()
             .on_render(|draw, layout| {
