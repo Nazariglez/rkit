@@ -11,6 +11,7 @@ struct State {
     time: f32,
     measure: Duration,
     n: u32,
+    left: f32,
 }
 
 fn main() -> Result<(), String> {
@@ -26,13 +27,9 @@ fn update(state: &mut State) {
     let now = time::now();
     draw.ui().show(|ctx| {
         for _ in 0..5000 {
-            Container { left: 10.0 }.add(ctx);
+            Container { left: state.left }.add(ctx);
         }
         nodes = ctx.len();
-        //
-        // Node::new(ctx)
-        //     .set_style(Style::default().size(px(100.0), px(100.0)))
-        // .add();
     });
 
     gfx::render_to_frame(&draw).unwrap();
@@ -43,6 +40,8 @@ fn update(state: &mut State) {
     if state.time > 5.0 {
         let avg = state.measure / state.n;
         log::warn!("avg: {avg:?} -> nodes: {nodes}");
+
+        state.left += 10.0;
 
         state.measure = Duration::ZERO;
         state.time = 0.0;

@@ -1,4 +1,5 @@
-use corelib::math::{bvec2, vec2, Vec2};
+use corelib::math::{bvec2, vec2, Rect, Vec2};
+use corelib::time;
 use draw::{Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::FxHashMap;
 use taffy::prelude::length;
@@ -102,7 +103,9 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             cache_styles: vec![],
         };
 
+        let now = time::now();
         cb(&mut ctx);
+        // println!("define layout {:?}", now.elapsed());
 
         let NuiContext {
             mut tree,
@@ -112,6 +115,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
         } = ctx;
 
         CACHE.with_borrow_mut(|cache| {
+            let now = time::now();
             let is_valid_cache = !cache_disabled && cache.is_cache_valid(layout_id, &cache_styles);
             if !is_valid_cache {
                 tree.compute_layout(
@@ -124,21 +128,28 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
                 .unwrap();
                 cache.add_cache(layout_id, cache_styles, tree);
             }
+            // println!(
+            //     "compute layout {:?} (cached: {is_valid_cache})",
+            //     now.elapsed()
+            // );
 
+            let now = time::now();
             let use_transform = transform2d.is_some();
             if let Some(mut transform) = transform2d {
                 transform.set_size(size);
                 draw.push_matrix(transform.updated_mat3());
             }
 
+            let root_bounds = Rect::new(Vec2::ZERO, size);
             let tree = cache.layouts.get(&layout_id).as_ref().map(|(_, tree)| tree);
             if let Some(tree) = tree {
-                draw_node(root_id, &mut nodes, tree, draw, data);
+                draw_node(root_id, &mut nodes, tree, draw, data, root_bounds);
             }
 
             if use_transform {
                 draw.pop_matrix();
             }
+            // println!("render layout {:?}", now.elapsed());
         });
     }
 
@@ -201,9 +212,20 @@ fn draw_node<T>(
     tree: &TaffyTree<()>,
     draw: &mut Draw2D,
     data: &T,
+    parent_bounds: Rect,
 ) {
     let layout = tree.layout(node_id).unwrap();
-    // println!("\n{node_id:?}:\n{layout:?}");
+
+    let bounds = Rect::new(
+        vec2(layout.location.x, layout.location.y) + parent_bounds.origin,
+        vec2(layout.size.width, layout.size.height),
+    );
+
+    let is_in_parent = parent_bounds.intersects(&bounds);
+    if !is_in_parent {
+        return;
+    }
+
     draw.push_matrix(
         Transform2DBuilder::default()
             .set_translation(vec2(layout.location.x, layout.location.y))
@@ -216,7 +238,7 @@ fn draw_node<T>(
     }
 
     for child_id in tree.children(node_id).unwrap() {
-        draw_node(child_id, callbacks, tree, draw, data);
+        draw_node(child_id, callbacks, tree, draw, data, bounds);
     }
 
     draw.pop_matrix();
