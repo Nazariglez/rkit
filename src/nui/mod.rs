@@ -56,6 +56,10 @@ impl NuiCache {
     }
 }
 
+pub fn clean_ui_layout_cache() {
+    CACHE.with_borrow_mut(|cache| cache.reset());
+}
+
 struct RenderCallback<T>
 where
     T: FnOnce(&mut Draw2D, Layout),
@@ -100,11 +104,7 @@ impl<'data, T> NuiContext<'data, T> {
         Node::new(self)
     }
 
-    fn on_render<'arena, F: FnOnce(&mut Draw2D, Layout) + 'static>(
-        &'arena mut self,
-        temp_id: u64,
-        cb: F,
-    ) {
+    fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'static>(&mut self, temp_id: u64, cb: F) {
         self.nodes.insert(
             CtxId::Temp(temp_id),
             Box::new(RenderCallback { cb: Some(cb) }),

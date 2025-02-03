@@ -25,9 +25,9 @@ fn update(state: &mut State) {
     let mut nodes = 0;
     let now = time::now();
     draw.ui().show(|ctx| {
-        // for _ in 0..5000 {
-        Container { left: 10.0 }.add(ctx);
-        // }
+        for _ in 0..5000 {
+            Container { left: 10.0 }.add(ctx);
+        }
         nodes = ctx.len();
         //
         // Node::new(ctx)
