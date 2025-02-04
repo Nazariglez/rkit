@@ -112,11 +112,12 @@ where
         let mut ctx = NuiContext {
             temp_id: 0,
             data,
-            nodes: FxHashMap::default(),
+            callbacks: FxHashMap::default(),
+            callbacks2: FxHashMap::default(),
             node_stack: vec![root_id],
             tree,
             size,
-            cache_styles: vec![],
+            cached_styles: vec![],
         };
 
         let now = time::now();
@@ -125,8 +126,8 @@ where
 
         let NuiContext {
             mut tree,
-            mut nodes,
-            cache_styles,
+            callbacks: mut nodes,
+            cached_styles: cache_styles,
             ..
         } = ctx;
 

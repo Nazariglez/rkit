@@ -35,13 +35,6 @@ impl<'ctx, 'data, T> Node<'ctx, 'data, T> {
         self
     }
 
-    // pub fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'static>(mut self, cb: F) -> Self {
-    //     if let Some(ctx) = &mut self.ctx {
-    //         ctx.on_render(self.temp_id, cb);
-    //     }
-    //     self
-    // }
-
     pub fn on_draw<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
         mut self,
         cb: F,

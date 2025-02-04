@@ -3,8 +3,9 @@ pub mod node;
 pub mod prelude;
 pub mod style;
 
-use std::{cell::RefCell, marker::PhantomData};
+use std::cell::RefCell;
 
+use bumpalo::Bump;
 use corelib::math::Vec2;
 use draw::Draw2D;
 use node::{Node, NuiWidget};
@@ -17,6 +18,7 @@ thread_local! {
         corelib::app::on_sys_pre_update(|| {
             CACHE.with_borrow_mut(|cache| {
                 cache.cache_id = 0;
+                cache.arena.reset();
             });
         });
         RefCell::new(NuiCache::default())
@@ -33,6 +35,7 @@ enum CacheId {
 struct NuiCache {
     cache_id: u64,
     layouts: FxHashMap<CacheId, (Vec<Style>, TaffyTree<()>)>,
+    arena: Bump,
 }
 
 impl NuiCache {
@@ -54,6 +57,10 @@ impl NuiCache {
     pub fn reset(&mut self) {
         self.layouts.clear();
     }
+
+    pub fn alloc<'ctx, T>(&'ctx mut self, item: T) -> &'ctx mut T {
+        self.arena.alloc(item)
+    }
 }
 
 pub fn clean_ui_layout_cache() {
@@ -71,9 +78,10 @@ type DrawCb<'data, T> = dyn for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'd
 pub struct NuiContext<'data, T: 'data> {
     temp_id: u64,
     data: &'data T,
-    nodes: FxHashMap<CtxId, Box<DrawCb<'data, T>>>,
+    callbacks: FxHashMap<CtxId, Box<DrawCb<'data, T>>>,
+    callbacks2: FxHashMap<CtxId, &'data mut DrawCb<'data, T>>,
+    cached_styles: Vec<Style>,
     node_stack: Vec<NodeId>,
-    cache_styles: Vec<Style>,
     tree: TaffyTree<()>,
     size: Vec2,
 }
@@ -92,7 +100,7 @@ where
         temp_id: u64,
         cb: F,
     ) {
-        self.nodes.insert(CtxId::Temp(temp_id), Box::new(cb));
+        self.callbacks.insert(CtxId::Temp(temp_id), Box::new(cb));
     }
 
     fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: Node<'_, 'data, T>, cb: F) {
@@ -111,17 +119,17 @@ where
         let style = node.style;
 
         let node_id = self.tree.new_leaf(taffy_style_from(&style.layout)).unwrap();
-        match self.nodes.entry(CtxId::Temp(node.temp_id)) {
+        match self.callbacks.entry(CtxId::Temp(node.temp_id)) {
             std::collections::hash_map::Entry::Occupied(e) => {
                 let val = e.remove();
-                self.nodes.insert(CtxId::Node(node_id), val);
+                self.callbacks.insert(CtxId::Node(node_id), val);
             }
             std::collections::hash_map::Entry::Vacant(e) => {
                 // TODO: this
             }
         };
 
-        self.cache_styles.push(node.style);
+        self.cached_styles.push(node.style);
         self.tree
             .add_child(*self.node_stack.last().unwrap(), node_id)
             .unwrap();
@@ -149,6 +157,6 @@ where
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.nodes.len()
+        self.callbacks.len()
     }
 }
