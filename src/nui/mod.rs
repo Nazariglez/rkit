@@ -18,7 +18,6 @@ thread_local! {
         corelib::app::on_sys_pre_update(|| {
             CACHE.with_borrow_mut(|cache| {
                 cache.cache_id = 0;
-                cache.arena.reset();
             });
         });
         RefCell::new(NuiCache::default())
@@ -35,7 +34,6 @@ enum CacheId {
 struct NuiCache {
     cache_id: u64,
     layouts: FxHashMap<CacheId, (Vec<Style>, TaffyTree<()>)>,
-    arena: Bump,
 }
 
 impl NuiCache {
@@ -57,17 +55,13 @@ impl NuiCache {
     pub fn reset(&mut self) {
         self.layouts.clear();
     }
-
-    pub fn alloc<'ctx, T>(&'ctx mut self, item: T) -> &'ctx mut T {
-        self.arena.alloc(item)
-    }
 }
 
 pub fn clean_ui_layout_cache() {
     CACHE.with_borrow_mut(|cache| cache.reset());
 }
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 enum CtxId {
     Temp(u64),
     Node(NodeId),
@@ -75,35 +69,41 @@ enum CtxId {
 
 type DrawCb<'data, T> = dyn for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data;
 
-pub struct NuiContext<'data, T: 'data> {
+pub struct NuiContext<'data, 'arena, T>
+where
+    'data: 'arena,
+    T: 'data,
+{
     temp_id: u64,
+    arena: &'arena Bump,
     data: &'data T,
-    callbacks: FxHashMap<CtxId, Box<DrawCb<'data, T>>>,
-    callbacks2: FxHashMap<CtxId, &'data mut DrawCb<'data, T>>,
+    callbacks: FxHashMap<CtxId, &'arena mut DrawCb<'data, T>>,
     cached_styles: Vec<Style>,
     node_stack: Vec<NodeId>,
     tree: TaffyTree<()>,
     size: Vec2,
 }
 
-impl<'data, T> NuiContext<'data, T>
+impl<'data, 'arena, T> NuiContext<'data, 'arena, T>
 where
+    'data: 'arena,
     T: 'data,
 {
     #[inline]
-    pub fn node<'ctx>(&'ctx mut self) -> Node<'ctx, 'data, T> {
+    pub fn node<'ctx>(&'ctx mut self) -> Node<'ctx, 'data, 'arena, T> {
         Node::new(self)
     }
 
-    fn on_render<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
+    fn on_draw<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
         &mut self,
         temp_id: u64,
         cb: F,
     ) {
-        self.callbacks.insert(CtxId::Temp(temp_id), Box::new(cb));
+        let oref = self.arena.alloc(cb);
+        self.callbacks.insert(CtxId::Temp(temp_id), oref);
     }
 
-    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: Node<'_, 'data, T>, cb: F) {
+    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: Node<'_, 'data, 'arena, T>, cb: F) {
         let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
@@ -111,13 +111,14 @@ where
     }
 
     #[inline]
-    fn add_node<'ctx>(&'ctx mut self, node: Node<'ctx, 'data, T>) -> NodeId {
+    fn add_node<'ctx>(&'ctx mut self, node: Node<'ctx, 'data, 'arena, T>) -> NodeId {
         self.insert_node(node)
     }
 
-    fn insert_node<'ctx>(&'ctx mut self, mut node: Node<'ctx, 'data, T>) -> NodeId {
+    fn insert_node<'ctx>(&'ctx mut self, mut node: Node<'ctx, 'data, 'arena, T>) -> NodeId {
         let style = node.style;
 
+        let temp_id = CtxId::Temp(node.temp_id);
         let node_id = self.tree.new_leaf(taffy_style_from(&style.layout)).unwrap();
         match self.callbacks.entry(CtxId::Temp(node.temp_id)) {
             std::collections::hash_map::Entry::Occupied(e) => {

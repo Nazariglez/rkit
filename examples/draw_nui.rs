@@ -27,15 +27,17 @@ fn update(state: &mut State) {
     let mut nodes = 0;
     let now = time::now();
     draw.ui().show(|ctx| {
-        ctx.node()
-            .on_draw(|d, l, data| {
-                state.count += 1;
-            })
-            .add();
+        // ctx.node()
+        //     .on_draw2(|d, l, data| {
+        //         state.count += 1;
+        //     })
+        //     .add();
 
-        // for _ in 0..5000 {
-        Container { left: state.left }.add(ctx);
-        // }
+        let now = time::now();
+        for _ in 0..5000 {
+            Container { left: state.left }.add(ctx);
+        }
+        println!("for loop {:?}", now.elapsed());
         nodes = ctx.len();
     });
 
@@ -59,10 +61,10 @@ pub struct Container {
     left: f32,
 }
 impl<T> NuiWidget<T> for Container {
-    fn ui(self, ctx: &mut NuiContext<'_, T>) {
+    fn ui(self, ctx: &mut NuiContext<T>) {
         // Root
         ctx.node()
-            .on_draw(|draw, layout, d| {
+            .on_draw2(|draw, layout, d| {
                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                     .color(Color::RED);
             })
@@ -79,7 +81,7 @@ impl<T> NuiWidget<T> for Container {
             .add_with_children(|ctx| {
                 // first column
                 ctx.node()
-                    .on_draw(|draw, layout, d| {
+                    .on_draw2(|draw, layout, d| {
                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                             .color(Color::YELLOW);
                     })
@@ -92,7 +94,7 @@ impl<T> NuiWidget<T> for Container {
                     .add_with_children(|ctx| {
                         // column content
                         ctx.node()
-                            .on_draw(|draw, layout, _| {
+                            .on_draw2(|draw, layout, _| {
                                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                                     .color(Color::BLUE);
                             })
@@ -102,7 +104,7 @@ impl<T> NuiWidget<T> for Container {
 
                 // second column
                 ctx.node()
-                    .on_draw(|draw, layout, _| {
+                    .on_draw2(|draw, layout, _| {
                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                             .color(Color::GREEN);
                     })

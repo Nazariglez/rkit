@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use corelib::math::{bvec2, vec2, Rect, Vec2};
 use corelib::time;
 use draw::{Draw2D, Transform2D, Transform2DBuilder};
@@ -84,7 +85,7 @@ where
 
     pub fn show<F>(self, cb: F)
     where
-        F: FnOnce(&mut NuiContext<'data, T>),
+        F: FnOnce(&mut NuiContext<'data, '_, T>),
     {
         let NuiLayout {
             id: layout_id,
@@ -109,24 +110,26 @@ where
             })
             .unwrap();
 
+        let arena = Bump::default();
+
         let mut ctx = NuiContext {
             temp_id: 0,
+            arena: &arena,
             data,
             callbacks: FxHashMap::default(),
-            callbacks2: FxHashMap::default(),
+            cached_styles: vec![],
             node_stack: vec![root_id],
             tree,
             size,
-            cached_styles: vec![],
         };
 
         let now = time::now();
         cb(&mut ctx);
-        // println!("define layout {:?}", now.elapsed());
+        println!("define layout {:?}", now.elapsed());
 
         let NuiContext {
             mut tree,
-            callbacks: mut nodes,
+            callbacks: mut callbacks2,
             cached_styles: cache_styles,
             ..
         } = ctx;
@@ -145,6 +148,7 @@ where
                 .unwrap();
                 cache.add_cache(layout_id, cache_styles, tree);
             }
+            println!("compute layout {:?}", now.elapsed());
 
             let now = time::now();
             let use_transform = transform2d.is_some();
@@ -158,7 +162,7 @@ where
             if let Some(tree) = tree {
                 draw_node(
                     root_id,
-                    &mut nodes,
+                    &mut callbacks2,
                     tree,
                     draw,
                     data,
@@ -170,7 +174,7 @@ where
             if use_transform {
                 draw.pop_matrix();
             }
-            // println!("render layout {:?}", now.elapsed());
+            println!("render layout {:?}", now.elapsed());
         });
     }
 
@@ -229,7 +233,8 @@ where
 }
 fn draw_node<T>(
     node_id: NodeId,
-    callbacks: &mut FxHashMap<CtxId, Box<DrawCb<T>>>,
+    // callbacks: &mut FxHashMap<CtxId, Box<DrawCb<T>>>,
+    callbacks: &mut FxHashMap<CtxId, &mut DrawCb<T>>,
     tree: &TaffyTree<()>,
     draw: &mut Draw2D,
     data: &T,
