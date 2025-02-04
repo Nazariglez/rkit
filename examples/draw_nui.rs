@@ -28,14 +28,15 @@ fn update(state: &mut State) {
     let now = time::now();
     let d = ();
     draw.ui_with(&d).show(|ctx| {
-        // for _ in 0..250 {
-        // Container { left: state.left }.add(ctx);
-        // }
         ctx.node()
             .on_render2(|d, l, data| {
                 state.count += 1;
             })
             .add();
+
+        // for _ in 0..5000 {
+        Container { left: state.left }.add(ctx);
+        // }
         nodes = ctx.len();
     });
 
@@ -55,59 +56,59 @@ fn update(state: &mut State) {
         state.n = 0;
     }
 }
-// pub struct Container {
-//     left: f32,
-// }
-// impl<T> NuiWidget<T> for Container {
-//     fn ui(self, ctx: &mut NuiContext<'_, '_, T>) {
-//         // Root
-//         ctx.node()
-//             .on_render(|draw, layout| {
-//                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
-//                     .color(Color::RED);
-//             })
-//             // .on_render(&|d, l| println!("whatever"))
-//             .set_style(
-//                 Style::default()
-//                     .flex_row()
-//                     .size(px(800.0), px(600.0))
-//                     .align_items_center()
-//                     .justify_content_center()
-//                     .left(self.left)
-//                     .gap_x(px(20.0)),
-//             )
-//             .add_with_children(|ctx| {
-//                 // first column
-//                 ctx.node()
-//                     .on_render(|draw, layout| {
-//                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
-//                             .color(Color::YELLOW);
-//                     })
-//                     .set_style(
-//                         Style::default()
-//                             .size(px(100.0), px(100.0))
-//                             .align_items_center()
-//                             .justify_content_center(),
-//                     )
-//                     .add_with_children(|ctx| {
-//                         // column content
-//                         ctx.node()
-//                             .on_render(|draw, layout| {
-//                                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
-//                                     .color(Color::BLUE);
-//                             })
-//                             .set_style(Style::default().size(px(40.0), px(20.0)))
-//                             .add();
-//                     });
+pub struct Container {
+    left: f32,
+}
+impl<T> NuiWidget<T> for Container {
+    fn ui(self, ctx: &mut NuiContext<'_, T>) {
+        // Root
+        ctx.node()
+            .on_render2(|draw, layout, d| {
+                draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
+                    .color(Color::RED);
+            })
+            // .on_render(&|d, l| println!("whatever"))
+            .set_style(
+                Style::default()
+                    .flex_row()
+                    .size(px(800.0), px(600.0))
+                    .align_items_center()
+                    .justify_content_center()
+                    .left(self.left)
+                    .gap_x(px(20.0)),
+            )
+            .add_with_children(|ctx| {
+                // first column
+                ctx.node()
+                    .on_render2(|draw, layout, d| {
+                        draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
+                            .color(Color::YELLOW);
+                    })
+                    .set_style(
+                        Style::default()
+                            .size(px(100.0), px(100.0))
+                            .align_items_center()
+                            .justify_content_center(),
+                    )
+                    .add_with_children(|ctx| {
+                        // column content
+                        ctx.node()
+                            .on_render2(|draw, layout, _| {
+                                draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
+                                    .color(Color::BLUE);
+                            })
+                            .set_style(Style::default().size(px(40.0), px(20.0)))
+                            .add();
+                    });
 
-//                 // second column
-//                 ctx.node()
-//                     .on_render(|draw, layout| {
-//                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
-//                             .color(Color::GREEN);
-//                     })
-//                     .set_style(Style::default().size(px(100.0), px(100.0)))
-//                     .add();
-//             });
-//     }
-// }
+                // second column
+                ctx.node()
+                    .on_render2(|draw, layout, _| {
+                        draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
+                            .color(Color::GREEN);
+                    })
+                    .set_style(Style::default().size(px(100.0), px(100.0)))
+                    .add();
+            });
+    }
+}
