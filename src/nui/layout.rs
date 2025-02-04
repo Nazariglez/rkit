@@ -9,21 +9,19 @@ use crate::nui::CtxId;
 
 use super::{CacheId, DrawCb, NuiContext, CACHE};
 
-const EMPTY_DATA: () = ();
-
 pub trait Draw2DUiExt {
-    // fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()>;
-    fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
+    fn ui(&mut self) -> NuiLayout<()>;
+    fn ui_with<'draw, 'data, T>(&'draw mut self, data: &'data T) -> NuiLayout<'data, 'draw, T>
     where
         'data: 'draw;
 }
 
 impl Draw2DUiExt for Draw2D {
-    // fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()> {
-    //     self.ui_with(&())
-    // }
+    fn ui(&mut self) -> NuiLayout<()> {
+        self.ui_with(&())
+    }
 
-    fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
+    fn ui_with<'draw, 'data, T>(&'draw mut self, data: &'data T) -> NuiLayout<'data, 'draw, T>
     where
         'data: 'draw,
     {
@@ -36,7 +34,12 @@ pub struct NuiLayout<'data, 'draw, T: 'data> {
     draw: &'draw mut Draw2D,
     data: &'data T,
     size: Option<Vec2>,
-    cache_disabled: bool,
+
+    // reuse last frame layout if available
+    use_cache: bool,
+
+    // skip drawing nodes outside their parents
+    use_culling: bool,
 
     transform2d: Option<Transform2D>,
     // mouse_info: MouseInfo,
@@ -53,7 +56,8 @@ where
             draw,
             data,
             size: None,
-            cache_disabled: false,
+            use_cache: true,
+            use_culling: true,
             transform2d: None,
         }
     }
@@ -64,7 +68,12 @@ where
     }
 
     pub fn disable_cache(mut self) -> Self {
-        self.cache_disabled = true;
+        self.use_cache = false;
+        self
+    }
+
+    pub fn disable_culling(mut self) -> Self {
+        self.use_culling = false;
         self
     }
 
@@ -79,7 +88,8 @@ where
     {
         let NuiLayout {
             id: layout_id,
-            cache_disabled,
+            use_cache,
+            use_culling,
             draw,
             data,
             size,
@@ -122,8 +132,8 @@ where
 
         CACHE.with_borrow_mut(|cache| {
             let now = time::now();
-            let is_valid_cache = !cache_disabled && cache.is_cache_valid(layout_id, &cache_styles);
-            if !is_valid_cache {
+            let skip_layout_compute = use_cache && cache.is_cache_valid(layout_id, &cache_styles);
+            if !skip_layout_compute {
                 tree.compute_layout(
                     root_id,
                     Size {
@@ -134,10 +144,6 @@ where
                 .unwrap();
                 cache.add_cache(layout_id, cache_styles, tree);
             }
-            // println!(
-            //     "compute layout {:?} (cached: {is_valid_cache})",
-            //     now.elapsed()
-            // );
 
             let now = time::now();
             let use_transform = transform2d.is_some();
@@ -149,7 +155,15 @@ where
             let root_bounds = Rect::new(Vec2::ZERO, size);
             let tree = cache.layouts.get(&layout_id).as_ref().map(|(_, tree)| tree);
             if let Some(tree) = tree {
-                draw_node(root_id, &mut nodes, tree, draw, data, root_bounds);
+                draw_node(
+                    root_id,
+                    &mut nodes,
+                    tree,
+                    draw,
+                    data,
+                    use_culling,
+                    root_bounds,
+                );
             }
 
             if use_transform {
@@ -218,6 +232,7 @@ fn draw_node<T>(
     tree: &TaffyTree<()>,
     draw: &mut Draw2D,
     data: &T,
+    use_culling: bool,
     parent_bounds: Rect,
 ) {
     let layout = tree.layout(node_id).unwrap();
@@ -227,8 +242,8 @@ fn draw_node<T>(
         vec2(layout.size.width, layout.size.height),
     );
 
-    let is_in_parent = parent_bounds.intersects(&bounds);
-    if !is_in_parent {
+    let skip_draw = use_culling && !parent_bounds.intersects(&bounds);
+    if skip_draw {
         return;
     }
 
@@ -244,7 +259,7 @@ fn draw_node<T>(
     }
 
     for child_id in tree.children(node_id).unwrap() {
-        draw_node(child_id, callbacks, tree, draw, data, bounds);
+        draw_node(child_id, callbacks, tree, draw, data, use_culling, bounds);
     }
 
     draw.pop_matrix();

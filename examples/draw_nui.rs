@@ -26,10 +26,9 @@ fn update(state: &mut State) {
     draw.clear(Color::WHITE);
     let mut nodes = 0;
     let now = time::now();
-    let d = ();
-    draw.ui_with(&d).show(|ctx| {
+    draw.ui().show(|ctx| {
         ctx.node()
-            .on_render2(|d, l, data| {
+            .on_draw(|d, l, data| {
                 state.count += 1;
             })
             .add();
@@ -63,7 +62,7 @@ impl<T> NuiWidget<T> for Container {
     fn ui(self, ctx: &mut NuiContext<'_, T>) {
         // Root
         ctx.node()
-            .on_render2(|draw, layout, d| {
+            .on_draw(|draw, layout, d| {
                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                     .color(Color::RED);
             })
@@ -80,7 +79,7 @@ impl<T> NuiWidget<T> for Container {
             .add_with_children(|ctx| {
                 // first column
                 ctx.node()
-                    .on_render2(|draw, layout, d| {
+                    .on_draw(|draw, layout, d| {
                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                             .color(Color::YELLOW);
                     })
@@ -93,7 +92,7 @@ impl<T> NuiWidget<T> for Container {
                     .add_with_children(|ctx| {
                         // column content
                         ctx.node()
-                            .on_render2(|draw, layout, _| {
+                            .on_draw(|draw, layout, _| {
                                 draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                                     .color(Color::BLUE);
                             })
@@ -103,7 +102,7 @@ impl<T> NuiWidget<T> for Container {
 
                 // second column
                 ctx.node()
-                    .on_render2(|draw, layout, _| {
+                    .on_draw(|draw, layout, _| {
                         draw.rect(Vec2::ZERO, vec2(layout.size.width, layout.size.height))
                             .color(Color::GREEN);
                     })

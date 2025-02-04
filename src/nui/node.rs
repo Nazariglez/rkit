@@ -42,7 +42,7 @@ impl<'ctx, 'data, T> Node<'ctx, 'data, T> {
     //     self
     // }
 
-    pub fn on_render2<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
+    pub fn on_draw<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
         mut self,
         cb: F,
     ) -> Self {
