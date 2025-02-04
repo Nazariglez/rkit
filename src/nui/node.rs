@@ -1,10 +1,10 @@
 use taffy::Layout;
 
-use super::{style::Style, CtxId, NuiContext, CACHE};
+use super::{ctx::NuiContext, style::Style};
 use crate::draw::*;
 
 pub trait NuiWidget<T> {
-    fn ui<'data>(self, ctx: &mut NuiContext<'data, '_, T>);
+    fn ui(self, ctx: &mut NuiContext<'_, '_, T>);
 
     fn add<'data>(self, ctx: &mut NuiContext<'data, '_, T>)
     where
@@ -42,16 +42,6 @@ where
     }
 
     pub fn on_draw<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
-        mut self,
-        cb: F,
-    ) -> Self {
-        if let Some(ctx) = &mut self.ctx {
-            ctx.on_draw(self.temp_id, cb);
-        }
-        self
-    }
-
-    pub fn on_draw2<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
         mut self,
         cb: F,
     ) -> Self {

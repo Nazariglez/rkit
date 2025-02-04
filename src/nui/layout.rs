@@ -1,14 +1,13 @@
 use bumpalo::Bump;
 use corelib::math::{bvec2, vec2, Rect, Vec2};
-use corelib::time;
 use draw::{Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::FxHashMap;
 use taffy::prelude::length;
-use taffy::{AvailableSpace, Layout, NodeId, Size, Style, TaffyTree};
+use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree};
 
-use crate::nui::CtxId;
+use crate::nui::ctx::{CtxId, NuiContext, OnDrawCb};
 
-use super::{CacheId, DrawCb, NuiContext, CACHE};
+use super::{CacheId, CACHE};
 
 pub trait Draw2DUiExt {
     fn ui(&mut self) -> NuiLayout<()>;
@@ -110,8 +109,7 @@ where
             })
             .unwrap();
 
-        let arena = Bump::default();
-
+        let arena = Bump::new();
         let mut ctx = NuiContext {
             temp_id: 0,
             arena: &arena,
@@ -123,20 +121,17 @@ where
             size,
         };
 
-        let now = time::now();
         cb(&mut ctx);
-        println!("define layout {:?}", now.elapsed());
 
         let NuiContext {
             mut tree,
-            callbacks: mut callbacks2,
-            cached_styles: cache_styles,
+            mut callbacks,
+            cached_styles,
             ..
         } = ctx;
 
         CACHE.with_borrow_mut(|cache| {
-            let now = time::now();
-            let skip_layout_compute = use_cache && cache.is_cache_valid(layout_id, &cache_styles);
+            let skip_layout_compute = use_cache && cache.is_cache_valid(layout_id, &cached_styles);
             if !skip_layout_compute {
                 tree.compute_layout(
                     root_id,
@@ -146,11 +141,9 @@ where
                     },
                 )
                 .unwrap();
-                cache.add_cache(layout_id, cache_styles, tree);
+                cache.add_cache(layout_id, cached_styles, tree);
             }
-            println!("compute layout {:?}", now.elapsed());
 
-            let now = time::now();
             let use_transform = transform2d.is_some();
             if let Some(mut transform) = transform2d {
                 transform.set_size(size);
@@ -162,7 +155,7 @@ where
             if let Some(tree) = tree {
                 draw_node(
                     root_id,
-                    &mut callbacks2,
+                    &mut callbacks,
                     tree,
                     draw,
                     data,
@@ -174,7 +167,6 @@ where
             if use_transform {
                 draw.pop_matrix();
             }
-            println!("render layout {:?}", now.elapsed());
         });
     }
 
@@ -233,8 +225,7 @@ where
 }
 fn draw_node<T>(
     node_id: NodeId,
-    // callbacks: &mut FxHashMap<CtxId, Box<DrawCb<T>>>,
-    callbacks: &mut FxHashMap<CtxId, &mut DrawCb<T>>,
+    callbacks: &mut FxHashMap<CtxId, &mut OnDrawCb<T>>,
     tree: &TaffyTree<()>,
     draw: &mut Draw2D,
     data: &T,
