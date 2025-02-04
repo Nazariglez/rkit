@@ -60,63 +60,42 @@ pub fn clean_ui_layout_cache() {
     CACHE.with_borrow_mut(|cache| cache.reset());
 }
 
-struct RenderCallback<T>
-where
-    T: FnOnce(&mut Draw2D, Layout),
-{
-    cb: Option<T>,
-}
-
-pub trait CallRenderCallback {
-    fn call(&mut self, draw: &mut Draw2D, layout: Layout);
-}
-
-impl<T> CallRenderCallback for RenderCallback<T>
-where
-    T: FnOnce(&mut Draw2D, Layout),
-{
-    fn call(&mut self, draw: &mut Draw2D, layout: Layout) {
-        if let Some(cb) = self.cb.take() {
-            cb(draw, layout);
-        }
-    }
-}
-
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 enum CtxId {
     Temp(u64),
     Node(NodeId),
 }
 
-pub struct NuiContext<'data, 'cb, T> {
-    _p: PhantomData<&'cb ()>,
+type DrawCb<'data, T> = dyn for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data;
+
+pub struct NuiContext<'data, T: 'data> {
     temp_id: u64,
     data: &'data T,
-    nodes: FxHashMap<CtxId, Box<dyn CallRenderCallback>>,
+    nodes: FxHashMap<CtxId, Box<DrawCb<'data, T>>>,
     node_stack: Vec<NodeId>,
     cache_styles: Vec<Style>,
     tree: TaffyTree<()>,
     size: Vec2,
 }
 
-impl<'data, 'cb, T> NuiContext<'data, 'cb, T> {
+impl<'data, T> NuiContext<'data, T>
+where
+    T: 'data,
+{
     #[inline]
-    pub fn node<'ctx>(&'ctx mut self) -> Node<'data, 'ctx, 'cb, T> {
+    pub fn node<'ctx>(&'ctx mut self) -> Node<'ctx, 'data, T> {
         Node::new(self)
     }
 
-    fn on_render<F: FnOnce(&mut Draw2D, Layout) + 'static>(&mut self, temp_id: u64, cb: F) {
-        self.nodes.insert(
-            CtxId::Temp(temp_id),
-            Box::new(RenderCallback { cb: Some(cb) }),
-        );
-    }
-
-    fn add_node_with<'ctx, F: FnOnce(&mut Self)>(
-        &'ctx mut self,
-        node: Node<'data, 'ctx, 'cb, T>,
+    fn on_render<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
+        &mut self,
+        temp_id: u64,
         cb: F,
     ) {
+        self.nodes.insert(CtxId::Temp(temp_id), Box::new(cb));
+    }
+
+    fn add_node_with<F: FnOnce(&mut Self)>(&mut self, node: Node<'_, 'data, T>, cb: F) {
         let node_id = self.add_node(node);
         self.node_stack.push(node_id);
         cb(self);
@@ -124,11 +103,11 @@ impl<'data, 'cb, T> NuiContext<'data, 'cb, T> {
     }
 
     #[inline]
-    fn add_node<'ctx>(&'ctx mut self, node: Node<'data, 'ctx, 'cb, T>) -> NodeId {
+    fn add_node<'ctx>(&'ctx mut self, node: Node<'ctx, 'data, T>) -> NodeId {
         self.insert_node(node)
     }
 
-    fn insert_node<'ctx>(&'ctx mut self, mut node: Node<'data, 'ctx, 'cb, T>) -> NodeId {
+    fn insert_node<'ctx>(&'ctx mut self, mut node: Node<'ctx, 'data, T>) -> NodeId {
         let style = node.style;
 
         let node_id = self.tree.new_leaf(taffy_style_from(&style.layout)).unwrap();

@@ -3,25 +3,25 @@ use corelib::time;
 use draw::{Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::FxHashMap;
 use taffy::prelude::length;
-use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree};
+use taffy::{AvailableSpace, Layout, NodeId, Size, Style, TaffyTree};
 
-use crate::nui::{CallRenderCallback, CtxId};
+use crate::nui::CtxId;
 
-use super::{CacheId, NuiContext, CACHE};
+use super::{CacheId, DrawCb, NuiContext, CACHE};
 
 const EMPTY_DATA: () = ();
 
 pub trait Draw2DUiExt {
-    fn ui<'draw>(&'draw mut self) -> NuiLayout<'_, 'draw, ()>;
+    // fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()>;
     fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
     where
         'data: 'draw;
 }
 
 impl Draw2DUiExt for Draw2D {
-    fn ui<'draw>(&'draw mut self) -> NuiLayout<'_, 'draw, ()> {
-        self.ui_with(&())
-    }
+    // fn ui<'data, 'draw>(&'draw mut self) -> NuiLayout<'data, 'draw, ()> {
+    //     self.ui_with(&())
+    // }
 
     fn ui_with<'data, 'draw, T>(&'draw mut self, data: &'data T) -> NuiLayout<T>
     where
@@ -31,7 +31,7 @@ impl Draw2DUiExt for Draw2D {
     }
 }
 
-pub struct NuiLayout<'data, 'draw, T> {
+pub struct NuiLayout<'data, 'draw, T: 'data> {
     id: CacheId,
     draw: &'draw mut Draw2D,
     data: &'data T,
@@ -42,7 +42,10 @@ pub struct NuiLayout<'data, 'draw, T> {
     // mouse_info: MouseInfo,
 }
 
-impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
+impl<'data, 'draw, T> NuiLayout<'data, 'draw, T>
+where
+    T: 'data,
+{
     fn new(draw: &'draw mut Draw2D, data: &'data T) -> Self {
         let id = CACHE.with_borrow_mut(|cache| cache.gen_id());
         Self {
@@ -70,7 +73,10 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
         self
     }
 
-    pub fn show<'cb, F: FnOnce(&mut NuiContext<'data, 'cb, T>) + 'cb>(self, cb: F) {
+    pub fn show<F>(self, cb: F)
+    where
+        F: FnOnce(&mut NuiContext<'data, T>),
+    {
         let NuiLayout {
             id: layout_id,
             cache_disabled,
@@ -94,7 +100,6 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
             .unwrap();
 
         let mut ctx = NuiContext {
-            _p: Default::default(),
             temp_id: 0,
             data,
             nodes: FxHashMap::default(),
@@ -209,7 +214,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T> {
 }
 fn draw_node<T>(
     node_id: NodeId,
-    callbacks: &mut FxHashMap<CtxId, Box<dyn CallRenderCallback>>,
+    callbacks: &mut FxHashMap<CtxId, Box<DrawCb<T>>>,
     tree: &TaffyTree<()>,
     draw: &mut Draw2D,
     data: &T,
@@ -235,7 +240,7 @@ fn draw_node<T>(
     );
 
     if let Some(cbs) = callbacks.get_mut(&CtxId::Node(node_id)) {
-        cbs.call(draw, *layout);
+        cbs(draw, *layout, data);
     }
 
     for child_id in tree.children(node_id).unwrap() {
