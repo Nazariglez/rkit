@@ -1,11 +1,11 @@
 use crate::sound::{InstanceId, SoundId};
 use crate::{clean_audio_manager, Sound, SoundInstance};
 use atomic_refcell::AtomicRefCell;
-use kira::manager::{AudioManager, AudioManagerSettings, DefaultBackend};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
-use kira::sound::{PlaybackRate, PlaybackState};
-use kira::tween::Tween;
-use kira::Volume;
+use kira::sound::PlaybackState;
+use kira::{
+    AudioManager, AudioManagerSettings, Decibels, DefaultBackend, Panning, PlaybackRate, Tween,
+};
 use num::Zero;
 use once_cell::sync::Lazy;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -184,7 +184,7 @@ impl Manager {
         self.volume = volume.clamp(0.0, 1.0);
         self.manager
             .main_track()
-            .set_volume(Volume::Amplitude(self.volume as _), Tween::default());
+            .set_volume(decibels_from_volume(self.volume), Tween::default());
     }
 
     pub fn is_playing(&self, instance: SoundInstance) -> Option<bool> {
@@ -219,14 +219,14 @@ impl Manager {
             InstanceId::Global => {
                 list.iter_mut().for_each(|d| {
                     d.handle
-                        .set_volume(Volume::Amplitude(vol as _), Tween::default());
+                        .set_volume(decibels_from_volume(vol), Tween::default());
                     d.volume = vol;
                 });
             }
             InstanceId::Local(id) => {
                 if let Some(data) = list.iter_mut().find(|d| d.id == id) {
                     data.handle
-                        .set_volume(Volume::Amplitude(vol as _), Tween::default());
+                        .set_volume(decibels_from_volume(vol), Tween::default());
                     data.volume = vol;
                 }
             }
@@ -253,14 +253,14 @@ impl Manager {
             InstanceId::Global => {
                 list.iter_mut().for_each(|d| {
                     d.handle
-                        .set_playback_rate(PlaybackRate::Factor(pitch as _), Tween::default());
+                        .set_playback_rate(PlaybackRate(pitch as _), Tween::default());
                     d.pitch = pitch;
                 });
             }
             InstanceId::Local(id) => {
                 if let Some(data) = list.iter_mut().find(|d| d.id == id) {
                     data.handle
-                        .set_playback_rate(PlaybackRate::Factor(pitch as _), Tween::default());
+                        .set_playback_rate(PlaybackRate(pitch as _), Tween::default());
                     data.pitch = pitch;
                 }
             }
@@ -287,13 +287,13 @@ impl Manager {
         match instance.id {
             InstanceId::Global => {
                 list.iter_mut().for_each(|d| {
-                    d.handle.set_panning(panning as f64, Tween::default());
+                    d.handle.set_panning(Panning(panning), Tween::default());
                     d.panning = panning;
                 });
             }
             InstanceId::Local(id) => {
                 if let Some(data) = list.iter_mut().find(|d| d.id == id) {
-                    data.handle.set_panning(panning as f64, Tween::default());
+                    data.handle.set_panning(Panning(panning), Tween::default());
                     data.panning = panning;
                 }
             }
@@ -380,11 +380,18 @@ impl From<PlayOptions> for StaticSoundSettings {
             start_position: Default::default(),
             loop_region: value.repeat.then_some((..).into()),
             reverse: false,
-            volume: Volume::Amplitude(value.volume as _).into(),
-            playback_rate: PlaybackRate::Factor(value.pitch as _).into(),
-            panning: (value.panning as f64).into(),
-            output_destination: Default::default(),
+            volume: decibels_from_volume(value.volume).into(),
+            playback_rate: PlaybackRate(value.pitch as _).into(),
+            panning: Panning(value.panning).into(),
             fade_in_tween: None,
         }
     }
+}
+
+pub(crate) fn decibels_from_volume(amplitude: f32) -> Decibels {
+    const MIN_DECIBELS: f32 = -60.0;
+    if amplitude <= 0.0 {
+        return Decibels(MIN_DECIBELS);
+    }
+    Decibels(20.0 * amplitude.log10())
 }

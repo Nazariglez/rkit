@@ -7,7 +7,12 @@ use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
 use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
-use crate::gfx::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer, BufferDescriptor, BufferUsage, Color, InnerBuffer, Limits, RenderPipeline, RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture, TextureData, TextureDescriptor, TextureFormat, TextureId, GpuStats};
+use crate::gfx::{
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
+    BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, RenderPipeline,
+    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture,
+    TextureData, TextureDescriptor, TextureFormat, TextureId,
+};
 use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
 use crate::math::{vec2, UVec2};
 use arrayvec::ArrayVec;
@@ -18,9 +23,10 @@ use utils::helpers::next_pot2;
 use wgpu::rwh::HasWindowHandle;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    Backends, BufferDescriptor as WBufferDescriptor, Extent3d, ImageCopyTexture, ImageDataLayout,
-    Instance, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp, Surface as RawSurface,
-    TextureAspect, TextureDimension, TextureFormat as WTextureFormat,
+    BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Extent3d, GlBackendOptions,
+    Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp,
+    Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
+    TextureFormat as WTextureFormat,
 };
 use winit::raw_window_handle::HasDisplayHandle;
 
@@ -658,19 +664,16 @@ impl GfxBackendImpl for GfxBackend {
             texture.id()
         );
         let channels = data.len() as u32 / (size.element_product());
+        let mut copy = texture.raw.as_image_copy();
+        copy.origin = Origin3d {
+            x: offset.x,
+            y: offset.y,
+            z: 0,
+        };
         self.ctx.queue.write_texture(
-            ImageCopyTexture {
-                texture: &texture.raw,
-                mip_level: 0,
-                origin: Origin3d {
-                    x: offset.x,
-                    y: offset.y,
-                    z: 0,
-                },
-                aspect: TextureAspect::All,
-            },
+            copy,
             data,
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(size.x * channels),
                 rows_per_image: None,
@@ -767,11 +770,16 @@ impl GfxBackend {
         let mut next_resource_id = 0;
 
         let instance = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
-            Instance::new(InstanceDescriptor {
+            Instance::new(&InstanceDescriptor {
                 backends: Backends::GL,
                 flags: InstanceFlags::default().with_env(),
-                dx12_shader_compiler: Default::default(),
-                gles_minor_version: wgpu::util::gles_minor_version_from_env().unwrap_or_default(),
+                backend_options: BackendOptions {
+                    gl: GlBackendOptions {
+                        gles_minor_version: Gles3MinorVersion::from_env()
+                            .unwrap_or(Gles3MinorVersion::Automatic),
+                    },
+                    dx12: Default::default(),
+                },
             })
         } else {
             Instance::default()
@@ -1051,14 +1059,9 @@ fn create_texture(
             let channels = d.bytes.len() as u32 / total;
             if !d.bytes.is_empty() {
                 queue.write_texture(
-                    wgpu::ImageCopyTexture {
-                        texture: &raw,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
+                    raw.as_image_copy(),
                     d.bytes,
-                    wgpu::ImageDataLayout {
+                    wgpu::TexelCopyBufferLayout {
                         offset: 0,
                         bytes_per_row: Some(d.width * channels),
                         rows_per_image: Some(d.height),

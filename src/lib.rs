@@ -10,6 +10,12 @@ pub mod random;
 #[cfg(feature = "ui")]
 pub mod ui;
 
+#[cfg(feature = "ecs")]
+pub mod ecs;
+pub mod nui;
+pub mod or_panic;
+pub mod prelude;
+
 #[doc(inline)]
 pub use corelib::*;
 

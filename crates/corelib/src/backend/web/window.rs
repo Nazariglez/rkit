@@ -18,6 +18,7 @@ use wgpu::rwh::{HandleError, HasWindowHandle, WindowHandle};
 
 pub(crate) struct WebWindow {
     pub canvas: HtmlCanvasElement,
+    pub window: web_sys::Window,
     pub document: Document,
     pub parent: Element,
     pub dpi: f32,
@@ -103,6 +104,7 @@ impl WebWindow {
 
         let mut win = Self {
             canvas,
+            window,
             document,
             parent: canvas_parent,
             dpi: dpi as f32,
@@ -127,7 +129,7 @@ impl WebWindow {
         // TODO how fast is this? maybe is better to use a Rc<RefCell<bool>>?
         self.document
             .fullscreen_element()
-            .map_or(false, |el| &el == self.canvas.as_ref())
+            .is_some_and(|el| &el == self.canvas.as_ref())
     }
 
     pub fn toggle_fullscreen(&mut self) {

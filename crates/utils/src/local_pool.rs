@@ -28,7 +28,7 @@ use std::ops::{Deref, DerefMut};
 /// println!("Available items in pool: {}", MY_POOL.len());
 /// ```
 pub struct LocalPool<T, const N: usize> {
-    _t: PhantomData<[T; N]>,
+    _t: PhantomData<[(); N]>,
     on_take: fn() -> Option<LocalPoolObserver<T>>,
     len_fn: fn() -> usize,
 }

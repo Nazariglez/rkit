@@ -17,7 +17,7 @@ num.workspace = true
 
 lyon = "1.0.1"
 
-etagere = "0.2.13"
+etagere = "0.2.15"
 cosmic-text = "0.12.1"
 
 [features]

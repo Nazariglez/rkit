@@ -42,7 +42,7 @@ log = "0.4.25"
 raw-window-handle = "0.6.2"
 atomic_refcell = "0.1.13"
 serde = { version = "1.0", features = ["serde_derive"] }
-rkyv = "0.8.9"
+rkyv = "0.8.10"
 heapless = "0.8.0"
 arrayvec = "0.7.6"
 nohash-hasher = "0.2.0"
@@ -61,6 +61,8 @@ js-sys = "0.3.77"
 wasm-bindgen = "0.2.100"
 strum = "0.26.3"
 strum_macros = "0.26.4"
+web-time = { version = "1.1.0", default-features = false }
+fastrand = "2.3.0"
 
 [dependencies]
 corelib.workspace = true
@@ -73,7 +75,7 @@ assets = { workspace = true, optional = true }
 log.workspace = true
 rustc-hash.workspace = true
 
-fastrand = { version = "2.3.0", optional = true }
+fastrand = { workspace = true, optional = true }
 
 # used on filters TODO maybe this must be optional under the filter feature?
 atomic_refcell.workspace = true
@@ -88,8 +90,15 @@ strum = { workspace = true, optional = true }
 strum_macros = { workspace = true, optional = true }
 heapless = { workspace = true, optional = true }
 
+# ecs deps
+bevy_ecs = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
+bevy_tasks = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
+web-time = { workspace = true, optional = true }
+taffy = { version = "0.7.5", optional = true }
+bumpalo = { version = "3.17.0", optional = true }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-fastrand = { version = "2.3.0", optional = true, features = ["js"] }
+fastrand = { workspace = true, optional = true, features = ["js"] }
 
 [dev-dependencies]
 log.workspace = true
@@ -118,4 +127,6 @@ draw-default-font = ["draw?/default-font"]
 # post process effects
 postfx = []
 # ui elements
-ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec", "dep:heapless", "dep:strum", "dep:strum_macros"]
+ui = ["draw", "dep:downcast-rs", "dep:scene-graph", "dep:smallvec", "dep:heapless", "dep:strum", "dep:strum_macros", "dep:taffy", "dep:bumpalo"]
+# enable ecs/app
+ecs = ["dep:bevy_ecs", "dep:bevy_tasks", "macros/ecs", "dep:web-time"]
