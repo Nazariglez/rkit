@@ -1,9 +1,9 @@
-use super::node::{Node, NuiWidget};
+use super::node::{Node, NodeInput, NodeState, NuiWidget};
 use bumpalo::Bump;
 use corelib::math::Vec2;
 use draw::Draw2D;
 
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, default};
 
 use super::style::{taffy_style_from, Style};
 use rustc_hash::FxHashMap;
@@ -15,7 +15,26 @@ pub(super) enum CtxId {
     Node(NodeId),
 }
 
-pub(super) type OnDrawCb<'data, T> = dyn for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data;
+pub(super) type OnDrawCb<'data, T> = dyn for<'draw> Fn(&'draw mut Draw2D, Layout, &mut T) + 'data;
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
+enum NodeType {
+    #[default]
+    Node,
+    Text,
+    Image,
+    // Button
+}
+
+#[derive(Debug, Default)]
+pub(super) struct NodeContext {
+    pub skip: bool,
+    pub typ: NodeType,
+    pub state: NodeState,
+    pub input: NodeInput,
+}
+
+// TODO: use ouroboros::self_referencing if possible so we can avoid the extra 'arena lifetime?
 
 pub struct NuiContext<'data, 'arena, T>
 where
@@ -24,11 +43,11 @@ where
 {
     pub(super) temp_id: u64,
     pub(super) arena: &'arena Bump,
-    pub(super) data: &'data T,
+    pub(super) data: &'data mut T,
     pub(super) callbacks: FxHashMap<CtxId, &'arena mut OnDrawCb<'data, T>>,
     pub(super) cached_styles: Vec<Style>,
     pub(super) node_stack: Vec<NodeId>,
-    pub(super) tree: TaffyTree<()>,
+    pub(super) tree: TaffyTree<NodeContext>,
     pub(super) size: Vec2,
 }
 
@@ -43,7 +62,7 @@ where
     }
 
     #[inline]
-    pub(super) fn on_draw<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
+    pub(super) fn on_draw<F: for<'draw> Fn(&'draw mut Draw2D, Layout, &mut T) + 'data>(
         &mut self,
         temp_id: u64,
         cb: F,
@@ -64,16 +83,20 @@ where
         self.node_stack.pop();
     }
 
-    #[inline]
     pub(super) fn add_node<'ctx>(&'ctx mut self, node: Node<'ctx, 'data, 'arena, T>) -> NodeId {
-        self.insert_node(node)
-    }
-
-    pub(super) fn insert_node<'ctx>(&'ctx mut self, node: Node<'ctx, 'data, 'arena, T>) -> NodeId {
         // process style to create the layout
         let node_id = self
             .tree
-            .new_leaf(taffy_style_from(&node.style.layout))
+            .new_leaf_with_context(
+                taffy_style_from(&node.style.layout),
+                NodeContext {
+                    input: NodeInput {
+                        enabled: node.use_inputs,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )
             .unwrap();
 
         // if there is a callback assigned then replace it with the final id

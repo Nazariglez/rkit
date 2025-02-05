@@ -3,25 +3,21 @@ use corelib::math::{bvec2, vec2, Rect, Vec2};
 use draw::{Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::FxHashMap;
 use taffy::prelude::length;
-use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree};
+use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree, TraversePartialTree};
 
 use crate::nui::ctx::{CtxId, NuiContext, OnDrawCb};
 
-use super::{CacheId, CACHE};
+use super::node::{NodeInput, NodeState};
+use super::{CacheId, NodeContext, CACHE};
 
 pub trait Draw2DUiExt {
-    fn ui(&mut self) -> NuiLayout<()>;
-    fn ui_with<'draw, 'data, T>(&'draw mut self, data: &'data T) -> NuiLayout<'data, 'draw, T>
+    fn ui<'draw, 'data, T>(&'draw mut self, data: &'data mut T) -> NuiLayout<'data, 'draw, T>
     where
         'data: 'draw;
 }
 
 impl Draw2DUiExt for Draw2D {
-    fn ui(&mut self) -> NuiLayout<()> {
-        self.ui_with(&())
-    }
-
-    fn ui_with<'draw, 'data, T>(&'draw mut self, data: &'data T) -> NuiLayout<'data, 'draw, T>
+    fn ui<'draw, 'data, T>(&'draw mut self, data: &'data mut T) -> NuiLayout<'data, 'draw, T>
     where
         'data: 'draw,
     {
@@ -32,7 +28,7 @@ impl Draw2DUiExt for Draw2D {
 pub struct NuiLayout<'data, 'draw, T: 'data> {
     id: CacheId,
     draw: &'draw mut Draw2D,
-    data: &'data T,
+    data: &'data mut T,
     size: Option<Vec2>,
 
     // reuse last frame layout if available
@@ -49,7 +45,7 @@ impl<'data, 'draw, T> NuiLayout<'data, 'draw, T>
 where
     T: 'data,
 {
-    fn new(draw: &'draw mut Draw2D, data: &'data T) -> Self {
+    fn new(draw: &'draw mut Draw2D, data: &'data mut T) -> Self {
         let id = CACHE.with_borrow_mut(|cache| cache.gen_id());
         Self {
             id,
@@ -97,7 +93,7 @@ where
         } = self;
         let size = size.unwrap_or(draw.size());
 
-        let mut tree = TaffyTree::<()>::new();
+        let mut tree = TaffyTree::new();
         let root_id = tree
             .new_leaf(Style {
                 flex_grow: 1.0,
@@ -127,6 +123,7 @@ where
             mut tree,
             mut callbacks,
             cached_styles,
+            data,
             ..
         } = ctx;
 
@@ -151,7 +148,8 @@ where
             }
 
             let root_bounds = Rect::new(Vec2::ZERO, size);
-            let tree = cache.layouts.get(&layout_id).as_ref().map(|(_, tree)| tree);
+            let mut cached_layout = cache.layouts.get_mut(&layout_id);
+            let tree = cached_layout.as_mut().map(|(_, tree)| tree);
             if let Some(tree) = tree {
                 draw_node(
                     root_id,
@@ -223,12 +221,95 @@ where
         self
     }
 }
+
+enum NodeTree {
+    Root(NodeId),
+    Node { parent: NodeId, node_id: NodeId },
+    StartChildrenOf(NodeId),
+    EndChildrenOf(NodeId),
+}
+
+fn generate_node_tree(root: NodeId, tree: &TaffyTree<NodeContext>) -> Vec<NodeTree> {
+    let mut list = Vec::with_capacity(tree.total_node_count());
+    recursive_node(None, root, tree, &mut list);
+    list
+}
+
+fn recursive_node(
+    parent: Option<NodeId>,
+    node_id: NodeId,
+    tree: &TaffyTree<NodeContext>,
+    list: &mut Vec<NodeTree>,
+) {
+    let id = match parent {
+        Some(parent) => NodeTree::Node { parent, node_id },
+        None => NodeTree::Root(node_id),
+    };
+
+    list.push(id);
+
+    if tree.child_count(node_id) == 0 {
+        return;
+    }
+
+    list.push(NodeTree::StartChildrenOf(node_id));
+
+    tree.child_ids(node_id).for_each(|child_id| {
+        recursive_node(Some(node_id), child_id, tree, list);
+    });
+
+    list.push(NodeTree::EndChildrenOf(node_id));
+}
+
+fn process_nodes<T>(
+    root_id: NodeId,
+    callbacks: &mut FxHashMap<CtxId, &mut OnDrawCb<T>>,
+    tree: &mut TaffyTree<NodeContext>,
+    draw: &mut Draw2D,
+    data: &mut T,
+    use_culling: bool,
+    parent_bounds: Rect,
+) {
+    let nodes = generate_node_tree(root_id, tree);
+
+    nodes.iter().for_each(|nt| {
+        let (id, bounds, layout, skip) = match nt {
+            NodeTree::Root(node_id) => {
+                let layout = tree.layout(*node_id).unwrap();
+                let bounds = Rect::new(
+                    vec2(layout.location.x, layout.location.y),
+                    vec2(layout.size.width, layout.size.height),
+                );
+                (*node_id, bounds, *layout)
+            }
+            NodeTree::Node { parent, node_id } => {
+                let parent_layout = tree.layout(*parent).unwrap();
+                let layout = tree.layout(*node_id).unwrap();
+                let bounds = Rect::new(
+                    vec2(
+                        layout.location.x + parent_layout.location.x,
+                        layout.location.y + parent_layout.location.y,
+                    ),
+                    vec2(layout.size.width, layout.size.height),
+                );
+                (*node_id, bounds, *layout)
+            }
+            _ => return,
+        };
+
+        let context = tree.get_node_context_mut(id).unwrap();
+        context.state.size = bounds.size;
+        context.state.position = bounds.origin;
+        context.state.content_size = vec2(layout.content_size.width, layout.content_size.height);
+    });
+}
+
 fn draw_node<T>(
     node_id: NodeId,
     callbacks: &mut FxHashMap<CtxId, &mut OnDrawCb<T>>,
-    tree: &TaffyTree<()>,
+    tree: &mut TaffyTree<NodeContext>,
     draw: &mut Draw2D,
-    data: &T,
+    data: &mut T,
     use_culling: bool,
     parent_bounds: Rect,
 ) {

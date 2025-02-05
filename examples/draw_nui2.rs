@@ -4,14 +4,25 @@ use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Vec2};
 use rkit::nui::prelude::*;
 
-fn main() -> Result<(), String> {
-    rkit::init().update(update).run()
+#[derive(Default)]
+struct State {
+    color1: Color,
+    color2: Color,
 }
 
-fn update() {
+fn main() -> Result<(), String> {
+    rkit::init_with(|| State {
+        color1: Color::WHITE,
+        color2: Color::PINK,
+    })
+    .update(update)
+    .run()
+}
+
+fn update(state: &mut State) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
-    draw.ui().show(|ctx| {
+    draw.ui(&mut ()).show(|ctx| {
         // root
         let root_size = ctx.size();
         ctx.node()
@@ -23,7 +34,8 @@ fn update() {
                     .justify_content_center(),
             )
             .on_draw(|draw, l, _| {
-                draw_quad(draw, l.size.width, l.size.height, Color::OLIVE);
+                draw_quad(draw, l.size.width, l.size.height, state.color2);
+                // *state += 10.0;
             })
             .add_with_children(|ctx| {
                 // container
@@ -51,7 +63,7 @@ fn update() {
                         ctx.node()
                             .set_style(Style::default().size_auto().width(200.0))
                             .on_draw(|draw, l, _| {
-                                draw_quad(draw, l.size.width, l.size.height, Color::GREEN);
+                                draw_quad(draw, l.size.width, l.size.height, state.color1);
                             })
                             .add();
 

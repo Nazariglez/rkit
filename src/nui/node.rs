@@ -1,3 +1,4 @@
+use crate::math::Vec2;
 use taffy::Layout;
 
 use super::{ctx::NuiContext, style::Style};
@@ -21,6 +22,7 @@ where
     pub(super) temp_id: u64,
     pub(super) ctx: Option<&'ctx mut NuiContext<'data, 'arena, T>>,
     pub(super) style: Style,
+    pub(super) use_inputs: bool,
 }
 
 impl<'ctx, 'data, 'arena, T> Node<'ctx, 'data, 'arena, T>
@@ -33,6 +35,7 @@ where
             temp_id: ctx.temp_id,
             ctx: Some(ctx),
             style: Style::default(),
+            use_inputs: false,
         }
     }
 
@@ -41,7 +44,12 @@ where
         self
     }
 
-    pub fn on_draw<F: for<'draw> FnMut(&'draw mut Draw2D, Layout, &T) + 'data>(
+    pub fn enable_input(mut self) -> Self {
+        self.use_inputs = true;
+        self
+    }
+
+    pub fn on_draw<F: for<'draw> Fn(&'draw mut Draw2D, Layout, &mut T) + 'data>(
         mut self,
         cb: F,
     ) -> Self {
@@ -55,7 +63,7 @@ where
         Style::default()
     }
 
-    pub fn add_with_children<F: FnMut(&mut NuiContext<T>)>(mut self, cb: F)
+    pub fn add_with_children<F: Fn(&mut NuiContext<'data, 'arena, T>)>(mut self, cb: F)
     where
         Self: Sized,
     {
@@ -71,3 +79,35 @@ where
         ctx.add_node(self);
     }
 }
+
+#[derive(Debug, Default)]
+pub struct NodeState {
+    pub(super) position: Vec2,
+    pub(super) size: Vec2,
+    pub(super) content_size: Vec2,
+}
+
+impl NodeState {
+    pub fn position(&self) -> Vec2 {
+        self.position
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.size
+    }
+
+    pub fn content_size(&self) -> Vec2 {
+        self.content_size
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct NodeInput {
+    pub(super) enabled: bool,
+    pub(super) pointer_position: Vec2,
+    pub(super) hover: bool,
+    pub(super) just_enter: bool,
+    pub(super) just_exit: bool,
+}
+
+// impl NodeInput {}
