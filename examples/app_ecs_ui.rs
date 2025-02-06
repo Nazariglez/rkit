@@ -1,6 +1,10 @@
+use core::panic;
+
 use draw::create_draw_2d;
+use rkit::app::window_size;
 use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
+use rkit::math::{vec2, Vec2};
+use rkit::nui::style::{Style as NStyle, Unit};
 use rkit::prelude::*;
 use rustc_hash::FxHashMap;
 
@@ -23,15 +27,31 @@ impl Plugin for UIPlugin {
     }
 }
 
-fn compute_layout_system(mut query: Query<&mut UINode>, mut layouts: ResMut<UILayouts>) {
+fn compute_layout_system(
+    mut query: Query<&mut UINode>,
+    mut layouts: ResMut<UILayouts>,
+    win: Res<Window>,
+) {
     layouts.layouts.iter_mut().for_each(|(id, layout)| {
+        layout.set_size(win.size()); // TODO: fixme
         let updated = layout.update();
-        // TODO: update UINode info we need to use UIStyle as input and UIWhatever as output
-        layout.tree.child_ids(parent_node_id)
+        if !updated {
+            return;
+        }
+
+        query
+            .iter_mut()
+            .filter(|ui_node| ui_node.layout == layout.id)
+            .for_each(|mut ui_node| {
+                let l = layout.tree.layout(ui_node.id).unwrap();
+                println!("~{l:?}");
+                ui_node.size = vec2(l.size.width, l.size.height);
+                ui_node.position = vec2(l.location.x, l.location.y);
+            });
     });
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct UINode {
     pub id: NodeId,
     pub layout: UILayoutId,
@@ -63,36 +83,51 @@ impl LayoutData {
     }
 
     pub fn set_size(&mut self, size: Vec2) {
+        if size == self.size {
+            return;
+        }
+
         self.size = size;
+        self.tree
+            .set_style(
+                self.root,
+                Style {
+                    size: Size {
+                        width: Dimension::Length(size.x),
+                        height: Dimension::Length(size.y),
+                    },
+                    ..Default::default()
+                },
+            )
+            .unwrap();
         self.dirty = true;
     }
 
     pub fn add_node(&mut self, entity: Entity, style: Style, parent: Option<NodeId>) -> NodeId {
         self.dirty = true;
         let node_id = self.tree.new_leaf_with_context(style, entity).unwrap();
-        if let Some(parent) = parent {
-            self.tree.add_child(parent, node_id).unwrap();
-        }
+        let parent_id = parent.unwrap_or(self.root);
+        self.tree.add_child(parent_id, node_id).unwrap();
         node_id
     }
 
     pub fn update(&mut self) -> bool {
-        if !self.dirty {
-            return false;
+        if self.dirty {
+            self.tree
+                .compute_layout(
+                    self.root,
+                    Size {
+                        width: AvailableSpace::Definite(self.size.x),
+                        height: AvailableSpace::Definite(self.size.y),
+                    },
+                )
+                .unwrap();
+
+            self.dirty = false;
+            return true;
         }
 
-        self.dirty = false;
-        self.tree
-            .compute_layout(
-                self.root,
-                Size {
-                    width: AvailableSpace::Definite(self.size.x),
-                    height: AvailableSpace::Definite(self.size.y),
-                },
-            )
-            .unwrap();
-
-        return true;
+        false
     }
 }
 
@@ -130,12 +165,12 @@ pub struct SpawnUICommand {
     bundles: Vec<Box<dyn FnOnce(&mut World, &mut FxHashMap<usize, NodeId>) + Send>>,
 }
 
-#[derive(Component, Default)]
-pub struct UIStyle {}
+#[derive(Component, Default, Deref)]
+pub struct UIStyle(NStyle);
 
 impl UIStyle {
     fn to_taffy(&self) -> Style {
-        Style::default()
+        self.0.to_taffy()
     }
 }
 
@@ -154,6 +189,8 @@ impl SpawnUICommandBuilder<'_, '_, '_> {
                     .map(|(e, style)| (e, style.to_taffy()))
                     .unwrap();
 
+                println!("style: {:?}", style.size);
+
                 let mut layouts = world.get_resource_mut::<UILayouts>().unwrap();
                 let parent_id = parent_id.and_then(|p_id| ids.get(&p_id)).cloned();
                 let node_id = layouts.add(entity, layout_id, style, parent_id);
@@ -162,6 +199,8 @@ impl SpawnUICommandBuilder<'_, '_, '_> {
                 world.entity_mut(entity).insert(UINode {
                     layout: layout_id,
                     id: node_id,
+                    position: Vec2::ZERO,
+                    size: Vec2::ONE,
                 });
             },
         ));
@@ -234,61 +273,74 @@ pub struct UITint(Color);
 #[derive(Component, Deref)]
 pub struct UISize(Vec2);
 
+#[derive(Component, Deref)]
+pub struct UIOrder(f32);
+
 fn setup_system(mut cmds: Commands, win: Res<Window>) {
     cmds.spawn_ui(
         UILayoutId("main"),
-        (UIPos(Vec2::ZERO), UITint(Color::WHITE), UISize(win.size())),
-    )
-    .with_children(|cmd| {
-        cmd.add(((
-            UIPos(Vec2::splat(20.0)),
-            UITint(Color::ORANGE),
-            UISize(Vec2::splat(400.0)),
-        ),))
-            .with_children(|cmd| {
-                cmd.add((
-                    UIPos(Vec2::splat(20.0)),
-                    UITint(Color::GREEN),
-                    UISize(Vec2::splat(40.0)),
-                ));
-            });
-
-        cmd.add((
-            UIPos(Vec2::splat(500.0)),
-            UITint(Color::BLUE),
-            UISize(Vec2::splat(40.0)),
-        ));
-    });
-
-    cmds.spawn_ui(
-        UILayoutId("main"),
         (
-            UIPos(Vec2::splat(20.0) + Vec2::splat(25.0)),
-            UITint(Color::ORANGE),
-            UISize(Vec2::splat(400.0)),
+            UIStyle(
+                NStyle::default()
+                    .flex_row()
+                    .size(win.width(), win.height())
+                    .align_items_center()
+                    .justify_content_center(),
+            ),
+            UITint(Color::WHITE),
+            UIOrder(0.0),
         ),
     )
     .with_children(|cmd| {
-        cmd.add((
-            UIPos(Vec2::splat(20.0) + Vec2::splat(25.0)),
-            UITint(Color::GREEN),
-            UISize(Vec2::splat(40.0)),
-        ));
-
-        cmd.add((
-            UIPos(Vec2::splat(500.0) + Vec2::splat(25.0)),
-            UITint(Color::BLUE),
-            UISize(Vec2::splat(40.0)),
-        ));
+        cmd.add(((
+            UIStyle(
+                NStyle::default()
+                    .flex_row()
+                    .justify_content_space_evenly()
+                    .size(Unit::Relative(0.9), Unit::Relative(0.9)),
+                // .size(Unit::Pixel(700.0), Unit::Pixel(500.0)),
+            ),
+            UITint(Color::ORANGE),
+            UIOrder(1.0),
+        ),))
+            .with_children(|cmd| {
+                cmd.add((
+                    UIStyle(NStyle::default().size_auto().width(200.0)),
+                    UITint(Color::RED),
+                    UIOrder(2.0),
+                ));
+                cmd.add((
+                    UIStyle(NStyle::default().size_auto().width(200.0)),
+                    UITint(Color::GREEN),
+                    UIOrder(3.0),
+                ));
+                cmd.add((
+                    UIStyle(NStyle::default().size_auto().width(200.0)),
+                    UITint(Color::BLUE),
+                    UIOrder(4.0),
+                ));
+            });
     });
 }
 
-fn draw_system(query: Query<(&UIPos, &UITint, &UISize)>) {
+fn draw_system(query: Query<(&UINode, &UITint, &UIOrder)>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
-    for (pos, tint, size) in &query {
-        draw.rect(Vec2::ZERO, size.0).translate(pos.0).color(tint.0);
+    // let query = query
+    //     .iter()
+    //     .sort_by::<(&UINode, &UITint, &UIOrder)>(|(_, _, o_a), (_, _, o_b)| {
+    //         o_a.0
+    //             .partial_cmp(&o_b.0)
+    //             .unwrap_or(std::cmp::Ordering::Equal)
+    //     });
+
+    println!("---");
+    for (node, tint, _) in &query {
+        println!("print {node:?}");
+        draw.rect(Vec2::ZERO, node.size)
+            .translate(node.position)
+            .color(tint.0);
     }
 
     gfx::render_to_frame(&draw).unwrap();

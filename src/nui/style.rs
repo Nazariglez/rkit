@@ -544,6 +544,10 @@ impl Style {
         self.layout.justify_content = Some(JustifyContent::SpaceAround);
         self
     }
+
+    pub fn to_taffy(&self) -> TStyle {
+        taffy_style_from(&self.layout)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
