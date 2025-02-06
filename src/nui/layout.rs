@@ -3,11 +3,10 @@ use corelib::math::{bvec2, vec2, Rect, Vec2};
 use draw::{Draw2D, Transform2D, Transform2DBuilder};
 use rustc_hash::FxHashMap;
 use taffy::prelude::length;
-use taffy::{AvailableSpace, NodeId, Size, Style, TaffyTree, TraversePartialTree};
+use taffy::{AvailableSpace, Layout, NodeId, Size, Style, TaffyTree, TraversePartialTree};
 
 use crate::nui::ctx::{CtxId, NuiContext, OnDrawCb};
 
-use super::node::{NodeInput, NodeState};
 use super::{CacheId, NodeContext, CACHE};
 
 pub trait Draw2DUiExt {
@@ -229,20 +228,45 @@ enum NodeTree {
     EndChildrenOf(NodeId),
 }
 
-fn generate_node_tree(root: NodeId, tree: &TaffyTree<NodeContext>) -> Vec<NodeTree> {
+fn prepare_node_tree(root: NodeId, tree: &TaffyTree<NodeContext>, culling: bool) -> Vec<NodeTree> {
     let mut list = Vec::with_capacity(tree.total_node_count());
-    recursive_node(None, root, tree, &mut list);
+    recursive_node_tree(None, root, tree, &mut list, culling);
     list
 }
 
-fn recursive_node(
+fn node_intersect_parent(parent_layout: &Layout, node_layout: &Layout) -> bool {
+    let parent_bounds = Rect::new(
+        vec2(parent_layout.location.x, parent_layout.location.y),
+        vec2(node_layout.size.width, node_layout.size.height),
+    );
+
+    let node_bounds = Rect::new(
+        vec2(node_layout.location.x, node_layout.location.y)
+            + vec2(parent_layout.location.x, parent_layout.location.y),
+        vec2(node_layout.size.width, node_layout.size.height),
+    );
+
+    parent_bounds.intersects(&node_bounds)
+}
+
+fn recursive_node_tree(
     parent: Option<NodeId>,
     node_id: NodeId,
     tree: &TaffyTree<NodeContext>,
     list: &mut Vec<NodeTree>,
+    culling: bool,
 ) {
+    let node_layout = tree.layout(node_id).unwrap();
+
     let id = match parent {
-        Some(parent) => NodeTree::Node { parent, node_id },
+        Some(parent) => {
+            let parent_layout = tree.layout(parent).unwrap();
+            if culling && !node_intersect_parent(parent_layout, node_layout) {
+                return;
+            }
+
+            NodeTree::Node { parent, node_id }
+        }
         None => NodeTree::Root(node_id),
     };
 
@@ -255,7 +279,7 @@ fn recursive_node(
     list.push(NodeTree::StartChildrenOf(node_id));
 
     tree.child_ids(node_id).for_each(|child_id| {
-        recursive_node(Some(node_id), child_id, tree, list);
+        recursive_node_tree(Some(node_id), child_id, tree, list, culling);
     });
 
     list.push(NodeTree::EndChildrenOf(node_id));
@@ -270,37 +294,27 @@ fn process_nodes<T>(
     use_culling: bool,
     parent_bounds: Rect,
 ) {
-    let nodes = generate_node_tree(root_id, tree);
+    let nodes = prepare_node_tree(root_id, tree, use_culling);
 
-    nodes.iter().for_each(|nt| {
-        let (id, bounds, layout, skip) = match nt {
+    nodes.iter().rev().for_each(|nt| {
+        let (id, layout) = match nt {
             NodeTree::Root(node_id) => {
                 let layout = tree.layout(*node_id).unwrap();
-                let bounds = Rect::new(
-                    vec2(layout.location.x, layout.location.y),
-                    vec2(layout.size.width, layout.size.height),
-                );
-                (*node_id, bounds, *layout)
+                (*node_id, *layout)
             }
             NodeTree::Node { parent, node_id } => {
-                let parent_layout = tree.layout(*parent).unwrap();
                 let layout = tree.layout(*node_id).unwrap();
-                let bounds = Rect::new(
-                    vec2(
-                        layout.location.x + parent_layout.location.x,
-                        layout.location.y + parent_layout.location.y,
-                    ),
-                    vec2(layout.size.width, layout.size.height),
-                );
-                (*node_id, bounds, *layout)
+                (*node_id, *layout)
             }
             _ => return,
         };
 
         let context = tree.get_node_context_mut(id).unwrap();
-        context.state.size = bounds.size;
-        context.state.position = bounds.origin;
+        context.state.size = vec2(layout.size.width, layout.size.height);
+        context.state.position = vec2(layout.location.x, layout.location.y);
         context.state.content_size = vec2(layout.content_size.width, layout.content_size.height);
+
+        if context.input.enabled {}
     });
 }
 
