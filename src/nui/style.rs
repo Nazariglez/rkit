@@ -112,6 +112,11 @@ impl Style {
     }
 
     #[inline]
+    pub fn size_full(self) -> Self {
+        self.size(Unit::Relative(1.0), Unit::Relative(1.0))
+    }
+
+    #[inline]
     pub fn width(mut self, unit: impl Into<Unit>) -> Self {
         self.layout.width = unit.into();
         self
