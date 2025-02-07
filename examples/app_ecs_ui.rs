@@ -1,10 +1,10 @@
-use draw::{create_draw_2d, Draw2D};
+use bevy_ecs::query::ReadOnlyQueryData;
+use draw::{create_draw_2d, Draw2D, Transform2D};
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Mat3, Vec2};
 use rkit::nui::style::{Style as NStyle, Unit};
 use rkit::prelude::*;
 use rustc_hash::FxHashMap;
-use std::sync::Arc;
 
 use taffy::prelude::*;
 
@@ -321,7 +321,7 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
                     .justify_content_center(),
             ),
             UITint(Color::WHITE),
-            UIOrder(0.0),
+            UIRender::new::<(&UITint, &UINode), _>(draw_node),
         ),
     )
     .with_children(|cmd| {
@@ -333,29 +333,35 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
                     .size(Unit::Relative(0.9), Unit::Relative(0.9)),
             ),
             UITint(Color::ORANGE),
-            UIOrder(1.0),
+            UIRender::new::<(&UITint, &UINode), _>(draw_node),
         ),))
             .with_children(|cmd| {
                 cmd.add((
                     UIStyle(NStyle::default().size_auto().width(Unit::Relative(0.4))),
                     UITint(Color::RED),
-                    UIOrder(2.0),
+                    UIRender::new::<(&UITint, &UINode), _>(draw_node),
                 ));
                 cmd.add((
                     UIStyle(NStyle::default().size_auto().width(200.0)),
                     UITint(Color::GREEN),
-                    UIOrder(3.0),
+                    UIRender::new::<(&UITint, &UINode), _>(draw_node),
                 ));
                 cmd.add((
                     UIStyle(NStyle::default().size_auto().width(Unit::Relative(0.4))),
                     UITint(Color::BLUE),
-                    UIOrder(4.0),
-                    UIRender::new(|draw, node, data: &UIStyle| {
-                        draw.rect(Vec2::ZERO, node.size).color(Color::BLUE);
+                    UIRender::new::<(&UITint, Option<&UINode>), _>(|draw, q| {
+                        if let Some(node) = q.1 {
+                            draw.rect(Vec2::ZERO, node.size).color(q.0 .0);
+                        }
                     }),
                 ));
             });
     });
+}
+
+fn draw_node(draw: &mut Draw2D, components: (&UITint, &UINode)) {
+    let (tint, node) = components;
+    draw.rect(Vec2::ZERO, node.size).color(tint.0);
 }
 
 fn draw_ui(layout: UILayoutId, draw: &mut Draw2D, world: &mut World) {
@@ -364,7 +370,13 @@ fn draw_ui(layout: UILayoutId, draw: &mut Draw2D, world: &mut World) {
             graph.iter().for_each(|ng| match ng {
                 UINodeGraph::Begin(entity) => {
                     if let Some(node) = world.get::<UINode>(*entity) {
-                        draw.push_matrix(Mat3::from_translation(node.position));
+                        draw.push_matrix(
+                            Transform2D::builder()
+                                .set_size(node.size)
+                                .set_translation(node.position)
+                                .build()
+                                .as_mat3(),
+                        );
                     }
                 }
                 UINodeGraph::Node(entity) => {
@@ -385,9 +397,7 @@ fn draw_ui(layout: UILayoutId, draw: &mut Draw2D, world: &mut World) {
 fn draw_system(world: &mut World) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
-
     draw_ui(UILayoutId("main"), &mut draw, world);
-
     gfx::render_to_frame(&draw).unwrap();
 }
 
@@ -396,20 +406,17 @@ pub struct UILayoutId(&'static str);
 
 #[derive(Component)]
 struct UIRender {
-    cb: Arc<dyn Fn(&mut Draw2D, &World, Entity) + Send + Sync + 'static>,
+    cb: Box<dyn Fn(&mut Draw2D, &World, Entity) + Send + Sync + 'static>,
 }
 
 impl UIRender {
-    pub fn new<T: Component + 'static, F: Fn(&mut Draw2D, &UINode, &T) + Send + Sync + 'static>(
-        cb: F,
-    ) -> Self {
-        let wrapped = Arc::new(move |draw: &mut Draw2D, world: &World, entity: Entity| {
-            let (Some(node), Some(data)) = (world.get::<UINode>(entity), world.get::<T>(entity))
-            else {
-                return;
-            };
-
-            cb(draw, node, data);
+    pub fn new<Q, F>(cb: F) -> Self
+    where
+        Q: ReadOnlyQueryData + 'static,
+        F: Fn(&mut Draw2D, Q::Item<'_>) + Send + Sync + 'static,
+    {
+        let wrapped = Box::new(move |draw: &mut Draw2D, world: &World, entity: Entity| {
+            cb(draw, world.entity(entity).components::<Q>());
         });
         Self { cb: wrapped }
     }
