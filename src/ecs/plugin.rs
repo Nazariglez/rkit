@@ -74,10 +74,10 @@ impl Plugin for BaseSchedules {
 }
 
 pub struct AddMainPlugins {
-    window: bool,
-    time: bool,
-    mouse: bool,
-    keyboard: bool,
+    pub window: bool,
+    pub time: bool,
+    pub mouse: bool,
+    pub keyboard: bool,
 }
 
 impl Default for AddMainPlugins {

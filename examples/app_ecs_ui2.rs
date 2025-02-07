@@ -1,9 +1,10 @@
 use bevy_ecs::query::ReadOnlyQueryData;
 use draw::{create_draw_2d, Draw2D, Transform2D};
+use rkit::app::WindowConfig;
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Mat3, Vec2};
 use rkit::nui::style::{Style as NStyle, Unit};
-use rkit::prelude::*;
+use rkit::{prelude::*, time};
 use rustc_hash::FxHashMap;
 
 use taffy::prelude::*;
@@ -11,6 +12,7 @@ use taffy::prelude::*;
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(AddMainPlugins::default())
+        .add_plugin(AddWindowConfigPlugin::default().vsync(false))
         .add_plugin(UIPlugin)
         .add_systems(OnSetup, setup_system)
         .add_systems(OnRender, draw_system)
@@ -158,11 +160,6 @@ fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree
             .child_ids(node_id)
             .for_each(|child_id| process_graph(graph, child_id, tree)),
     }
-}
-
-#[derive(Component, Copy, Clone, Default)]
-pub struct Lid<T> {
-    _m: std::marker::PhantomData<T>,
 }
 
 #[derive(Default, Debug, Resource)]
@@ -315,6 +312,12 @@ pub struct UISize(Vec2);
 pub struct UIOrder(f32);
 
 fn setup_system(mut cmds: Commands, win: Res<Window>) {
+    // for _ in 0..15000 {
+    add_nodes(&mut cmds);
+    // }
+}
+
+fn add_nodes(cmds: &mut Commands) {
     cmds.spawn_ui(
         UILayoutId("main"),
         (
@@ -323,6 +326,7 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
                     .flex_row()
                     .size_full()
                     .align_items_center()
+                    .gap_x(20.0)
                     .justify_content_center(),
             ),
             UITint(Color::WHITE),
@@ -333,26 +337,16 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
         cmd.add(((
             UIStyle(
                 NStyle::default()
-                    .flex_row()
-                    .justify_content_space_evenly()
-                    .size(Unit::Relative(0.9), Unit::Relative(0.9)),
+                    .align_items_center()
+                    .justify_content_center()
+                    .size(100.0, 100.0),
             ),
             UITint(Color::ORANGE),
             UIRender::new::<(&UITint, &UINode), _>(draw_node),
         ),))
             .with_children(|cmd| {
                 cmd.add((
-                    UIStyle(NStyle::default().size_auto().width(Unit::Relative(0.4))),
-                    UITint(Color::RED),
-                    UIRender::new::<(&UITint, &UINode), _>(draw_node),
-                ));
-                cmd.add((
-                    UIStyle(NStyle::default().size_auto().width(200.0)),
-                    UITint(Color::GREEN),
-                    UIRender::new::<(&UITint, &UINode), _>(draw_node),
-                ));
-                cmd.add((
-                    UIStyle(NStyle::default().size_auto().width(Unit::Relative(0.4))),
+                    UIStyle(NStyle::default().size(40.0, 20.0)),
                     UITint(Color::BLUE),
                     UIRender::new::<(&UITint, Option<&UINode>), _>(|draw, q| {
                         if let Some(node) = q.1 {
@@ -361,6 +355,17 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
                     }),
                 ));
             });
+
+        cmd.add(((
+            UIStyle(
+                NStyle::default()
+                    .align_items_center()
+                    .justify_content_center()
+                    .size(100.0, 100.0),
+            ),
+            UITint(Color::RED),
+            UIRender::new::<(&UITint, &UINode), _>(draw_node),
+        ),));
     });
 }
 
@@ -370,6 +375,7 @@ fn draw_node(draw: &mut Draw2D, components: (&UITint, &UINode)) {
 }
 
 fn draw_ui(layout: UILayoutId, draw: &mut Draw2D, world: &mut World) {
+    println!("fps -> {:.2} ms: {:?}", time::fps(), time::delta());
     world.resource_scope(|world: &mut World, layouts: Mut<UILayouts>| {
         if let Some(graph) = layouts.graph(layout) {
             graph.iter().for_each(|ng| match ng {
