@@ -1,9 +1,10 @@
-use draw::create_draw_2d;
+use draw::{create_draw_2d, Draw2D};
 use rkit::gfx::{self, Color};
 use rkit::math::{vec2, Mat3, Vec2};
 use rkit::nui::style::{Style as NStyle, Unit};
 use rkit::prelude::*;
 use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
 use taffy::prelude::*;
 
@@ -336,7 +337,7 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
         ),))
             .with_children(|cmd| {
                 cmd.add((
-                    UIStyle(NStyle::default().size_auto().width(200.0)),
+                    UIStyle(NStyle::default().size_auto().width(Unit::Relative(0.4))),
                     UITint(Color::RED),
                     UIOrder(2.0),
                 ));
@@ -346,36 +347,74 @@ fn setup_system(mut cmds: Commands, win: Res<Window>) {
                     UIOrder(3.0),
                 ));
                 cmd.add((
-                    UIStyle(NStyle::default().size_auto().width(200.0)),
+                    UIStyle(NStyle::default().size_auto().width(Unit::Relative(0.4))),
                     UITint(Color::BLUE),
                     UIOrder(4.0),
+                    UIRender::new(|draw, node, data: &UIStyle| {
+                        draw.rect(Vec2::ZERO, node.size).color(Color::BLUE);
+                    }),
                 ));
             });
     });
 }
 
-fn draw_system(query: Query<(&UINode, &UITint, &UIOrder)>, layouts: Res<UILayouts>) {
+fn draw_ui(layout: UILayoutId, draw: &mut Draw2D, world: &mut World) {
+    world.resource_scope(|world: &mut World, layouts: Mut<UILayouts>| {
+        if let Some(graph) = layouts.graph(layout) {
+            graph.iter().for_each(|ng| match ng {
+                UINodeGraph::Begin(entity) => {
+                    if let Some(node) = world.get::<UINode>(*entity) {
+                        draw.push_matrix(Mat3::from_translation(node.position));
+                    }
+                }
+                UINodeGraph::Node(entity) => {
+                    if let Some(render) = world.get::<UIRender>(*entity) {
+                        render.render(draw, world, *entity);
+                    };
+                }
+                UINodeGraph::End(_entity) => {
+                    if world.entity(*_entity).contains::<UINode>() {
+                        draw.pop_matrix();
+                    }
+                }
+            });
+        }
+    });
+}
+
+fn draw_system(world: &mut World) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
-    if let Some(graph) = layouts.graph(UILayoutId("main")) {
-        graph.iter().for_each(|ng| match ng {
-            UINodeGraph::Begin(entity) => {
-                let (node, _, _) = query.get(*entity).unwrap();
-                draw.push_matrix(Mat3::from_translation(node.position));
-            }
-            UINodeGraph::Node(entity) => {
-                let (node, tint, _) = query.get(*entity).unwrap();
-                draw.rect(Vec2::ZERO, node.size).color(tint.0);
-            }
-            UINodeGraph::End(entity) => {
-                draw.pop_matrix();
-            }
-        });
-    }
+    draw_ui(UILayoutId("main"), &mut draw, world);
 
     gfx::render_to_frame(&draw).unwrap();
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub struct UILayoutId(&'static str);
+
+#[derive(Component)]
+struct UIRender {
+    cb: Arc<dyn Fn(&mut Draw2D, &World, Entity) + Send + Sync + 'static>,
+}
+
+impl UIRender {
+    pub fn new<T: Component + 'static, F: Fn(&mut Draw2D, &UINode, &T) + Send + Sync + 'static>(
+        cb: F,
+    ) -> Self {
+        let wrapped = Arc::new(move |draw: &mut Draw2D, world: &World, entity: Entity| {
+            let (Some(node), Some(data)) = (world.get::<UINode>(entity), world.get::<T>(entity))
+            else {
+                return;
+            };
+
+            cb(draw, node, data);
+        });
+        Self { cb: wrapped }
+    }
+
+    fn render(&self, draw: &mut Draw2D, world: &World, entity: Entity) {
+        (self.cb)(draw, world, entity);
+    }
+}
