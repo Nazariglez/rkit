@@ -1,12 +1,24 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
-use macros::Deref;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::{components::UINode, layout::UILayout, style::UIStyle};
 
 type BuilderCb = dyn FnOnce(&mut World, &mut FxHashMap<Entity, NodeId>) + Send;
+
+pub struct SpawnUICommand {
+    bundles: Vec<Box<BuilderCb>>,
+}
+
+pub struct AddUIChildCommand<T>
+where
+    T: Component,
+{
+    _layout: T,
+    parent: Entity,
+    child: Entity,
+}
 
 pub struct SpawnUICommandBuilder<'c, 'w, 's, T>
 where
@@ -19,37 +31,11 @@ where
     bundles: Option<Vec<Box<BuilderCb>>>,
 }
 
-pub struct SpawnUICommand {
-    bundles: Vec<Box<BuilderCb>>,
-}
-
-#[derive(Deref)]
-pub struct SpawnUICommandEntity<'temp, 'c, 'w, 's, T>
-where
-    T: Component + Copy,
-{
-    #[deref]
-    cmd: &'temp mut SpawnUICommandBuilder<'c, 'w, 's, T>,
-    entity: Entity,
-}
-
-impl<T> SpawnUICommandEntity<'_, '_, '_, '_, T>
-where
-    T: Component + Copy,
-{
-    pub fn entity_id(self) -> Entity {
-        self.entity
-    }
-}
-
 impl<'c, 'w, 's, T> SpawnUICommandBuilder<'c, 'w, 's, T>
 where
     T: Component + Copy,
 {
-    pub fn add<'temp, B: Bundle>(
-        &'temp mut self,
-        bundle: B,
-    ) -> SpawnUICommandEntity<'temp, 'c, 'w, 's, T> {
+    pub fn add<B: Bundle>(&mut self, bundle: B) -> &mut SpawnUICommandBuilder<'c, 'w, 's, T> {
         self.current_entity = self.cmds.spawn_empty().id();
         let entity = self.current_entity;
         let parent_id = self.stack.last().cloned();
@@ -66,7 +52,7 @@ where
 
                 let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();
                 let parent_id = parent_id.and_then(|p_id| ids.get(&p_id)).cloned();
-                let node_id = layout.add_node(entity, style, parent_id);
+                let node_id = layout.add_raw_node(entity, style, parent_id);
                 ids.insert(entity, node_id);
 
                 world.entity_mut(entity).insert(UINode {
@@ -77,24 +63,24 @@ where
             },
         ));
 
-        SpawnUICommandEntity { cmd: self, entity }
+        self
     }
 
-    pub fn with_children<'temp, F: FnOnce(&mut Self)>(
-        &'temp mut self,
+    pub fn with_children<F: FnOnce(&mut Self)>(
+        &mut self,
         cb: F,
-    ) -> SpawnUICommandEntity<'temp, 'c, 'w, 's, T> {
-        let entity = self.current_entity;
-
+    ) -> &mut SpawnUICommandBuilder<'c, 'w, 's, T> {
+        let prev = self.current_entity;
         self.stack.push(self.current_entity);
         cb(self);
         self.stack.pop();
+        self.current_entity = prev;
 
-        SpawnUICommandEntity { cmd: self, entity }
+        self
     }
 
-    pub fn entity_id(self) -> Entity {
-        self.stack.last().cloned().unwrap_or(self.current_entity)
+    pub fn entity_id(&self) -> Entity {
+        self.current_entity
     }
 }
 
@@ -120,6 +106,14 @@ pub trait CommandSpawnUIExt<'w, 's> {
     where
         T: Component + Copy,
         B: Bundle;
+
+    fn despawn_ui_node<T>(&mut self, layout: T, entity: Entity)
+    where
+        T: Component;
+
+    fn add_ui_child<T>(&mut self, layout: T, parent: Entity, child: Entity)
+    where
+        T: Component;
 }
 
 impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
@@ -143,6 +137,25 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
         builder.add(bundle);
         builder
     }
+
+    fn add_ui_child<T>(&mut self, layout: T, parent: Entity, child: Entity)
+    where
+        T: Component,
+    {
+        self.queue(AddUIChildCommand {
+            _layout: layout,
+            parent,
+            child,
+        });
+    }
+
+    fn despawn_ui_node<T>(&mut self, layout: T, entity: Entity)
+    where
+        T: Component,
+    {
+        // TODO: despawn in recursive all the tree children from this node
+        todo!()
+    }
 }
 
 impl Command for SpawnUICommand {
@@ -152,5 +165,20 @@ impl Command for SpawnUICommand {
         for cb in bundles {
             cb(world, &mut table);
         }
+    }
+}
+
+impl<T> Command for AddUIChildCommand<T>
+where
+    T: Component,
+{
+    fn apply(self, world: &mut World) {
+        let Self {
+            _layout,
+            parent,
+            child,
+        } = self;
+        let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();
+        layout.add_child(parent, child);
     }
 }

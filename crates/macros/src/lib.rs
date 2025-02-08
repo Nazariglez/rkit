@@ -451,10 +451,11 @@ pub fn derive_deref_macro(input: TokenStream) -> TokenStream {
                 .iter()
                 .enumerate()
                 .map(|(idx, f)| {
+                    let index = syn::Index::from(idx);
                     (
                         f.ty.clone(),
                         // The access to this field: self.0, self.1, etc.
-                        quote! { #idx },
+                        quote! { #index },
                         // Whether this field has the `#[deref]` attribute
                         f.attrs.iter().any(|attr| attr.path().is_ident("deref")),
                     )

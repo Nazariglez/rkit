@@ -1,7 +1,6 @@
-use crate::draw::{Draw2D, Transform2D};
+use crate::draw::{BaseCam2D, Draw2D, Transform2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
-use draw::BaseCam2D;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
@@ -13,25 +12,6 @@ enum UINodeGraph {
     Node(Entity),
     Begin(Entity),
     End(Entity),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct UILayoutId<T>
-where
-    T: Component,
-{
-    _m: std::marker::PhantomData<T>,
-}
-
-impl<T> Default for UILayoutId<T>
-where
-    T: Component,
-{
-    fn default() -> Self {
-        Self {
-            _m: Default::default(),
-        }
-    }
 }
 
 #[derive(Debug, Resource)]
@@ -137,6 +117,18 @@ where
         node_id
     }
 
+    pub(super) fn add_child(&mut self, parent: Entity, child: Entity) {
+        if let (Some(parent_id), Some(node_id)) =
+            (self.relations.get(&parent), self.relations.get(&child))
+        {
+            if let Some(prev_parent) = self.tree.parent(*node_id) {
+                self.tree.remove_child(prev_parent, *node_id).unwrap();
+            }
+            self.tree.add_child(*parent_id, *node_id).unwrap();
+            self.dirty_graph = true;
+        }
+    }
+
     pub(super) fn remove_node(&mut self, entity: Entity) {
         if let Some(node_id) = self.relations.remove(&entity) {
             self.tree.remove(node_id).unwrap();
@@ -165,9 +157,10 @@ fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree
                 .for_each(|child_id| process_graph(graph, child_id, tree));
             graph.push(UINodeGraph::End(e));
         }
-        _ => tree
-            .child_ids(node_id)
-            .for_each(|child_id| process_graph(graph, child_id, tree)),
+        _ => {
+            tree.child_ids(node_id)
+                .for_each(|child_id| process_graph(graph, child_id, tree));
+        }
     }
 }
 

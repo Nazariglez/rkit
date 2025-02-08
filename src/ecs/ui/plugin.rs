@@ -7,6 +7,9 @@ use crate::ecs::schedules::OnPostUpdate;
 use crate::ecs::window::Window;
 use bevy_ecs::prelude::*;
 
+#[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct UILayoutSysSet;
+
 pub struct UILayoutPlugin<T>(std::marker::PhantomData<T>);
 impl<T> Default for UILayoutPlugin<T>
 where
@@ -25,10 +28,14 @@ where
         let compute_system = generate_compute_system::<T>();
         let remove_system = generate_remove_system::<T>();
         let change_style_system = generate_change_style_system::<T>();
-        app.add_resource(UILayout::<T>::default()).add_systems(
-            OnPostUpdate,
-            (remove_system, change_style_system, compute_system).chain(),
-        )
+        app.add_resource(UILayout::<T>::default())
+            .add_systems(
+                OnPostUpdate,
+                (remove_system, change_style_system, compute_system)
+                    .chain()
+                    .in_set(UILayoutSysSet),
+            )
+            .configure_sets(OnPostUpdate, UILayoutSysSet)
     }
 }
 
