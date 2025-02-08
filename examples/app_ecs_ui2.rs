@@ -13,7 +13,7 @@ fn main() -> Result<(), String> {
         .run()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Component, Clone, Copy)]
 struct MainLayout;
 
 pub struct UIPlugin;
@@ -25,7 +25,7 @@ impl Plugin for UIPlugin {
 }
 
 fn compute_layout_system(
-    mut query: Query<&mut UINode<MainLayout>>,
+    mut query: Query<&mut UINode>,
     mut layout: ResMut<UILayout<MainLayout>>,
     win: Res<Window>,
 ) {
@@ -56,7 +56,7 @@ fn add_nodes(cmds: &mut Commands) {
                 .gap_x(20.0)
                 .justify_content_center(),
             UITint(Color::WHITE),
-            UIRender::new::<(&UITint, &UINode<MainLayout>), _>(draw_node),
+            UIRender::new::<(&UITint, &UINode), _>(draw_node),
         ),
     )
     .with_children(|cmd| {
@@ -66,13 +66,13 @@ fn add_nodes(cmds: &mut Commands) {
                 .justify_content_center()
                 .size(100.0, 100.0),
             UITint(Color::ORANGE),
-            UIRender::new::<(&UITint, &UINode<MainLayout>), _>(draw_node),
+            UIRender::new::<(&UITint, &UINode), _>(draw_node),
         ),))
             .with_children(|cmd| {
                 cmd.add((
                     UIStyle::default().size(40.0, 20.0),
                     UITint(Color::BLUE),
-                    UIRender::new::<(&UITint, &UINode<MainLayout>), _>(draw_node),
+                    UIRender::new::<(&UITint, &UINode), _>(draw_node),
                 ));
             });
 
@@ -82,12 +82,12 @@ fn add_nodes(cmds: &mut Commands) {
                 .justify_content_center()
                 .size(100.0, 100.0),
             UITint(Color::RED),
-            UIRender::new::<(&UITint, &UINode<MainLayout>), _>(draw_node),
+            UIRender::new::<(&UITint, &UINode), _>(draw_node),
         ),));
     });
 }
 
-fn draw_node(draw: &mut Draw2D, components: (&UITint, &UINode<MainLayout>)) {
+fn draw_node(draw: &mut Draw2D, components: (&UITint, &UINode)) {
     let (tint, node) = components;
     draw.rect(Vec2::ZERO, node.size()).color(tint.0);
 }

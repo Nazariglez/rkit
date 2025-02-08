@@ -48,7 +48,6 @@ where
                 ids.insert(entity, node_id);
 
                 world.entity_mut(entity).insert(UINode {
-                    layout: UILayoutId::<T>::default(),
                     node_id,
                     position: Vec2::ZERO,
                     size: Vec2::ONE,

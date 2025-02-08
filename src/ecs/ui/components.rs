@@ -1,4 +1,3 @@
-use super::layout::UILayoutId;
 use crate::draw::*;
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
@@ -6,25 +5,13 @@ use bevy_ecs::query::ReadOnlyQueryData;
 use taffy::prelude::*;
 
 #[derive(Component)]
-pub struct UINode<T>
-where
-    T: Send + Sync + 'static,
-{
-    pub(super) layout: UILayoutId<T>,
+pub struct UINode {
     pub(super) node_id: NodeId,
     pub(super) position: Vec2,
     pub(super) size: Vec2,
 }
 
-impl<T> UINode<T>
-where
-    T: Send + Sync + 'static,
-{
-    #[inline]
-    pub fn layout(&self) -> &UILayoutId<T> {
-        &self.layout
-    }
-
+impl UINode {
     #[inline]
     pub fn position(&self) -> Vec2 {
         self.position

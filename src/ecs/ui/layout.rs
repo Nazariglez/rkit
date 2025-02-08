@@ -123,7 +123,7 @@ where
         needs_compute
     }
 
-    pub fn update_node(&self, node: &mut UINode<T>) {
+    pub fn update_node(&self, node: &mut UINode) {
         let l = self.tree.layout(node.node_id).unwrap();
         node.size = vec2(l.size.width, l.size.height);
         node.position = vec2(l.location.x, l.location.y);
@@ -152,7 +152,7 @@ where
     world.resource_scope(|world: &mut World, layout: Mut<UILayout<T>>| {
         layout.graph.iter().for_each(|ng| match ng {
             UINodeGraph::Begin(entity) => {
-                if let Some(node) = world.get::<UINode<T>>(*entity) {
+                if let Some(node) = world.get::<UINode>(*entity) {
                     draw.push_matrix(
                         Transform2D::builder()
                             .set_size(node.size)
@@ -168,7 +168,7 @@ where
                 };
             }
             UINodeGraph::End(_entity) => {
-                if world.entity(*_entity).contains::<UINode<T>>() {
+                if world.entity(*_entity).contains::<UINode>() {
                     draw.pop_matrix();
                 }
             }
