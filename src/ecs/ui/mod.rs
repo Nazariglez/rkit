@@ -1,5 +1,6 @@
-mod command;
-mod components;
-mod layout;
+pub mod command;
+pub mod components;
+pub mod layout;
+pub mod plugin;
 pub(super) mod prelude;
-mod style;
+pub mod style;

@@ -1,11 +1,11 @@
 use super::app::App;
-use crate::ecs::input::{AddKeyboardPlugin, AddMousePlugin};
+use crate::ecs::input::{KeyboardPlugin, MousePlugin};
 use crate::ecs::schedules::{
     OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
     OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
     OnPreUpdate, OnRender, OnSetup, OnUpdate,
 };
-use crate::prelude::{AddTimePlugin, AddWindowPlugin, OnEngineSetup};
+use crate::prelude::{OnEngineSetup, TimePlugin, WindowPlugin};
 use bevy_ecs::prelude::Schedule;
 use bevy_ecs::schedule::ExecutorKind;
 
@@ -73,14 +73,14 @@ impl Plugin for BaseSchedules {
     }
 }
 
-pub struct AddMainPlugins {
+pub struct MainPlugins {
     pub window: bool,
     pub time: bool,
     pub mouse: bool,
     pub keyboard: bool,
 }
 
-impl Default for AddMainPlugins {
+impl Default for MainPlugins {
     fn default() -> Self {
         Self {
             window: true,
@@ -91,22 +91,22 @@ impl Default for AddMainPlugins {
     }
 }
 
-impl Plugin for AddMainPlugins {
+impl Plugin for MainPlugins {
     fn apply(self, mut app: App) -> App {
         if self.window {
-            app = app.add_plugin(AddWindowPlugin);
+            app = app.add_plugin(WindowPlugin);
         }
 
         if self.time {
-            app = app.add_plugin(AddTimePlugin);
+            app = app.add_plugin(TimePlugin);
         }
 
         if self.mouse {
-            app = app.add_plugin(AddMousePlugin);
+            app = app.add_plugin(MousePlugin);
         }
 
         if self.keyboard {
-            app = app.add_plugin(AddKeyboardPlugin);
+            app = app.add_plugin(KeyboardPlugin);
         }
 
         app

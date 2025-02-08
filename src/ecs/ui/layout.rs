@@ -2,9 +2,11 @@ use crate::draw::{Draw2D, Transform2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
 use draw::BaseCam2D;
+use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::components::{UINode, UIRender};
+use super::style::UIStyle;
 
 #[derive(Clone, Copy, Debug)]
 enum UINodeGraph {
@@ -16,14 +18,14 @@ enum UINodeGraph {
 #[derive(Debug, Clone, Copy)]
 pub struct UILayoutId<T>
 where
-    T: Send + Sync,
+    T: Component,
 {
     _m: std::marker::PhantomData<T>,
 }
 
 impl<T> Default for UILayoutId<T>
 where
-    T: Send + Sync,
+    T: Component,
 {
     fn default() -> Self {
         Self {
@@ -35,11 +37,12 @@ where
 #[derive(Debug, Resource)]
 pub struct UILayout<T>
 where
-    T: Send + Sync,
+    T: Component,
 {
-    id: UILayoutId<T>,
+    _m: std::marker::PhantomData<T>,
     dirty_layout: bool,
     dirty_graph: bool,
+    relations: FxHashMap<Entity, NodeId>,
     tree: TaffyTree<Entity>,
     graph: Vec<UINodeGraph>,
     size: Vec2,
@@ -48,15 +51,16 @@ where
 
 impl<T> Default for UILayout<T>
 where
-    T: Send + Sync,
+    T: Component,
 {
     fn default() -> Self {
         let mut tree = TaffyTree::<Entity>::new();
         let root = tree.new_leaf(Style::default()).unwrap();
         Self {
-            id: UILayoutId::default(),
+            _m: Default::default(),
             dirty_layout: true,
             dirty_graph: true,
+            relations: FxHashMap::default(),
             tree,
             graph: vec![],
             root,
@@ -67,7 +71,7 @@ where
 
 impl<T> UILayout<T>
 where
-    T: Send + Sync,
+    T: Component,
 {
     pub fn set_size(&mut self, size: Vec2) {
         if size == self.size {
@@ -90,16 +94,11 @@ where
         self.dirty_layout = true;
     }
 
-    pub fn add_node(&mut self, entity: Entity, style: Style, parent: Option<NodeId>) -> NodeId {
-        self.dirty_layout = true;
-        self.dirty_graph = true;
-        let node_id = self.tree.new_leaf_with_context(style, entity).unwrap();
-        let parent_id = parent.unwrap_or(self.root);
-        self.tree.add_child(parent_id, node_id).unwrap();
-        node_id
+    pub fn set_camera(&mut self, cam: impl BaseCam2D) {
+        // TODO: store cam data to use it on update, or fallback to window size
     }
 
-    pub fn update(&mut self, cam: Option<&dyn BaseCam2D>) -> bool {
+    pub fn update(&mut self) -> bool {
         let needs_compute = self.dirty_graph || self.dirty_layout;
         if needs_compute {
             self.tree
@@ -123,7 +122,34 @@ where
         needs_compute
     }
 
-    pub fn update_node(&self, node: &mut UINode) {
+    pub(super) fn add_raw_node(
+        &mut self,
+        entity: Entity,
+        style: Style,
+        parent: Option<NodeId>,
+    ) -> NodeId {
+        self.dirty_layout = true;
+        self.dirty_graph = true;
+        let node_id = self.tree.new_leaf_with_context(style, entity).unwrap();
+        let parent_id = parent.unwrap_or(self.root);
+        self.tree.add_child(parent_id, node_id).unwrap();
+        self.relations.insert(entity, node_id);
+        node_id
+    }
+
+    pub(super) fn remove_node(&mut self, entity: Entity) {
+        if let Some(node_id) = self.relations.remove(&entity) {
+            self.tree.remove(node_id).unwrap();
+            self.dirty_graph = true;
+        }
+    }
+
+    pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle) {
+        self.tree.set_style(node.node_id, style.to_taffy()).unwrap();
+        self.dirty_layout = true;
+    }
+
+    pub(super) fn set_node_layout(&self, node: &mut UINode) {
         let l = self.tree.layout(node.node_id).unwrap();
         node.size = vec2(l.size.width, l.size.height);
         node.position = vec2(l.location.x, l.location.y);
@@ -145,9 +171,9 @@ fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree
     }
 }
 
-pub fn draw_ui<T>(draw: &mut Draw2D, world: &mut World)
+pub fn draw_ui_layout<T>(draw: &mut Draw2D, world: &mut World)
 where
-    T: Send + Sync + 'static,
+    T: Component,
 {
     world.resource_scope(|world: &mut World, layout: Mut<UILayout<T>>| {
         layout.graph.iter().for_each(|ng| match ng {

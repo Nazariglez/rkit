@@ -10,7 +10,7 @@ use taffy::prelude::*;
 
 fn main() -> Result<(), String> {
     App::new()
-        .add_plugin(AddMainPlugins::default())
+        .add_plugin(MainPlugins::default())
         .add_plugin(UIPlugin)
         .add_systems(OnSetup, setup_system)
         .add_systems(OnRender, draw_system)
