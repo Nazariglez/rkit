@@ -136,6 +136,34 @@ where
         }
     }
 
+    pub(super) fn tree_from_node(&self, entity: Entity) -> Vec<Entity> {
+        debug_assert!(
+            !self.dirty_graph,
+            "The graph must be updated to get the right tree from a node"
+        );
+        let Some(start_idx) = self.graph.iter().position(|ng| match ng {
+            UINodeGraph::Begin(e) => e == &entity,
+            _ => false,
+        }) else {
+            return vec![];
+        };
+
+        let Some(end_idx) = self.graph.iter().position(|ng| match ng {
+            UINodeGraph::End(e) => e == &entity,
+            _ => false,
+        }) else {
+            return vec![];
+        };
+
+        self.graph[start_idx..=end_idx]
+            .iter()
+            .filter_map(|ng| match ng {
+                UINodeGraph::Node(entity) => Some(*entity),
+                _ => None,
+            })
+            .collect()
+    }
+
     pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle) {
         self.tree.set_style(node.node_id, style.to_taffy()).unwrap();
         self.dirty_layout = true;

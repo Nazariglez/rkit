@@ -19,6 +19,7 @@ struct MainLayout;
 pub struct Tint(Color);
 
 fn setup_system(mut cmds: Commands) {
+    let mut n = Entity::from_raw(0);
     let root = cmds
         .spawn_ui_node(
             MainLayout,
@@ -50,14 +51,16 @@ fn setup_system(mut cmds: Commands) {
                     ));
                 });
 
-            cmd.add(((
-                UIStyle::default()
-                    .align_items_center()
-                    .justify_content_center()
-                    .size(100.0, 100.0),
-                Tint(Color::RED),
-                UIRender::new::<(&Tint, &UINode), _>(draw_node),
-            ),));
+            n = cmd
+                .add(((
+                    UIStyle::default()
+                        .align_items_center()
+                        .justify_content_center()
+                        .size(100.0, 100.0),
+                    Tint(Color::RED),
+                    UIRender::new::<(&Tint, &UINode), _>(draw_node),
+                ),))
+                .entity_id();
         })
         .entity_id();
 
@@ -75,7 +78,7 @@ fn setup_system(mut cmds: Commands) {
         )
         .entity_id();
 
-    cmds.add_ui_child(MainLayout, root, child);
+    cmds.add_ui_child(MainLayout, n, child);
 }
 
 fn draw_node(draw: &mut Draw2D, components: (&Tint, &UINode)) {

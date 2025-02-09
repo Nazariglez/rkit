@@ -20,6 +20,14 @@ where
     child: Entity,
 }
 
+pub struct DespawnUICommand<T>
+where
+    T: Component,
+{
+    _layout: T,
+    entity: Entity,
+}
+
 pub struct SpawnUICommandBuilder<'c, 'w, 's, T>
 where
     T: Component + Copy,
@@ -153,8 +161,10 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
     where
         T: Component,
     {
-        // TODO: despawn in recursive all the tree children from this node
-        todo!()
+        self.queue(DespawnUICommand {
+            _layout: layout,
+            entity,
+        });
     }
 }
 
@@ -180,5 +190,18 @@ where
         } = self;
         let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();
         layout.add_child(parent, child);
+    }
+}
+
+impl<T> Command for DespawnUICommand<T>
+where
+    T: Component,
+{
+    fn apply(self, world: &mut World) {
+        let Self { _layout, entity } = self;
+        let layout = world.get_resource::<UILayout<T>>().unwrap();
+        layout.tree_from_node(entity).iter().for_each(|e| {
+            let _ = world.despawn(*e);
+        });
     }
 }
