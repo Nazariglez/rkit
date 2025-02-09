@@ -1,12 +1,10 @@
 use rkit::draw::create_draw_2d;
 use rkit::ecs::prelude::*;
-use rkit::ecs::{schedule::ExecutorKind, OnChange, OnEnter, OnExit, Plugin, Screen};
-use rkit::ecs::{App, ChangeScreen, OnCleanup, OnRender, OnSetup, OnUpdate};
+use rkit::gfx;
 use rkit::gfx::Color;
 use rkit::input::{is_key_pressed, KeyCode};
 use rkit::macros::Screen;
 use rkit::math::{vec2, Vec2};
-use rkit::{gfx, time};
 
 #[derive(Screen, Debug, Hash, Clone, PartialEq, Eq)]
 enum Scene {
@@ -24,7 +22,10 @@ impl Plugin for InitScenes {
     }
 }
 fn main() -> Result<(), String> {
-    App::new().add_plugin(InitScenes).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .add_plugin(InitScenes)
+        .run()
 }
 
 fn is_change_requested() -> bool {

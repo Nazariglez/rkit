@@ -12,7 +12,7 @@ pub mod ui;
 
 #[cfg(feature = "ecs")]
 pub mod ecs;
-pub mod nui;
+
 pub mod or_panic;
 pub mod prelude;
 

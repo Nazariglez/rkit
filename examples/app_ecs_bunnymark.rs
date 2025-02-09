@@ -1,14 +1,15 @@
-use corelib::input::{is_key_pressed, is_mouse_btn_down, MouseButton};
+use corelib::input::{is_mouse_btn_down, MouseButton};
 use rkit::draw::{create_draw_2d, Sprite};
 use rkit::ecs::prelude::*;
 use rkit::gfx::Color;
 use rkit::math::{vec2, Vec2};
 use rkit::random::Rng;
-use rkit::{gfx, random, time};
+use rkit::{gfx, random};
 
 fn main() -> Result<(), String> {
     App::new()
-        .add_plugin(WindowPlugin::default().title("BunnyMark"))
+        .add_plugin(MainPlugins::default())
+        .add_plugin(WindowConfigPlugin::default().title("BunnyMark"))
         .add_systems(OnSetup, setup_system)
         .add_systems(OnUpdate, (update_system, add_bunnies_system))
         .add_systems(OnRender, draw_system)
@@ -21,6 +22,7 @@ struct Pos(Vec2);
 struct Vel(Vec2);
 #[derive(Component, Debug, Deref)]
 struct BunnyColor(Color);
+
 #[derive(Resource, Deref)]
 struct Random(Rng);
 #[derive(Resource, Deref)]
@@ -38,7 +40,7 @@ fn setup_system(mut cmds: Commands) {
     let image = draw::create_sprite()
         .from_image(include_bytes!("./assets/bunny.png"))
         .build()
-        .map(|s| Image(s))
+        .map(Image)
         .unwrap();
     cmds.insert_resource(image);
 
@@ -74,7 +76,12 @@ fn update_system(mut query: Query<(&mut Pos, &mut Vel)>, mut rng: ResMut<Random>
     });
 }
 
-fn draw_system(query: Query<(&Pos, &BunnyColor)>, img: Res<Image>, counter: Res<Counter>) {
+fn draw_system(
+    query: Query<(&Pos, &BunnyColor)>,
+    img: Res<Image>,
+    counter: Res<Counter>,
+    time: Res<Time>,
+) {
     let mut draw = create_draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
@@ -82,7 +89,7 @@ fn draw_system(query: Query<(&Pos, &BunnyColor)>, img: Res<Image>, counter: Res<
         draw.image(&img).position(*pos).color(*color);
     });
 
-    draw.text(&format!("Bunnies: {}\nFPS: {:.2}", counter.0, time::fps()))
+    draw.text(&format!("Bunnies: {}\nFPS: {:.2}", counter.0, time.fps()))
         .size(10.0)
         .position(vec2(10.0, 10.0));
 
