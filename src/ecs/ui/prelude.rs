@@ -3,3 +3,4 @@ pub use super::components::*;
 pub use super::layout::*;
 pub use super::plugin::*;
 pub use super::style::*;
+pub use super::widgets::*;
