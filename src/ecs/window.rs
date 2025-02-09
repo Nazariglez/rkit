@@ -5,9 +5,9 @@ use corelib::math::{uvec2, UVec2, Vec2};
 use macros::Deref;
 
 #[derive(Default)]
-pub struct AddWindowPlugin;
+pub struct WindowPlugin;
 
-impl Plugin for AddWindowPlugin {
+impl Plugin for WindowPlugin {
     fn apply(self, mut app: App) -> App {
         app.add_systems(OnEngineSetup, init_window_system)
             .add_systems(OnEnginePreFrame, populate_window_system)
@@ -16,15 +16,15 @@ impl Plugin for AddWindowPlugin {
 }
 
 #[derive(Default, Debug, Resource, Deref)]
-pub struct AddWindowConfigPlugin(WindowConfig);
+pub struct WindowConfigPlugin(WindowConfig);
 
-impl Plugin for AddWindowConfigPlugin {
+impl Plugin for WindowConfigPlugin {
     fn apply(self, app: App) -> App {
         app.with_window(self.0)
     }
 }
 
-impl AddWindowConfigPlugin {
+impl WindowConfigPlugin {
     /// Set the window's title
     pub fn title(mut self, title: &str) -> Self {
         self.title = title.to_string();

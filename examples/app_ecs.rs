@@ -1,12 +1,12 @@
 use draw::create_draw_2d;
 use rkit::ecs::prelude::*;
-use rkit::ecs::{App, OnCleanup, OnRender, OnSetup, OnUpdate};
 use rkit::gfx::Color;
 use rkit::math::{vec2, Vec2};
 use rkit::{gfx, time};
 
 fn main() -> Result<(), String> {
     App::new()
+        .add_plugin(MainPlugins::default())
         .add_systems(OnSetup, setup_system)
         .add_systems(OnUpdate, update_system)
         .add_systems(OnRender, draw_system)
@@ -20,7 +20,6 @@ struct Pos(Vec2);
 struct Rect(Vec2);
 
 fn setup_system(mut cmds: Commands) {
-    println!("Hello World!");
     cmds.spawn((Pos(vec2(400.0, 300.0)), Rect(Vec2::splat(200.0))));
 }
 

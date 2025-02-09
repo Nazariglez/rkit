@@ -13,8 +13,8 @@ use corelib::math::Vec2;
 pub use corelib::input::{KeyCode, KeyCodeList, MouseButton, MouseButtonList};
 
 // -- Mouse
-pub struct AddMousePlugin;
-impl Plugin for AddMousePlugin {
+pub struct MousePlugin;
+impl Plugin for MousePlugin {
     fn apply(self, app: App) -> App {
         app.add_systems(OnEngineSetup, init_mouse_system)
             .add_systems(OnEnginePreFrame, populate_mouse_system)
@@ -203,8 +203,8 @@ fn sync_mouse_system(mut mouse: ResMut<Mouse>) {
 }
 
 // -- Keyboard
-pub struct AddKeyboardPlugin;
-impl Plugin for AddKeyboardPlugin {
+pub struct KeyboardPlugin;
+impl Plugin for KeyboardPlugin {
     fn apply(self, app: App) -> App {
         app.add_systems(OnEngineSetup, init_keyboard_system)
             .add_systems(OnEnginePreFrame, populate_keyboard_system)

@@ -4,8 +4,8 @@ use bevy_ecs::system::{Commands, ResMut};
 use corelib::time;
 use web_time::{Duration, Instant};
 
-pub struct AddTimePlugin;
-impl Plugin for AddTimePlugin {
+pub struct TimePlugin;
+impl Plugin for TimePlugin {
     fn apply(self, mut app: App) -> App {
         app.add_systems(OnEngineSetup, init_time_system)
             .add_systems(OnEnginePreFrame, update_time_system)

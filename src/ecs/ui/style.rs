@@ -1,553 +1,11 @@
+use bevy_ecs::prelude::*;
 use taffy::geometry as geom;
 use taffy::prelude::TaffyZero;
 use taffy::style as tstyle;
-use taffy::Style as TStyle;
+use taffy::style::Style as TStyle;
 
-// TODO: layout style
-
-#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Style {
-    pub layout: LayoutStyle,
-}
-
-impl Style {
-    #[inline]
-    pub fn flex(mut self) -> Self {
-        self.layout.display = Display::Flex;
-        self
-    }
-
-    #[inline]
-    pub fn grid(mut self) -> Self {
-        self.layout.display = Display::Grid;
-        self
-    }
-
-    #[inline]
-    pub fn hide(mut self) -> Self {
-        self.layout.display = Display::None;
-        self
-    }
-
-    pub fn relative(mut self) -> Self {
-        self.layout.mode = Mode::Relative;
-        self
-    }
-
-    pub fn absolute(mut self) -> Self {
-        self.layout.mode = Mode::Absolute;
-        self
-    }
-
-    #[inline]
-    pub fn flex_col(mut self) -> Self {
-        self.layout.flex_direction = FlexDirection::Col;
-        self
-    }
-
-    #[inline]
-    pub fn flex_row(mut self) -> Self {
-        self.layout.flex_direction = FlexDirection::Row;
-        self
-    }
-
-    #[inline]
-    pub fn flex_wrap(mut self) -> Self {
-        self.layout.flex_wrap = FlexWrap::Wrap;
-        self
-    }
-
-    #[inline]
-    pub fn flex_grow(mut self, value: f32) -> Self {
-        self.layout.flex_grow = value;
-        self
-    }
-
-    #[inline]
-    pub fn flex_shrink(mut self, value: f32) -> Self {
-        self.layout.flex_shrink = value;
-        self
-    }
-
-    #[inline]
-    pub fn flex_basis(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.flex_basis = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn top(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.top = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn bottom(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.bottom = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn left(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.left = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn right(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.right = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
-        self.layout.width = x.into();
-        self.layout.height = y.into();
-        self
-    }
-
-    #[inline]
-    pub fn size_auto(self) -> Self {
-        self.size(auto(), auto())
-    }
-
-    #[inline]
-    pub fn width(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.width = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn width_auto(mut self) -> Self {
-        self.layout.width = Unit::Auto;
-        self
-    }
-
-    #[inline]
-    pub fn height(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.height = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn height_auto(mut self) -> Self {
-        self.layout.height = Unit::Auto;
-        self
-    }
-
-    #[inline]
-    pub fn min_size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
-        self.layout.min_width = x.into();
-        self.layout.min_height = y.into();
-        self
-    }
-
-    #[inline]
-    pub fn min_width(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.min_width = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn min_width_auto(mut self) -> Self {
-        self.layout.min_width = Unit::Auto;
-        self
-    }
-
-    #[inline]
-    pub fn min_height(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.min_height = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn min_height_auto(mut self) -> Self {
-        self.layout.min_height = Unit::Auto;
-        self
-    }
-
-    #[inline]
-    pub fn max_size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
-        self.layout.max_width = x.into();
-        self.layout.max_height = y.into();
-        self
-    }
-
-    #[inline]
-    pub fn max_width(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.max_width = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn max_width_auto(mut self) -> Self {
-        self.layout.max_width = Unit::Auto;
-        self
-    }
-
-    #[inline]
-    pub fn max_height(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.max_height = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn max_height_auto(mut self) -> Self {
-        self.layout.max_height = Unit::Auto;
-        self
-    }
-
-    #[inline]
-    pub fn padding(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.padding_top = unit;
-        self.layout.padding_bottom = unit;
-        self.layout.padding_left = unit;
-        self.layout.padding_right = unit;
-        self
-    }
-
-    #[inline]
-    pub fn padding_y(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.padding_top = unit;
-        self.layout.padding_bottom = unit;
-        self
-    }
-
-    #[inline]
-    pub fn padding_x(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.padding_left = unit;
-        self.layout.padding_right = unit;
-        self
-    }
-
-    #[inline]
-    pub fn padding_top(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.padding_top = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn padding_bottom(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.padding_bottom = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn padding_left(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.padding_left = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn padding_right(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.padding_right = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn margin(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.margin_top = unit;
-        self.layout.margin_bottom = unit;
-        self.layout.margin_left = unit;
-        self.layout.margin_right = unit;
-        self
-    }
-
-    #[inline]
-    pub fn margin_y(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.margin_top = unit;
-        self.layout.margin_bottom = unit;
-        self
-    }
-
-    #[inline]
-    pub fn margin_x(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.margin_left = unit;
-        self.layout.margin_right = unit;
-        self
-    }
-
-    #[inline]
-    pub fn margin_top(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.margin_top = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn margin_bottom(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.margin_bottom = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn margin_left(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.margin_left = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn margin_right(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.margin_right = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn gap(mut self, unit: impl Into<Unit>) -> Self {
-        let unit = unit.into();
-        self.layout.gap_vertical = unit;
-        self.layout.gap_horizontal = unit;
-        self
-    }
-
-    #[inline]
-    pub fn gap_x(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.gap_horizontal = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn gap_y(mut self, unit: impl Into<Unit>) -> Self {
-        self.layout.gap_vertical = unit.into();
-        self
-    }
-
-    #[inline]
-    pub fn align_items_start(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::Start);
-        self
-    }
-
-    #[inline]
-    pub fn align_items_end(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::End);
-        self
-    }
-
-    #[inline]
-    pub fn align_items_flex_start(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::FlexStart);
-        self
-    }
-
-    #[inline]
-    pub fn align_items_flex_end(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::FlexEnd);
-        self
-    }
-
-    #[inline]
-    pub fn align_items_center(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::Center);
-        self
-    }
-
-    #[inline]
-    pub fn align_items_baseline(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::Baseline);
-        self
-    }
-
-    #[inline]
-    pub fn align_items_stretch(mut self) -> Self {
-        self.layout.align_items = Some(AlignItems::Stretch);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_start(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::Start);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_end(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::End);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_flex_start(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::FlexStart);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_flex_end(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::FlexEnd);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_center(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::Center);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_baseline(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::Baseline);
-        self
-    }
-
-    #[inline]
-    pub fn align_self_stretch(mut self) -> Self {
-        self.layout.align_self = Some(AlignSelf::Stretch);
-        self
-    }
-
-    #[inline]
-    pub fn justify_items_start(mut self) -> Self {
-        self.layout.justify_items = Some(JustifyItems::Start);
-        self
-    }
-
-    #[inline]
-    pub fn justify_items_end(mut self) -> Self {
-        self.layout.justify_items = Some(JustifyItems::End);
-        self
-    }
-
-    #[inline]
-    pub fn justify_items_center(mut self) -> Self {
-        self.layout.justify_items = Some(JustifyItems::Center);
-        self
-    }
-
-    #[inline]
-    pub fn justify_items_baseline(mut self) -> Self {
-        self.layout.justify_items = Some(JustifyItems::Baseline);
-        self
-    }
-
-    #[inline]
-    pub fn justify_items_stretch(mut self) -> Self {
-        self.layout.justify_items = Some(JustifyItems::Stretch);
-        self
-    }
-
-    #[inline]
-    pub fn justify_self_start(mut self) -> Self {
-        self.layout.justify_self = Some(JustifySelf::Start);
-        self
-    }
-
-    #[inline]
-    pub fn justify_self_end(mut self) -> Self {
-        self.layout.justify_self = Some(JustifySelf::End);
-        self
-    }
-
-    #[inline]
-    pub fn justify_self_center(mut self) -> Self {
-        self.layout.justify_self = Some(JustifySelf::Center);
-        self
-    }
-
-    #[inline]
-    pub fn justify_self_baseline(mut self) -> Self {
-        self.layout.justify_self = Some(JustifySelf::Baseline);
-        self
-    }
-
-    #[inline]
-    pub fn justify_self_stretch(mut self) -> Self {
-        self.layout.justify_self = Some(JustifySelf::Stretch);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_start(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::Start);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_end(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::End);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_center(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::Center);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_stretch(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::Stretch);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_space_between(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::SpaceBetween);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_space_evenly(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::SpaceEvenly);
-        self
-    }
-
-    #[inline]
-    pub fn align_content_space_around(mut self) -> Self {
-        self.layout.align_content = Some(AlignContent::SpaceAround);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_start(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::Start);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_end(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::End);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_center(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::Center);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_stretch(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::Stretch);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_space_between(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::SpaceBetween);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_space_evenly(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::SpaceEvenly);
-        self
-    }
-
-    #[inline]
-    pub fn justify_content_space_around(mut self) -> Self {
-        self.layout.justify_content = Some(JustifyContent::SpaceAround);
-        self
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct LayoutStyle {
+#[derive(Component, Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct UIStyle {
     pub display: Display,
     pub mode: Mode,
 
@@ -592,7 +50,552 @@ pub struct LayoutStyle {
     pub justify_content: Option<JustifyContent>,
 }
 
-impl Default for LayoutStyle {
+impl UIStyle {
+    #[inline]
+    pub fn flex(mut self) -> Self {
+        self.display = Display::Flex;
+        self
+    }
+
+    #[inline]
+    pub fn grid(mut self) -> Self {
+        self.display = Display::Grid;
+        self
+    }
+
+    #[inline]
+    pub fn hide(mut self) -> Self {
+        self.display = Display::None;
+        self
+    }
+
+    pub fn relative(mut self) -> Self {
+        self.mode = Mode::Relative;
+        self
+    }
+
+    pub fn absolute(mut self) -> Self {
+        self.mode = Mode::Absolute;
+        self
+    }
+
+    #[inline]
+    pub fn flex_col(mut self) -> Self {
+        self.flex_direction = FlexDirection::Col;
+        self
+    }
+
+    #[inline]
+    pub fn flex_row(mut self) -> Self {
+        self.flex_direction = FlexDirection::Row;
+        self
+    }
+
+    #[inline]
+    pub fn flex_wrap(mut self) -> Self {
+        self.flex_wrap = FlexWrap::Wrap;
+        self
+    }
+
+    #[inline]
+    pub fn flex_grow(mut self, value: f32) -> Self {
+        self.flex_grow = value;
+        self
+    }
+
+    #[inline]
+    pub fn flex_shrink(mut self, value: f32) -> Self {
+        self.flex_shrink = value;
+        self
+    }
+
+    #[inline]
+    pub fn flex_basis(mut self, unit: impl Into<Unit>) -> Self {
+        self.flex_basis = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn top(mut self, unit: impl Into<Unit>) -> Self {
+        self.top = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn bottom(mut self, unit: impl Into<Unit>) -> Self {
+        self.bottom = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn left(mut self, unit: impl Into<Unit>) -> Self {
+        self.left = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn right(mut self, unit: impl Into<Unit>) -> Self {
+        self.right = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
+        self.width = x.into();
+        self.height = y.into();
+        self
+    }
+
+    #[inline]
+    pub fn size_auto(self) -> Self {
+        self.size(auto(), auto())
+    }
+
+    #[inline]
+    pub fn size_full(self) -> Self {
+        self.size(Unit::Relative(1.0), Unit::Relative(1.0))
+    }
+
+    #[inline]
+    pub fn width(mut self, unit: impl Into<Unit>) -> Self {
+        self.width = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn width_auto(mut self) -> Self {
+        self.width = Unit::Auto;
+        self
+    }
+
+    #[inline]
+    pub fn height(mut self, unit: impl Into<Unit>) -> Self {
+        self.height = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn height_auto(mut self) -> Self {
+        self.height = Unit::Auto;
+        self
+    }
+
+    #[inline]
+    pub fn min_size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
+        self.min_width = x.into();
+        self.min_height = y.into();
+        self
+    }
+
+    #[inline]
+    pub fn min_width(mut self, unit: impl Into<Unit>) -> Self {
+        self.min_width = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn min_width_auto(mut self) -> Self {
+        self.min_width = Unit::Auto;
+        self
+    }
+
+    #[inline]
+    pub fn min_height(mut self, unit: impl Into<Unit>) -> Self {
+        self.min_height = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn min_height_auto(mut self) -> Self {
+        self.min_height = Unit::Auto;
+        self
+    }
+
+    #[inline]
+    pub fn max_size(mut self, x: impl Into<Unit>, y: impl Into<Unit>) -> Self {
+        self.max_width = x.into();
+        self.max_height = y.into();
+        self
+    }
+
+    #[inline]
+    pub fn max_width(mut self, unit: impl Into<Unit>) -> Self {
+        self.max_width = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn max_width_auto(mut self) -> Self {
+        self.max_width = Unit::Auto;
+        self
+    }
+
+    #[inline]
+    pub fn max_height(mut self, unit: impl Into<Unit>) -> Self {
+        self.max_height = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn max_height_auto(mut self) -> Self {
+        self.max_height = Unit::Auto;
+        self
+    }
+
+    #[inline]
+    pub fn padding(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.padding_top = unit;
+        self.padding_bottom = unit;
+        self.padding_left = unit;
+        self.padding_right = unit;
+        self
+    }
+
+    #[inline]
+    pub fn padding_y(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.padding_top = unit;
+        self.padding_bottom = unit;
+        self
+    }
+
+    #[inline]
+    pub fn padding_x(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.padding_left = unit;
+        self.padding_right = unit;
+        self
+    }
+
+    #[inline]
+    pub fn padding_top(mut self, unit: impl Into<Unit>) -> Self {
+        self.padding_top = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn padding_bottom(mut self, unit: impl Into<Unit>) -> Self {
+        self.padding_bottom = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn padding_left(mut self, unit: impl Into<Unit>) -> Self {
+        self.padding_left = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn padding_right(mut self, unit: impl Into<Unit>) -> Self {
+        self.padding_right = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn margin(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.margin_top = unit;
+        self.margin_bottom = unit;
+        self.margin_left = unit;
+        self.margin_right = unit;
+        self
+    }
+
+    #[inline]
+    pub fn margin_y(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.margin_top = unit;
+        self.margin_bottom = unit;
+        self
+    }
+
+    #[inline]
+    pub fn margin_x(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.margin_left = unit;
+        self.margin_right = unit;
+        self
+    }
+
+    #[inline]
+    pub fn margin_top(mut self, unit: impl Into<Unit>) -> Self {
+        self.margin_top = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn margin_bottom(mut self, unit: impl Into<Unit>) -> Self {
+        self.margin_bottom = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn margin_left(mut self, unit: impl Into<Unit>) -> Self {
+        self.margin_left = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn margin_right(mut self, unit: impl Into<Unit>) -> Self {
+        self.margin_right = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn gap(mut self, unit: impl Into<Unit>) -> Self {
+        let unit = unit.into();
+        self.gap_vertical = unit;
+        self.gap_horizontal = unit;
+        self
+    }
+
+    #[inline]
+    pub fn gap_x(mut self, unit: impl Into<Unit>) -> Self {
+        self.gap_horizontal = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn gap_y(mut self, unit: impl Into<Unit>) -> Self {
+        self.gap_vertical = unit.into();
+        self
+    }
+
+    #[inline]
+    pub fn align_items_start(mut self) -> Self {
+        self.align_items = Some(AlignItems::Start);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_end(mut self) -> Self {
+        self.align_items = Some(AlignItems::End);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_flex_start(mut self) -> Self {
+        self.align_items = Some(AlignItems::FlexStart);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_flex_end(mut self) -> Self {
+        self.align_items = Some(AlignItems::FlexEnd);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_center(mut self) -> Self {
+        self.align_items = Some(AlignItems::Center);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_baseline(mut self) -> Self {
+        self.align_items = Some(AlignItems::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn align_items_stretch(mut self) -> Self {
+        self.align_items = Some(AlignItems::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_start(mut self) -> Self {
+        self.align_self = Some(AlignSelf::Start);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_end(mut self) -> Self {
+        self.align_self = Some(AlignSelf::End);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_flex_start(mut self) -> Self {
+        self.align_self = Some(AlignSelf::FlexStart);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_flex_end(mut self) -> Self {
+        self.align_self = Some(AlignSelf::FlexEnd);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_center(mut self) -> Self {
+        self.align_self = Some(AlignSelf::Center);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_baseline(mut self) -> Self {
+        self.align_self = Some(AlignSelf::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn align_self_stretch(mut self) -> Self {
+        self.align_self = Some(AlignSelf::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_start(mut self) -> Self {
+        self.justify_items = Some(JustifyItems::Start);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_end(mut self) -> Self {
+        self.justify_items = Some(JustifyItems::End);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_center(mut self) -> Self {
+        self.justify_items = Some(JustifyItems::Center);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_baseline(mut self) -> Self {
+        self.justify_items = Some(JustifyItems::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn justify_items_stretch(mut self) -> Self {
+        self.justify_items = Some(JustifyItems::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_start(mut self) -> Self {
+        self.justify_self = Some(JustifySelf::Start);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_end(mut self) -> Self {
+        self.justify_self = Some(JustifySelf::End);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_center(mut self) -> Self {
+        self.justify_self = Some(JustifySelf::Center);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_baseline(mut self) -> Self {
+        self.justify_self = Some(JustifySelf::Baseline);
+        self
+    }
+
+    #[inline]
+    pub fn justify_self_stretch(mut self) -> Self {
+        self.justify_self = Some(JustifySelf::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_start(mut self) -> Self {
+        self.align_content = Some(AlignContent::Start);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_end(mut self) -> Self {
+        self.align_content = Some(AlignContent::End);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_center(mut self) -> Self {
+        self.align_content = Some(AlignContent::Center);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_stretch(mut self) -> Self {
+        self.align_content = Some(AlignContent::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_space_between(mut self) -> Self {
+        self.align_content = Some(AlignContent::SpaceBetween);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_space_evenly(mut self) -> Self {
+        self.align_content = Some(AlignContent::SpaceEvenly);
+        self
+    }
+
+    #[inline]
+    pub fn align_content_space_around(mut self) -> Self {
+        self.align_content = Some(AlignContent::SpaceAround);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_start(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::Start);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_end(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::End);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_center(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::Center);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_stretch(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::Stretch);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_space_between(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::SpaceBetween);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_space_evenly(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::SpaceEvenly);
+        self
+    }
+
+    #[inline]
+    pub fn justify_content_space_around(mut self) -> Self {
+        self.justify_content = Some(JustifyContent::SpaceAround);
+        self
+    }
+
+    pub(super) fn to_taffy(&self) -> TStyle {
+        taffy_style_from(&self)
+    }
+}
+
+impl Default for UIStyle {
     fn default() -> Self {
         Self {
             display: Display::Flex,
@@ -711,6 +714,9 @@ pub fn auto() -> Unit {
 
 impl Unit {
     pub const ZERO: Self = Self::Pixel(0.0);
+    pub const AUTO: Self = Self::Auto;
+    pub const FULL: Self = Self::Relative(1.0);
+    pub const HALF: Self = Self::Relative(0.5);
 }
 
 impl From<f32> for Unit {
@@ -758,7 +764,7 @@ fn dimension_from(unit: Unit) -> tstyle::Dimension {
     }
 }
 
-pub(super) fn taffy_style_from(style: &LayoutStyle) -> TStyle {
+pub(super) fn taffy_style_from(style: &UIStyle) -> TStyle {
     TStyle {
         display: match style.display {
             Display::Flex => tstyle::Display::Flex,

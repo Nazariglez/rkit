@@ -1,9 +1,5 @@
-use draw::create_draw_2d;
-use rand::random;
 use rkit::ecs::prelude::*;
-use rkit::gfx::Color;
-use rkit::math::{vec2, Vec2};
-use rkit::{gfx, random, time};
+use rkit::random;
 
 #[derive(Event)]
 struct MyCustomEvent {
@@ -13,6 +9,7 @@ struct MyCustomEvent {
 fn main() -> Result<(), String> {
     App::new()
         .add_event::<MyCustomEvent>()
+        .add_plugin(MainPlugins::default())
         .add_systems(OnUpdate, (send_event_system, receive_event_system).chain())
         .run()
 }

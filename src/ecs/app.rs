@@ -161,6 +161,8 @@ impl App {
 
             world.run_schedule(OnPostFrame);
             world.run_schedule(OnEnginePostFrame);
+
+            world.clear_trackers();
         });
 
         builder = builder.cleanup(|world: &mut World| world.run_schedule(OnCleanup));
