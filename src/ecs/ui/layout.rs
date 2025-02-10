@@ -1,4 +1,4 @@
-use crate::draw::{BaseCam2D, Draw2D, Transform2D};
+use crate::draw::{BaseCam2D, Draw2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;
@@ -202,9 +202,12 @@ where
                 if let (Some(render), Some(node)) =
                     (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
                 {
+                    let last_alpha = draw.alpha();
+                    draw.set_alpha(node.global_alpha);
                     draw.push_matrix(node.global_transform);
                     render.render(draw, world, *entity);
                     draw.pop_matrix();
+                    draw.set_alpha(last_alpha);
                 };
             }
         });

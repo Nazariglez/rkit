@@ -19,6 +19,8 @@ pub struct UINode {
     pub(super) local_dirty: bool,
     pub(super) local_transform: Mat3,
     pub(super) global_transform: Mat3,
+
+    pub(super) global_alpha: f32,
 }
 
 impl UINode {
@@ -40,6 +42,11 @@ impl UINode {
     #[inline]
     pub fn global_transform(&self) -> Mat3 {
         self.global_transform
+    }
+
+    #[inline]
+    pub fn global_alpha(&self) -> f32 {
+        self.global_alpha
     }
 
     pub(super) fn update_transform(&mut self, transform: &UITransform, parent: Mat3) {

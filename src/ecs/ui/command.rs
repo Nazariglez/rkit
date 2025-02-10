@@ -72,6 +72,8 @@ where
                     local_dirty: true,
                     local_transform: Mat3::IDENTITY,
                     global_transform: Mat3::IDENTITY,
+
+                    global_alpha: 1.0,
                 });
             },
         ));

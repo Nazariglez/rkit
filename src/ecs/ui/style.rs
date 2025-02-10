@@ -8,6 +8,7 @@ use taffy::style::Style as TStyle;
 pub struct UIStyle {
     pub display: Display,
     pub mode: Mode,
+    pub opacity: f32,
 
     pub flex_direction: FlexDirection,
     pub flex_grow: f32,
@@ -69,11 +70,19 @@ impl UIStyle {
         self
     }
 
+    #[inline]
+    pub fn opacity(mut self, alpha: f32) -> Self {
+        self.opacity = alpha;
+        self
+    }
+
+    #[inline]
     pub fn relative(mut self) -> Self {
         self.mode = Mode::Relative;
         self
     }
 
+    #[inline]
     pub fn absolute(mut self) -> Self {
         self.mode = Mode::Absolute;
         self
@@ -600,6 +609,7 @@ impl Default for UIStyle {
         Self {
             display: Display::Flex,
             mode: Mode::Relative,
+            opacity: 1.0,
             flex_direction: FlexDirection::Row,
             flex_grow: 0.0,
             flex_shrink: 1.0,

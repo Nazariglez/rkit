@@ -44,21 +44,24 @@ where
 }
 
 fn generate_update_layout_system<T: Component>(
-) -> impl Fn(Query<(&mut UINode, &UITransform), With<T>>, ResMut<UILayout<T>>, Res<Window>) {
+) -> impl Fn(Query<(&mut UINode, &UIStyle, &UITransform), With<T>>, ResMut<UILayout<T>>, Res<Window>)
+{
     |mut query, mut layout, win| {
         layout.set_size(win.size()); // TODO: fixme
         let updated = layout.update();
         if updated {
             query
                 .iter_mut()
-                .for_each(|(mut node, _)| layout.set_node_layout(&mut node));
+                .for_each(|(mut node, _, _)| layout.set_node_layout(&mut node));
 
-            let mut stack = vec![Mat3::IDENTITY];
+            let mut stack = vec![(Mat3::IDENTITY, 1.0)];
             layout.graph.iter().for_each(|ng| match ng {
                 UINodeGraph::Begin(entity) => {
-                    if let Ok((mut node, transform)) = query.get_mut(*entity) {
-                        node.update_transform(transform, *stack.last().unwrap());
-                        stack.push(node.global_transform);
+                    if let Ok((mut node, style, transform)) = query.get_mut(*entity) {
+                        let (last_transform, last_alpha) = stack.last().copied().unwrap();
+                        node.global_alpha = last_alpha * style.opacity;
+                        node.update_transform(transform, last_transform);
+                        stack.push((node.global_transform, node.global_alpha));
                     }
                 }
                 UINodeGraph::End(_entity) => {
