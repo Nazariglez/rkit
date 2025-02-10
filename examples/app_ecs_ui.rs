@@ -1,5 +1,6 @@
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
+use rkit::math::Vec2;
 use rkit::prelude::*;
 
 #[derive(Component, Clone, Copy)]
@@ -10,6 +11,7 @@ fn main() -> Result<(), String> {
         .add_plugin(MainPlugins::default())
         .add_plugin(UILayoutPlugin::<MainLayout>::default())
         .add_systems(OnSetup, setup_system)
+        .add_systems(OnUpdate, rot_system)
         .add_systems(OnRender, draw_system)
         .run()
 }
@@ -53,7 +55,18 @@ fn setup_system(mut cmds: Commands) {
                 bg_color: Some(Color::RED),
             },
             UIStyle::default().size(100.0, 100.0),
+            RotEffect(50.0),
         ),));
+    });
+}
+
+#[derive(Component)]
+struct RotEffect(f32);
+
+fn rot_system(mut query: Query<(&mut UITransform, &RotEffect)>, time: Res<Time>) {
+    query.iter_mut().for_each(|(mut transform, rot)| {
+        transform.rotation += rot.0.to_radians() * time.delta_f32();
+        // transform.scale = Vec2::splat(1.0) + time.elapsed_f32().sin() * 0.2;
     });
 }
 

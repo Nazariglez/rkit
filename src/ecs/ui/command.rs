@@ -1,5 +1,6 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
+use corelib::math::Mat3;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
@@ -67,6 +68,10 @@ where
                     node_id,
                     position: Vec2::ZERO,
                     size: Vec2::ONE,
+
+                    local_dirty: true,
+                    local_transform: Mat3::IDENTITY,
+                    global_transform: Mat3::IDENTITY,
                 });
             },
         ));

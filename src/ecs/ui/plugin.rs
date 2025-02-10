@@ -1,11 +1,14 @@
 use super::components::UINode;
-use super::layout::UILayout;
+use super::layout::{UILayout, UINodeGraph};
+use super::prelude::{UIPointer, UITransform};
 use super::style::UIStyle;
 use crate::ecs::app::App;
+use crate::ecs::input::Mouse;
 use crate::ecs::plugin::Plugin;
 use crate::ecs::schedules::OnPostUpdate;
 use crate::ecs::window::Window;
 use bevy_ecs::prelude::*;
+use corelib::math::Mat3;
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct UILayoutSysSet;
@@ -25,9 +28,10 @@ where
     T: Component,
 {
     fn apply(self, app: App) -> App {
-        let compute_system = generate_compute_system::<T>();
+        let compute_system = generate_update_layout_system::<T>();
         let remove_system = generate_remove_system::<T>();
         let change_style_system = generate_change_style_system::<T>();
+        let pointer_interactivity_system = generate_pointer_interactivity_system::<T>();
         app.add_resource(UILayout::<T>::default())
             .add_systems(
                 OnPostUpdate,
@@ -39,16 +43,35 @@ where
     }
 }
 
-// TODO: interactivity and camera support?
-fn generate_compute_system<T: Component>(
-) -> impl Fn(Query<&mut UINode, With<T>>, ResMut<UILayout<T>>, Res<Window>) {
+fn generate_update_layout_system<T: Component>(
+) -> impl Fn(Query<(&mut UINode, &UITransform), With<T>>, ResMut<UILayout<T>>, Res<Window>) {
     |mut query, mut layout, win| {
         layout.set_size(win.size()); // TODO: fixme
         let updated = layout.update();
         if updated {
             query
                 .iter_mut()
-                .for_each(|mut node| layout.set_node_layout(&mut node));
+                .for_each(|(mut node, _)| layout.set_node_layout(&mut node));
+
+            let mut stack = vec![Mat3::IDENTITY];
+            layout.graph.iter().for_each(|ng| match ng {
+                UINodeGraph::Begin(entity) => {
+                    if let Ok((mut node, transform)) = query.get_mut(*entity) {
+                        node.update_transform(transform, *stack.last().unwrap());
+                        stack.push(node.global_transform);
+                    }
+                }
+                UINodeGraph::End(_entity) => {
+                    stack.pop();
+                }
+                _ => {}
+            });
+
+            debug_assert!(
+                stack.len() == 1,
+                "Stack transform msut be one but is not {}",
+                stack.len()
+            );
         }
     }
 }
@@ -58,12 +81,18 @@ fn generate_remove_system<T: Component>() -> impl Fn(
     RemovedComponents<UINode>,
     RemovedComponents<T>,
     RemovedComponents<UIStyle>,
+    RemovedComponents<UITransform>,
 ) {
-    move |mut layout, mut removed_nodes, mut removed_layouts, mut removed_style| {
+    move |mut layout,
+          mut removed_nodes,
+          mut removed_layouts,
+          mut removed_style,
+          mut removed_transform| {
         let iterator = removed_nodes
             .read()
             .chain(removed_layouts.read())
-            .chain(removed_style.read());
+            .chain(removed_style.read())
+            .chain(removed_transform.read());
 
         for entity in iterator {
             layout.remove_node(entity);
@@ -71,11 +100,21 @@ fn generate_remove_system<T: Component>() -> impl Fn(
     }
 }
 
-fn generate_change_style_system<T: Component>(
-) -> impl Fn(Query<(&UINode, &UIStyle), (With<T>, Changed<UIStyle>)>, ResMut<UILayout<T>>) {
-    move |query, mut layout| {
-        for (node, style) in query.iter() {
-            layout.set_node_style(node, style);
+fn generate_change_style_system<T: Component>() -> impl Fn(
+    Query<(&mut UINode, &UIStyle), (With<T>, Or<(Changed<UIStyle>, Changed<UITransform>)>)>,
+    ResMut<UILayout<T>>,
+) {
+    move |mut query, mut layout| {
+        for (mut node, style) in query.iter_mut() {
+            node.local_dirty = true;
+            layout.set_node_style(node.as_ref(), style);
         }
+    }
+}
+
+fn generate_pointer_interactivity_system<T: Component>(
+) -> impl Fn(Query<(&mut UIPointer, &UINode), With<T>>, Res<UILayout<T>>, Res<Mouse>) {
+    move |mut query, layout, mouse| {
+        for (mut pointer, node) in &mut query {}
     }
 }

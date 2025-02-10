@@ -8,7 +8,7 @@ use super::components::{UINode, UIRender};
 use super::style::UIStyle;
 
 #[derive(Clone, Copy, Debug)]
-enum UINodeGraph {
+pub(super) enum UINodeGraph {
     Node(Entity),
     Begin(Entity),
     End(Entity),
@@ -24,7 +24,7 @@ where
     dirty_graph: bool,
     relations: FxHashMap<Entity, NodeId>,
     tree: TaffyTree<Entity>,
-    graph: Vec<UINodeGraph>,
+    pub(super) graph: Vec<UINodeGraph>,
     size: Vec2,
     root: NodeId,
 }
@@ -197,27 +197,15 @@ where
     T: Component,
 {
     world.resource_scope(|world: &mut World, layout: Mut<UILayout<T>>| {
-        layout.graph.iter().for_each(|ng| match ng {
-            UINodeGraph::Begin(entity) => {
-                if let Some(node) = world.get::<UINode>(*entity) {
-                    draw.push_matrix(
-                        Transform2D::builder()
-                            .set_size(node.size)
-                            .set_translation(node.position)
-                            .build()
-                            .as_mat3(),
-                    );
-                }
-            }
-            UINodeGraph::Node(entity) => {
-                if let Some(render) = world.get::<UIRender>(*entity) {
+        layout.graph.iter().for_each(|ng| {
+            if let UINodeGraph::Node(entity) = ng {
+                if let (Some(render), Some(node)) =
+                    (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
+                {
+                    draw.push_matrix(node.global_transform);
                     render.render(draw, world, *entity);
-                };
-            }
-            UINodeGraph::End(_entity) => {
-                if world.entity(*_entity).contains::<UINode>() {
                     draw.pop_matrix();
-                }
+                };
             }
         });
     });

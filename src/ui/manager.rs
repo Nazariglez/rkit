@@ -11,6 +11,7 @@ use smallvec::SmallVec;
 use std::any::TypeId;
 use std::marker::PhantomData;
 use strum::EnumCount;
+use strum_macros::EnumCount;
 use utils::helpers::next_pot2;
 
 use crate::ui::element::{UIElement, UIRoot};
