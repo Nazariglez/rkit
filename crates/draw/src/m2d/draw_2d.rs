@@ -182,22 +182,27 @@ impl Draw2D {
         }
     }
 
+    #[inline]
     pub fn clear(&mut self, color: Color) {
         self.clear_color = Some(color);
     }
 
+    #[inline]
     pub fn set_alpha(&mut self, alpha: f32) {
         self.alpha = alpha;
     }
 
+    #[inline]
     pub fn set_round_pixels(&mut self, round: bool) {
         self.round_pixels = round;
     }
 
+    #[inline]
     pub fn alpha(&self) -> f32 {
         self.alpha
     }
 
+    #[inline]
     pub fn add_element<T>(&mut self, element: &T)
     where
         T: Element2D,
@@ -305,6 +310,7 @@ impl Draw2D {
         self.vertices.extend_from_slice(info.vertices);
     }
 
+    #[inline]
     pub fn last_text_bounds(&self) -> Rect {
         self.last_text_bounds
     }
@@ -331,6 +337,7 @@ impl Draw2D {
         }
     }
 
+    #[inline]
     pub fn size(&self) -> Vec2 {
         self.size
     }
@@ -354,6 +361,7 @@ impl Draw2D {
         self.inverse_transform = None;
     }
 
+    #[inline]
     pub fn projection(&self) -> Mat4 {
         self.projection
     }
@@ -368,6 +376,7 @@ impl Draw2D {
         self.inverse_transform = None;
     }
 
+    #[inline]
     pub fn matrix(&self) -> Mat3 {
         self.matrix_stack.matrix()
     }
@@ -382,6 +391,7 @@ impl Draw2D {
         self.inverse_transform = None;
     }
 
+    #[inline]
     pub fn matrix_stack_len(&self) -> usize {
         self.matrix_stack.len()
     }
@@ -418,36 +428,38 @@ impl Draw2D {
         inverse_transform.transform_point2(vec2(pos.x, pos.y))
     }
 
-    // // - included methods
-    // pub fn pixel(&mut self, pos: Vec2) -> Drawing<'_, Pixel> {
-    //     Drawing::new(self, Pixel::new(pos))
-    // }
-
     // - shapes
+    #[inline]
     pub fn path(&mut self) -> Drawing<'_, Path2D> {
         Drawing::new(self, Path2D::new())
     }
 
+    #[inline]
     pub fn line(&mut self, p1: Vec2, p2: Vec2) -> Drawing<'_, Line2D> {
         Drawing::new(self, Line2D::new(p1, p2))
     }
 
+    #[inline]
     pub fn triangle(&mut self, p1: Vec2, p2: Vec2, p3: Vec2) -> Drawing<'_, Triangle2D> {
         Drawing::new(self, Triangle2D::new(p1, p2, p3))
     }
 
+    #[inline]
     pub fn rect(&mut self, pos: Vec2, size: Vec2) -> Drawing<'_, Rectangle2D> {
         Drawing::new(self, Rectangle2D::new(pos, size))
     }
 
+    #[inline]
     pub fn circle(&mut self, radius: f32) -> Drawing<'_, Circle2D> {
         Drawing::new(self, Circle2D::new(radius))
     }
 
+    #[inline]
     pub fn ellipse(&mut self, pos: Vec2, size: Vec2) -> Drawing<'_, Ellipse2D> {
         Drawing::new(self, Ellipse2D::new(pos, size))
     }
 
+    #[inline]
     pub fn star(
         &mut self,
         spikes: u8,
@@ -457,25 +469,30 @@ impl Draw2D {
         Drawing::new(self, Star2D::new(spikes, outer_radius, inner_radius))
     }
 
+    #[inline]
     pub fn polygon(&mut self, sides: u8, radius: f32) -> Drawing<'_, Polygon2D> {
         Drawing::new(self, Polygon2D::new(sides, radius))
     }
 
     // - pattern
+    #[inline]
     pub fn pattern(&mut self, sprite: &Sprite) -> Drawing<'_, Pattern2D> {
         Drawing::new(self, Pattern2D::new(sprite))
     }
 
     // - images
+    #[inline]
     pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image2D> {
         Drawing::new(self, Image2D::new(sprite))
     }
 
     // - text
+    #[inline]
     pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D<'a>> {
         Drawing::new(self, Text2D::new(text))
     }
 
+    #[inline]
     pub fn stats(&self) -> DrawStats {
         self.stats
     }

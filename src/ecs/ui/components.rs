@@ -16,7 +16,6 @@ pub struct UINode {
     pub(super) position: Vec2,
     pub(super) size: Vec2,
 
-    pub(super) local_dirty: bool,
     pub(super) local_transform: Mat3,
     pub(super) global_transform: Mat3,
 
@@ -50,21 +49,17 @@ impl UINode {
     }
 
     pub(super) fn update_transform(&mut self, transform: &UITransform, parent: Mat3) {
-        if self.local_dirty {
-            let pivot_offset = transform.pivot * self.size;
-            let position = self.position + transform.offset;
+        let pivot_offset = transform.pivot * self.size;
+        let position = self.position + transform.offset;
 
-            let translate = Mat3::from_translation(position);
-            let pivot_translate = Mat3::from_translation(pivot_offset);
-            let rotation = Mat3::from_angle(transform.rotation);
-            let scale = Mat3::from_scale(transform.scale);
-            let pivot_translate_back = Mat3::from_translation(-pivot_offset);
+        let translate = Mat3::from_translation(position);
+        let pivot_translate = Mat3::from_translation(pivot_offset);
+        let rotation = Mat3::from_angle(transform.rotation);
+        let scale = Mat3::from_scale(transform.scale);
+        let pivot_translate_back = Mat3::from_translation(-pivot_offset);
 
-            self.local_transform =
-                translate * pivot_translate * rotation * scale * pivot_translate_back;
-
-            self.local_dirty = false;
-        }
+        self.local_transform =
+            translate * pivot_translate * rotation * scale * pivot_translate_back;
 
         self.global_transform = parent * self.local_transform;
     }
@@ -109,6 +104,8 @@ pub struct UIPointer {
     pub(super) clicked: MouseButtonSet,
     pub(super) scrolling: Option<Vec2>,
     pub(super) dragging: MouseButtonMap<Vec2>,
+
+    pub(super) inverse_transform: Mat3,
 }
 
 impl UIPointer {

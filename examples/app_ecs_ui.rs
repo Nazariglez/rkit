@@ -10,7 +10,8 @@ fn main() -> Result<(), String> {
         .add_plugin(MainPlugins::default())
         .add_plugin(UILayoutPlugin::<MainLayout>::default())
         .add_systems(OnSetup, setup_system)
-        .add_systems(OnUpdate, rot_system)
+        .add_systems(OnPreUpdate, update_layout_system)
+        .add_systems(OnUpdate, (rot_system, on_hover_system))
         .add_systems(OnRender, draw_system)
         .run()
 }
@@ -46,6 +47,8 @@ fn setup_system(mut cmds: Commands) {
                         bg_color: Some(Color::BLUE),
                     },
                     UIStyle::default().size(20.0, 50.0),
+                    RotEffect(50.0),
+                    UIPointer::default(),
                 ));
             });
 
@@ -54,9 +57,22 @@ fn setup_system(mut cmds: Commands) {
                 bg_color: Some(Color::RED),
             },
             UIStyle::default().size(100.0, 100.0),
-            RotEffect(50.0),
         ),));
     });
+}
+
+fn update_layout_system(mut layout: ResMut<UILayout<MainLayout>>, win: Res<Window>) {
+    layout.set_size(win.size());
+}
+
+fn on_hover_system(mut query: Query<(&mut UIContainer, &UIPointer), With<RotEffect>>) {
+    for (mut container, pointer) in &mut query {
+        if pointer.just_enter() {
+            container.bg_color = Some(Color::GREEN);
+        } else if pointer.just_exit() {
+            container.bg_color = Some(Color::RED);
+        }
+    }
 }
 
 #[derive(Component)]

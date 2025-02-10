@@ -1,6 +1,7 @@
 use crate::draw::{BaseCam2D, Draw2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
+use corelib::math::{vec3, Mat3, Mat4};
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
@@ -14,6 +15,52 @@ pub(super) enum UINodeGraph {
     End(Entity),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct UICameraInfo {
+    size: Vec2,
+    projection: Mat4,
+    inverse_projection: Mat4,
+    transform: Mat3,
+    inverse_transform: Mat3,
+}
+
+impl UICameraInfo {
+    fn from_base(cam: &impl BaseCam2D) -> Self {
+        Self {
+            size: cam.size(),
+            projection: cam.projection(),
+            inverse_projection: cam.inverse_projection(),
+            transform: cam.transform(),
+            inverse_transform: cam.inverse_transform(),
+        }
+    }
+
+    fn update_size(&mut self, size: Vec2) -> bool {
+        if self.size == size {
+            return false;
+        }
+
+        self.size = size;
+        self.projection = Mat4::orthographic_rh(0.0, self.size.x, self.size.y, 0.0, 0.0, 1.0);
+        self.inverse_projection = self.projection.inverse();
+        self.transform = Mat3::IDENTITY;
+        self.inverse_transform = Mat3::IDENTITY;
+
+        true
+    }
+
+    pub fn screen_to_local(&self, screen_pos: Vec2, local_inverse_transform: Mat3) -> Vec2 {
+        let norm = screen_pos / self.size;
+        let mouse_pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
+
+        let pos = self
+            .inverse_projection
+            .project_point3(vec3(mouse_pos.x, mouse_pos.y, 1.0));
+
+        local_inverse_transform.transform_point2(vec2(pos.x, pos.y))
+    }
+}
+
 #[derive(Debug, Resource)]
 pub struct UILayout<T>
 where
@@ -24,9 +71,10 @@ where
     dirty_graph: bool,
     relations: FxHashMap<Entity, NodeId>,
     tree: TaffyTree<Entity>,
-    pub(super) graph: Vec<UINodeGraph>,
-    size: Vec2,
     root: NodeId,
+
+    pub(super) graph: Vec<UINodeGraph>,
+    pub(super) cam_info: UICameraInfo,
 }
 
 impl<T> Default for UILayout<T>
@@ -43,8 +91,16 @@ where
             relations: FxHashMap::default(),
             tree,
             graph: vec![],
+
+            cam_info: UICameraInfo {
+                size: Vec2::ZERO,
+                projection: Mat4::IDENTITY,
+                inverse_projection: Mat4::IDENTITY,
+                transform: Mat3::IDENTITY,
+                inverse_transform: Mat3::IDENTITY,
+            },
+
             root,
-            size: Vec2::ZERO,
         }
     }
 }
@@ -53,29 +109,36 @@ impl<T> UILayout<T>
 where
     T: Component,
 {
-    pub fn set_size(&mut self, size: Vec2) {
-        if size == self.size {
-            return;
-        }
-
-        self.size = size;
+    fn update_root_size(&mut self) {
         self.tree
             .set_style(
                 self.root,
                 Style {
                     size: Size {
-                        width: Dimension::Length(size.x),
-                        height: Dimension::Length(size.y),
+                        width: Dimension::Length(self.cam_info.size.x),
+                        height: Dimension::Length(self.cam_info.size.y),
                     },
                     ..Default::default()
                 },
             )
             .unwrap();
-        self.dirty_layout = true;
     }
 
-    pub fn set_camera(&mut self, cam: impl BaseCam2D) {
-        // TODO: store cam data to use it on update, or fallback to window size
+    pub fn set_size(&mut self, size: Vec2) {
+        let updated = self.cam_info.update_size(size);
+        if updated {
+            self.dirty_layout = true;
+            self.update_root_size();
+        }
+    }
+
+    pub fn set_camera(&mut self, cam: &impl BaseCam2D) {
+        let info = UICameraInfo::from_base(cam);
+        if info != self.cam_info {
+            self.cam_info = info;
+            self.dirty_layout = true;
+            self.update_root_size();
+        }
     }
 
     pub fn update(&mut self) -> bool {
@@ -85,8 +148,8 @@ where
                 .compute_layout(
                     self.root,
                     Size {
-                        width: AvailableSpace::Definite(self.size.x),
-                        height: AvailableSpace::Definite(self.size.y),
+                        width: AvailableSpace::Definite(self.cam_info.size.x),
+                        height: AvailableSpace::Definite(self.cam_info.size.y),
                     },
                 )
                 .unwrap();
@@ -203,9 +266,11 @@ where
                     (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
                 {
                     let last_alpha = draw.alpha();
-                    draw.set_alpha(node.global_alpha);
+                    draw.set_alpha(last_alpha * node.global_alpha);
                     draw.push_matrix(node.global_transform);
-                    render.render(draw, world, *entity);
+                    if draw.alpha() > 0.0 {
+                        render.render(draw, world, *entity);
+                    }
                     draw.pop_matrix();
                     draw.set_alpha(last_alpha);
                 };

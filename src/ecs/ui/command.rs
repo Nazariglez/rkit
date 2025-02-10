@@ -16,7 +16,7 @@ pub struct AddUIChildCommand<T>
 where
     T: Component,
 {
-    _layout: T,
+    _m: std::marker::PhantomData<T>,
     parent: Entity,
     child: Entity,
 }
@@ -25,7 +25,7 @@ pub struct DespawnUICommand<T>
 where
     T: Component,
 {
-    _layout: T,
+    _m: std::marker::PhantomData<T>,
     entity: Entity,
 }
 
@@ -69,7 +69,6 @@ where
                     position: Vec2::ZERO,
                     size: Vec2::ONE,
 
-                    local_dirty: true,
                     local_transform: Mat3::IDENTITY,
                     global_transform: Mat3::IDENTITY,
 
@@ -153,23 +152,23 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
         builder
     }
 
-    fn add_ui_child<T>(&mut self, layout: T, parent: Entity, child: Entity)
+    fn add_ui_child<T>(&mut self, _layout: T, parent: Entity, child: Entity)
     where
         T: Component,
     {
         self.queue(AddUIChildCommand {
-            _layout: layout,
+            _m: std::marker::PhantomData::<T>,
             parent,
             child,
         });
     }
 
-    fn despawn_ui_node<T>(&mut self, layout: T, entity: Entity)
+    fn despawn_ui_node<T>(&mut self, _layout: T, entity: Entity)
     where
         T: Component,
     {
         self.queue(DespawnUICommand {
-            _layout: layout,
+            _m: std::marker::PhantomData::<T>,
             entity,
         });
     }
@@ -190,11 +189,7 @@ where
     T: Component,
 {
     fn apply(self, world: &mut World) {
-        let Self {
-            _layout,
-            parent,
-            child,
-        } = self;
+        let Self { _m, parent, child } = self;
         let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();
         layout.add_child(parent, child);
     }
@@ -205,7 +200,10 @@ where
     T: Component,
 {
     fn apply(self, world: &mut World) {
-        let Self { _layout, entity } = self;
+        let Self {
+            _m: _layout,
+            entity,
+        } = self;
         let layout = world.get_resource::<UILayout<T>>().unwrap();
         layout.tree_from_node(entity).iter().for_each(|e| {
             let _ = world.despawn(*e);
