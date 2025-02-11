@@ -18,6 +18,7 @@ pub struct UINode {
 
     pub(super) local_transform: Mat3,
     pub(super) global_transform: Mat3,
+    pub(super) parent_global_transform: Mat3,
 
     pub(super) global_alpha: f32,
 }
@@ -60,8 +61,8 @@ impl UINode {
 
         self.local_transform =
             translate * pivot_translate * rotation * scale * pivot_translate_back;
-
-        self.global_transform = parent * self.local_transform;
+        self.parent_global_transform = parent;
+        self.global_transform = self.parent_global_transform * self.local_transform;
     }
 }
 
@@ -88,11 +89,22 @@ impl UIRender {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum UIDragEvent {
+    Start(Vec2),
+    Move {
+        start: Vec2,
+        pos: Vec2,
+        parent_delta: Vec2,
+    },
+    End(Vec2),
+}
+
 type MouseButtonSet = FnvIndexSet<MouseButton, { next_pot2(MouseButton::COUNT) }>;
 type MouseButtonMap<T> = FnvIndexMap<MouseButton, T, { next_pot2(MouseButton::COUNT) }>;
 
 /// Enable Mouse interactivity for the node/entity
-#[derive(Component, Default, Clone)]
+#[derive(Component, Default, Clone, Debug)]
 pub struct UIPointer {
     pub(super) position: Vec2,
     pub(super) is_hover: bool,
@@ -101,10 +113,13 @@ pub struct UIPointer {
     pub(super) down: MouseButtonSet,
     pub(super) pressed: MouseButtonSet,
     pub(super) released: MouseButtonSet,
+    pub(super) init_click: MouseButtonMap<Vec2>,
+    pub(super) init_drag: MouseButtonMap<(Vec2, Vec2)>, // start, and current pos
     pub(super) clicked: MouseButtonSet,
     pub(super) scrolling: Option<Vec2>,
-    pub(super) dragging: MouseButtonMap<Vec2>,
+    pub(super) dragging: MouseButtonMap<UIDragEvent>,
 
+    pub(super) parent_inverse_transform: Mat3,
     pub(super) inverse_transform: Mat3,
 }
 
@@ -141,12 +156,12 @@ impl UIPointer {
         self.clicked.contains(&btn)
     }
 
-    pub fn scroll(&self) -> Vec2 {
-        self.scrolling.unwrap_or_default()
+    pub fn scroll(&self) -> Option<Vec2> {
+        self.scrolling
     }
 
-    pub fn dragging(&self, btn: MouseButton) -> Option<Vec2> {
-        self.dragging.get(&btn).copied()
+    pub fn dragging(&self, btn: MouseButton) -> Option<UIDragEvent> {
+        self.dragging.get(&btn).cloned()
     }
 }
 

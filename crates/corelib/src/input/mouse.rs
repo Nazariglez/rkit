@@ -3,9 +3,12 @@ use crate::utils::EnumSet;
 use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
+use strum_macros::EnumIter;
 use utils::helpers::next_pot2;
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, strum_macros::EnumCount)]
+#[derive(
+    Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, strum_macros::EnumCount, EnumIter,
+)]
 #[repr(u8)]
 pub enum MouseButton {
     Left,

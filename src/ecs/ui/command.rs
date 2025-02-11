@@ -71,6 +71,7 @@ where
 
                     local_transform: Mat3::IDENTITY,
                     global_transform: Mat3::IDENTITY,
+                    parent_global_transform: Mat3::IDENTITY,
 
                     global_alpha: 1.0,
                 });

@@ -17,11 +17,11 @@ pub(super) enum UINodeGraph {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct UICameraInfo {
-    size: Vec2,
-    projection: Mat4,
-    inverse_projection: Mat4,
-    transform: Mat3,
-    inverse_transform: Mat3,
+    pub size: Vec2,
+    pub projection: Mat4,
+    pub inverse_projection: Mat4,
+    pub transform: Mat3,
+    pub inverse_transform: Mat3,
 }
 
 impl UICameraInfo {

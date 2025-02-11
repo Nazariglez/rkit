@@ -1,14 +1,17 @@
 use super::components::UINode;
 use super::layout::{UILayout, UINodeGraph};
-use super::prelude::{UIPointer, UITransform};
+use super::prelude::{UIDragEvent, UIPointer, UITransform};
 use super::style::UIStyle;
 use crate::ecs::app::App;
 use crate::ecs::input::Mouse;
 use crate::ecs::plugin::Plugin;
 use crate::ecs::schedules::OnPostUpdate;
+use crate::input::MouseButton;
+use crate::math::{Mat3, Vec2};
 use crate::prelude::OnPreUpdate;
 use bevy_ecs::prelude::*;
-use corelib::math::{Mat3, Vec2};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 #[derive(Debug, Event, Clone, Copy)]
 pub struct UILayoutUpdateEvent<T>(std::marker::PhantomData<T>)
@@ -93,7 +96,7 @@ fn generate_update_node_system<T: Component>() -> impl Fn(
                 .iter_mut()
                 .for_each(|(mut node, _, _)| layout.set_node_layout(&mut node));
 
-            let mut stack = vec![(Mat3::IDENTITY, 1.0)];
+            let mut stack = vec![(layout.cam_info.transform, 1.0)];
             layout.graph.iter().for_each(|ng| match ng {
                 UINodeGraph::Begin(entity) => {
                     if let Ok((mut node, style, transform)) = node_query.get_mut(*entity) {
@@ -125,6 +128,7 @@ fn generate_update_pointer_transform_system<T: Component>(
             // after update nodes, update transform on pointers
             pointer_query.iter_mut().for_each(|(node, mut pointer)| {
                 pointer.inverse_transform = node.global_transform.inverse();
+                pointer.parent_inverse_transform = node.parent_global_transform.inverse();
             });
         }
     }
@@ -173,6 +177,7 @@ fn generate_pointer_interactivity_system<T: Component>(
         let mut pressed_button = mouse.pressed_buttons();
         let mut released_button = mouse.released_buttons();
         let mut scrolling = mouse.is_scrolling().then_some(mouse.wheel_delta());
+        let mut is_moving = mouse.is_moving();
 
         layout.graph.iter().rev().for_each(|ng| {
             if let UINodeGraph::Node(entity) = ng {
@@ -180,6 +185,9 @@ fn generate_pointer_interactivity_system<T: Component>(
                     let local_pos = layout
                         .cam_info
                         .screen_to_local(pos, pointer.inverse_transform);
+                    let parent_pos = layout
+                        .cam_info
+                        .screen_to_local(pos, pointer.parent_inverse_transform);
 
                     let min = Vec2::ZERO;
                     let max = node.size;
@@ -195,8 +203,96 @@ fn generate_pointer_interactivity_system<T: Component>(
                     pointer.just_enter = just_enter;
                     pointer.just_exit = just_exit;
 
-                    // TODO: reset storing button, store start click, rekease will release everything etc.. check old ui
-                    // manager
+                    // clean last drag events
+                    pointer.dragging.clear();
+
+                    // dragging events
+                    MouseButton::iter().for_each(|btn| {
+                        let init_click = pointer.init_click.contains_key(&btn);
+                        let drag_started = pointer.init_drag.contains_key(&btn);
+                        let is_down = mouse.is_down(btn);
+
+                        if is_moving {
+                            let can_start = init_click && is_down && !drag_started;
+                            let can_move = drag_started && is_down;
+
+                            if can_start {
+                                let start_pos = pointer.init_click.get(&btn).cloned().unwrap();
+                                pointer
+                                    .init_drag
+                                    .insert(btn, (start_pos, parent_pos))
+                                    .unwrap();
+                                pointer
+                                    .dragging
+                                    .insert(btn, UIDragEvent::Start(local_pos))
+                                    .unwrap();
+                            } else if can_move {
+                                let (start_pos, last_frame_parent_pos) =
+                                    pointer.init_drag.get(&btn).cloned().unwrap();
+                                let parent_delta = parent_pos - last_frame_parent_pos;
+                                pointer
+                                    .dragging
+                                    .insert(
+                                        btn,
+                                        UIDragEvent::Move {
+                                            start: start_pos,
+                                            pos: local_pos,
+                                            parent_delta,
+                                        },
+                                    )
+                                    .unwrap();
+                                pointer
+                                    .init_drag
+                                    .insert(btn, (start_pos, parent_pos))
+                                    .unwrap();
+                            }
+                        }
+
+                        let can_end = drag_started && !is_down;
+                        if can_end {
+                            pointer.dragging.remove(&btn);
+                            pointer.init_drag.remove(&btn);
+                            pointer
+                                .dragging
+                                .insert(btn, UIDragEvent::End(local_pos))
+                                .unwrap();
+                        }
+                    });
+
+                    // clean last frame states
+                    pointer.down.clear();
+                    pointer.pressed.clear();
+                    pointer.released.clear();
+                    pointer.clicked.clear();
+                    pointer.scrolling = None;
+
+                    // button events
+                    if is_hover {
+                        MouseButton::iter().for_each(|btn| {
+                            if down_button.contains(btn) {
+                                pointer.down.insert(btn).unwrap();
+                            }
+
+                            if pressed_button.contains(btn) {
+                                pointer.pressed.insert(btn).unwrap();
+                                pointer.init_click.insert(btn, local_pos).unwrap();
+                            }
+
+                            if released_button.contains(btn) {
+                                pointer.released.insert(btn).unwrap();
+
+                                if pointer.init_click.contains_key(&btn) {
+                                    pointer.clicked.insert(btn).unwrap();
+                                }
+
+                                pointer.init_click.remove(&btn);
+                            }
+
+                            pointer.scrolling = scrolling;
+                        });
+                    } else {
+                        pointer.init_click.clear();
+                    }
                 }
             }
         });
