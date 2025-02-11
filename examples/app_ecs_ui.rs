@@ -2,8 +2,30 @@ use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::prelude::*;
 
+/// Identify the layout and the entities that belongs to it
 #[derive(Component, Clone, Copy)]
 struct MainLayout;
+
+/// Allows an entity to be draggable
+#[derive(Component)]
+#[require(UIPointer)]
+struct Draggable;
+
+/// Allows an entity to be draggable
+#[derive(Component)]
+#[require(UIPointer)]
+struct Highlight {
+    color: Color,
+    base: Color,
+}
+
+#[derive(Component)]
+#[require(UIPointer)]
+struct AlphaOnScroll;
+
+/// Display the entity rotatin at N speed
+#[derive(Component)]
+struct Rotate(f32);
 
 fn main() -> Result<(), String> {
     App::new()
@@ -11,7 +33,10 @@ fn main() -> Result<(), String> {
         .add_plugin(UILayoutPlugin::<MainLayout>::default())
         .add_systems(OnSetup, setup_system)
         .add_systems(OnPreUpdate, update_layout_system)
-        .add_systems(OnUpdate, (rot_system, on_hover_system, drag_system))
+        .add_systems(
+            OnUpdate,
+            (rotation_system, highlight_system, drag_system, alpha_system),
+        )
         .add_systems(OnRender, draw_system)
         .run()
 }
@@ -29,6 +54,7 @@ fn setup_system(mut cmds: Commands) {
                 .align_items_center()
                 .gap_x(20.0)
                 .justify_content_center(),
+            AlphaOnScroll,
         ),
     )
     .with_children(|cmd| {
@@ -41,7 +67,6 @@ fn setup_system(mut cmds: Commands) {
                 .justify_content_center()
                 .size(200.0, 100.0),
             Draggable,
-            UIPointer::default(),
         ),))
             .with_children(|cmd| {
                 cmd.add((
@@ -49,6 +74,7 @@ fn setup_system(mut cmds: Commands) {
                         bg_color: Some(Color::BLUE),
                     },
                     UIStyle::default().size(20.0, 50.0),
+                    Rotate(50.0),
                 ));
             });
 
@@ -57,66 +83,48 @@ fn setup_system(mut cmds: Commands) {
                 bg_color: Some(Color::RED),
             },
             UIStyle::default().size(100.0, 100.0),
-            RotEffect(50.0),
-            UIPointer::default(),
+            Highlight {
+                color: Color::GREEN,
+                base: Color::RED,
+            },
         ),));
     });
 }
 
+/// we need to set the layout's size or pass a camera to know the root's size
 fn update_layout_system(mut layout: ResMut<UILayout<MainLayout>>, win: Res<Window>) {
     layout.set_size(win.size());
 }
 
-#[derive(Component)]
-struct Draggable;
-
-// TODO: stopPropagation?
-
-fn drag_system(mut query: Query<(&mut UITransform, &UIPointer), With<Draggable>>, time: Res<Time>) {
+fn drag_system(mut query: Query<(&mut UITransform, &UIPointer), With<Draggable>>) {
     query.iter_mut().for_each(|(mut transform, pointer)| {
-        match pointer.dragging(MouseButton::Left) {
-            Some(evt) => match evt {
-                UIDragEvent::Start(vec2) => println!("drag start"),
-                UIDragEvent::Move {
-                    start,
-                    pos,
-                    parent_delta,
-                } => {
-                    transform.offset = transform
-                        .offset
-                        .lerp(transform.offset + parent_delta, time.delta_f32());
-                }
-                UIDragEvent::End(vec2) => println!("drag end"),
-            },
-            _ => {}
+        if let Some(UIDragEvent::Move { delta, .. }) = pointer.dragging(MouseButton::Left) {
+            transform.offset = transform.offset.lerp(transform.offset + delta, 0.99);
         }
     });
 }
 
-fn on_hover_system(mut query: Query<(&mut UIContainer, &UIPointer), With<RotEffect>>) {
-    for (mut container, pointer) in &mut query {
+fn highlight_system(mut query: Query<(&mut UIContainer, &UIPointer, &Highlight)>) {
+    for (mut container, pointer, highlight) in &mut query {
         if pointer.just_enter() {
-            container.bg_color = Some(Color::GREEN);
+            container.bg_color = Some(highlight.color);
         } else if pointer.just_exit() {
-            container.bg_color = Some(Color::RED);
-        }
-        // if pointer.just_released(MouseButton::Left) {
-        //     container.bg_color = Some(Color::PINK);
-        // }
-        //
-        // println!("{pointer:?}");
-        if let Some(scroll) = pointer.scroll() {
-            println!("scrolling {scroll}");
+            container.bg_color = Some(highlight.base);
         }
     }
 }
 
-#[derive(Component)]
-struct RotEffect(f32);
-
-fn rot_system(mut query: Query<(&mut UITransform, &RotEffect)>, time: Res<Time>) {
+fn rotation_system(mut query: Query<(&mut UITransform, &Rotate)>, time: Res<Time>) {
     query.iter_mut().for_each(|(mut transform, rot)| {
         transform.rotation += rot.0.to_radians() * time.delta_f32();
+    });
+}
+
+fn alpha_system(mut query: Query<(&mut UIStyle, &UIPointer)>, time: Res<Time>) {
+    query.iter_mut().for_each(|(mut style, pointer)| {
+        if let Some(scroll) = pointer.scroll() {
+            style.opacity = (style.opacity + scroll.y * time.delta_f32()).clamp(0.0, 1.0);
+        }
     });
 }
 

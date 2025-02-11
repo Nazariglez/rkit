@@ -159,7 +159,7 @@ impl Time {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use instant::Duration;
+    use web_time::Duration;
 
     // Busy spin, to await N time and measure time, because thread::busy_spin is not precise
     fn busy_spin(duration: Duration) {

@@ -89,13 +89,14 @@ impl UIRender {
     }
 }
 
+/// Dragging events, positions are always the node's parent position
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UIDragEvent {
     Start(Vec2),
     Move {
-        start: Vec2,
-        pos: Vec2,
-        parent_delta: Vec2,
+        start_pos: Vec2,
+        current_pos: Vec2,
+        delta: Vec2,
     },
     End(Vec2),
 }

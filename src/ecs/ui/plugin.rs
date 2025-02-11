@@ -224,20 +224,20 @@ fn generate_pointer_interactivity_system<T: Component>(
                                     .unwrap();
                                 pointer
                                     .dragging
-                                    .insert(btn, UIDragEvent::Start(local_pos))
+                                    .insert(btn, UIDragEvent::Start(parent_pos))
                                     .unwrap();
                             } else if can_move {
                                 let (start_pos, last_frame_parent_pos) =
                                     pointer.init_drag.get(&btn).cloned().unwrap();
-                                let parent_delta = parent_pos - last_frame_parent_pos;
+                                let delta = parent_pos - last_frame_parent_pos;
                                 pointer
                                     .dragging
                                     .insert(
                                         btn,
                                         UIDragEvent::Move {
-                                            start: start_pos,
-                                            pos: local_pos,
-                                            parent_delta,
+                                            start_pos,
+                                            current_pos: parent_pos,
+                                            delta,
                                         },
                                     )
                                     .unwrap();
@@ -254,7 +254,7 @@ fn generate_pointer_interactivity_system<T: Component>(
                             pointer.init_drag.remove(&btn);
                             pointer
                                 .dragging
-                                .insert(btn, UIDragEvent::End(local_pos))
+                                .insert(btn, UIDragEvent::End(parent_pos))
                                 .unwrap();
                         }
                     });
