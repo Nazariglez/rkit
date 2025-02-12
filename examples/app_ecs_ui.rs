@@ -35,7 +35,7 @@ fn main() -> Result<(), String> {
         .add_systems(OnPreUpdate, update_layout_system)
         .add_systems(
             OnUpdate,
-            (rotation_system, highlight_system, drag_system, alpha_system),
+            (alpha_system, rotation_system, highlight_system, drag_system),
         )
         .add_systems(OnRender, draw_system)
         .run()
@@ -75,6 +75,7 @@ fn setup_system(mut cmds: Commands) {
                     },
                     UIStyle::default().size(20.0, 50.0),
                     Rotate(50.0),
+                    // UIPointer::default(),
                 ));
             });
 
@@ -120,7 +121,10 @@ fn rotation_system(mut query: Query<(&mut UITransform, &Rotate)>, time: Res<Time
     });
 }
 
-fn alpha_system(mut query: Query<(&mut UIStyle, &UIPointer)>, time: Res<Time>) {
+fn alpha_system(
+    mut query: Query<(&mut UIStyle, &UIPointer), With<AlphaOnScroll>>,
+    time: Res<Time>,
+) {
     query.iter_mut().for_each(|(mut style, pointer)| {
         if let Some(scroll) = pointer.scroll() {
             style.opacity = (style.opacity + scroll.y * time.delta_f32()).clamp(0.0, 1.0);

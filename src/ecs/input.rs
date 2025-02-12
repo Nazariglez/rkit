@@ -144,6 +144,18 @@ impl Mouse {
     pub fn released_buttons(&self) -> MouseButtonList {
         self.btn_released.clone()
     }
+
+    pub(crate) fn clear_down_btn(&mut self, btn: MouseButton) {
+        self.btn_down.remove(btn);
+    }
+
+    pub(crate) fn clear_pressed_btn(&mut self, btn: MouseButton) {
+        self.btn_pressed.remove(btn);
+    }
+
+    pub(crate) fn clear_released_btn(&mut self, btn: MouseButton) {
+        self.btn_released.remove(btn);
+    }
 }
 
 fn init_mouse_system(mut cmds: Commands) {

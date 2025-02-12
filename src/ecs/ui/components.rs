@@ -5,7 +5,7 @@ use crate::utils::next_pot2;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::ReadOnlyQueryData;
 use heapless::{FnvIndexMap, FnvIndexSet};
-use strum::EnumCount;
+use strum::{EnumCount, IntoEnumIterator};
 use taffy::prelude::*;
 
 /// The Node contains layout info, as position, size, etc...
@@ -73,7 +73,7 @@ pub struct UIRender {
 }
 
 impl UIRender {
-    pub fn new<Q, F>(cb: F) -> Self
+    pub fn run<Q, F>(cb: F) -> Self
     where
         Q: ReadOnlyQueryData + 'static,
         F: Fn(&mut Draw2D, Q::Item<'_>) + Send + Sync + 'static,
@@ -103,6 +103,71 @@ pub enum UIDragEvent {
 
 type MouseButtonSet = FnvIndexSet<MouseButton, { next_pot2(MouseButton::COUNT) }>;
 type MouseButtonMap<T> = FnvIndexMap<MouseButton, T, { next_pot2(MouseButton::COUNT) }>;
+
+/// Defines which pointer events should be consumed by the node
+#[derive(Component, Default, Clone, Debug)]
+pub struct UIPointerConsumePolicy {
+    /// Consume the click event for these buttons.
+    pub on_click: MouseButtonSet,
+    /// Consume the down event for these buttons.
+    pub on_down: MouseButtonSet,
+    /// Consume the pressed event for these buttons.
+    pub on_pressed: MouseButtonSet,
+    /// Consume the released event for these buttons.
+    pub on_released: MouseButtonSet,
+    /// Consume the scroll event.
+    pub on_scroll: bool,
+    /// Consume the hover event.
+    pub on_hover: bool,
+
+    /// Block the global down event for these buttons.
+    pub block_global_down: MouseButtonSet,
+    /// Block the global pressed event for these buttons.
+    pub block_global_pressed: MouseButtonSet,
+    /// Block the global released event for these buttons.
+    pub block_global_released: MouseButtonSet,
+}
+
+impl UIPointerConsumePolicy {
+    pub fn all() -> Self {
+        Self {
+            on_click: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_down: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_pressed: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_released: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_scroll: true,
+            on_hover: true,
+            block_global_down: MouseButtonSet::from_iter(MouseButton::iter()),
+            block_global_pressed: MouseButtonSet::from_iter(MouseButton::iter()),
+            block_global_released: MouseButtonSet::from_iter(MouseButton::iter()),
+        }
+    }
+
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    pub fn only_ui() -> Self {
+        Self {
+            on_click: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_down: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_pressed: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_released: MouseButtonSet::from_iter(MouseButton::iter()),
+            on_scroll: true,
+            on_hover: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn only_global() -> Self {
+        Self {
+            block_global_down: MouseButtonSet::from_iter(MouseButton::iter()),
+            block_global_pressed: MouseButtonSet::from_iter(MouseButton::iter()),
+            block_global_released: MouseButtonSet::from_iter(MouseButton::iter()),
+            ..Default::default()
+        }
+    }
+}
 
 /// Enable Mouse interactivity for the node/entity
 #[derive(Component, Default, Clone, Debug)]

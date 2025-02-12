@@ -13,7 +13,7 @@ pub struct UIContainer {
 }
 
 fn container_render_component() -> UIRender {
-    UIRender::new::<(&UIContainer, &UINode), _>(render_container)
+    UIRender::run::<(&UIContainer, &UINode), _>(render_container)
 }
 
 fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode)) {

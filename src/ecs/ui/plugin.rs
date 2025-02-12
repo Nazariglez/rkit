@@ -1,6 +1,5 @@
-use super::components::UINode;
+use super::components::{UIDragEvent, UINode, UIPointer, UIPointerConsumePolicy, UITransform};
 use super::layout::{UILayout, UINodeGraph};
-use super::prelude::{UIDragEvent, UIPointer, UITransform};
 use super::style::UIStyle;
 use crate::ecs::app::App;
 use crate::ecs::input::Mouse;
@@ -11,7 +10,6 @@ use crate::math::{Mat3, Vec2};
 use crate::prelude::OnPreUpdate;
 use bevy_ecs::prelude::*;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
 #[derive(Debug, Event, Clone, Copy)]
 pub struct UILayoutUpdateEvent<T>(std::marker::PhantomData<T>)
@@ -169,19 +167,28 @@ fn generate_change_style_system<T: Component>() -> impl Fn(
     }
 }
 
-fn generate_pointer_interactivity_system<T: Component>(
-) -> impl Fn(Query<(&mut UIPointer, &UINode), With<T>>, Res<UILayout<T>>, Res<Mouse>) {
-    move |mut query, layout, mouse| {
+fn generate_pointer_interactivity_system<T: Component>() -> impl Fn(
+    Query<(&mut UIPointer, &UINode, Option<&UIPointerConsumePolicy>), With<T>>,
+    Res<UILayout<T>>,
+    ResMut<Mouse>,
+) {
+    let default_policy = UIPointerConsumePolicy::all();
+
+    move |mut query, layout, mut mouse| {
         let pos = mouse.position();
+        let mut consumed_hover = false;
+        let mut consumed_click = false;
+
         let mut down_button = mouse.down_buttons();
         let mut pressed_button = mouse.pressed_buttons();
         let mut released_button = mouse.released_buttons();
         let mut scrolling = mouse.is_scrolling().then_some(mouse.wheel_delta());
-        let mut is_moving = mouse.is_moving();
+        let is_moving = mouse.is_moving();
 
         layout.graph.iter().rev().for_each(|ng| {
             if let UINodeGraph::Node(entity) = ng {
-                if let Ok((mut pointer, node)) = query.get_mut(*entity) {
+                if let Ok((mut pointer, node, policy)) = query.get_mut(*entity) {
+                    let policy = policy.unwrap_or(&default_policy);
                     let local_pos = layout
                         .cam_info
                         .screen_to_local(pos, pointer.inverse_transform);
@@ -191,14 +198,21 @@ fn generate_pointer_interactivity_system<T: Component>(
 
                     let min = Vec2::ZERO;
                     let max = node.size;
-                    let is_hover = local_pos.x >= min.x
+                    let contains_point = local_pos.x >= min.x
                         && local_pos.y >= min.y
                         && local_pos.x < max.x
                         && local_pos.y < max.y;
 
+                    let is_hover = contains_point && !consumed_hover;
                     let just_enter = !pointer.is_hover && is_hover;
                     let just_exit = pointer.is_hover && !is_hover;
 
+                    // consume on_hover for next nodes
+                    if is_hover && policy.on_hover {
+                        consumed_hover = true;
+                    }
+
+                    pointer.position = local_pos;
                     pointer.is_hover = is_hover;
                     pointer.just_enter = just_enter;
                     pointer.just_exit = just_exit;
@@ -271,25 +285,59 @@ fn generate_pointer_interactivity_system<T: Component>(
                         MouseButton::iter().for_each(|btn| {
                             if down_button.contains(btn) {
                                 pointer.down.insert(btn).unwrap();
+
+                                // consume
+                                if policy.on_down.contains(&btn) {
+                                    down_button.remove(btn);
+                                }
+
+                                if policy.block_global_down.contains(&btn) {
+                                    mouse.clear_down_btn(btn);
+                                }
                             }
 
                             if pressed_button.contains(btn) {
                                 pointer.pressed.insert(btn).unwrap();
                                 pointer.init_click.insert(btn, local_pos).unwrap();
+
+                                // consume
+                                if policy.on_pressed.contains(&btn) {
+                                    pressed_button.remove(btn);
+                                }
+
+                                if policy.block_global_pressed.contains(&btn) {
+                                    mouse.clear_pressed_btn(btn);
+                                }
                             }
 
                             if released_button.contains(btn) {
                                 pointer.released.insert(btn).unwrap();
 
-                                if pointer.init_click.contains_key(&btn) {
+                                if policy.on_released.contains(&btn) {
+                                    released_button.remove(btn);
+                                }
+
+                                if policy.block_global_released.contains(&btn) {
+                                    mouse.clear_released_btn(btn);
+                                }
+
+                                if pointer.init_click.contains_key(&btn) && !consumed_click {
                                     pointer.clicked.insert(btn).unwrap();
+
+                                    if policy.on_click.contains(&btn) {
+                                        consumed_click = true;
+                                    }
                                 }
 
                                 pointer.init_click.remove(&btn);
                             }
-
-                            pointer.scrolling = scrolling;
                         });
+
+                        // scroll
+                        pointer.scrolling = scrolling;
+                        if scrolling.is_some() && policy.on_scroll {
+                            scrolling = None;
+                        }
                     } else {
                         pointer.init_click.clear();
                     }
