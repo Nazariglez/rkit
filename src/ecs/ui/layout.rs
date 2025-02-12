@@ -228,7 +228,9 @@ where
     }
 
     pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle) {
-        self.tree.set_style(node.node_id, style.to_taffy()).unwrap();
+        self.tree
+            .set_style(node.node_id, style.as_taffy_style())
+            .unwrap();
         self.dirty_layout = true;
     }
 

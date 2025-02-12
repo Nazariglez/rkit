@@ -1,14 +1,14 @@
 use crate::prelude::{App, OnEnginePostFrame, OnEnginePreFrame, OnEngineSetup, Plugin};
 use bevy_ecs::prelude::*;
 use corelib::app::*;
-use corelib::math::{uvec2, UVec2, Vec2};
+use corelib::math::{uvec2, Vec2};
 use macros::Deref;
 
 #[derive(Default)]
 pub struct WindowPlugin;
 
 impl Plugin for WindowPlugin {
-    fn apply(self, mut app: App) -> App {
+    fn apply(self, app: App) -> App {
         app.add_systems(OnEngineSetup, init_window_system)
             .add_systems(OnEnginePreFrame, populate_window_system)
             .add_systems(OnEnginePostFrame, sync_window_system)

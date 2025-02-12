@@ -66,10 +66,12 @@ impl UINode {
     }
 }
 
+type RenderCb = dyn Fn(&mut Draw2D, &World, Entity) + Send + Sync + 'static;
+
 /// Wrapper for the render callback
 #[derive(Component)]
 pub struct UIRender {
-    pub(super) cb: Box<dyn Fn(&mut Draw2D, &World, Entity) + Send + Sync + 'static>,
+    pub(super) cb: Box<RenderCb>,
 }
 
 impl UIRender {

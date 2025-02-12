@@ -599,8 +599,8 @@ impl UIStyle {
         self
     }
 
-    pub(super) fn to_taffy(&self) -> TStyle {
-        taffy_style_from(&self)
+    pub(super) fn as_taffy_style(&self) -> TStyle {
+        taffy_style_from(self)
     }
 }
 

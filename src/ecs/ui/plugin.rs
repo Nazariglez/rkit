@@ -6,7 +6,7 @@ use crate::ecs::input::Mouse;
 use crate::ecs::plugin::Plugin;
 use crate::ecs::schedules::OnPostUpdate;
 use crate::input::MouseButton;
-use crate::math::{Mat3, Vec2};
+use crate::math::Vec2;
 use crate::prelude::OnPreUpdate;
 use bevy_ecs::prelude::*;
 use strum::IntoEnumIterator;
@@ -82,6 +82,7 @@ fn generate_update_layout_system<T: Component>(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_update_node_system<T: Component>() -> impl Fn(
     Query<(&mut UINode, &UIStyle, &UITransform), With<T>>,
     ResMut<UILayout<T>>,
@@ -119,6 +120,7 @@ fn generate_update_node_system<T: Component>() -> impl Fn(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_update_pointer_transform_system<T: Component>(
 ) -> impl Fn(Query<(&UINode, &mut UIPointer), With<T>>, EventReader<UILayoutUpdateEvent<T>>) {
     move |mut pointer_query, mut evt| {
@@ -132,6 +134,7 @@ fn generate_update_pointer_transform_system<T: Component>(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_remove_system<T: Component>() -> impl Fn(
     ResMut<UILayout<T>>,
     RemovedComponents<UINode>,
@@ -156,6 +159,7 @@ fn generate_remove_system<T: Component>() -> impl Fn(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_change_style_system<T: Component>() -> impl Fn(
     Query<(&UINode, &UIStyle), (With<T>, Or<(Changed<UIStyle>, Changed<UITransform>)>)>,
     ResMut<UILayout<T>>,
@@ -167,6 +171,7 @@ fn generate_change_style_system<T: Component>() -> impl Fn(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_pointer_interactivity_system<T: Component>() -> impl Fn(
     Query<(&mut UIPointer, &UINode, Option<&UIPointerConsumePolicy>), With<T>>,
     Res<UILayout<T>>,

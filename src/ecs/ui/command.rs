@@ -56,7 +56,7 @@ where
                     .insert((layout, bundle))
                     .insert_if_new(UIStyle::default())
                     .get_components::<&UIStyle>()
-                    .map(|style| style.to_taffy())
+                    .map(|style| style.as_taffy_style())
                     .unwrap();
 
                 let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();

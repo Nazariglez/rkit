@@ -1,4 +1,4 @@
-use crate::prelude::{App, OnEnginePreFrame, OnEngineSetup, OnPreFrame, Plugin};
+use crate::prelude::{App, OnEnginePreFrame, OnEngineSetup, Plugin};
 use bevy_ecs::prelude::Resource;
 use bevy_ecs::system::{Commands, ResMut};
 use corelib::time;
@@ -6,7 +6,7 @@ use web_time::{Duration, Instant};
 
 pub struct TimePlugin;
 impl Plugin for TimePlugin {
-    fn apply(self, mut app: App) -> App {
+    fn apply(self, app: App) -> App {
         app.add_systems(OnEngineSetup, init_time_system)
             .add_systems(OnEnginePreFrame, update_time_system)
     }

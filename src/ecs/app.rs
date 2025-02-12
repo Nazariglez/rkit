@@ -53,7 +53,7 @@ impl App {
     }
 
     #[inline]
-    pub fn with_screen<S: Screen>(mut self, screen: S) -> Self {
+    pub fn with_screen<S: Screen>(self, screen: S) -> Self {
         S::add_schedules(self).add_systems(OnEngineSetup, move |mut cmds: Commands| {
             cmds.queue(ChangeScreen(screen.clone()))
         })

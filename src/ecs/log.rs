@@ -1,8 +1,8 @@
 use super::app::App;
 use super::plugin::Plugin;
+use crate::app::LogConfig;
+use crate::macros::Deref;
 use bevy_ecs::prelude::*;
-use corelib::app::{LogConfig, WindowConfig};
-use macros::Deref;
 
 #[derive(Resource, Deref, Default)]
 pub struct LogPlugin(LogConfig);

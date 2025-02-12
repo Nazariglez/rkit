@@ -135,7 +135,7 @@ mod tests {
 
     // Use the macro to initialize the pools used in the tests
     init_local_pool!(POOL_A, 4, Vec<u8>, || Vec::with_capacity(10));
-    init_local_pool!(POOL_B, 3, String, || String::new());
+    init_local_pool!(POOL_B, 3, String, || String::from(""));
 
     #[test]
     fn test_pool_a_initial_length() {

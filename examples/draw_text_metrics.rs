@@ -3,7 +3,7 @@ use rkit::draw::{create_draw_2d, text_metrics};
 use rkit::gfx::{self, Color};
 use rkit::math::Vec2;
 
-const TEXT: &'static str = "Drawing a background with a margin of 10 pixels!. To do so, we're measuring the text before draw it.";
+const TEXT: &str = "Drawing a background with a margin of 10 pixels!. To do so, we're measuring the text before draw it.";
 
 fn main() -> Result<(), String> {
     rkit::init().update(update).run()

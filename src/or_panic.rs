@@ -79,6 +79,7 @@ impl<T> PanicContext<T, ()> for Option<T> {
     }
 }
 
+#[allow(dead_code)]
 fn panic_hook(info: &PanicHookInfo) {
     let msg = info
         .payload()

@@ -4,8 +4,7 @@ use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, LitInt,
-    Meta, Token, Type, Variant,
+    parse_macro_input, Data, DataEnum, DeriveInput, Error, Fields, LitInt, Token, Type, Variant,
 };
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
