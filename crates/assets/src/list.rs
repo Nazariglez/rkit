@@ -1,22 +1,22 @@
 use crate::{is_loaded, is_loading, AssetId};
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct AssetMap {
-    inner: FxHashMap<TypeId, FxHashMap<String, Rc<dyn Any>>>,
+    inner: FxHashMap<TypeId, FxHashMap<String, Arc<dyn Any + Send + Sync>>>,
     len: usize,
 }
 
 impl AssetMap {
-    pub(crate) fn insert<T: 'static>(&mut self, id: String, asset: T) {
+    pub(crate) fn insert<T: Send + Sync + 'static>(&mut self, id: String, asset: T) {
         let type_id = TypeId::of::<T>();
 
         self.inner
             .entry(type_id)
             .or_default()
-            .insert(id, Rc::new(asset));
+            .insert(id, Arc::new(asset));
 
         self.len += 1;
     }
@@ -30,10 +30,9 @@ impl AssetMap {
                     .ok_or_else(|| format!("Cannot find asset: {id}"))
             })
             .and_then(|asset| {
-                asset
-                    .clone()
-                    .downcast::<T>()
-                    .map_err(|_| format!("Failed to downcast asset with id '{id}' to correct type"))
+                asset.downcast_ref::<T>().ok_or_else(|| {
+                    format!("Failed to downcast asset with id '{id}' to correct type")
+                })
             })
             .map(|asset| (*asset).clone())
     }
@@ -52,14 +51,14 @@ struct Data {
     loaded: bool,
 }
 
-type ParserFn = dyn Fn(&AssetId, &str, &mut AssetMap) -> Result<(), String>;
+type ParserFn = dyn Fn(&AssetId, &str, &mut AssetMap) -> Result<(), String> + Send + Sync;
 
 pub struct AssetList {
     inner: FxHashMap<String, Data>,
     total: usize,
 
     assets: AssetMap,
-    parsers: FxHashMap<String, Box<ParserFn>>,
+    parsers: FxHashMap<String, Arc<ParserFn>>,
 }
 
 impl AssetList {
@@ -107,12 +106,12 @@ impl AssetList {
 
     pub fn with_extension_parser<T, F>(mut self, ext: &str, parser: F) -> Self
     where
-        F: Fn(&str, &[u8]) -> Result<T, String> + 'static + Clone,
-        T: 'static,
+        F: Fn(&str, &[u8]) -> Result<T, String> + 'static + Clone + Send + Sync,
+        T: Send + Sync + 'static,
     {
         self.parsers.insert(
             ext.to_string(),
-            Box::new(move |aid: &AssetId, id: &str, map: &mut AssetMap| {
+            Arc::new(move |aid: &AssetId, id: &str, map: &mut AssetMap| {
                 let parsed = super::parse_asset::<T, F>(aid, parser.clone(), false)?;
                 if let Some(parsed_asset) = parsed {
                     map.insert(id.to_string(), parsed_asset);
