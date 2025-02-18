@@ -134,7 +134,7 @@ impl BaseCam2D for Camera2D {
     }
 
     fn bounds(&self) -> Rect {
-        let size = self.size / (self.ratio * self.scale);
+        let size = self.size_visible();
         let origin = self.position - (size * 0.5);
         Rect::new(origin, size)
     }
@@ -185,6 +185,7 @@ impl Camera2D {
         }
     }
 
+    #[inline]
     pub fn position(&self) -> Vec2 {
         self.position
     }
@@ -196,6 +197,7 @@ impl Camera2D {
         }
     }
 
+    #[inline]
     pub fn rotation(&self) -> f32 {
         self.rotation
     }
@@ -207,14 +209,17 @@ impl Camera2D {
         }
     }
 
+    #[inline]
     pub fn scale(&self) -> Vec2 {
         self.scale
     }
 
+    #[inline]
     pub fn set_zoom(&mut self, scale: f32) {
         self.set_scale(Vec2::splat(scale));
     }
 
+    #[inline]
     pub fn zoom(&self) -> f32 {
         self.scale.x
     }
@@ -240,8 +245,14 @@ impl Camera2D {
         }
     }
 
+    #[inline]
     pub fn ratio(&self) -> Vec2 {
         self.ratio
+    }
+
+    #[inline]
+    pub fn size_visible(&self) -> Vec2 {
+        self.size / (self.ratio * self.scale)
     }
 
     /// Translate a local point to screen coordinates

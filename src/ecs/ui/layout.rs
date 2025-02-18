@@ -1,11 +1,14 @@
 use crate::draw::{BaseCam2D, Draw2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
+use corelib::gfx::Color;
 use corelib::math::{vec3, Mat3, Mat4};
+use draw::Camera2D;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::components::{UINode, UIRender};
+use super::prelude::UIPointer;
 use super::style::UIStyle;
 
 #[derive(Clone, Copy, Debug)]
@@ -17,6 +20,7 @@ pub(super) enum UINodeGraph {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct UICameraInfo {
+    pub top_left: Vec2,
     pub size: Vec2,
     pub projection: Mat4,
     pub inverse_projection: Mat4,
@@ -25,9 +29,11 @@ pub(super) struct UICameraInfo {
 }
 
 impl UICameraInfo {
-    fn from_base(cam: &impl BaseCam2D) -> Self {
+    fn from_base(cam: &Camera2D) -> Self {
+        let bounds = cam.bounds();
         Self {
-            size: cam.size(),
+            top_left: bounds.origin,
+            size: bounds.size,
             projection: cam.projection(),
             inverse_projection: cam.inverse_projection(),
             transform: cam.transform(),
@@ -72,6 +78,7 @@ where
     relations: FxHashMap<Entity, NodeId>,
     tree: TaffyTree<Entity>,
     root: NodeId,
+    pub(super) base_transform: Mat3,
 
     pub(super) graph: Vec<UINodeGraph>,
     pub(super) cam_info: UICameraInfo,
@@ -84,6 +91,9 @@ where
     fn default() -> Self {
         let mut tree = TaffyTree::<Entity>::new();
         let root = tree.new_leaf(Style::default()).unwrap();
+        let container = tree.new_leaf(Style::default()).unwrap();
+        tree.add_child(root, container).unwrap();
+
         Self {
             _m: Default::default(),
             dirty_layout: true,
@@ -93,6 +103,7 @@ where
             graph: vec![],
 
             cam_info: UICameraInfo {
+                top_left: Vec2::ZERO,
                 size: Vec2::ZERO,
                 projection: Mat4::IDENTITY,
                 inverse_projection: Mat4::IDENTITY,
@@ -101,6 +112,7 @@ where
             },
 
             root,
+            base_transform: Mat3::IDENTITY,
         }
     }
 }
@@ -109,7 +121,7 @@ impl<T> UILayout<T>
 where
     T: Component,
 {
-    fn update_root_size(&mut self) {
+    fn update_root(&mut self) {
         self.tree
             .set_style(
                 self.root,
@@ -122,22 +134,30 @@ where
                 },
             )
             .unwrap();
+
+        self.base_transform = Mat3::from_translation(self.cam_info.top_left);
+
+        println!("root updated {:?}", self.cam_info);
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.cam_info.size
     }
 
     pub fn set_size(&mut self, size: Vec2) {
         let updated = self.cam_info.update_size(size);
         if updated {
             self.dirty_layout = true;
-            self.update_root_size();
+            self.update_root();
         }
     }
 
-    pub fn set_camera(&mut self, cam: &impl BaseCam2D) {
+    pub fn set_camera(&mut self, cam: &Camera2D) {
         let info = UICameraInfo::from_base(cam);
         if info != self.cam_info {
             self.cam_info = info;
             self.dirty_layout = true;
-            self.update_root_size();
+            self.update_root();
         }
     }
 
@@ -237,7 +257,7 @@ where
     pub(super) fn set_node_layout(&self, node: &mut UINode) {
         let l = self.tree.layout(node.node_id).unwrap();
         node.size = vec2(l.size.width, l.size.height);
-        node.position = vec2(l.location.x, l.location.y);
+        node.position = vec2(l.location.x, l.location.y) + vec2(l.margin.left, l.margin.top);
     }
 }
 
@@ -267,14 +287,30 @@ where
                 if let (Some(render), Some(node)) =
                     (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
                 {
+                    // store current values
                     let last_alpha = draw.alpha();
+
+                    // set layout's node values
                     draw.set_alpha(last_alpha * node.global_alpha);
                     draw.push_matrix(node.global_transform);
+
+                    // draw if necessary
                     if draw.alpha() > 0.0 {
                         render.render(draw, world, *entity);
                     }
+
+                    // restore old values
                     draw.pop_matrix();
                     draw.set_alpha(last_alpha);
+
+                    // TODO: remove this
+                    if let Some(p) = world.get::<UIPointer>(*entity) {
+                        draw.push_matrix(p.inverse_transform.inverse());
+                        draw.rect(Vec2::ZERO, node.size)
+                            .stroke(3.0)
+                            .color(Color::RED);
+                        draw.pop_matrix();
+                    }
                 };
             }
         });

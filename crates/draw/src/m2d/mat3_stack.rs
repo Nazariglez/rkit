@@ -42,6 +42,10 @@ impl Mat3Stack {
     pub fn len(&self) -> usize {
         self.stack.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
 }
 
 #[derive(Copy, Clone, Debug)]

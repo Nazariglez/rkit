@@ -53,7 +53,9 @@ where
             .add_event::<UILayoutUpdateEvent<T>>()
             .add_systems(
                 OnPreUpdate,
-                pointer_interactivity_system.in_set(UILayoutSysSet),
+                pointer_interactivity_system
+                    .run_if(is_layout_present::<T>)
+                    .in_set(UILayoutSysSet),
             )
             .add_systems(
                 OnPostUpdate,
@@ -65,11 +67,16 @@ where
                     update_pointer_transform_system,
                 )
                     .chain()
+                    .run_if(is_layout_present::<T>)
                     .in_set(UILayoutSysSet),
             )
             .configure_sets(OnPreUpdate, UILayoutSysSet)
             .configure_sets(OnPostUpdate, UILayoutSysSet)
     }
+}
+
+fn is_layout_present<T: Component>(layout: Option<Res<UILayout<T>>>) -> bool {
+    layout.is_some()
 }
 
 fn generate_update_layout_system<T: Component>(
@@ -95,7 +102,7 @@ fn generate_update_node_system<T: Component>() -> impl Fn(
                 .iter_mut()
                 .for_each(|(mut node, _, _)| layout.set_node_layout(&mut node));
 
-            let mut stack = vec![(layout.cam_info.transform, 1.0)];
+            let mut stack = vec![(layout.base_transform, 1.0)];
             layout.graph.iter().for_each(|ng| match ng {
                 UINodeGraph::Begin(entity) => {
                     if let Ok((mut node, style, transform)) = node_query.get_mut(*entity) {
@@ -113,7 +120,7 @@ fn generate_update_node_system<T: Component>() -> impl Fn(
 
             debug_assert!(
                 stack.len() == 1,
-                "Stack transform msut be one but is not {}",
+                "Stack transform must be one but is not {}",
                 stack.len()
             );
         }
@@ -194,9 +201,18 @@ fn generate_pointer_interactivity_system<T: Component>() -> impl Fn(
             if let UINodeGraph::Node(entity) = ng {
                 if let Ok((mut pointer, node, policy)) = query.get_mut(*entity) {
                     let policy = policy.unwrap_or(&default_policy);
-                    let local_pos = layout
-                        .cam_info
-                        .screen_to_local(pos, pointer.inverse_transform);
+                    let local_pos = layout.cam_info.screen_to_local(
+                        pos,
+                        pointer.inverse_transform, // * layout.cam_info.inverse_transform,
+                                                   // (layout.cam_info.transform * node.global_transform).inverse(),
+                    );
+                    println!(
+                        "{local_pos} -> {} (diff {}) size: {}",
+                        mouse.position(),
+                        local_pos - mouse.position(),
+                        node.size,
+                    );
+                    println!("{:?}", layout.cam_info);
                     let parent_pos = layout
                         .cam_info
                         .screen_to_local(pos, pointer.parent_inverse_transform);

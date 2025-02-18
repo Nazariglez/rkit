@@ -354,6 +354,11 @@ impl Draw2D {
         self.projection = cam.projection();
         self.inverse_projection = cam.inverse_projection();
 
+        debug_assert!(
+            self.matrix_stack.is_empty(),
+            "The Camera2D must be set before push any transformation"
+        );
+
         // transform
         self.matrix_stack.set_matrix(cam.transform());
 

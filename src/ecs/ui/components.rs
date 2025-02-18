@@ -9,7 +9,7 @@ use strum::{EnumCount, IntoEnumIterator};
 use taffy::prelude::*;
 
 /// The Node contains layout info, as position, size, etc...
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Debug)]
 #[require(UITransform)]
 pub struct UINode {
     pub(super) node_id: NodeId,
