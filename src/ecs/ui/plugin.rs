@@ -7,8 +7,10 @@ use crate::ecs::plugin::Plugin;
 use crate::ecs::schedules::OnPostUpdate;
 use crate::input::MouseButton;
 use crate::math::Vec2;
-use crate::prelude::OnPreUpdate;
+use crate::prelude::{OnPreUpdate, Window};
 use bevy_ecs::prelude::*;
+use corelib::app::window_size;
+use corelib::math::Mat3;
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Event, Clone, Copy)]
@@ -128,14 +130,19 @@ fn generate_update_node_system<T: Component>() -> impl Fn(
 }
 
 #[allow(clippy::type_complexity)]
-fn generate_update_pointer_transform_system<T: Component>(
-) -> impl Fn(Query<(&UINode, &mut UIPointer), With<T>>, EventReader<UILayoutUpdateEvent<T>>) {
-    move |mut pointer_query, mut evt| {
+fn generate_update_pointer_transform_system<T: Component>() -> impl Fn(
+    Query<(&UINode, &mut UIPointer), With<T>>,
+    Res<UILayout<T>>,
+    EventReader<UILayoutUpdateEvent<T>>,
+) {
+    move |mut pointer_query, layout, mut evt| {
         for _ in evt.read() {
             // after update nodes, update transform on pointers
             pointer_query.iter_mut().for_each(|(node, mut pointer)| {
-                pointer.inverse_transform = node.global_transform.inverse();
-                pointer.parent_inverse_transform = node.parent_global_transform.inverse();
+                pointer.inverse_transform =
+                    node.global_transform.inverse() * layout.cam_info.inverse_transform;
+                pointer.parent_inverse_transform =
+                    node.parent_global_transform.inverse() * layout.cam_info.transform;
             });
         }
     }
@@ -183,10 +190,11 @@ fn generate_pointer_interactivity_system<T: Component>() -> impl Fn(
     Query<(&mut UIPointer, &UINode, Option<&UIPointerConsumePolicy>), With<T>>,
     Res<UILayout<T>>,
     ResMut<Mouse>,
+    Res<Window>,
 ) {
     let default_policy = UIPointerConsumePolicy::all();
 
-    move |mut query, layout, mut mouse| {
+    move |mut query, layout, mut mouse, win| {
         let pos = mouse.position();
         let mut consumed_hover = false;
         let mut consumed_click = false;
@@ -201,18 +209,9 @@ fn generate_pointer_interactivity_system<T: Component>() -> impl Fn(
             if let UINodeGraph::Node(entity) = ng {
                 if let Ok((mut pointer, node, policy)) = query.get_mut(*entity) {
                     let policy = policy.unwrap_or(&default_policy);
-                    let local_pos = layout.cam_info.screen_to_local(
-                        pos,
-                        pointer.inverse_transform, // * layout.cam_info.inverse_transform,
-                                                   // (layout.cam_info.transform * node.global_transform).inverse(),
-                    );
-                    println!(
-                        "{local_pos} -> {} (diff {}) size: {}",
-                        mouse.position(),
-                        local_pos - mouse.position(),
-                        node.size,
-                    );
-                    println!("{:?}", layout.cam_info);
+                    let local_pos = layout
+                        .cam_info
+                        .screen_to_local(pos, pointer.inverse_transform);
                     let parent_pos = layout
                         .cam_info
                         .screen_to_local(pos, pointer.parent_inverse_transform);

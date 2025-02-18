@@ -19,6 +19,5 @@ fn container_render_component() -> UIRender {
 fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode)) {
     if let Some(bg_color) = container.bg_color {
         draw.rect(Vec2::ZERO, node.size).color(bg_color);
-        println!("@@@@ {:?}", node.global_transform);
     }
 }

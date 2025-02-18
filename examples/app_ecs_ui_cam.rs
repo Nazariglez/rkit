@@ -49,11 +49,6 @@ fn setup_system(mut cmds: Commands) {
                 .size_full()
                 .align_items_center()
                 .justify_content_center(),
-            UIPointer::default(),
-            Highlight {
-                color: Color::GREEN,
-                base: Color::ORANGE,
-            },
         ),
     )
     .with_children(|cmd| {
@@ -62,6 +57,11 @@ fn setup_system(mut cmds: Commands) {
                 bg_color: Some(Color::WHITE),
             },
             UIStyle::default().size(300.0, 100.0),
+            UIPointer::default(),
+            Highlight {
+                color: Color::GREEN,
+                base: Color::WHITE,
+            },
         ));
     });
 }

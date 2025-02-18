@@ -2,7 +2,8 @@ use crate::draw::{BaseCam2D, Draw2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
 use corelib::gfx::Color;
-use corelib::math::{vec3, Mat3, Mat4};
+use corelib::input::mouse_position;
+use corelib::math::{vec3, Mat3, Mat4, Vec3Swizzles};
 use draw::Camera2D;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
@@ -20,8 +21,9 @@ pub(super) enum UINodeGraph {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct UICameraInfo {
+    pub cam_size: Vec2,
     pub top_left: Vec2,
-    pub size: Vec2,
+    pub layout_size: Vec2,
     pub projection: Mat4,
     pub inverse_projection: Mat4,
     pub transform: Mat3,
@@ -32,8 +34,9 @@ impl UICameraInfo {
     fn from_base(cam: &Camera2D) -> Self {
         let bounds = cam.bounds();
         Self {
+            cam_size: cam.size(),
             top_left: bounds.origin,
-            size: bounds.size,
+            layout_size: bounds.size,
             projection: cam.projection(),
             inverse_projection: cam.inverse_projection(),
             transform: cam.transform(),
@@ -42,12 +45,14 @@ impl UICameraInfo {
     }
 
     fn update_size(&mut self, size: Vec2) -> bool {
-        if self.size == size {
+        if self.layout_size == size {
             return false;
         }
 
-        self.size = size;
-        self.projection = Mat4::orthographic_rh(0.0, self.size.x, self.size.y, 0.0, 0.0, 1.0);
+        self.cam_size = size;
+        self.layout_size = size;
+        self.projection =
+            Mat4::orthographic_rh(0.0, self.layout_size.x, self.layout_size.y, 0.0, 0.0, 1.0);
         self.inverse_projection = self.projection.inverse();
         self.transform = Mat3::IDENTITY;
         self.inverse_transform = Mat3::IDENTITY;
@@ -56,14 +61,14 @@ impl UICameraInfo {
     }
 
     pub fn screen_to_local(&self, screen_pos: Vec2, local_inverse_transform: Mat3) -> Vec2 {
-        let norm = screen_pos / self.size;
+        let norm = screen_pos / self.cam_size;
         let mouse_pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
 
         let pos = self
             .inverse_projection
             .project_point3(vec3(mouse_pos.x, mouse_pos.y, 1.0));
 
-        local_inverse_transform.transform_point2(vec2(pos.x, pos.y))
+        local_inverse_transform.transform_point2(pos.xy())
     }
 }
 
@@ -103,8 +108,9 @@ where
             graph: vec![],
 
             cam_info: UICameraInfo {
+                cam_size: Vec2::ZERO,
                 top_left: Vec2::ZERO,
-                size: Vec2::ZERO,
+                layout_size: Vec2::ZERO,
                 projection: Mat4::IDENTITY,
                 inverse_projection: Mat4::IDENTITY,
                 transform: Mat3::IDENTITY,
@@ -127,8 +133,8 @@ where
                 self.root,
                 Style {
                     size: Size {
-                        width: Dimension::Length(self.cam_info.size.x),
-                        height: Dimension::Length(self.cam_info.size.y),
+                        width: Dimension::Length(self.cam_info.layout_size.x),
+                        height: Dimension::Length(self.cam_info.layout_size.y),
                     },
                     ..Default::default()
                 },
@@ -136,12 +142,10 @@ where
             .unwrap();
 
         self.base_transform = Mat3::from_translation(self.cam_info.top_left);
-
-        println!("root updated {:?}", self.cam_info);
     }
 
     pub fn size(&self) -> Vec2 {
-        self.cam_info.size
+        self.cam_info.layout_size
     }
 
     pub fn set_size(&mut self, size: Vec2) {
@@ -168,8 +172,8 @@ where
                 .compute_layout(
                     self.root,
                     Size {
-                        width: AvailableSpace::Definite(self.cam_info.size.x),
-                        height: AvailableSpace::Definite(self.cam_info.size.y),
+                        width: AvailableSpace::Definite(self.cam_info.layout_size.x),
+                        height: AvailableSpace::Definite(self.cam_info.layout_size.y),
                     },
                 )
                 .unwrap();
@@ -302,15 +306,6 @@ where
                     // restore old values
                     draw.pop_matrix();
                     draw.set_alpha(last_alpha);
-
-                    // TODO: remove this
-                    if let Some(p) = world.get::<UIPointer>(*entity) {
-                        draw.push_matrix(p.inverse_transform.inverse());
-                        draw.rect(Vec2::ZERO, node.size)
-                            .stroke(3.0)
-                            .color(Color::RED);
-                        draw.pop_matrix();
-                    }
                 };
             }
         });
