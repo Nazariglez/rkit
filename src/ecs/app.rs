@@ -1,4 +1,6 @@
+use super::exit::app_exit_system;
 use super::prelude::*;
+use crate::app::{LogConfig, WindowConfig};
 use crate::ecs::plugin::{BaseSchedules, Plugin};
 use crate::ecs::schedules::{
     OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
@@ -8,11 +10,12 @@ use crate::ecs::schedules::{
 use crate::ecs::screen::{in_screen, Screen};
 use bevy_ecs::event::EventRegistry;
 use bevy_ecs::schedule::ScheduleLabel;
+use bevy_ecs::system::SystemId;
 use bevy_tasks::{ComputeTaskPool, TaskPool};
-use corelib::app::{LogConfig, WindowConfig};
 
 pub struct App {
     pub world: World,
+    exit_sys: SystemId,
     pub(crate) fixed_updates: Vec<u8>,
     pub(crate) window_config: WindowConfig,
     pub(crate) log_config: LogConfig,
@@ -26,10 +29,12 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
-        let world = World::new();
+        let mut world = World::new();
 
+        let exit_sys = world.register_system(app_exit_system);
         let app = Self {
             world,
+            exit_sys,
             fixed_updates: vec![],
             window_config: Default::default(),
             log_config: Default::default(),
@@ -37,6 +42,7 @@ impl App {
 
         ComputeTaskPool::get_or_init(TaskPool::default);
         app.add_plugin(BaseSchedules)
+            .add_event::<AppExitEvt>()
             .add_systems(OnEnginePreFrame, bevy_ecs::event::event_update_system)
     }
 
@@ -123,6 +129,7 @@ impl App {
     pub fn run(self) -> Result<(), String> {
         let Self {
             mut world,
+            exit_sys,
             fixed_updates,
             window_config,
             log_config,
@@ -148,7 +155,7 @@ impl App {
             });
         }
 
-        builder = builder.update(|world: &mut World| {
+        builder = builder.update(move |world: &mut World| {
             world.run_schedule(OnPreUpdate);
             world.run_schedule(OnUpdate);
             world.run_schedule(OnPostUpdate);
@@ -163,6 +170,8 @@ impl App {
             world.run_schedule(OnEnginePostFrame);
 
             world.clear_trackers();
+
+            world.run_system(exit_sys).unwrap();
         });
 
         builder = builder.cleanup(|world: &mut World| world.run_schedule(OnCleanup));

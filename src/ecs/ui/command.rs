@@ -1,6 +1,6 @@
-use crate::math::Vec2;
+use crate::macros::Deref;
+use crate::math::{Mat3, Vec2};
 use bevy_ecs::prelude::*;
-use corelib::math::Mat3;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
@@ -29,11 +29,13 @@ where
     entity: Entity,
 }
 
+#[derive(Deref)]
 pub struct SpawnUICommandBuilder<'c, 'w, 's, T>
 where
     T: Component + Copy,
 {
-    cmds: &'c mut Commands<'w, 's>,
+    #[deref]
+    pub cmds: &'c mut Commands<'w, 's>,
     current_entity: Entity,
     stack: Vec<Entity>,
     layout: T,

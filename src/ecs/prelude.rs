@@ -1,4 +1,5 @@
 pub use super::app::*;
+pub use super::exit::*;
 pub use super::input::*;
 pub use super::log::*;
 pub use super::plugin::*;
