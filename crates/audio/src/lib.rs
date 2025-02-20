@@ -1,3 +1,4 @@
+pub use crate::manager::Manager;
 use crate::manager::{PlayOptions, MANAGER};
 pub use crate::sound::{AsSoundInstance, Sound, SoundInstance};
 

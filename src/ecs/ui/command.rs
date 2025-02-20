@@ -1,5 +1,6 @@
 use crate::macros::Deref;
 use crate::math::{Mat3, Vec2};
+use crate::prelude::PanicContext;
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
@@ -61,7 +62,10 @@ where
                     .map(|style| style.as_taffy_style())
                     .unwrap();
 
-                let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();
+                let mut layout = world
+                    .get_resource_mut::<UILayout<T>>()
+                    .or_panic("Cannot find UILayout to add Nodes. Are you sure the name of the layout is right or that it was initialized?");
+
                 let parent_id = parent_id.and_then(|p_id| ids.get(&p_id)).cloned();
                 let node_id = layout.add_raw_node(entity, style, parent_id);
                 ids.insert(entity, node_id);

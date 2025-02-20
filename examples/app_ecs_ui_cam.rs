@@ -44,6 +44,7 @@ fn setup_system(mut cmds: Commands) {
         (
             UIContainer {
                 bg_color: Some(Color::ORANGE),
+                ..Default::default()
             },
             UIStyle::default()
                 .size_full()
@@ -55,6 +56,7 @@ fn setup_system(mut cmds: Commands) {
         cmd.add((
             UIContainer {
                 bg_color: Some(Color::WHITE),
+                ..Default::default()
             },
             UIStyle::default().size(300.0, 100.0),
             UIPointer::default(),

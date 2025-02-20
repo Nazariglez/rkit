@@ -47,6 +47,7 @@ fn setup_system(mut cmds: Commands) {
         (
             UIContainer {
                 bg_color: Some(Color::WHITE),
+                ..Default::default()
             },
             UIStyle::default()
                 .flex_row()
@@ -61,6 +62,7 @@ fn setup_system(mut cmds: Commands) {
         cmd.add(((
             UIContainer {
                 bg_color: Some(Color::ORANGE),
+                ..Default::default()
             },
             UIStyle::default()
                 .align_items_center()
@@ -72,6 +74,7 @@ fn setup_system(mut cmds: Commands) {
                 cmd.add((
                     UIContainer {
                         bg_color: Some(Color::BLUE),
+                        ..Default::default()
                     },
                     UIStyle::default().size(20.0, 50.0),
                     Rotate(50.0),
@@ -82,6 +85,7 @@ fn setup_system(mut cmds: Commands) {
         cmd.add(((
             UIContainer {
                 bg_color: Some(Color::RED),
+                ..Default::default()
             },
             UIStyle::default().size(100.0, 100.0),
             Highlight {

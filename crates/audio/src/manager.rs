@@ -31,7 +31,7 @@ impl InstanceData {
     }
 }
 
-pub(crate) struct Manager {
+pub struct Manager {
     count_ids: u64,
     manager: AudioManager,
     instances: FxHashMap<SoundId, SmallVec<InstanceData, 10>>,
@@ -185,6 +185,10 @@ impl Manager {
         self.manager
             .main_track()
             .set_volume(decibels_from_volume(self.volume), Tween::default());
+    }
+
+    pub fn volume(&self) -> f32 {
+        self.volume
     }
 
     pub fn is_playing(&self, instance: SoundInstance) -> Option<bool> {
@@ -355,7 +359,7 @@ fn create_sound_from_bytes(id: u64, bytes: &[u8]) -> Result<Sound, String> {
 }
 
 #[derive(Copy, Clone)]
-pub(crate) struct PlayOptions {
+pub struct PlayOptions {
     pub volume: f32,
     pub repeat: bool,
     pub pitch: f32,

@@ -1,4 +1,5 @@
 pub mod app;
+pub mod audio;
 pub mod exit;
 pub mod input;
 pub mod log;
