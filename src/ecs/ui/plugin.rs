@@ -9,8 +9,6 @@ use crate::input::MouseButton;
 use crate::math::Vec2;
 use crate::prelude::{OnPreUpdate, Window};
 use bevy_ecs::prelude::*;
-use corelib::app::window_size;
-use corelib::math::Mat3;
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Event, Clone, Copy)]
@@ -109,7 +107,12 @@ fn generate_update_node_system<T: Component>() -> impl Fn(
                 UINodeGraph::Begin(entity) => {
                     if let Ok((mut node, style, transform)) = node_query.get_mut(*entity) {
                         let (last_transform, last_alpha) = stack.last().copied().unwrap();
-                        node.global_alpha = last_alpha * style.opacity;
+                        let is_hide = matches!(style.display, crate::ecs::ui::style::Display::None);
+                        node.global_alpha = if is_hide {
+                            0.0
+                        } else {
+                            last_alpha * style.opacity
+                        };
                         node.update_transform(transform, last_transform);
                         stack.push((node.global_transform, node.global_alpha));
                     }
