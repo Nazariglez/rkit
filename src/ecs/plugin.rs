@@ -1,9 +1,9 @@
 use super::app::App;
 use crate::ecs::input::{KeyboardPlugin, MousePlugin};
 use crate::ecs::schedules::{
-    OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
-    OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
-    OnPreUpdate, OnRender, OnSetup, OnUpdate,
+    OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate, OnPostFrame,
+    OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender, OnPreUpdate, OnRender,
+    OnSetup, OnUpdate,
 };
 use crate::prelude::{OnEngineSetup, TimePlugin, WindowPlugin};
 use bevy_ecs::prelude::Schedule;
@@ -66,7 +66,6 @@ impl Plugin for BaseSchedules {
             OnPreRender: false,
             OnRender: false,
             OnPostRender: false,
-            OnAudio: false,
             OnCleanup: false,
         );
         app

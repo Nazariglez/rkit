@@ -11,6 +11,9 @@ pub trait Screen:
 }
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct ScreenSchedule<SL: ScheduleLabel, S: Screen>(pub SL, pub S);
+
+#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnExit<S: Screen>(pub S);
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]

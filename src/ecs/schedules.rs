@@ -46,7 +46,4 @@ pub struct OnRender;
 pub struct OnPostRender;
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnAudio;
-
-#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OnCleanup;

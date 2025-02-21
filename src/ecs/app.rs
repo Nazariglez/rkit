@@ -3,11 +3,11 @@ use super::prelude::*;
 use crate::app::{LogConfig, WindowConfig};
 use crate::ecs::plugin::{BaseSchedules, Plugin};
 use crate::ecs::schedules::{
-    OnAudio, OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
-    OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
-    OnPreUpdate, OnRender, OnSetup, OnUpdate,
+    OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate, OnPostFrame,
+    OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender, OnPreUpdate, OnRender,
+    OnSetup, OnUpdate,
 };
-use crate::ecs::screen::{in_screen, Screen};
+use crate::ecs::screen::Screen;
 use bevy_ecs::event::EventRegistry;
 use bevy_ecs::schedule::ScheduleLabel;
 use bevy_ecs::system::SystemId;
@@ -71,13 +71,45 @@ impl App {
     }
 
     #[inline]
-    pub fn add_screen_systems<S: Screen, M>(
-        self,
+    #[track_caller]
+    pub fn add_screen_systems<SL: ScheduleLabel + Eq + Clone + std::hash::Hash, S: Screen, M>(
+        mut self,
         screen: S,
-        label: impl ScheduleLabel,
+        label: SL,
         systems: impl IntoSystemConfigs<M>,
     ) -> Self {
-        self.add_systems(label, (systems).run_if(in_screen(screen)))
+        let schedule_id = ScreenSchedule(label.clone(), screen.clone());
+
+        let needs_initialization = self
+            .world
+            .try_schedule_scope(schedule_id.clone(), |_world, _sch| {})
+            .is_err();
+
+        if needs_initialization {
+            let executor = self
+                .world
+                .schedule_scope(label.clone(), |_w, sch| sch.get_executor_kind());
+
+            let mut schedule = Schedule::new(schedule_id.clone());
+            schedule.set_executor_kind(executor);
+            self.world.add_schedule(schedule);
+
+            let sc_id_clone = schedule_id.clone();
+            self.world.schedule_scope(label, move |_world, sc| {
+                let sys = move |world: &mut World| {
+                    let is_in_screen = world
+                        .get_resource::<S>()
+                        .is_some_and(|s| *s == screen.clone());
+
+                    if is_in_screen {
+                        world.run_schedule(sc_id_clone.clone());
+                    }
+                };
+                sc.add_systems(sys);
+            });
+        }
+
+        self.add_systems(schedule_id, systems)
     }
 
     #[inline]
@@ -108,6 +140,17 @@ impl App {
             })
             .unwrap();
         self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn configure_screen_sets(
+        self,
+        screen: impl Screen,
+        label: impl ScheduleLabel + Clone + Eq + std::hash::Hash,
+        sets: impl IntoSystemSetConfigs,
+    ) -> Self {
+        self.configure_sets(ScreenSchedule(label, screen), sets)
     }
 
     #[inline]
@@ -163,8 +206,6 @@ impl App {
             world.run_schedule(OnPreRender);
             world.run_schedule(OnRender);
             world.run_schedule(OnPostRender);
-
-            world.run_schedule(OnAudio);
 
             world.run_schedule(OnPostFrame);
             world.run_schedule(OnEnginePostFrame);
