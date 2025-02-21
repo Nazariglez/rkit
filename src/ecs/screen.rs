@@ -5,7 +5,7 @@ use bevy_ecs::schedule::ScheduleLabel;
 pub trait Screen:
     Resource + std::fmt::Debug + std::hash::Hash + Clone + Eq + Send + 'static
 {
-    fn add_schedules(app: App) -> App {
+    fn add_schedules(app: &mut App) -> &mut App {
         app
     }
 }

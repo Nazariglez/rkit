@@ -32,7 +32,7 @@ impl App {
         let mut world = World::new();
 
         let exit_sys = world.register_system(app_exit_system);
-        let app = Self {
+        let mut app = Self {
             world,
             exit_sys,
             fixed_updates: vec![],
@@ -43,41 +43,43 @@ impl App {
         ComputeTaskPool::get_or_init(TaskPool::default);
         app.add_plugin(BaseSchedules)
             .add_event::<AppExitEvt>()
-            .add_systems(OnEnginePreFrame, bevy_ecs::event::event_update_system)
+            .add_systems(OnEnginePreFrame, bevy_ecs::event::event_update_system);
+
+        app
     }
 
     #[inline]
-    pub(crate) fn with_window(mut self, config: WindowConfig) -> Self {
+    pub(crate) fn with_window(&mut self, config: WindowConfig) -> &mut Self {
         self.window_config = config;
         self
     }
 
     #[inline]
-    pub(crate) fn with_log(mut self, config: LogConfig) -> Self {
+    pub(crate) fn with_log(&mut self, config: LogConfig) -> &mut Self {
         self.log_config = config;
         self
     }
 
     #[inline]
-    pub fn with_screen<S: Screen>(self, screen: S) -> Self {
+    pub fn with_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
         S::add_schedules(self).add_systems(OnEngineSetup, move |mut cmds: Commands| {
             cmds.queue(ChangeScreen(screen.clone()))
         })
     }
 
     #[inline]
-    pub fn add_plugin(self, config: impl Plugin) -> Self {
+    pub fn add_plugin(&mut self, config: impl Plugin) -> &mut Self {
         config.apply(self)
     }
 
     #[inline]
     #[track_caller]
     pub fn add_screen_systems<SL: ScheduleLabel + Eq + Clone + std::hash::Hash, S: Screen, M>(
-        mut self,
+        &mut self,
         screen: S,
         label: SL,
         systems: impl IntoSystemConfigs<M>,
-    ) -> Self {
+    ) -> &mut Self {
         let schedule_id = ScreenSchedule(label.clone(), screen.clone());
 
         let needs_initialization = self
@@ -115,10 +117,10 @@ impl App {
     #[inline]
     #[track_caller]
     pub fn add_systems<M>(
-        mut self,
+        &mut self,
         label: impl ScheduleLabel,
         systems: impl IntoSystemConfigs<M>,
-    ) -> Self {
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(label, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -130,10 +132,10 @@ impl App {
     #[inline]
     #[track_caller]
     pub fn configure_sets(
-        mut self,
+        &mut self,
         label: impl ScheduleLabel,
         sets: impl IntoSystemSetConfigs,
-    ) -> Self {
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(label, move |_world, schedule| {
                 schedule.configure_sets(sets);
@@ -145,17 +147,17 @@ impl App {
     #[inline]
     #[track_caller]
     pub fn configure_screen_sets(
-        self,
+        &mut self,
         screen: impl Screen,
         label: impl ScheduleLabel + Clone + Eq + std::hash::Hash,
         sets: impl IntoSystemSetConfigs,
-    ) -> Self {
+    ) -> &mut Self {
         self.configure_sets(ScreenSchedule(label, screen), sets)
     }
 
     #[inline]
     #[track_caller]
-    pub fn add_event<E: Event>(mut self) -> Self {
+    pub fn add_event<E: Event>(&mut self) -> &mut Self {
         if !self.world.contains_resource::<Events<E>>() {
             EventRegistry::register_event::<E>(&mut self.world);
         }
@@ -164,19 +166,17 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn add_resource<R: Resource>(mut self, value: R) -> Self {
+    pub fn add_resource<R: Resource>(&mut self, value: R) -> &mut Self {
         self.world.insert_resource(value);
         self
     }
 
-    pub fn run(self) -> Result<(), String> {
-        let Self {
-            mut world,
-            exit_sys,
-            fixed_updates,
-            window_config,
-            log_config,
-        } = self;
+    pub fn run(&mut self) -> Result<(), String> {
+        let mut world = std::mem::take(&mut self.world);
+        let exit_sys = self.exit_sys;
+        let window_config = self.window_config.clone();
+        let log_config = self.log_config.clone();
+
         let mut builder = crate::init_with(|| {
             world.run_schedule(OnEngineSetup);
             world.run_schedule(OnSetup);
@@ -190,7 +190,7 @@ impl App {
             world.run_schedule(OnPreFrame);
         });
 
-        for fps in fixed_updates {
+        for fps in self.fixed_updates.iter().cloned() {
             builder = builder.fixed_update(1.0 / (fps as f32), move |world: &mut World| {
                 world.run_schedule(OnPreFixedUpdate(fps));
                 world.run_schedule(OnFixedUpdate(fps));

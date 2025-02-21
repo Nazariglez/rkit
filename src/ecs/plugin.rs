@@ -10,12 +10,12 @@ use bevy_ecs::prelude::Schedule;
 use bevy_ecs::schedule::ExecutorKind;
 
 pub trait Plugin {
-    fn apply(self, app: App) -> App;
+    fn apply(self, app: &mut App) -> &mut App;
 }
 
 pub struct FixedUpdate(pub u8);
 impl Plugin for FixedUpdate {
-    fn apply(self, mut app: App) -> App {
+    fn apply(self, app: &mut App) -> &mut App {
         let fps = self.0;
 
         if app.fixed_updates.contains(&fps) {
@@ -51,7 +51,7 @@ macro_rules! add_schedules {
 
 pub(crate) struct BaseSchedules;
 impl Plugin for BaseSchedules {
-    fn apply(self, mut app: App) -> App {
+    fn apply(self, app: &mut App) -> &mut App {
         add_schedules!(
             app,
             OnEngineSetup: false,
@@ -91,21 +91,21 @@ impl Default for MainPlugins {
 }
 
 impl Plugin for MainPlugins {
-    fn apply(self, mut app: App) -> App {
+    fn apply(self, app: &mut App) -> &mut App {
         if self.window {
-            app = app.add_plugin(WindowPlugin);
+            app.add_plugin(WindowPlugin);
         }
 
         if self.time {
-            app = app.add_plugin(TimePlugin);
+            app.add_plugin(TimePlugin);
         }
 
         if self.mouse {
-            app = app.add_plugin(MousePlugin);
+            app.add_plugin(MousePlugin);
         }
 
         if self.keyboard {
-            app = app.add_plugin(KeyboardPlugin);
+            app.add_plugin(KeyboardPlugin);
         }
 
         app

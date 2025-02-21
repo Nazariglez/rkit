@@ -391,7 +391,7 @@ pub fn derive_iter_variants(input: TokenStream) -> TokenStream {
     // Generate the implementation for the Screen trait and Resource trait
     let expanded = quote! {
         impl #impl_generics Screen for #enum_name #ty_generics #where_clause {
-            fn add_schedules(mut app: App) -> App {
+            fn add_schedules(mut app: &mut App) -> &mut App {
                 let variants = vec![
                     #(Self::#variant_names),*
                 ];

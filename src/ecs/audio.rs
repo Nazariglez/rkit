@@ -8,7 +8,7 @@ pub use crate::audio::{AsSoundInstance, Sound, SoundInstance};
 #[derive(Default)]
 pub struct AudioPlugin;
 impl Plugin for AudioPlugin {
-    fn apply(self, app: App) -> App {
+    fn apply(self, app: &mut App) -> &mut App {
         app.add_resource(Audio::default())
             .add_systems(OnEnginePostFrame, clean_system)
     }

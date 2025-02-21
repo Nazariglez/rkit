@@ -1,6 +1,6 @@
 use crate::math::{uvec2, UVec2};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WindowConfig {
     pub title: String,
     pub size: UVec2,
