@@ -1,4 +1,4 @@
-use crate::audio::Manager;
+use crate::audio::{Manager, PlayOptions};
 use crate::ecs::app::App;
 use bevy_ecs::prelude::*;
 
@@ -28,9 +28,8 @@ impl Audio {
         self.manager.create_sound_instance(snd)
     }
 
-    pub fn play<S: AsSoundInstance>(&mut self, snd: &S) {
-        self.manager
-            .play_sound(snd.as_instance(), Default::default());
+    pub fn play<'manager, S: AsSoundInstance>(&'manager mut self, snd: &S) -> SoundPlay<'manager> {
+        SoundPlay::new(&mut self.manager, snd.as_instance())
     }
 
     pub fn stop<S: AsSoundInstance>(&mut self, snd: &S) {
@@ -108,4 +107,52 @@ fn clean_system(audio: Option<ResMut<Audio>>) {
     };
 
     audio.manager.clean();
+}
+
+pub struct SoundPlay<'manager> {
+    instance: Option<SoundInstance>,
+    manager: &'manager mut Manager,
+    opts: PlayOptions,
+}
+
+impl<'manager> SoundPlay<'manager> {
+    fn new(manager: &'manager mut Manager, instance: SoundInstance) -> Self {
+        Self {
+            instance: Some(instance),
+            manager,
+            opts: Default::default(),
+        }
+    }
+
+    pub fn volume(mut self, vol: f32) -> Self {
+        self.opts.volume = vol.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn repeat(mut self, val: bool) -> Self {
+        self.opts.repeat = val;
+        self
+    }
+
+    pub fn pitch(mut self, speed: f32) -> Self {
+        self.opts.pitch = speed;
+        self
+    }
+
+    pub fn panning(mut self, panning: f32) -> Self {
+        self.opts.panning = panning.clamp(0.0, 1.0);
+        self
+    }
+}
+
+impl Drop for SoundPlay<'_> {
+    fn drop(&mut self) {
+        debug_assert!(
+            self.instance.is_some(),
+            "Instance must exists always on drop. This should be unreachable."
+        );
+        let instance = self.instance.take().unwrap();
+        let opts = self.opts;
+        self.manager.play_sound(instance, opts);
+    }
 }

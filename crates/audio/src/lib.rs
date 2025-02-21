@@ -1,5 +1,5 @@
-pub use crate::manager::Manager;
-use crate::manager::{PlayOptions, MANAGER};
+use crate::manager::MANAGER;
+pub use crate::manager::{Manager, PlayOptions};
 pub use crate::sound::{AsSoundInstance, Sound, SoundInstance};
 
 mod manager;
