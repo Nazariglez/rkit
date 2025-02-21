@@ -8,8 +8,8 @@ use bevy_ecs::prelude::*;
 pub struct LogPlugin(LogConfig);
 
 impl Plugin for LogPlugin {
-    fn apply(self, app: &mut App) -> &mut App {
-        app.with_log(self.0)
+    fn apply(&self, app: &mut App) {
+        app.with_log(self.0.clone());
     }
 }
 

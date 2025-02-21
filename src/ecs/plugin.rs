@@ -10,17 +10,26 @@ use bevy_ecs::prelude::Schedule;
 use bevy_ecs::schedule::ExecutorKind;
 
 pub trait Plugin {
-    fn apply(self, app: &mut App) -> &mut App;
+    fn apply(&self, app: &mut App);
+}
+
+impl<T> Plugin for T
+where
+    T: Fn(&mut App) + Send + Sync + 'static,
+{
+    fn apply(&self, app: &mut App) {
+        self(app);
+    }
 }
 
 pub struct FixedUpdate(pub u8);
 impl Plugin for FixedUpdate {
-    fn apply(self, app: &mut App) -> &mut App {
+    fn apply(&self, app: &mut App) {
         let fps = self.0;
 
         if app.fixed_updates.contains(&fps) {
             log::warn!("Ignoring FixedUpdate({fps}) because it's already registered");
-            return app;
+            return;
         }
 
         app.world.add_schedule(Schedule::new(OnPreFixedUpdate(fps)));
@@ -29,7 +38,6 @@ impl Plugin for FixedUpdate {
             .add_schedule(Schedule::new(OnPostFixedUpdate(fps)));
 
         app.fixed_updates.push(fps);
-        app
     }
 }
 
@@ -51,7 +59,7 @@ macro_rules! add_schedules {
 
 pub(crate) struct BaseSchedules;
 impl Plugin for BaseSchedules {
-    fn apply(self, app: &mut App) -> &mut App {
+    fn apply(&self, app: &mut App) {
         add_schedules!(
             app,
             OnEngineSetup: false,
@@ -68,7 +76,6 @@ impl Plugin for BaseSchedules {
             OnPostRender: false,
             OnCleanup: false,
         );
-        app
     }
 }
 
@@ -91,7 +98,7 @@ impl Default for MainPlugins {
 }
 
 impl Plugin for MainPlugins {
-    fn apply(self, app: &mut App) -> &mut App {
+    fn apply(&self, app: &mut App) {
         if self.window {
             app.add_plugin(WindowPlugin);
         }
@@ -107,7 +114,5 @@ impl Plugin for MainPlugins {
         if self.keyboard {
             app.add_plugin(KeyboardPlugin);
         }
-
-        app
     }
 }

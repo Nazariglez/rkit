@@ -14,11 +14,11 @@ enum Scene {
 
 struct InitScenes;
 impl Plugin for InitScenes {
-    fn apply(self, app: &mut App) -> &mut App {
+    fn apply(&self, app: &mut App) {
         app.with_screen(Scene::Menu)
             .add_screen_systems(Scene::Menu, OnRender, draw_menu_system)
             .add_screen_systems(Scene::Game, OnRender, draw_game_system)
-            .add_systems(OnUpdate, change_screen_system.run_if(is_change_requested))
+            .add_systems(OnUpdate, change_screen_system.run_if(is_change_requested));
     }
 }
 fn main() -> Result<(), String> {

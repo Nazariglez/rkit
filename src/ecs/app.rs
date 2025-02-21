@@ -69,7 +69,8 @@ impl App {
 
     #[inline]
     pub fn add_plugin(&mut self, config: impl Plugin) -> &mut Self {
-        config.apply(self)
+        config.apply(self);
+        self
     }
 
     #[inline]

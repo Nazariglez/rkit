@@ -44,7 +44,7 @@ impl<T> Plugin for UILayoutPlugin<T>
 where
     T: Component,
 {
-    fn apply(self, app: &mut App) -> &mut App {
+    fn apply(&self, app: &mut App) {
         let update_layout_system = generate_update_layout_system::<T>();
         let update_nodes_system = generate_update_node_system::<T>();
         let update_pointer_transform_system = generate_update_pointer_transform_system::<T>();
@@ -73,7 +73,7 @@ where
                     .in_set(UILayoutSysSet),
             )
             .configure_sets(OnPreUpdate, UILayoutSysSet)
-            .configure_sets(OnPostUpdate, UILayoutSysSet)
+            .configure_sets(OnPostUpdate, UILayoutSysSet);
     }
 }
 

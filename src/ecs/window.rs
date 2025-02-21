@@ -8,10 +8,10 @@ use macros::Deref;
 pub struct WindowPlugin;
 
 impl Plugin for WindowPlugin {
-    fn apply(self, app: &mut App) -> &mut App {
+    fn apply(&self, app: &mut App) {
         app.add_systems(OnEngineSetup, init_window_system)
             .add_systems(OnEnginePreFrame, populate_window_system)
-            .add_systems(OnEnginePostFrame, sync_window_system)
+            .add_systems(OnEnginePostFrame, sync_window_system);
     }
 }
 
@@ -19,8 +19,8 @@ impl Plugin for WindowPlugin {
 pub struct WindowConfigPlugin(WindowConfig);
 
 impl Plugin for WindowConfigPlugin {
-    fn apply(self, app: &mut App) -> &mut App {
-        app.with_window(self.0)
+    fn apply(&self, app: &mut App) {
+        app.with_window(self.0.clone());
     }
 }
 
