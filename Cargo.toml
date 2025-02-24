@@ -38,7 +38,7 @@ audio = { path = "crates/audio" }
 assets = { path = "crates/assets" }
 
 ## common deps
-log = "0.4.25"
+log = "0.4.26"
 raw-window-handle = "0.6.2"
 atomic_refcell = "0.1.13"
 serde = { version = "1.0", features = ["serde_derive"] }
@@ -59,8 +59,8 @@ parking_lot = "0.12.3"
 web-sys = "0.3.77"
 js-sys = "0.3.77"
 wasm-bindgen = "0.2.100"
-strum = "0.27.0"
-strum_macros = "0.27.0"
+strum = "0.27.1"
+strum_macros = "0.27.1"
 web-time = { version = "1.1.0", default-features = false }
 fastrand = "2.3.0"
 
@@ -94,7 +94,7 @@ heapless = { workspace = true, optional = true }
 bevy_ecs = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
 bevy_tasks = { version = "0.15", default-features = false, features = ["multi_threaded"], optional = true }
 web-time = { workspace = true, optional = true }
-taffy = { version = "0.7.5", optional = true }
+taffy = { version = "0.7.6", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { workspace = true, optional = true, features = ["js"] }
@@ -102,7 +102,7 @@ fastrand = { workspace = true, optional = true, features = ["js"] }
 [dev-dependencies]
 log.workspace = true
 bytemuck = {workspace = true, features = ["derive"]}
-shipyard = "0.7.5"
+shipyard = "0.7.6"
 static_assertions = "1.1.0"
 
 [features]
