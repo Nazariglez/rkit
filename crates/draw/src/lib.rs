@@ -1,9 +1,11 @@
 mod m2d;
+mod render_sprite_cache;
 mod shapes;
 mod sprite;
 pub mod text;
 
 pub use m2d::*;
+pub use render_sprite_cache::*;
 pub use sprite::*;
 
 pub use text::*;

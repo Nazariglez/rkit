@@ -1,12 +1,11 @@
 use crate::app::window_size;
 use crate::gfx::{
-    self, AsRenderer, BindGroup, BlendMode, RenderPipeline, RenderTexture, RenderTextureId,
+    self, AsRenderer, BindGroup, BlendMode, Color, RenderPipeline, RenderTexture, RenderTextureId,
     Renderer, Sampler, SamplerId, TextureFilter,
 };
 use crate::math::UVec2;
 use crate::postfx::pfx::{create_pfx_pipeline, PostFx, PostProcess};
 use atomic_refcell::AtomicRefCell;
-use corelib::gfx::Color;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
 use utils::fast_cache::FastCache;

@@ -185,5 +185,3 @@ impl<'a> SpriteBuilder<'a> {
         })
     }
 }
-
-// TODO: RenderSprite
