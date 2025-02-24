@@ -1,6 +1,6 @@
 use super::components::{UINode, UIRender};
 use super::style::UIStyle;
-use crate::draw::Draw2D;
+use crate::draw::{Draw2D, Sprite};
 use crate::gfx::Color;
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
@@ -40,4 +40,24 @@ fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode
             .stroke_color(border_color)
             .stroke(container.border_size);
     }
+}
+
+// -- Image
+#[derive(Component, Debug, Clone)]
+#[require(UIStyle, UIRender(image_render_component))]
+pub struct UIImage {
+    pub sprite: Sprite,
+}
+
+fn image_render_component() -> UIRender {
+    UIRender::run::<(&UIImage, &UINode), _>(render_image)
+}
+
+fn render_image(draw: &mut Draw2D, (image, node): (&UIImage, &UINode)) {
+    let scale = node.size() / image.sprite.size();
+
+    draw.image(&image.sprite)
+        .scale(scale)
+        .origin(Vec2::splat(0.5))
+        .translate(node.size() * 0.5);
 }

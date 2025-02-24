@@ -1,15 +1,12 @@
 use crate::draw::{BaseCam2D, Draw2D};
 use crate::math::{vec2, Vec2};
 use bevy_ecs::prelude::*;
-use corelib::gfx::Color;
-use corelib::input::mouse_position;
 use corelib::math::{vec3, Mat3, Mat4, Vec3Swizzles};
 use draw::Camera2D;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::components::{UINode, UIRender};
-use super::prelude::UIPointer;
 use super::style::UIStyle;
 
 #[derive(Clone, Copy, Debug)]
@@ -285,29 +282,70 @@ pub fn draw_ui_layout<T>(draw: &mut Draw2D, world: &mut World)
 where
     T: Component,
 {
+    draw_ui_layout_from::<T>(draw, world, None)
+}
+
+pub fn draw_ui_layout_from<T>(draw: &mut Draw2D, world: &mut World, from: Option<Entity>)
+where
+    T: Component,
+{
     world.resource_scope(|world: &mut World, layout: Mut<UILayout<T>>| {
-        layout.graph.iter().for_each(|ng| {
-            if let UINodeGraph::Node(entity) = ng {
-                if let (Some(render), Some(node)) =
-                    (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
-                {
-                    // store current values
-                    let last_alpha = draw.alpha();
+        // is form is none draw all the graph
+        let mut rendering = from.is_none();
 
-                    // set layout's node values
-                    draw.set_alpha(last_alpha * node.global_alpha);
-                    draw.push_matrix(node.global_transform);
-
-                    // draw if necessary
-                    if draw.alpha() > 0.0 {
-                        render.render(draw, world, *entity);
+        for ng in &layout.graph {
+            match ng {
+                UINodeGraph::Node(entity) => {
+                    // skip the entitiy if is not inside the graph we want
+                    if !rendering {
+                        continue;
                     }
 
-                    // restore old values
-                    draw.pop_matrix();
-                    draw.set_alpha(last_alpha);
-                };
+                    // if the node continas a render component then render
+                    if let (Some(render), Some(node)) =
+                        (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
+                    {
+                        // store current values
+                        let last_alpha = draw.alpha();
+
+                        // set layout's node values
+                        draw.set_alpha(last_alpha * node.global_alpha);
+                        draw.push_matrix(node.global_transform);
+
+                        // draw if necessary
+                        if draw.alpha() > 0.0 {
+                            render.render(draw, world, *entity);
+                        }
+
+                        // restore old values
+                        draw.pop_matrix();
+                        draw.set_alpha(last_alpha);
+                    };
+                }
+                UINodeGraph::Begin(entity) => {
+                    // skip if we're already rendering
+                    if rendering {
+                        continue;
+                    }
+
+                    // start rendering if we reached the node we want
+                    rendering = from.is_some_and(|e| &e == entity);
+                }
+                UINodeGraph::End(entity) => {
+                    // skip if we're not rendering
+                    if !rendering {
+                        continue;
+                    }
+
+                    // stop rendering if we reached the end of the node's children
+                    if let Some(e) = from {
+                        if &e == entity {
+                            // rendering = false;
+                            break;
+                        }
+                    }
+                }
             }
-        });
+        }
     });
 }
