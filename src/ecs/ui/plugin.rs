@@ -1,5 +1,6 @@
 use super::components::{UIDragEvent, UINode, UIPointer, UIPointerConsumePolicy, UITransform};
 use super::layout::{UILayout, UINodeGraph};
+use super::prelude::{UIImage, UIText};
 use super::style::UIStyle;
 use crate::ecs::app::App;
 use crate::ecs::input::Mouse;
@@ -79,10 +80,14 @@ fn is_layout_present<T: Component>(layout: Option<Res<UILayout<T>>>) -> bool {
     layout.is_some()
 }
 
-fn generate_update_layout_system<T: Component>(
-) -> impl Fn(ResMut<UILayout<T>>, EventWriter<UILayoutUpdateEvent<T>>) {
-    |mut layout, mut evt| {
-        let updated = layout.update();
+fn generate_update_layout_system<T: Component>() -> impl Fn(
+    ResMut<UILayout<T>>,
+    EventWriter<UILayoutUpdateEvent<T>>,
+    Query<&UIImage, With<T>>,
+    Query<&UIText, With<T>>,
+) {
+    |mut layout, mut evt, images, texts| {
+        let updated = layout.update(images, texts);
         if updated {
             evt.send(UILayoutUpdateEvent::<T>::default());
         }

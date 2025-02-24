@@ -5,6 +5,7 @@ use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
+use super::ctx::UINodeType;
 use super::{components::UINode, layout::UILayout, style::UIStyle};
 
 type BuilderCb = dyn FnOnce(&mut World, &mut FxHashMap<Entity, NodeId>) + Send;
@@ -54,12 +55,13 @@ where
         let layout = self.layout;
         self.bundles.as_mut().unwrap().push(Box::new(
             move |world: &mut World, ids: &mut FxHashMap<Entity, NodeId>| {
-                let style = world
+                let (style, typ) = world
                     .entity_mut(entity)
                     .insert((layout, bundle))
                     .insert_if_new(UIStyle::default())
-                    .get_components::<&UIStyle>()
-                    .map(|style| style.as_taffy_style())
+                    .insert_if_new(UINodeType::Container)
+                    .get_components::<(&UIStyle, &UINodeType)>()
+                    .map(|(style, typ)| (style.as_taffy_style(), *typ))
                     .unwrap();
 
                 let mut layout = world
@@ -67,7 +69,7 @@ where
                     .or_panic("Cannot find UILayout to add Nodes. Are you sure the name of the layout is right or that it was initialized?");
 
                 let parent_id = parent_id.and_then(|p_id| ids.get(&p_id)).cloned();
-                let node_id = layout.add_raw_node(entity, style, parent_id);
+                let node_id = layout.add_raw_node(entity, style, typ, parent_id);
                 ids.insert(entity, node_id);
 
                 world.entity_mut(entity).insert(UINode {

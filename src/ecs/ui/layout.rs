@@ -1,13 +1,13 @@
-use crate::draw::{BaseCam2D, Draw2D};
-use crate::math::{vec2, Vec2};
+use crate::draw::{BaseCam2D, Camera2D, Draw2D};
+use crate::math::{vec2, vec3, Mat3, Mat4, Vec2, Vec3Swizzles};
 use bevy_ecs::prelude::*;
-use corelib::math::{vec3, Mat3, Mat4, Vec3Swizzles};
-use draw::Camera2D;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::components::{UINode, UIRender};
+use super::ctx::{measure, NodeContext, UINodeType};
 use super::style::UIStyle;
+use super::widgets::{UIImage, UIText};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum UINodeGraph {
@@ -78,7 +78,7 @@ where
     dirty_layout: bool,
     dirty_graph: bool,
     relations: FxHashMap<Entity, NodeId>,
-    tree: TaffyTree<Entity>,
+    tree: TaffyTree<NodeContext>,
     root: NodeId,
     pub(super) base_transform: Mat3,
 
@@ -91,7 +91,7 @@ where
     T: Component,
 {
     fn default() -> Self {
-        let mut tree = TaffyTree::<Entity>::new();
+        let mut tree = TaffyTree::<NodeContext>::new();
         let root = tree.new_leaf(Style::default()).unwrap();
         let container = tree.new_leaf(Style::default()).unwrap();
         tree.add_child(root, container).unwrap();
@@ -162,15 +162,22 @@ where
         }
     }
 
-    pub fn update(&mut self) -> bool {
+    pub fn update(
+        &mut self,
+        images: Query<&UIImage, With<T>>,
+        texts: Query<&UIText, With<T>>,
+    ) -> bool {
         let needs_compute = self.dirty_graph || self.dirty_layout;
         if needs_compute {
             self.tree
-                .compute_layout(
+                .compute_layout_with_measure(
                     self.root,
                     Size {
                         width: AvailableSpace::Definite(self.cam_info.layout_size.x),
                         height: AvailableSpace::Definite(self.cam_info.layout_size.y),
+                    },
+                    |known_dimensions, available_space, _node_id, ctx, _style| {
+                        measure(known_dimensions, available_space, ctx, &images, &texts)
                     },
                 )
                 .unwrap();
@@ -190,11 +197,15 @@ where
         &mut self,
         entity: Entity,
         style: Style,
+        typ: UINodeType,
         parent: Option<NodeId>,
     ) -> NodeId {
         self.dirty_layout = true;
         self.dirty_graph = true;
-        let node_id = self.tree.new_leaf_with_context(style, entity).unwrap();
+        let node_id = self
+            .tree
+            .new_leaf_with_context(style, NodeContext { entity, typ })
+            .unwrap();
         let parent_id = parent.unwrap_or(self.root);
         self.tree.add_child(parent_id, node_id).unwrap();
         self.relations.insert(entity, node_id);
@@ -262,14 +273,14 @@ where
     }
 }
 
-fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree<Entity>) {
+fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree<NodeContext>) {
     match tree.get_node_context(node_id).cloned() {
-        Some(e) => {
-            graph.push(UINodeGraph::Begin(e));
-            graph.push(UINodeGraph::Node(e));
+        Some(ctx) => {
+            graph.push(UINodeGraph::Begin(ctx.entity));
+            graph.push(UINodeGraph::Node(ctx.entity));
             tree.child_ids(node_id)
                 .for_each(|child_id| process_graph(graph, child_id, tree));
-            graph.push(UINodeGraph::End(e));
+            graph.push(UINodeGraph::End(ctx.entity));
         }
         _ => {
             tree.child_ids(node_id)
