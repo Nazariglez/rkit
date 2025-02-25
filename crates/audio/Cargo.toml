@@ -18,4 +18,4 @@ smallvec.workspace = true
 num.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
-kira = { version = "0.9.6", default-features = false, features = ["cpal", "ogg", "wav", "android_shared_stdcxx"] }
+kira = { version = "0.10.4", default-features = false, features = ["cpal", "ogg", "wav", "android_shared_stdcxx"] }

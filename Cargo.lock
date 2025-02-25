@@ -241,8 +241,7 @@ version = "0.0.0"
 dependencies = [
  "atomic_refcell",
  "corelib",
- "kira 0.10.4",
- "kira 0.9.6",
+ "kira",
  "log",
  "num",
  "once_cell",
@@ -272,18 +271,18 @@ dependencies = [
 
 [[package]]
 name = "avif-serialize"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e335041290c43101ca215eed6f43ec437eb5a42125573f600fc3fa42b9bddd62"
+checksum = "98922d6a4cfbcb08820c69d8eeccc05bb1f29bfa06b4f5b1dbfe9a868bd7608e"
 dependencies = [
  "arrayvec",
 ]
 
 [[package]]
 name = "bevy_ecs"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40e6d5ad061f750f710a9a4e2f9e7d65f86c0061fc9ffcf3a430b3c003bc0088"
+checksum = "1597106cc01e62e6217ccb662e0748b2ce330893f27c7dc17bac33e0bb99bca9"
 dependencies = [
  "arrayvec",
  "bevy_ecs_macros",
@@ -302,9 +301,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_ecs_macros"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fea80917f2d11e8928d0b7cd41efa55b814355e6a3544a1bf68e6b73871d332c"
+checksum = "f453adf07712b39826bc5845e5b0887ce03204ee8359bbe6b40a9afda60564a1"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -314,9 +313,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_macro_utils"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "090371a2cd85574989febff6063a21d1fbbc2939e80f00fe075f62aa8e616136"
+checksum = "8bb6ded1ddc124ea214f6a2140e47a78d1fe79b0638dad39419cdeef2e1133f1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -326,15 +325,15 @@ dependencies = [
 
 [[package]]
 name = "bevy_ptr"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4da2111eefa2000ea8c9dc1beee2eb7283b29b5ef90a29fe43c748df549f84ad"
+checksum = "89fe0b0b919146939481a3a7c38864face2c6d0fd2c73ab3d430dc693ecd9b11"
 
 [[package]]
 name = "bevy_tasks"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e085e93374b8dd2559968bcc1bc66d059387ef3128e59e9af92dcde03f10b7"
+checksum = "028630ddc355563bd567df1076db3515858aa26715ddf7467d2086f9b40e5ab1"
 dependencies = [
  "async-channel",
  "async-executor",
@@ -347,9 +346,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_utils"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2993cac374b3f88cfaf59506c71f8e3e7ad8b4961f4e9864bc76e1c9e1e4400c"
+checksum = "63c2174d43a0de99f863c98a472370047a2bfa7d1e5cec8d9d647fb500905d9d"
 dependencies = [
  "ahash",
  "bevy_utils_proc_macros",
@@ -362,9 +361,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_utils_proc_macros"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2606f79dfe359a88e2a59bb6cd632cd42e9d4bcd250ac8bc3a4e7657e82f4f39"
+checksum = "94847541f6dd2e28f54a9c2b0e857da5f2631e2201ebc25ce68781cdcb721391"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1709,22 +1708,6 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kira"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb5a9f9dff5e262540b628b00d5e1a772270a962d6869f8695bb24832ff3b394"
-dependencies = [
- "cpal",
- "glam",
- "mint",
- "paste",
- "ringbuf",
- "send_wrapper",
- "symphonia",
- "triple_buffer",
-]
-
-[[package]]
-name = "kira"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57141819f3e9a88d264e9b5d945c494d58b6ba4148ca7fc8261e8e7de84407ad"
@@ -2884,15 +2867,6 @@ name = "rgb"
 version = "0.8.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57397d16646700483b67d2dd6511d79318f9d057fdbd21a4066aeac8b41d310a"
-
-[[package]]
-name = "ringbuf"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
-dependencies = [
- "crossbeam-utils",
-]
 
 [[package]]
 name = "rkit"
