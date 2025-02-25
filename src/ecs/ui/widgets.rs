@@ -3,7 +3,7 @@ use super::ctx::UINodeType;
 use super::style::UIStyle;
 use crate::draw::{Draw2D, Font, HAlign, Sprite};
 use crate::gfx::Color;
-use crate::math::{vec2, Vec2};
+use crate::math::{Vec2, vec2};
 use bevy_ecs::prelude::*;
 
 // -- Container

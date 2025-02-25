@@ -1,6 +1,6 @@
 [package]
 name = "corelib"
-edition = "2021"
+edition = "2024"
 build = "build.rs"
 
 [dependencies]

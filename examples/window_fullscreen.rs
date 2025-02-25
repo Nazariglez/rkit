@@ -1,8 +1,8 @@
 use rkit::app::{is_window_fullscreen, toggle_fullscreen, window_size};
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::input::{is_key_pressed, KeyCode};
-use rkit::math::{vec2, Vec2};
+use rkit::input::{KeyCode, is_key_pressed};
+use rkit::math::{Vec2, vec2};
 
 fn main() -> Result<(), String> {
     rkit::init().update(update).run()

@@ -1,4 +1,4 @@
-use crate::backend::{get_backend, get_mut_backend, BackendImpl};
+use crate::backend::{BackendImpl, get_backend, get_mut_backend};
 use crate::math::Vec2;
 
 #[cfg(feature = "gamepad")]

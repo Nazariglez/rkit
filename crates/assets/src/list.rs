@@ -1,4 +1,4 @@
-use crate::{is_loaded, is_loading, AssetId};
+use crate::{AssetId, is_loaded, is_loading};
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::sync::Arc;

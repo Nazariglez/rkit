@@ -1,7 +1,7 @@
 use crate::ui::{UIControl, UIEvents, UIRawHandler};
 use corelib::input::MouseButton;
 use corelib::math::{Rect, Vec2};
-use downcast_rs::{impl_downcast, Downcast};
+use downcast_rs::{Downcast, impl_downcast};
 use draw::{Draw2D, Transform2D};
 
 #[derive(Debug, Copy, Clone)]

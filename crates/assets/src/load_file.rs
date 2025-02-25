@@ -5,13 +5,13 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::future::Future;
 
 #[cfg(target_arch = "wasm32")]
-use futures_util::future::{poll_fn, ready, TryFutureExt};
+use futures_util::future::{TryFutureExt, poll_fn, ready};
 #[cfg(target_arch = "wasm32")]
 use js_sys::Uint8Array;
 #[cfg(target_arch = "wasm32")]
 use std::task::{Context, Poll};
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 #[cfg(target_arch = "wasm32")]
 use web_sys::{XmlHttpRequest, XmlHttpRequestResponseType};
 
@@ -29,7 +29,7 @@ impl FileLoader {
         Ok(Self { thread_pool })
     }
 
-    pub fn load_file(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, String>> {
+    pub fn load_file(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, String>> + use<> {
         let (tx, rx) = oneshot::channel();
 
         let path = path.to_owned();

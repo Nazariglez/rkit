@@ -1,12 +1,12 @@
 use audio::{is_sound_playing, sound_progress};
 use rkit::audio::{
-    create_sound, create_sound_instance, play_sound, set_global_volume, stop_sound, Sound,
-    SoundInstance,
+    Sound, SoundInstance, create_sound, create_sound_instance, play_sound, set_global_volume,
+    stop_sound,
 };
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::input::{is_key_pressed, KeyCode};
-use rkit::math::{vec2, Vec2};
+use rkit::input::{KeyCode, is_key_pressed};
+use rkit::math::{Vec2, vec2};
 use rkit::time;
 
 struct State {

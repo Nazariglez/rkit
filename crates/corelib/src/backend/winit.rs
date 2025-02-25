@@ -20,12 +20,12 @@ use crate::app::WindowConfig;
 use crate::backend::wgpu::GfxBackend;
 use crate::builder::AppBuilder;
 use crate::input::{KeyCode, KeyboardState, MouseButton, MouseState};
-use crate::math::{vec2, Vec2};
+use crate::math::{Vec2, vec2};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
 #[cfg(feature = "gamepad")]
 use crate::backend::gamepad_gilrs::GilrsBackend;
-use crate::events::{CoreEvent, CORE_EVENTS_MAP};
+use crate::events::{CORE_EVENTS_MAP, CoreEvent};
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;
 use crate::time;

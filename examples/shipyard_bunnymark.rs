@@ -1,7 +1,7 @@
-use rkit::draw::{create_draw_2d, Sprite};
+use rkit::draw::{Sprite, create_draw_2d};
 use rkit::gfx::Color;
-use rkit::input::{is_mouse_btn_down, MouseButton};
-use rkit::math::{vec2, Vec2};
+use rkit::input::{MouseButton, is_mouse_btn_down};
+use rkit::math::{Vec2, vec2};
 use rkit::random::Rng;
 use rkit::{draw, gfx, time};
 use shipyard::{
@@ -62,7 +62,7 @@ fn update_bunnies(mut pos: ViewMut<Pos>, mut vel: ViewMut<Vel>, mut res: UniqueV
             if pos.y > 600.0 {
                 speed.y *= -0.85;
                 pos.y = 600.0;
-                if res.rng.gen::<bool>() {
+                if res.rng.r#gen::<bool>() {
                     speed.y -= res.rng.range(0.0..6.0);
                 }
             } else if pos.y < 0.0 {
@@ -100,7 +100,7 @@ fn add_bunnies(
         (&mut pos, &mut vel, &mut color),
         (0..50).map(|_| {
             let speed = vec2(res.rng.range(0.0..10.0), res.rng.range(-5.0..5.0));
-            let color = Color::rgb(res.rng.gen(), res.rng.gen(), res.rng.gen());
+            let color = Color::rgb(res.rng.r#gen(), res.rng.r#gen(), res.rng.r#gen());
             (Pos(Vec2::ZERO), Vel(speed), BunnyColor(color))
         }),
     );

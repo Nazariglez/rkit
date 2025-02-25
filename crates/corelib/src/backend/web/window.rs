@@ -2,8 +2,8 @@ use super::events::EventIterator;
 use super::input::*;
 use super::utils::{canvas_add_event_listener, get_gk_size, set_size_dpi};
 use crate::app::WindowConfig;
-use crate::math::{uvec2, UVec2};
-use glam::{vec2, Vec2};
+use crate::math::{UVec2, uvec2};
+use glam::{Vec2, vec2};
 use js_sys::wasm_bindgen::JsValue;
 use raw_window_handle::{
     DisplayHandle, HasDisplayHandle, RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle,
@@ -199,7 +199,9 @@ fn get_or_create_canvas(
     }
 
     if let Err(e) = canvas_element.set_attribute("tabindex", "0") {
-        log::warn!("Cannot set tabindex to 0, this can lead to errors with focus/unfocus the canvas: {e:?}");
+        log::warn!(
+            "Cannot set tabindex to 0, this can lead to errors with focus/unfocus the canvas: {e:?}"
+        );
     }
 
     if let Err(e) = canvas_element.style().set_property("outline", "none") {

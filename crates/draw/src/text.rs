@@ -2,13 +2,13 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use corelib::gfx::{
     self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat,
 };
-use corelib::math::{uvec2, vec2, UVec2, Vec2};
+use corelib::math::{UVec2, Vec2, uvec2, vec2};
 use cosmic_text::fontdb::Source;
 use cosmic_text::{
     Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch, Style, SwashCache,
     SwashContent, Weight,
 };
-use etagere::{size2, BucketedAtlasAllocator};
+use etagere::{BucketedAtlasAllocator, size2};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;

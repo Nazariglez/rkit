@@ -1,7 +1,7 @@
 use rkit::app::window_size;
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::input::{is_mouse_btn_pressed, mouse_position, MouseButton};
+use rkit::input::{MouseButton, is_mouse_btn_pressed, mouse_position};
 use rkit::math::Vec2;
 
 #[derive(Default)]

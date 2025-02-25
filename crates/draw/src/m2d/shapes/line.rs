@@ -1,7 +1,7 @@
 use crate::m2d::shapes::Path2D;
 use crate::{Draw2D, DrawPipelineId, Element2D, Transform2D};
 use corelib::gfx::Color;
-use corelib::math::{bvec2, Vec2};
+use corelib::math::{Vec2, bvec2};
 use macros::Drawable2D;
 
 #[derive(Drawable2D)]

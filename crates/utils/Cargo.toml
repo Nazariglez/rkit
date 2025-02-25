@@ -1,6 +1,6 @@
 [package]
 name = "utils"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 macros.workspace = true

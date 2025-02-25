@@ -1,4 +1,4 @@
-use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
+use crate::backend::{BackendImpl, GfxBackendImpl, get_mut_backend};
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef, BlendMode,
     Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, CullMode, DepthStencil,
@@ -6,7 +6,7 @@ use crate::gfx::{
     RenderTextureDescriptor, Sampler, SamplerDescriptor, Stencil, Texture, TextureData,
     TextureDescriptor, TextureFilter, TextureFormat, TextureWrap, VertexLayout,
 };
-use glam::{uvec2, UVec2};
+use glam::{UVec2, uvec2};
 use image::EncodableLayout;
 
 pub struct RenderPipelineBuilder<'a> {

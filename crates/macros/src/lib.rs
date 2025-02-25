@@ -4,7 +4,7 @@ use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, Data, DataEnum, DeriveInput, Error, Fields, LitInt, Token, Type, Variant,
+    Data, DataEnum, DeriveInput, Error, Fields, LitInt, Token, Type, Variant, parse_macro_input,
 };
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
@@ -247,11 +247,11 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
                             #field_name: self.#field_name
                         }
                     } else {
-                        let easing_fn = if let Some(ease_fn_path) = custom_ease_fn {
+                        let easing_fn = match custom_ease_fn { Some(ease_fn_path) => {
                             quote! { #ease_fn_path }
-                        } else {
+                        } _ => {
                             quote! { easing }
-                        };
+                        }};
 
                         if yoyo {
                             quote! {
@@ -315,11 +315,11 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
                                 self.#index
                             }
                         } else {
-                            let easing_fn = if let Some(ease_fn_path) = custom_ease_fn {
+                            let easing_fn = match custom_ease_fn { Some(ease_fn_path) => {
                                 quote! { #ease_fn_path }
-                            } else {
+                            } _ => {
                                 quote! { easing }
-                            };
+                            }};
 
                             if yoyo {
                                 quote! {
@@ -377,12 +377,16 @@ pub fn derive_iter_variants(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Ensure the input is an enum
-    let variants = if let Data::Enum(DataEnum { variants, .. }) = input.data {
-        variants
-    } else {
-        return syn::Error::new_spanned(enum_name, "Screen derive can only be derived for enums")
+    let variants = match input.data {
+        Data::Enum(DataEnum { variants, .. }) => variants,
+        _ => {
+            return syn::Error::new_spanned(
+                enum_name,
+                "Screen derive can only be derived for enums",
+            )
             .to_compile_error()
             .into();
+        }
     };
 
     // Collect variant names

@@ -42,7 +42,7 @@ impl Plugin for FixedUpdate {
 }
 
 macro_rules! add_schedules {
-    ($app:expr, $( $schedule:ident : $multi_threaded:expr ),* $(,)?) => {
+    ($app:expr_2021, $( $schedule:ident : $multi_threaded:expr_2021 ),* $(,)?) => {
         $(
             {
                 let mut schedule = Schedule::new($schedule);

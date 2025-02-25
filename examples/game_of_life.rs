@@ -1,7 +1,7 @@
 use rkit::app::WindowConfig;
-use rkit::draw::{self, create_draw_2d, Sprite};
+use rkit::draw::{self, Sprite, create_draw_2d};
 use rkit::gfx::{self, Color, TextureFilter};
-use rkit::math::{uvec2, Vec2};
+use rkit::math::{Vec2, uvec2};
 use rkit::{random, time};
 
 const WIDTH: usize = 100;
@@ -63,11 +63,7 @@ impl State {
                 Some(idx) => {
                     let is_red =
                         is_red_color(&self.previous_bytes[idx..idx + 4].try_into().unwrap());
-                    if is_red {
-                        sum + 1
-                    } else {
-                        sum
-                    }
+                    if is_red { sum + 1 } else { sum }
                 }
                 _ => sum,
             }

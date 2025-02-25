@@ -24,8 +24,8 @@ pub fn set_seed(seed: u64) {
 /// Generate a random value for T
 /// booleans will be true|false while floats will be a number between 0 and 1
 #[inline]
-pub fn gen<T: Generator>() -> T {
-    LOCAL_RNG.with(|rng| rng.borrow_mut().gen())
+pub fn r#gen<T: Generator>() -> T {
+    LOCAL_RNG.with(|rng| rng.borrow_mut().r#gen())
 }
 
 /// Generate a random value between the range passed
@@ -80,8 +80,8 @@ impl Rng {
     /// Generate a random value for T
     /// booleans will be true|false while floats will be a number between 0 and 1
     #[inline]
-    pub fn gen<T: Generator>(&mut self) -> T {
-        T::gen(self)
+    pub fn r#gen<T: Generator>(&mut self) -> T {
+        T::r#gen(self)
     }
 
     /// Generate a random value between the range passed
@@ -113,14 +113,14 @@ impl Rng {
 }
 
 pub trait Generator {
-    fn gen(rng: &mut Rng) -> Self;
+    fn r#gen(rng: &mut Rng) -> Self;
 }
 
 macro_rules! impl_generator {
     ($($t:ty, $method:ident),*) => {
         $(
             impl Generator for $t {
-                fn gen(rng: &mut Rng) -> Self {
+                fn r#gen(rng: &mut Rng) -> Self {
                     rng.raw.$method()
                 }
             }
@@ -197,13 +197,13 @@ mod test {
         let mut rng1 = Rng::with_seed(seed);
         let mut rng2 = Rng::with_seed(seed);
 
-        assert_eq!(rng1.gen::<f32>(), rng2.gen::<f32>());
-        assert_eq!(rng1.gen::<f64>(), rng2.gen::<f64>());
-        assert_eq!(rng1.gen::<bool>(), rng2.gen::<bool>());
+        assert_eq!(rng1.r#gen::<f32>(), rng2.r#gen::<f32>());
+        assert_eq!(rng1.r#gen::<f64>(), rng2.r#gen::<f64>());
+        assert_eq!(rng1.r#gen::<bool>(), rng2.r#gen::<bool>());
     }
 
     macro_rules! test_range {
-        ($($rng:expr, $t:ty, $range:expr),*) => {
+        ($($rng:expr_2021, $t:ty, $range:expr_2021),*) => {
             $(
                let range: Range<$t> = $range;
                 let number = $rng.range(range.clone());

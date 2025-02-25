@@ -4,7 +4,7 @@ use crate::gfx::{
     Renderer, Sampler, SamplerId, TextureFilter,
 };
 use crate::math::UVec2;
-use crate::postfx::pfx::{create_pfx_pipeline, PostFx, PostProcess};
+use crate::postfx::pfx::{PostFx, PostProcess, create_pfx_pipeline};
 use atomic_refcell::AtomicRefCell;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
@@ -90,7 +90,7 @@ pub(crate) struct PostProcessSys {
 }
 
 macro_rules! insert_bg {
-    ($self:ident, $rt:expr, $sampler:expr) => {{
+    ($self:ident, $rt:expr_2021, $sampler:expr_2021) => {{
         let bg_key = BindGroupKey {
             tex: $rt.id(),
             sampler: $sampler.id(),
@@ -114,7 +114,7 @@ macro_rules! insert_bg {
 }
 
 macro_rules! get_bg {
-    ($self:ident, $rt:expr, $sampler:expr) => {{
+    ($self:ident, $rt:expr_2021, $sampler:expr_2021) => {{
         let bg_key = BindGroupKey {
             tex: $rt.id(),
             sampler: $sampler.id(),

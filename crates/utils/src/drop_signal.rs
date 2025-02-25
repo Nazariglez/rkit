@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Add it to a struct to know when all the clones are dropped
 #[derive(Clone)]

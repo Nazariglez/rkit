@@ -1,5 +1,5 @@
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, Window};
 
 pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) {

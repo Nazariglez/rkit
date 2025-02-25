@@ -6,7 +6,7 @@ pub(crate) type EnumSet<T, const N: usize> = IndexSet<T, BuildNoHashHasher<T>, N
 // use values from environment or set a default
 #[macro_export]
 macro_rules! option_usize_env {
-    ($s:expr, $d:expr) => {
+    ($s:expr_2021, $d:expr_2021) => {
         $crate::utils::parse_string_as_usize(option_env!($s), $d)
     };
 }

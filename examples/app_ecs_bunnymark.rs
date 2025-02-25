@@ -1,8 +1,8 @@
-use corelib::input::{is_mouse_btn_down, MouseButton};
-use rkit::draw::{create_draw_2d, Sprite};
+use corelib::input::{MouseButton, is_mouse_btn_down};
+use rkit::draw::{Sprite, create_draw_2d};
 use rkit::ecs::prelude::*;
 use rkit::gfx::Color;
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 use rkit::random::Rng;
 use rkit::{gfx, random};
 
@@ -66,7 +66,7 @@ fn update_system(mut query: Query<(&mut Pos, &mut Vel)>, mut rng: ResMut<Random>
         if pos.y > 600.0 {
             speed.y *= -0.85;
             pos.y = 600.0;
-            if rng.gen::<bool>() {
+            if rng.r#gen::<bool>() {
                 speed.y -= rng.range(0.0..6.0);
             }
         } else if pos.y < 0.0 {
@@ -101,7 +101,7 @@ fn add_bunnies_system(mut cmds: Commands, mut counter: ResMut<Counter>) {
     if is_mouse_btn_down(MouseButton::Left) {
         cmds.spawn_batch((0..ADD).map(|_| {
             let speed = vec2(random::range(0.0..10.0), random::range(-5.0..5.0));
-            let color = Color::rgb(random::gen(), random::gen(), random::gen());
+            let color = Color::rgb(random::r#gen(), random::r#gen(), random::r#gen());
             (Pos(Vec2::ZERO), Vel(speed), BunnyColor(color))
         }));
 

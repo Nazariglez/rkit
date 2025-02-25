@@ -2,7 +2,7 @@ use crate::gfx;
 use crate::gfx::{
     BindGroup, BindGroupLayout, BindingType, Buffer, Color, RenderPipeline, Renderer,
 };
-use crate::postfx::pfx::{create_pfx_pipeline, PostFx};
+use crate::postfx::pfx::{PostFx, create_pfx_pipeline};
 use crate::postfx::sys::IOPostFxData;
 use encase::{ShaderType, UniformBuffer};
 

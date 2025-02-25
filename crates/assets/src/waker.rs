@@ -19,9 +19,11 @@ impl DummyWaker {
 }
 
 unsafe fn vt_clone(data: *const ()) -> RawWaker {
-    let w = (data as *const DummyWaker).as_ref().unwrap();
-    let new_w = Box::new(<&DummyWaker>::clone(&w));
-    RawWaker::new(Box::into_raw(new_w) as *mut (), &VTABLE)
+    unsafe {
+        let w = (data as *const DummyWaker).as_ref().unwrap();
+        let new_w = Box::new(<&DummyWaker>::clone(&w));
+        RawWaker::new(Box::into_raw(new_w) as *mut (), &VTABLE)
+    }
 }
 
 unsafe fn vt_dummy(_data: *const ()) {}

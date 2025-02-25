@@ -2,7 +2,7 @@
 name = "rkit"
 version = "0.1.0"
 authors = ["Nazarí González <nazari.nz@gmail.com>"]
-edition = "2021"
+edition = "2024"
 readme = "README.md"
 homepage = "https://github.com/Nazariglez/rkit"
 repository = "https://github.com/Nazariglez/rkit"

@@ -1,8 +1,8 @@
 use crate::gfx;
 use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
-use crate::postfx::pfx::{create_pfx_pipeline, PostFx};
+use crate::postfx::pfx::{PostFx, create_pfx_pipeline};
 use crate::postfx::sys::IOPostFxData;
-use corelib::math::{vec2, Vec2};
+use corelib::math::{Vec2, vec2};
 use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl

@@ -5,7 +5,7 @@ mod window;
 
 use crate::backend::{BackendImpl, GfxBackendImpl};
 use crate::builder::AppBuilder;
-use crate::events::{CoreEvent, CORE_EVENTS_MAP};
+use crate::events::{CORE_EVENTS_MAP, CoreEvent};
 use crate::gfx::GfxBackend;
 use crate::input::{KeyboardState, MouseState};
 use crate::math::Vec2;

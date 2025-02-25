@@ -2,7 +2,7 @@ use crate::gfx::{
     self, BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer, TextureFilter,
 };
 use crate::math::Vec2;
-use crate::postfx::{create_pfx_pipeline, IOPostFxData, PostFx};
+use crate::postfx::{IOPostFxData, PostFx, create_pfx_pipeline};
 use crate::time;
 use encase::{ShaderType, UniformBuffer};
 

@@ -1,4 +1,4 @@
-use crate::math::{uvec2, UVec2};
+use crate::math::{UVec2, uvec2};
 
 #[derive(Debug, Clone)]
 pub struct WindowConfig {

@@ -1,7 +1,7 @@
 use crate::prelude::{App, OnEnginePostFrame, OnEnginePreFrame, OnEngineSetup, Plugin};
 use bevy_ecs::prelude::*;
 use corelib::app::*;
-use corelib::math::{uvec2, Vec2};
+use corelib::math::{Vec2, uvec2};
 use macros::Deref;
 
 #[derive(Default)]

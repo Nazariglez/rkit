@@ -5,7 +5,7 @@ use crate::{
 use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use corelib::math::{bvec2, Mat3, Rect, Vec2};
+use corelib::math::{Mat3, Rect, Vec2, bvec2};
 use macros::Drawable2D;
 
 // language=wgsl

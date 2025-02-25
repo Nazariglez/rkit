@@ -1,5 +1,5 @@
 use crate::ui::{UIElement, UIRawHandler};
-use corelib::math::{vec2, vec3, Mat3, Mat4, Vec2};
+use corelib::math::{Mat3, Mat4, Vec2, vec2, vec3};
 use draw::Transform2D;
 use scene_graph::{NodeIndex, SceneGraph};
 use std::marker::PhantomData;

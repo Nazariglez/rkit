@@ -1,9 +1,9 @@
-use crate::text::{get_mut_text_system, AtlasType, Font, HAlign, TextInfo};
+use crate::text::{AtlasType, Font, HAlign, TextInfo, get_mut_text_system};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Transform2D};
 use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use corelib::math::{bvec2, Mat3, Rect, Vec2};
+use corelib::math::{Mat3, Rect, Vec2, bvec2};
 use macros::Drawable2D;
 use std::cell::RefCell;
 

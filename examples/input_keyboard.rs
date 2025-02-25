@@ -1,7 +1,7 @@
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::input::{is_key_down, keys_released, KeyCode};
-use rkit::math::{vec2, Vec2};
+use rkit::input::{KeyCode, is_key_down, keys_released};
+use rkit::math::{Vec2, vec2};
 use rkit::time;
 
 const MOVE_SPEED: f32 = 100.0;

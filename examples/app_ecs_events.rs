@@ -15,7 +15,7 @@ fn main() -> Result<(), String> {
 }
 
 fn send_event_system(mut writer: EventWriter<MyCustomEvent>) {
-    let rng = random::gen::<f32>();
+    let rng = random::r#gen::<f32>();
     if rng <= 0.95 {
         return;
     }

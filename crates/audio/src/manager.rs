@@ -1,8 +1,8 @@
 use crate::sound::{InstanceId, SoundId};
-use crate::{clean_audio_manager, Sound, SoundInstance};
+use crate::{Sound, SoundInstance, clean_audio_manager};
 use atomic_refcell::AtomicRefCell;
-use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::sound::PlaybackState;
+use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, DefaultBackend, Panning, PlaybackRate, Tween,
 };

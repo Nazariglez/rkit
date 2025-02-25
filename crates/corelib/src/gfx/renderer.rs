@@ -1,12 +1,12 @@
 use crate::backend::gfx::BindGroup;
-use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
+use crate::backend::{BackendImpl, GfxBackendImpl, get_mut_backend};
 use crate::gfx::consts::{
     MAX_BIND_GROUPS_PER_PIPELINE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE, MAX_VERTEX_BUFFERS,
 };
 use crate::gfx::pipeline::ClearOptions;
 use crate::gfx::{Buffer, Color, RenderPipeline, RenderTexture};
 use arrayvec::ArrayVec;
-use glam::{vec2, Vec2};
+use glam::{Vec2, vec2};
 use smallvec::SmallVec;
 use std::collections::Bound;
 use std::ops::{Range, RangeBounds};

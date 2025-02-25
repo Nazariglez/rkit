@@ -1,8 +1,8 @@
-use super::{create_shapes_2d_pipeline_ctx, PipelineContext};
+use super::{PipelineContext, create_shapes_2d_pipeline_ctx};
 use crate::sprite::SpriteId;
 use crate::{
-    clean_2d, create_images_2d_pipeline_ctx, create_pattern_2d_pipeline_ctx,
-    create_text_2d_pipeline_ctx, Sprite,
+    Sprite, clean_2d, create_images_2d_pipeline_ctx, create_pattern_2d_pipeline_ctx,
+    create_text_2d_pipeline_ctx,
 };
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use corelib::gfx::{self, BindGroup, Buffer, RenderPipeline};

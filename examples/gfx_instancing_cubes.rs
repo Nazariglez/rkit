@@ -2,7 +2,7 @@ use rkit::gfx::{
     self, BindGroup, BindGroupLayout, BindingType, Buffer, Color, CullMode, IndexFormat,
     RenderPipeline, Renderer, VertexFormat, VertexLayout, VertexStepMode,
 };
-use rkit::math::{vec3, Mat4};
+use rkit::math::{Mat4, vec3};
 use rkit::random;
 use rkit::time;
 
@@ -112,7 +112,7 @@ impl State {
         let pos_vbo = gfx::create_vertex_buffer(vertices).build()?;
 
         let colors = (0..INSTANCES)
-            .map(|_| Color::rgb(random::gen(), random::gen(), random::gen()).to_rgba())
+            .map(|_| Color::rgb(random::r#gen(), random::r#gen(), random::r#gen()).to_rgba())
             .collect::<Vec<_>>();
 
         let color_vbo = gfx::create_vertex_buffer(&colors).build()?;

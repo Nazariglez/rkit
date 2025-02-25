@@ -145,14 +145,17 @@ mod tests {
     #[test]
     fn test_take_and_return_pool_a() {
         // Take an item from POOL_A
-        if let Some(mut item) = POOL_A.take() {
-            item.push(42);
-            assert_eq!(item.capacity(), 10);
+        match POOL_A.take() {
+            Some(mut item) => {
+                item.push(42);
+                assert_eq!(item.capacity(), 10);
 
-            // After taking an item, the pool should have one less
-            assert_eq!(POOL_A.len(), 3);
-        } else {
-            panic!("Expected an available item in POOL_A");
+                // After taking an item, the pool should have one less
+                assert_eq!(POOL_A.len(), 3);
+            }
+            _ => {
+                panic!("Expected an available item in POOL_A");
+            }
         }
 
         // Item should be returned after drop

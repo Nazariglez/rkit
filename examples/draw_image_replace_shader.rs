@@ -1,7 +1,7 @@
 use draw::{AsBindGroups, DrawPipelineId, PipelineContext, PipelineResources};
-use rkit::draw::{create_draw_2d, Sprite};
+use rkit::draw::{Sprite, create_draw_2d};
 use rkit::gfx::{self, BindGroupLayout, BindingType, BlendMode, Color, VertexFormat, VertexLayout};
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 
 // language=wgsl
 const SHADER: &str = r#"

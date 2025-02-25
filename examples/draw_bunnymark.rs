@@ -1,7 +1,7 @@
-use rkit::draw::{create_draw_2d, Sprite};
+use rkit::draw::{Sprite, create_draw_2d};
 use rkit::gfx::{self, Color};
-use rkit::input::{is_mouse_btn_down, MouseButton};
-use rkit::math::{vec2, Vec2};
+use rkit::input::{MouseButton, is_mouse_btn_down};
+use rkit::math::{Vec2, vec2};
 use rkit::random::Rng;
 use rkit::time;
 
@@ -37,7 +37,7 @@ impl State {
             self.bunnies.push(Bunny {
                 pos: Vec2::ZERO,
                 speed: vec2(self.rng.range(0.0..10.0), self.rng.range(-5.0..5.0)),
-                color: Color::rgb(self.rng.gen(), self.rng.gen(), self.rng.gen()),
+                color: Color::rgb(self.rng.r#gen(), self.rng.r#gen(), self.rng.r#gen()),
             })
         });
     }
@@ -76,7 +76,7 @@ fn update(state: &mut State) {
         if b.pos.y > 600.0 {
             b.speed.y *= -0.85;
             b.pos.y = 600.0;
-            if rng.gen::<bool>() {
+            if rng.r#gen::<bool>() {
                 b.speed.y -= rng.range(0.0..6.0);
             }
         } else if b.pos.y < 0.0 {

@@ -1,8 +1,8 @@
-use rkit::app::{window_size, WindowConfig};
-use rkit::draw::{create_draw_2d, Draw2D};
+use rkit::app::{WindowConfig, window_size};
+use rkit::draw::{Draw2D, create_draw_2d};
 use rkit::gfx::{self, Color};
-use rkit::input::{is_mouse_btn_pressed, mouse_position, MouseButton};
-use rkit::math::{ivec2, uvec2, vec2, IVec2, UVec2, Vec2};
+use rkit::input::{MouseButton, is_mouse_btn_pressed, mouse_position};
+use rkit::math::{IVec2, UVec2, Vec2, ivec2, uvec2, vec2};
 use rkit::random;
 
 const COLS: usize = 4;

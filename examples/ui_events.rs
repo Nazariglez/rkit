@@ -1,8 +1,8 @@
 use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Camera2D, Draw2D, Transform2D};
+use rkit::draw::{Camera2D, Draw2D, Transform2D, create_draw_2d};
 use rkit::gfx::{self, Color};
 use rkit::input::MouseButton;
-use rkit::math::{vec2, FloatExt, Vec2};
+use rkit::math::{FloatExt, Vec2, vec2};
 use rkit::time;
 use rkit::ui::{UIControl, UIElement, UIEvents, UIHandler, UIManager, UINodeMetadata};
 

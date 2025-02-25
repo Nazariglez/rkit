@@ -1,7 +1,7 @@
 use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Sprite};
+use rkit::draw::{Sprite, create_draw_2d};
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 use rkit::time;
 use std::ops::Rem;
 

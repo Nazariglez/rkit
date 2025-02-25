@@ -2,7 +2,7 @@ use rkit::gfx::{
     self, BindGroup, BindGroupLayout, BindingType, Buffer, Color, CullMode, IndexFormat,
     RenderPipeline, Renderer, VertexFormat, VertexLayout,
 };
-use rkit::math::{vec3, Mat4};
+use rkit::math::{Mat4, vec3};
 use rkit::time;
 
 // language=wgsl

@@ -1,9 +1,9 @@
 use corelib::app::window_height;
-use corelib::input::{is_key_pressed, KeyCode};
+use corelib::input::{KeyCode, is_key_pressed};
 use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Sprite};
+use rkit::draw::{Sprite, create_draw_2d};
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 use rkit::postfx::{
     BlurFx, ColorReplaceFx, GrayScaleFx, PixelateFx, PostFx, PostProcess, RgbSplitFx,
 };

@@ -1,7 +1,7 @@
 use draw::create_draw_2d;
 use rkit::ecs::prelude::*;
 use rkit::gfx::Color;
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 use rkit::{gfx, time};
 
 fn main() -> Result<(), String> {

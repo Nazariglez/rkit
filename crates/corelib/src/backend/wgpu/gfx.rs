@@ -13,8 +13,8 @@ use crate::gfx::{
     RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture,
     TextureData, TextureDescriptor, TextureFormat, TextureId,
 };
-use crate::gfx::{Sampler, SamplerDescriptor, MAX_BINDING_ENTRIES};
-use crate::math::{vec2, UVec2};
+use crate::gfx::{MAX_BINDING_ENTRIES, Sampler, SamplerDescriptor};
+use crate::math::{UVec2, vec2};
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
 use std::borrow::Cow;

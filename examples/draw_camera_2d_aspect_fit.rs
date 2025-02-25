@@ -1,9 +1,9 @@
 use draw::ScreenMode;
 use rkit::app::window_size;
-use rkit::draw::create_draw_2d;
 use rkit::draw::Camera2D;
+use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 
 // TODO fix debug mode crash because glam_assert
 

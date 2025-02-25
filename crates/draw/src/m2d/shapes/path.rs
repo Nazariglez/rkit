@@ -1,10 +1,10 @@
 use super::size_from_vertices;
-use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
+use crate::shapes::{SHAPE_TESSELLATOR, TessMode};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
 use corelib::gfx::Color;
-use corelib::math::{bvec2, Mat3, Vec2};
+use corelib::math::{Mat3, Vec2, bvec2};
 use lyon::geom::Arc;
-use lyon::math::{point, Angle};
+use lyon::math::{Angle, point};
 use lyon::path::path::Builder;
 use lyon::tessellation::*;
 use macros::Drawable2D;

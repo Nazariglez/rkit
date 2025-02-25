@@ -11,7 +11,7 @@ mod stats;
 mod texture;
 
 pub use crate::backend::gfx::*;
-use crate::backend::{get_mut_backend, BackendImpl, GfxBackendImpl};
+use crate::backend::{BackendImpl, GfxBackendImpl, get_mut_backend};
 pub use bind_group::*;
 pub use blend_mode::*;
 pub use buffer::*;

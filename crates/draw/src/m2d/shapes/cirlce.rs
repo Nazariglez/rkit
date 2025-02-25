@@ -1,7 +1,7 @@
-use crate::shapes::{TessMode, SHAPE_TESSELLATOR};
+use crate::shapes::{SHAPE_TESSELLATOR, TessMode};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
 use corelib::gfx::Color;
-use corelib::math::{bvec2, Mat3, Vec2};
+use corelib::math::{Mat3, Vec2, bvec2};
 use lyon::math::point;
 use lyon::path::{Path, Winding};
 use lyon::tessellation::*;

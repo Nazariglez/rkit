@@ -1,6 +1,6 @@
 use corelib::input::{
-    is_mouse_moving, is_mouse_scrolling, mouse_btns_down, mouse_btns_pressed, mouse_btns_released,
-    mouse_position, mouse_wheel_delta, MouseButton,
+    MouseButton, is_mouse_moving, is_mouse_scrolling, mouse_btns_down, mouse_btns_pressed,
+    mouse_btns_released, mouse_position, mouse_wheel_delta,
 };
 use corelib::math::{Mat3, Mat4, Rect, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};

@@ -1,8 +1,8 @@
 use draw::{BaseCam2D, ScreenMode};
 use rkit::app::window_size;
-use rkit::draw::{create_draw_2d, Camera2D};
+use rkit::draw::{Camera2D, create_draw_2d};
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 use rkit::prelude::*;
 
 /// Identify the layout and the entities that belongs to it

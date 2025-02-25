@@ -2,7 +2,7 @@ use crate::app::WindowConfig;
 use crate::backend::run;
 
 #[cfg(feature = "logs")]
-use crate::app::logger::{init_logs, LogConfig};
+use crate::app::logger::{LogConfig, init_logs};
 
 pub(crate) type InitCb<S> = Box<dyn FnOnce() -> S>;
 pub(crate) type UpdateCb<S> = Box<dyn FnMut(&mut S)>;

@@ -1,10 +1,10 @@
 use draw::{BaseCam2D, ScreenMode};
-use rkit::app::{window_size, WindowConfig};
-use rkit::draw::create_draw_2d;
+use rkit::app::{WindowConfig, window_size};
 use rkit::draw::Camera2D;
+use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
-use rkit::input::{is_key_down, is_key_pressed, KeyCode};
-use rkit::math::{uvec2, vec2, Vec2};
+use rkit::input::{KeyCode, is_key_down, is_key_pressed};
+use rkit::math::{Vec2, uvec2, vec2};
 use rkit::time;
 use std::ops::Rem;
 

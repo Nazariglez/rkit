@@ -8,7 +8,7 @@ pub mod math;
 pub mod time;
 mod utils;
 
-use crate::builder::{builder, AppBuilder};
+use crate::builder::{AppBuilder, builder};
 
 pub fn init_with<F, S>(callback: F) -> AppBuilder<S>
 where

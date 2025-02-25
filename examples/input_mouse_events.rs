@@ -1,12 +1,12 @@
 use rkit::draw::create_draw_2d;
 use rkit::gfx::{self, Color};
 use rkit::input::{
-    hide_cursor, is_cursor_locked, is_cursor_on_screen, is_cursor_visible, is_key_pressed,
-    is_mouse_btn_down, is_mouse_moving, is_mouse_scrolling, lock_cursor, mouse_btns_pressed,
-    mouse_btns_released, mouse_motion_delta, mouse_position, mouse_wheel_delta, show_cursor,
-    unlock_cursor, KeyCode, MouseButton,
+    KeyCode, MouseButton, hide_cursor, is_cursor_locked, is_cursor_on_screen, is_cursor_visible,
+    is_key_pressed, is_mouse_btn_down, is_mouse_moving, is_mouse_scrolling, lock_cursor,
+    mouse_btns_pressed, mouse_btns_released, mouse_motion_delta, mouse_position, mouse_wheel_delta,
+    show_cursor, unlock_cursor,
 };
-use rkit::math::{vec2, Vec2};
+use rkit::math::{Vec2, vec2};
 use rkit::utils::RingBuffer;
 
 struct State {

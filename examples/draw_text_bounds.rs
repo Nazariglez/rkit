@@ -1,7 +1,7 @@
 use rkit::app::window_size;
-use rkit::draw::{self, create_draw_2d, Draw2D, Font};
+use rkit::draw::{self, Draw2D, Font, create_draw_2d};
 use rkit::gfx::{self, Color};
-use rkit::math::{vec2, Rect, Vec2};
+use rkit::math::{Rect, Vec2, vec2};
 
 struct State {
     font: Font,

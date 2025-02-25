@@ -1,5 +1,5 @@
-use crate::backend::{get_backend, get_mut_backend, BackendImpl};
-use crate::math::{vec2, Vec2};
+use crate::backend::{BackendImpl, get_backend, get_mut_backend};
+use crate::math::{Vec2, vec2};
 
 mod window;
 pub use window::*;
@@ -9,7 +9,7 @@ pub mod logger;
 #[cfg(feature = "logs")]
 pub use logger::LogConfig;
 
-use crate::events::{CoreEvent, CORE_EVENTS_MAP};
+use crate::events::{CORE_EVENTS_MAP, CoreEvent};
 
 // -- Window section
 /// Return the window's title
