@@ -781,7 +781,7 @@ pub(super) fn taffy_style_from(style: &UIStyle) -> TStyle {
             Display::Grid => tstyle::Display::Grid,
             Display::None => tstyle::Display::None,
         },
-        box_sizing: tstyle::BoxSizing::ContentBox,
+        box_sizing: tstyle::BoxSizing::BorderBox,
         position: match style.mode {
             Mode::Relative => tstyle::Position::Relative,
             Mode::Absolute => tstyle::Position::Absolute,

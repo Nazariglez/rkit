@@ -95,7 +95,7 @@ fn text_renderer() -> UIRender {
 fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
     let data = TextData {
         node_size: node.size(),
-        max_width: node.size().x,
+        max_width: node.size().x + 1.0,
         font: text.font.as_ref(),
         text: &text.text,
         color: text.color,
@@ -152,6 +152,6 @@ fn draw_text(draw: &mut Draw2D, data: &TextData) {
 
     d_text
         .color(data.color)
-        .size(data.size)
-        .max_width(data.max_width);
+        .max_width(data.max_width)
+        .size(data.size);
 }
