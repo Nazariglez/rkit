@@ -2,15 +2,21 @@ use crate::macros::Deref;
 use crate::math::{Mat3, Vec2};
 use crate::prelude::PanicContext;
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::RunSystemOnce;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::ctx::UINodeType;
+use super::plugin::update_layout_system;
 use super::{components::UINode, layout::UILayout, style::UIStyle};
 
 type BuilderCb = dyn FnOnce(&mut World, &mut FxHashMap<Entity, NodeId>) + Send;
 
-pub struct SpawnUICommand {
+pub struct SpawnUICommand<T>
+where
+    T: Component,
+{
+    _m: std::marker::PhantomData<T>,
     bundles: Vec<Box<BuilderCb>>,
 }
 
@@ -21,6 +27,14 @@ where
     _m: std::marker::PhantomData<T>,
     parent: Entity,
     child: Entity,
+}
+
+pub struct ClearUIChildrenCommand<T>
+where
+    T: Component,
+{
+    _m: std::marker::PhantomData<T>,
+    parent: Entity,
 }
 
 pub struct DespawnUICommand<T>
@@ -114,6 +128,7 @@ where
     fn drop(&mut self) {
         let bundles = self.bundles.take();
         let command = SpawnUICommand {
+            _m: std::marker::PhantomData::<T>,
             bundles: bundles.unwrap(),
         };
         self.cmds.queue(command);
@@ -135,6 +150,10 @@ pub trait CommandSpawnUIExt<'w, 's> {
         T: Component;
 
     fn add_ui_child<T>(&mut self, layout: T, parent: Entity, child: Entity)
+    where
+        T: Component;
+
+    fn clear_ui_children<T>(&mut self, layout: T, parent: Entity)
     where
         T: Component;
 }
@@ -172,6 +191,16 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
         });
     }
 
+    fn clear_ui_children<T>(&mut self, _layout: T, parent: Entity)
+    where
+        T: Component,
+    {
+        self.queue(ClearUIChildrenCommand {
+            _m: std::marker::PhantomData::<T>,
+            parent,
+        });
+    }
+
     fn despawn_ui_node<T>(&mut self, _layout: T, entity: Entity)
     where
         T: Component,
@@ -183,13 +212,20 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
     }
 }
 
-impl Command for SpawnUICommand {
+impl<T> Command for SpawnUICommand<T>
+where
+    T: Component,
+{
     fn apply(self, world: &mut World) {
-        let Self { bundles } = self;
+        let Self { _m, bundles } = self;
         let mut table = FxHashMap::default();
         for cb in bundles {
             cb(world, &mut table);
         }
+
+        world
+            .run_system_once(update_layout_system::<T>)
+            .or_panic("Running Update Layout System on SpawnUICommand");
     }
 }
 
@@ -201,6 +237,33 @@ where
         let Self { _m, parent, child } = self;
         let mut layout = world.get_resource_mut::<UILayout<T>>().unwrap();
         layout.add_child(parent, child);
+
+        world
+            .run_system_once(update_layout_system::<T>)
+            .or_panic("Running Update Layout System on AddUIChildCommand");
+    }
+}
+
+impl<T> Command for ClearUIChildrenCommand<T>
+where
+    T: Component,
+{
+    fn apply(self, world: &mut World) {
+        let Self { _m, parent } = self;
+        {
+            let layout = world.get_resource_mut::<UILayout<T>>().unwrap();
+            layout
+                .tree_from_node(parent)
+                .iter()
+                .filter(|e| **e != parent)
+                .for_each(|e| {
+                    let _ = world.despawn(*e);
+                });
+        }
+
+        world
+            .run_system_once(update_layout_system::<T>)
+            .or_panic("Running Update Layout System on ClearUIChildrenCommand");
     }
 }
 
@@ -213,9 +276,16 @@ where
             _m: _layout,
             entity,
         } = self;
-        let layout = world.get_resource::<UILayout<T>>().unwrap();
-        layout.tree_from_node(entity).iter().for_each(|e| {
-            let _ = world.despawn(*e);
-        });
+        {
+            let _ = world.despawn(entity);
+            let layout = world.get_resource::<UILayout<T>>().unwrap();
+            layout.tree_from_node(entity).iter().for_each(|e| {
+                let _ = world.despawn(*e);
+            });
+        }
+
+        world
+            .run_system_once(update_layout_system::<T>)
+            .or_panic("Running Update Layout System on DespawnUICommand");
     }
 }

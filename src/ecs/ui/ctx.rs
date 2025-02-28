@@ -44,7 +44,7 @@ pub(super) fn measure<T: Component>(
         }) => match texts.get(*entity) {
             Ok(text) => measure_text(known_dimensions, available_space, text),
             Err(err) => {
-                log::error!("Cannot measure UIText: {err}");
+                log::warn!("Cannot measure UIText: {err}");
                 Size::ZERO
             }
         },
@@ -54,7 +54,7 @@ pub(super) fn measure<T: Component>(
         }) => match images.get(*entity) {
             Ok(image) => measure_image(known_dimensions, image),
             Err(err) => {
-                log::error!("Cannot measure UIImage: {err}");
+                log::warn!("Cannot measure UIImage: {err}");
                 Size::ZERO
             }
         },
