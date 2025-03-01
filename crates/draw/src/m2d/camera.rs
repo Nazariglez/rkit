@@ -75,6 +75,7 @@ impl Default for Camera2D {
 }
 
 impl BaseCam2D for Camera2D {
+    #[inline]
     fn projection(&self) -> Mat4 {
         debug_assert!(
             !self.dirty_projection,
@@ -83,6 +84,7 @@ impl BaseCam2D for Camera2D {
         self.projection
     }
 
+    #[inline]
     fn inverse_projection(&self) -> Mat4 {
         debug_assert!(
             !self.dirty_projection,
@@ -91,6 +93,7 @@ impl BaseCam2D for Camera2D {
         self.inverse_projection
     }
 
+    #[inline]
     fn transform(&self) -> Mat3 {
         debug_assert!(
             !self.dirty_transform,
@@ -99,6 +102,7 @@ impl BaseCam2D for Camera2D {
         self.transform
     }
 
+    #[inline]
     fn inverse_transform(&self) -> Mat3 {
         debug_assert!(
             !self.dirty_transform,
@@ -107,30 +111,19 @@ impl BaseCam2D for Camera2D {
         self.inverse_transform
     }
 
+    #[inline]
     fn size(&self) -> Vec2 {
         self.size
     }
 
+    #[inline]
     fn local_to_screen(&self, point: Vec2) -> Vec2 {
-        let half = self.size() * 0.5;
-        let pos = self.transform() * vec3(point.x, point.y, 1.0);
-        let pos = self.projection() * vec4(pos.x, pos.y, pos.z, 1.0);
-        vec2(half.x + (half.x * pos.x), half.y + (half.y * -pos.y))
+        self.transform_to_screen(point, self.transform())
     }
 
+    #[inline]
     fn screen_to_local(&self, point: Vec2) -> Vec2 {
-        // normalized coordinates
-        let norm = point / self.size();
-        let pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-
-        // projected position
-        let pos = self
-            .inverse_projection()
-            .project_point3(vec3(pos.x, pos.y, 1.0));
-
-        // local position
-        self.inverse_transform()
-            .transform_point2(vec2(pos.x, pos.y))
+        self.screen_to_transform(point, self.inverse_transform())
     }
 
     fn bounds(&self) -> Rect {
@@ -152,6 +145,27 @@ impl Camera2D {
         cam
     }
 
+    pub fn screen_to_transform(&self, point: Vec2, inverse: Mat3) -> Vec2 {
+        // normalized coordinates
+        let norm = point / self.size();
+        let pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
+
+        // projected position
+        let pos = self
+            .inverse_projection()
+            .project_point3(vec3(pos.x, pos.y, 1.0));
+
+        // local position
+        inverse.transform_point2(vec2(pos.x, pos.y))
+    }
+
+    pub fn transform_to_screen(&self, point: Vec2, transform: Mat3) -> Vec2 {
+        let half = self.size() * 0.5;
+        let pos = transform * vec3(point.x, point.y, 1.0);
+        let pos = self.projection() * vec4(pos.x, pos.y, pos.z, 1.0);
+        half + (half * vec2(pos.x, -pos.y))
+    }
+
     pub fn set_screen_mode(&mut self, mode: ScreenMode) {
         if self.mode != mode {
             self.mode = mode;
@@ -159,6 +173,7 @@ impl Camera2D {
         }
     }
 
+    #[inline]
     pub fn screen_mode(&self) -> ScreenMode {
         self.mode
     }

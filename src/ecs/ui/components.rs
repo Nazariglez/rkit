@@ -1,6 +1,6 @@
 use crate::draw::*;
 use crate::input::MouseButton;
-use crate::math::{Mat3, Vec2};
+use crate::math::{Mat3, Rect, Vec2};
 use crate::utils::next_pot2;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::ReadOnlyQueryData;
@@ -47,6 +47,11 @@ impl UINode {
     #[inline]
     pub fn global_alpha(&self) -> f32 {
         self.global_alpha
+    }
+
+    #[inline]
+    pub fn bounds(&self) -> Rect {
+        Rect::new(self.position(), self.size())
     }
 
     pub(super) fn update_transform(&mut self, transform: &UITransform, parent: Mat3) {

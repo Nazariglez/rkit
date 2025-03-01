@@ -1,13 +1,18 @@
-use crate::draw::{BaseCam2D, Camera2D, Draw2D};
-use crate::math::{Mat3, Mat4, Vec2, Vec3Swizzles, vec2, vec3};
+use crate::{
+    draw::{BaseCam2D, Camera2D, Draw2D},
+    math::{Mat3, Mat4, Vec2, Vec3Swizzles, vec2, vec3},
+};
 use bevy_ecs::prelude::*;
+use corelib::math::vec4;
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
-use super::components::{UINode, UIRender};
-use super::ctx::{NodeContext, UINodeType, measure};
-use super::style::UIStyle;
-use super::widgets::{UIImage, UIText};
+use super::{
+    components::{UINode, UIRender},
+    ctx::{NodeContext, UINodeType, measure},
+    style::UIStyle,
+    widgets::{UIImage, UIText},
+};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum UINodeGraph {
@@ -139,6 +144,35 @@ where
             .unwrap();
 
         self.base_transform = Mat3::from_translation(self.cam_info.top_left);
+    }
+
+    pub fn parent(&self, entity: Entity) -> Option<Entity> {
+        self.relations
+            .get(&entity)
+            .and_then(|id| self.tree.parent(*id))
+            .and_then(|parent| self.tree.get_node_context(parent))
+            .map(|parent_ctx| parent_ctx.entity)
+    }
+
+    #[inline]
+    pub fn screen_to_node(&self, screen_pos: Vec2, node: &UINode) -> Vec2 {
+        self.cam_info.screen_to_local(
+            screen_pos,
+            node.global_transform().inverse() * self.cam_info.inverse_transform,
+        )
+    }
+
+    pub fn node_to_screen(&self, point: Vec2, node: &UINode) -> Vec2 {
+        let transform = self.cam_info.transform * node.global_transform();
+        let half = self.cam_info.cam_size * 0.5;
+        let pos = transform * vec3(point.x, point.y, 1.0);
+        let pos = self.cam_info.projection * vec4(pos.x, pos.y, pos.z, 1.0);
+        half + (half * vec2(pos.x, -pos.y))
+    }
+
+    #[inline]
+    pub fn node_to_node(&self, point: Vec2, from: &UINode, to: &UINode) -> Vec2 {
+        self.screen_to_node(self.node_to_screen(point, from), to)
     }
 
     pub fn size(&self) -> Vec2 {
