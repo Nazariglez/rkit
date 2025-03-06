@@ -175,6 +175,7 @@ where
         self.screen_to_node(self.node_to_screen(point, from), to)
     }
 
+    #[inline]
     pub fn size(&self) -> Vec2 {
         self.cam_info.layout_size
     }

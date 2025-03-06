@@ -166,7 +166,18 @@ fn remove_system<T: Component>(
 
 #[allow(clippy::type_complexity)]
 fn change_style_system<T: Component>(
-    mut query: Query<(&UINode, &UIStyle), (With<T>, Or<(Changed<UIStyle>, Changed<UITransform>)>)>,
+    mut query: Query<
+        (&UINode, &UIStyle),
+        (
+            With<T>,
+            Or<(
+                Changed<UIStyle>,
+                Changed<UITransform>,
+                Changed<UIText>,
+                Changed<UIImage>,
+            )>,
+        ),
+    >,
     mut layout: ResMut<UILayout<T>>,
 ) {
     for (node, style) in query.iter_mut() {
