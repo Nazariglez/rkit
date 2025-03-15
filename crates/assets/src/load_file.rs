@@ -56,7 +56,7 @@ impl FileLoader {
         Ok(Self {})
     }
 
-    pub fn load_file(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, String>> {
+    pub fn load_file(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, String>> + use<> {
         ready(create_request(path)).and_then(|xhr| {
             let mut have_set_handlers = false;
             poll_fn(move |ctx| poll_request(&xhr, ctx, &mut have_set_handlers))

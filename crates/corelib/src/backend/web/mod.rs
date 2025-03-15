@@ -3,25 +3,25 @@ mod input;
 mod utils;
 mod window;
 
-use crate::backend::{BackendImpl, GfxBackendImpl};
-use crate::builder::AppBuilder;
-use crate::events::{CORE_EVENTS_MAP, CoreEvent};
-use crate::gfx::GfxBackend;
-use crate::input::{KeyboardState, MouseState};
-use crate::math::Vec2;
+use crate::{
+    backend::{BackendImpl, GfxBackendImpl},
+    builder::AppBuilder,
+    events::{CORE_EVENTS_MAP, CoreEvent},
+    gfx::GfxBackend,
+    input::{KeyboardState, MouseState},
+    math::Vec2,
+    time,
+};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use encase::ShaderType;
 use glam::vec2;
 use once_cell::sync::Lazy;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 use utils::request_animation_frame;
 use wasm_bindgen::closure::Closure;
 use window::WebWindow;
 
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;
-use crate::time;
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WebBackend>> =
     Lazy::new(|| AtomicRefCell::new(WebBackend::default()));
