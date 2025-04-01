@@ -38,40 +38,59 @@ impl PartialEq for Sprite {
 }
 
 impl Sprite {
+    #[inline]
     pub fn id(&self) -> SpriteId {
         self.id
     }
 
+    #[inline]
     pub fn texture(&self) -> &Texture {
         &self.texture
     }
 
+    #[inline]
     pub fn sampler(&self) -> &Sampler {
         &self.sampler
     }
 
+    #[inline]
     pub fn size(&self) -> Vec2 {
         self.frame.size
     }
 
+    #[inline]
     pub fn width(&self) -> f32 {
         self.frame.size.x
     }
 
+    #[inline]
     pub fn height(&self) -> f32 {
         self.frame.size.y
     }
 
+    #[inline]
     pub fn frame(&self) -> Rect {
         self.frame
     }
 
+    #[inline]
     pub fn clone_with_frame(&self, frame: Rect) -> Self {
         Self {
             id: self.id,
             texture: self.texture.clone(),
             sampler: self.sampler.clone(),
-            frame,
+            frame: Rect::new(self.frame.origin + frame.origin, frame.size),
+            drop_observer: self.drop_observer.clone(),
+        }
+    }
+
+    #[inline]
+    pub fn clone_without_frame(&self) -> Self {
+        Self {
+            id: self.id,
+            texture: self.texture.clone(),
+            sampler: self.sampler.clone(),
+            frame: Rect::new(Vec2::ZERO, self.texture.size()),
             drop_observer: self.drop_observer.clone(),
         }
     }
