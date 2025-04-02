@@ -8,6 +8,7 @@ pub mod prelude;
 pub mod schedules;
 pub mod screen;
 pub mod time;
+pub mod tween;
 pub mod ui;
 pub mod window;
 
