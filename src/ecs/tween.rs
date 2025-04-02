@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 
 use crate::tween::*;
 
-use super::{app::App, prelude::OnUpdate, time::Time};
+use super::{app::App, plugin::Plugin, prelude::OnUpdate, time::Time};
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct TweenSysSet;
@@ -24,6 +24,17 @@ where
         Self {
             _m: std::marker::PhantomData::<(C, T)>,
         }
+    }
+}
+
+impl<C, T> Plugin for TweenPlugin<C, T>
+where
+    C: Component,
+    T: TweenableComponent<C>,
+{
+    fn apply(&self, app: &mut App) {
+        app.add_event::<TweenDone<T>>()
+            .add_systems(OnUpdate, tween_system::<C, T>.in_set(TweenSysSet));
     }
 }
 
@@ -60,11 +71,6 @@ where
             tweenable,
         }
     }
-}
-
-fn add_component_tween<C: Component, T: TweenableComponent<C>>(app: &mut App) {
-    app.add_event::<TweenDone<T>>()
-        .add_systems(OnUpdate, tween_system::<C, T>.in_set(TweenSysSet));
 }
 
 fn tween_system<C: Component, T: TweenableComponent<C>>(

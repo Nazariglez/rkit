@@ -15,6 +15,7 @@ pub mod ecs;
 
 pub mod or_panic;
 pub mod prelude;
+pub mod timer;
 
 #[doc(inline)]
 pub use corelib::*;
