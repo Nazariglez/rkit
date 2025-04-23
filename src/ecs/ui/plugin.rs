@@ -11,6 +11,7 @@ use crate::{
     prelude::OnPreUpdate,
 };
 use bevy_ecs::prelude::*;
+use indexmap::{IndexMap, IndexSet};
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Event, Clone, Copy)]
@@ -93,36 +94,46 @@ fn update_nodes_system<T: Component>(
     layout: ResMut<UILayout<T>>,
     mut evt: EventReader<UILayoutUpdateEvent<T>>,
 ) {
+    #[derive(Clone, Copy, Hash, PartialEq, Eq)]
+    enum EntityId {
+        Empty,
+        Raw(Entity),
+    }
+
     for _ in evt.read() {
         // update nodes
         node_query
             .iter_mut()
             .for_each(|(mut node, _, _)| layout.set_node_layout(&mut node));
 
-        let mut stack = vec![(layout.base_transform, 1.0)];
+        let mut stack = IndexMap::new();
+        stack.insert(EntityId::Empty, (layout.base_transform, 1.0));
         layout.graph.iter().for_each(|ng| match ng {
             UINodeGraph::Begin(entity) => {
                 if let Ok((mut node, style, transform)) = node_query.get_mut(*entity) {
-                    let (last_transform, last_alpha) = stack.last().copied().unwrap();
+                    let (_, (last_transform, last_alpha)) = stack.last().unwrap();
                     let is_hide = matches!(style.display, crate::ecs::ui::style::Display::None);
                     node.global_alpha = if is_hide {
                         0.0
                     } else {
                         last_alpha * style.opacity
                     };
-                    node.update_transform(transform, last_transform);
-                    stack.push((node.global_transform, node.global_alpha));
+                    node.update_transform(transform, *last_transform);
+                    stack.insert(
+                        EntityId::Raw(*entity),
+                        (node.global_transform, node.global_alpha),
+                    );
                 }
             }
-            UINodeGraph::End(_entity) => {
-                stack.pop();
+            UINodeGraph::End(entity) => {
+                stack.swap_remove(&EntityId::Raw(*entity));
             }
             _ => {}
         });
 
         debug_assert!(
             stack.len() == 1,
-            "Stack transform must be one but is not {}",
+            "Stack transform must be one but is not. (current len: {})",
             stack.len()
         );
     }

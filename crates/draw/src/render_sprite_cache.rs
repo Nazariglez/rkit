@@ -1,8 +1,10 @@
 use crate::create_sprite;
 
 use super::sprite::Sprite;
-use corelib::gfx::{RenderTexture, Sampler, create_render_texture};
-use corelib::math::UVec2;
+use corelib::{
+    gfx::{RenderTexture, Sampler, create_render_texture},
+    math::UVec2,
+};
 use std::num::NonZeroUsize;
 use utils::fast_cache::FastCache;
 
