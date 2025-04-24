@@ -125,7 +125,7 @@ where
     T: TweenableComponent<C>,
 {
     fn drop(&mut self) {
-        self.e_cmds.insert(ComponentTween {
+        self.e_cmds.try_insert(ComponentTween {
             _m: Default::default(),
             id: self.id.take(),
             tween: self.tween.start(),
