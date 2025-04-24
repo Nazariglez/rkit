@@ -38,18 +38,26 @@ gilrs = { version = "0.11", optional = true }
 web-time.workspace = true
 
 # Process images
-image = { version = "0.25.5", default-features = false, features = ["png", "jpeg", "webp", "rayon"] }
+image = { version = "0.25.5", default-features = false, features = [
+    "png",
+    "jpeg",
+    "webp",
+    "rayon",
+] }
 
 ## deps only for this crate
 strum.workspace = true
 strum_macros.workspace = true
-crossbeam-channel = "0.5.14"
+crossbeam-channel = "0.5.15"
 
 # loggin
 fern = { version = "0.7.1", optional = true, features = ["colored"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-time = { version = "0.3.37", optional = true, features = ["formatting", "local-offset"] }
+time = { version = "0.3.37", optional = true, features = [
+    "formatting",
+    "local-offset",
+] }
 spin_sleep_util = "0.1.1"
 
 # wasm deps
@@ -96,8 +104,13 @@ webgl = ["wgpu/webgl"]
 # Enable Gamepad API
 gamepad = ["dep:gilrs"]
 # Logging
-logs = ["dep:time", "dep:fern", "dep:console_log", "dep:console_error_panic_hook"]
+logs = [
+    "dep:time",
+    "dep:fern",
+    "dep:console_log",
+    "dep:console_error_panic_hook",
+]
 
 [dev-dependencies]
 # Hackish, to add environment variables for test builds
-corelib = { path = ".", features = ["test-env"]}
+corelib = { path = ".", features = ["test-env"] }

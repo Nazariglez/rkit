@@ -132,7 +132,10 @@ impl AssetList {
                 continue;
             }
 
-            let ext = path.split('.').last().and_then(|ext| self.parsers.get(ext));
+            let ext = path
+                .split('.')
+                .next_back()
+                .and_then(|ext| self.parsers.get(ext));
             match ext {
                 // use the parser provided to store the asset as the type needed
                 Some(parser) => (*parser)(&data.id, path, &mut self.assets)?,

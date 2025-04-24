@@ -11,7 +11,7 @@ use crate::{
     prelude::OnPreUpdate,
 };
 use bevy_ecs::prelude::*;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Event, Clone, Copy)]
