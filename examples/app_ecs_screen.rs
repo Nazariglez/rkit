@@ -1,10 +1,11 @@
-use rkit::draw::create_draw_2d;
-use rkit::ecs::prelude::*;
-use rkit::gfx;
-use rkit::gfx::Color;
-use rkit::input::{KeyCode, is_key_pressed};
-use rkit::macros::Screen;
-use rkit::math::{Vec2, vec2};
+use rkit::{
+    draw::create_draw_2d,
+    ecs::prelude::*,
+    gfx::{self, Color},
+    input::{KeyCode, is_key_pressed},
+    macros::Screen,
+    math::{Vec2, vec2},
+};
 
 #[derive(Screen, Debug, Hash, Clone, PartialEq, Eq)]
 enum Scene {

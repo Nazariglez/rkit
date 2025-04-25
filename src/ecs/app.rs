@@ -62,6 +62,11 @@ impl App {
 
     #[inline]
     pub fn with_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
+        self.add_event::<ChangeScreenEvt<S>>().add_systems(
+            OnEnginePreFrame,
+            change_screen_event_system::<S>.after(bevy_ecs::event::event_update_system),
+        );
+
         S::add_schedules(self).add_systems(OnEngineSetup, move |mut cmds: Commands| {
             cmds.queue(ChangeScreen(screen.clone()))
         })
