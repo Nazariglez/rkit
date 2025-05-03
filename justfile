@@ -1,5 +1,5 @@
 check-health:
     cargo clippy --all-features
     cargo machete
-    cargo audit
+    cargo deny check
     cargo test --all-features

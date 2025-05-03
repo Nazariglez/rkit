@@ -49,6 +49,13 @@ impl Timer {
         self
     }
 
+    /// Makes the timer finish immediately on the first tick
+    #[inline]
+    pub fn with_inmediate(mut self) -> Self {
+        self.to = self.from;
+        self
+    }
+
     /// Advances the timer by `delta` seconds
     pub fn tick(&mut self, delta: f32) {
         //  clear the "just" flags

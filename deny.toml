@@ -1,0 +1,32 @@
+[advisories]
+# This is `paste` crate being unmaintained.
+# We're okay with that for now, it's not broken, just old.
+ignore = ["RUSTSEC-2024-0436"]
+
+[licenses]
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "BSD-2-Clause",
+  "Zlib",
+  "ISC",
+  "Unlicense",
+  "CC0-1.0",
+  "Unicode-3.0",
+
+  # Kira uses this license, if the source is modified we need to publish the files changes
+  "MPL-2.0",
+]
+
+# Ignore our own workspace crates
+private = { ignore = true }
+
+[bans]
+multiple-versions = "allow"
+
+deny = [
+  { name = "glam", deny-multiple-versions = true },
+  { name = "raw-window-handle", deny-multiple-versions = true },
+]
