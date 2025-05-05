@@ -599,7 +599,7 @@ impl AtlasData {
     }
 
     fn upload(&self, size: UVec2, offset: UVec2, data: &[u8]) -> Result<(), String> {
-        log::debug!("Uploading new glyph to texture");
+        log::trace!("Uploading new glyph to texture");
         gfx::write_texture(&self.texture)
             .from_data(data)
             .with_offset(offset)
