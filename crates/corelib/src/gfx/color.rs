@@ -68,6 +68,15 @@ impl Color {
         Self { r, g, b, a }
     }
 
+    /// Create a new color from a hexadecimal string like "#RRGGBBAA" or "RRGGBBAA"
+    #[inline(always)]
+    pub fn hex_string(hex: &str) -> Self {
+        let hex_str = hex.trim_start_matches('#');
+        // TODO: log a warning if color is invalid?
+        let hex_val = u32::from_str_radix(hex_str, 16).unwrap_or(0);
+        Self::hex(hex_val)
+    }
+
     #[inline(always)]
     /// Create a new color from rgba bytes
     pub const fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
@@ -477,5 +486,29 @@ mod tests {
         assert!(approx_eq(result.g, srgb_color.g));
         assert!(approx_eq(result.b, srgb_color.b));
         assert_eq!(result.a, srgb_color.a);
+    }
+
+    #[test]
+    fn test_color_from_hex_string() {
+        let color1 = Color::hex_string("#FF8000FF");
+        assert!(approx_eq(color1.r, 1.0));
+        assert!(approx_eq(color1.g, 0.5));
+        assert!(approx_eq(color1.b, 0.0));
+        assert_eq!(color1.a, 1.0);
+
+        let color2 = Color::hex_string("80FF00FF");
+        assert!(approx_eq(color2.r, 0.5));
+        assert!(approx_eq(color2.g, 1.0));
+        assert!(approx_eq(color2.b, 0.0));
+        assert_eq!(color2.a, 1.0);
+
+        let color3 = Color::hex_string("#ff0080ff");
+        assert!(approx_eq(color3.r, 1.0));
+        assert!(approx_eq(color3.g, 0.0));
+        assert!(approx_eq(color3.b, 0.5));
+        assert_eq!(color3.a, 1.0);
+
+        let color4 = Color::hex_string("invalid");
+        assert_eq!(color4, Color::hex(0));
     }
 }
