@@ -120,7 +120,10 @@ default = [
   "logs",
   "ui",
   "ecs",
+  "headless",
 ]
+# enable headless/server mode
+headless = ["corelib/headless"]
 # enable loggin
 logs = ["corelib/logs"]
 # enables gamepad api

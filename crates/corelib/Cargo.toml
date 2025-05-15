@@ -21,7 +21,7 @@ rustc-hash.workspace = true
 encase.workspace = true
 
 # app/windowing
-winit = "0.30.9"
+winit = { version = "0.30.9" }
 raw-window-handle = "0.6.2"
 
 # math
@@ -97,6 +97,8 @@ features = [
 
 
 [features]
+# use headless mode
+headless = []
 # Hackish, to add environment variables for test builds
 test-env = []
 # WebGL instead of WebGPU on WASM
