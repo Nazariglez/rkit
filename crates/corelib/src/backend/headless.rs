@@ -1,4 +1,5 @@
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use glam::Vec2;
 use once_cell::sync::Lazy;
 use spin_sleep_util::Interval;
 use time::Duration;
@@ -6,6 +7,7 @@ use time::Duration;
 use crate::{
     builder::AppBuilder,
     events::{CORE_EVENTS_MAP, CoreEvent},
+    input::{KeyboardState, MouseState},
 };
 
 use super::{BackendImpl, GfxBackendImpl};
@@ -133,6 +135,9 @@ impl GfxBackendImpl for HeadlessGfx {
 #[derive(Default)]
 pub(crate) struct HeadlessBackend {
     request_close: bool,
+    mouse_state: MouseState,
+    keyboard_state: KeyboardState,
+    gfx: HeadlessGfx,
 }
 
 impl BackendImpl<HeadlessGfx> for HeadlessBackend {
@@ -145,7 +150,7 @@ impl BackendImpl<HeadlessGfx> for HeadlessBackend {
     }
 
     fn size(&self) -> glam::Vec2 {
-        unreachable!()
+        Vec2::ZERO
     }
 
     fn set_size(&mut self, size: glam::Vec2) {
@@ -205,7 +210,7 @@ impl BackendImpl<HeadlessGfx> for HeadlessBackend {
     }
 
     fn mouse_state(&self) -> &crate::input::MouseState {
-        unreachable!()
+        &self.mouse_state
     }
 
     fn set_cursor_lock(&mut self, lock: bool) {
@@ -213,7 +218,7 @@ impl BackendImpl<HeadlessGfx> for HeadlessBackend {
     }
 
     fn is_cursor_locked(&self) -> bool {
-        unreachable!()
+        false
     }
 
     fn set_cursor_visible(&mut self, visible: bool) {
@@ -221,15 +226,15 @@ impl BackendImpl<HeadlessGfx> for HeadlessBackend {
     }
 
     fn is_cursor_visible(&self) -> bool {
-        unreachable!()
+        false
     }
 
     fn keyboard_state(&self) -> &crate::input::KeyboardState {
-        unreachable!()
+        &self.keyboard_state
     }
 
     fn gfx(&mut self) -> &mut HeadlessGfx {
-        unreachable!()
+        &mut self.gfx
     }
 }
 
