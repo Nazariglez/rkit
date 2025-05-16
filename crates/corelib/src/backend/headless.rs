@@ -241,7 +241,7 @@ impl BackendImpl<HeadlessGfx> for HeadlessBackend {
 struct Runner<S> {
     state: S,
     update: Box<dyn FnMut(&mut S)>,
-    interval: Option<Interval>,
+    interval: Interval,
 }
 
 impl<S> Runner<S> {
@@ -265,8 +265,9 @@ impl<S> Runner<S> {
             CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PostUpdate);
         }
 
-        let request_close = get_backend().request_close;
-        request_close
+        self.interval.tick();
+
+        get_backend().request_close
     }
 
     fn process_events(&mut self) {
@@ -293,10 +294,8 @@ where
         ..
     } = builder;
 
-    let interval = window
-        .max_fps
-        .or(Some(60))
-        .map(|max| spin_sleep_util::interval(std::time::Duration::from_secs(1) / max as u32));
+    let run_fps = window.max_fps.unwrap_or(20);
+    let interval = spin_sleep_util::interval(std::time::Duration::from_secs(1) / run_fps as u32);
 
     let mut runner = Runner {
         state: init_cb(),

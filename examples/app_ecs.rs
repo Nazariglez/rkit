@@ -6,7 +6,12 @@ use rkit::{gfx, time};
 
 fn main() -> Result<(), String> {
     App::new()
-        .add_plugin(MainPlugins::default())
+        .add_plugin(MainPlugins {
+            window: false,
+            time: true,
+            mouse: false,
+            keyboard: false,
+        })
         .add_systems(OnSetup, setup_system)
         .add_systems(OnUpdate, update_system)
         .add_systems(OnRender, draw_system)
