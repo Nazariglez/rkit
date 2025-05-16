@@ -177,6 +177,13 @@ impl App {
         self
     }
 
+    #[inline]
+    #[track_caller]
+    pub fn add_non_send_resource<R: 'static>(&mut self, value: R) -> &mut Self {
+        self.world.insert_non_send_resource(value);
+        self
+    }
+
     pub fn run(&mut self) -> Result<(), String> {
         let mut world = std::mem::take(&mut self.world);
         let exit_sys = self.exit_sys;

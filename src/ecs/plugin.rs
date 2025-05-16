@@ -97,6 +97,15 @@ impl Default for MainPlugins {
     }
 }
 
+impl MainPlugins {
+    pub fn headless() -> Self {
+        Self {
+            window: false,
+            ..Default::default()
+        }
+    }
+}
+
 impl Plugin for MainPlugins {
     fn apply(&self, app: &mut App) {
         if self.window {
