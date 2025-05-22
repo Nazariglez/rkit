@@ -33,6 +33,7 @@ pub(super) struct UICameraInfo {
 }
 
 impl UICameraInfo {
+    /// Creates a new UICameraInfo from a Camera2D
     fn from_base(cam: &Camera2D) -> Self {
         let bounds = cam.bounds();
         Self {
@@ -46,6 +47,8 @@ impl UICameraInfo {
         }
     }
 
+    /// Updates the camera size and recalculates related matrices
+    /// Returns true if the size was changed
     fn update_size(&mut self, size: Vec2) -> bool {
         if self.layout_size == size {
             return false;
@@ -62,6 +65,7 @@ impl UICameraInfo {
         true
     }
 
+    /// Converts screen coordinates to local node coordinates
     pub fn screen_to_local(&self, screen_pos: Vec2, local_inverse_transform: Mat3) -> Vec2 {
         let norm = screen_pos / self.cam_size;
         let mouse_pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
@@ -95,6 +99,7 @@ impl<T> Default for UILayout<T>
 where
     T: Component,
 {
+    /// Creates a default UILayout with an empty tree and default camera info
     fn default() -> Self {
         let mut tree = TaffyTree::<NodeContext>::new();
         let root = tree.new_leaf(Style::default()).unwrap();
@@ -129,6 +134,7 @@ impl<T> UILayout<T>
 where
     T: Component,
 {
+    /// Updates the root node style based on the current camera info
     fn update_root(&mut self) {
         self.tree
             .set_style(
@@ -146,6 +152,7 @@ where
         self.base_transform = Mat3::from_translation(self.cam_info.top_left);
     }
 
+    /// Returns the parent entity of the given entity in the UI tree
     pub fn parent(&self, entity: Entity) -> Option<Entity> {
         self.relations
             .get(&entity)
@@ -154,6 +161,39 @@ where
             .map(|parent_ctx| parent_ctx.entity)
     }
 
+    /// Returns how many immediate children this entity has in the UI-tree.
+    pub fn child_count(&self, entity: Entity) -> usize {
+        if let Some(&node_id) = self.relations.get(&entity) {
+            self.tree.child_ids(node_id).count()
+        } else {
+            0
+        }
+    }
+
+    /// Returns true if this entity has any children.
+    pub fn has_children(&self, entity: Entity) -> bool {
+        if let Some(&node_id) = self.relations.get(&entity) {
+            self.tree.child_ids(node_id).next().is_some()
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if this entity has no children.
+    pub fn is_empty(&self, entity: Entity) -> bool {
+        !self.has_children(entity)
+    }
+
+    /// Returns an iterator over the immediate children of `parent` in the UI tree.
+    pub fn children(&self, parent: Entity) -> impl Iterator<Item = Entity> + '_ {
+        self.relations
+            .get(&parent)
+            .into_iter()
+            .flat_map(move |&parent_id| self.tree.child_ids(parent_id))
+            .filter_map(move |child_id| self.tree.get_node_context(child_id).map(|ctx| ctx.entity))
+    }
+
+    /// Converts screen coordinates to node-local coordinates
     #[inline]
     pub fn screen_to_node(&self, screen_pos: Vec2, node: &UINode) -> Vec2 {
         self.cam_info.screen_to_local(
@@ -162,6 +202,7 @@ where
         )
     }
 
+    /// Converts node-local coordinates to screen coordinates
     pub fn node_to_screen(&self, point: Vec2, node: &UINode) -> Vec2 {
         let transform = self.cam_info.transform * node.global_transform();
         let half = self.cam_info.cam_size * 0.5;
@@ -170,16 +211,19 @@ where
         half + (half * vec2(pos.x, -pos.y))
     }
 
+    /// Converts coordinates from one node's local space to another node's local space
     #[inline]
     pub fn node_to_node(&self, point: Vec2, from: &UINode, to: &UINode) -> Vec2 {
         self.screen_to_node(self.node_to_screen(point, from), to)
     }
 
+    /// Returns the current layout size
     #[inline]
     pub fn size(&self) -> Vec2 {
         self.cam_info.layout_size
     }
 
+    /// Sets the layout size and updates the root node if necessary
     pub fn set_size(&mut self, size: Vec2) {
         let updated = self.cam_info.update_size(size);
         if updated {
@@ -188,6 +232,7 @@ where
         }
     }
 
+    /// Updates the camera info from a Camera2D and marks layout as dirty if needed
     pub fn set_camera(&mut self, cam: &Camera2D) {
         let info = UICameraInfo::from_base(cam);
         if info != self.cam_info {
@@ -197,6 +242,8 @@ where
         }
     }
 
+    /// Updates the layout tree and graph if they're dirty
+    /// Returns true if any computation was performed
     pub fn update(
         &mut self,
         images: Query<&UIImage, With<T>>,
@@ -228,6 +275,7 @@ where
         needs_compute
     }
 
+    /// Adds a new node to the layout tree with the given style and type
     pub(super) fn add_raw_node(
         &mut self,
         entity: Entity,
@@ -247,6 +295,7 @@ where
         node_id
     }
 
+    /// Adds a child node to a parent node, reparenting if necessary
     pub(super) fn add_child(&mut self, parent: Entity, child: Entity) {
         if let (Some(parent_id), Some(node_id)) =
             (self.relations.get(&parent), self.relations.get(&child))
@@ -259,6 +308,7 @@ where
         }
     }
 
+    /// Removes a node and its children from the layout tree
     pub(super) fn remove_node(&mut self, entity: Entity) {
         if let Some(node_id) = self.relations.remove(&entity) {
             self.tree.remove(node_id).unwrap();
@@ -266,6 +316,7 @@ where
         }
     }
 
+    /// Returns all entities in the subtree starting from the given entity
     pub(super) fn tree_from_node(&self, entity: Entity) -> Vec<Entity> {
         debug_assert!(
             !self.dirty_graph,
@@ -294,6 +345,7 @@ where
             .collect()
     }
 
+    /// Updates the style of a node in the layout tree
     pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle) {
         self.tree
             .set_style(node.node_id, style.as_taffy_style())
@@ -301,6 +353,7 @@ where
         self.dirty_layout = true;
     }
 
+    /// Updates a node's size and position based on the computed layout
     pub(super) fn set_node_layout(&self, node: &mut UINode) {
         let l = self.tree.layout(node.node_id).unwrap();
         node.size = vec2(l.size.width, l.size.height);
@@ -308,6 +361,7 @@ where
     }
 }
 
+/// Recursively processes the layout tree to build a flat graph representation
 fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree<NodeContext>) {
     match tree.get_node_context(node_id).cloned() {
         Some(ctx) => {
@@ -324,6 +378,7 @@ fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree
     }
 }
 
+/// Draws the entire UI layout
 pub fn draw_ui_layout<T>(draw: &mut Draw2D, world: &mut World)
 where
     T: Component,
@@ -331,6 +386,7 @@ where
     draw_ui_layout_from::<T>(draw, world, None)
 }
 
+/// Draws a portion of the UI layout starting from a specific entity
 pub fn draw_ui_layout_from<T>(draw: &mut Draw2D, world: &mut World, from: Option<Entity>)
 where
     T: Component,
