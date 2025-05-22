@@ -294,7 +294,7 @@ where
         ..
     } = builder;
 
-    let run_fps = window.max_fps.unwrap_or(20);
+    let run_fps = window.max_fps.unwrap_or(60);
     let interval = spin_sleep_util::interval(std::time::Duration::from_secs(1) / run_fps as u32);
 
     let mut runner = Runner {
