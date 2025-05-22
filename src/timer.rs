@@ -52,7 +52,7 @@ impl Timer {
     /// Makes the timer finish immediately on the first tick
     #[inline]
     pub fn with_inmediate(mut self) -> Self {
-        self.to = self.from;
+        self.elapsed = self.to;
         self
     }
 
@@ -137,6 +137,16 @@ impl Timer {
     #[inline]
     pub fn progress(&self) -> f32 {
         self.elapsed / self.to
+    }
+
+    #[inline]
+    pub fn to(&self) -> f32 {
+        self.to
+    }
+
+    #[inline]
+    pub fn from(&self) -> f32 {
+        self.from
     }
 }
 
