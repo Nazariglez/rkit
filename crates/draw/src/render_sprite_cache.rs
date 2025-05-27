@@ -27,7 +27,7 @@ impl RenderSpriteCache {
     }
 
     pub fn get(&mut self, size: UVec2) -> &RenderSprite {
-        let sprite = self.textures.get_or_insert(size, || {
+        self.textures.get_or_insert(size, || {
             let render_texture = create_render_texture()
                 .with_label(&format!("Cached RenderTexture({})", size))
                 .with_size(size.x, size.y)
@@ -46,8 +46,7 @@ impl RenderSpriteCache {
                 sprite,
                 render_texture,
             }
-        });
-        sprite
+        })
     }
 
     pub fn clear(&mut self) {
