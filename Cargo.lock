@@ -2892,6 +2892,7 @@ checksum = "57397d16646700483b67d2dd6511d79318f9d057fdbd21a4066aeac8b41d310a"
 name = "rkit"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "assets",
  "atomic_refcell",
  "audio",
