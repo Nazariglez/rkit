@@ -2,4 +2,4 @@ check-health:
     cargo clippy --all-features
     cargo machete
     cargo deny check
-    cargo test --all-features
+    SAVE_FILE_DIR=./fixtures cargo test --all-features

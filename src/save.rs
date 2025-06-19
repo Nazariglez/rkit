@@ -43,16 +43,19 @@ pub struct SaveMetadata {
 }
 
 #[derive(Debug)]
-struct SaveData<D> {
+pub struct SaveData<D> {
     pub metadata: SaveMetadata,
     pub data: D,
 }
 
 #[inline]
 fn data_dir(base_dir: &str) -> Result<PathBuf, String> {
-    AppDirs::new(Some(base_dir), false)
-        .map(|d| d.data_dir)
-        .ok_or_else(|| "Unable to set a folder to save the savefile.".to_string())
+    match std::env::var("SAVE_FILE_DIR").ok() {
+        Some(p) => Ok(PathBuf::from(p).join(base_dir)),
+        None => AppDirs::new(Some(base_dir), false)
+            .map(|d| d.data_dir)
+            .ok_or_else(|| "Unable to set a folder to save the savefile.".to_string()),
+    }
 }
 
 #[inline]

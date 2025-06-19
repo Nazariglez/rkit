@@ -56,6 +56,13 @@ impl Timer {
         self
     }
 
+    /// Makes the timer continue from a point
+    #[inline]
+    pub fn with_elapsed(mut self, elapsed: f32) -> Self {
+        self.elapsed = elapsed;
+        self
+    }
+
     /// Advances the timer by `delta` seconds
     pub fn tick(&mut self, delta: f32) {
         //  clear the "just" flags
