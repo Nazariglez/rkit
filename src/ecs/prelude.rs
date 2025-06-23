@@ -12,5 +12,8 @@ pub use super::ui::prelude::*;
 pub use super::window::*;
 pub use crate::macros::{Deref, Screen};
 
+#[cfg(feature = "locale")]
+pub use super::locale::*;
+
 pub use bevy_ecs;
 pub use bevy_ecs::prelude::*;

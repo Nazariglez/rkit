@@ -7,7 +7,7 @@ use unic_langid::LanguageIdentifier;
 
 #[derive(Resource)]
 pub struct Locales {
-    log_errors: bool,
+    pub log_errors: bool,
     fallback_lang: String,
     content: FxHashMap<String, FluentBundle<FluentResource>>,
 }
@@ -46,6 +46,7 @@ impl Locales {
                 .join("\n")
         })?;
         self.content.insert(lang.to_string(), bundle);
+        log::info!("Locale '{lang}' added.");
         Ok(())
     }
 
