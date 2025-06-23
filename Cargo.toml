@@ -102,6 +102,9 @@ bincode = { version = "2.0.1", features = ["serde"], optional = true }
 brotli = { version = "8.0.1", optional = true }
 crc32fast = { version = "1.4.2", optional = true }
 
+# locale deps
+fluent = { version = "0.17", optional = true }
+unic-langid = { version = "0.9.6", optional = true }
 
 # ecs deps
 bevy_ecs = { version = "0.15", default-features = false, features = [
@@ -178,3 +181,5 @@ save = [
   "dep:brotli",
   "dep:crc32fast",
 ]
+# enable locale method
+locale = ["dep:fluent", "dep:unic-langid"]

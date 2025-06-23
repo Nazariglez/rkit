@@ -196,6 +196,7 @@ fn read_metadata(file_path: &PathBuf) -> Result<SaveMetadata, String> {
     })
 }
 
+#[derive(Debug)]
 pub struct SaveList {
     pub main: Option<SaveMetadata>,
     pub backups: Vec<SaveMetadata>,

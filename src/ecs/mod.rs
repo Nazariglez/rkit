@@ -12,5 +12,8 @@ pub mod tween;
 pub mod ui;
 pub mod window;
 
+#[cfg(feature = "locale")]
+pub mod locale;
+
 // re-export bevy ecs
 pub use bevy_ecs;
