@@ -46,6 +46,8 @@ impl Locales {
                 .collect::<Vec<_>>()
                 .join("\n")
         })?;
+        bundle.add_builtins().map_err(|err| err.to_string())?;
+
         self.content.insert(lang.to_string(), bundle);
         log::info!("Locale '{lang}' added.");
         Ok(())
