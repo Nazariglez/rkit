@@ -312,4 +312,93 @@ mod tests {
         );
         assert!(timer.finished(), "Timer should remain finished");
     }
+
+    #[test]
+    fn test_with_inmediate() {
+        let mut timer = Timer::new(1.0).with_inmediate();
+        assert!(
+            !timer.finished(),
+            "Timer should not be finished before the first tick"
+        );
+        assert_eq!(
+            timer.elapsed(),
+            timer.to(),
+            "Elapsed should already equal the target after with_inmediate"
+        );
+
+        timer.tick(0.0);
+        assert!(
+            timer.finished(),
+            "Timer should be finished immediately on first tick with with_inmediate"
+        );
+        assert!(
+            timer.just_finished(),
+            "just_finished should be true when immediate timer completes"
+        );
+        assert_eq!(
+            timer.elapsed(),
+            timer.to(),
+            "Elapsed should remain clamped to the target time"
+        );
+
+        timer.tick(0.5);
+        assert!(
+            !timer.just_finished(),
+            "just_finished should be false after ticking a finished timer"
+        );
+        assert!(
+            !timer.just_finished_repeat(),
+            "just_finished_repeat should be false after ticking a finished timer"
+        );
+    }
+
+    #[test]
+    fn test_with_inmediate_and_infinite() {
+        let mut timer = Timer::new(1.0).with_infinite(true).with_inmediate();
+
+        assert!(
+            !timer.finished(),
+            "Timer should not be marked finished before ticking"
+        );
+        assert_eq!(
+            timer.elapsed(),
+            timer.to(),
+            "Elapsed should equal 'to' after with_inmediate"
+        );
+
+        timer.tick(0.5);
+        assert!(
+            !timer.finished(),
+            "Infinite timer should never be marked finished"
+        );
+        assert!(
+            timer.just_finished_repeat(),
+            "just_finished_repeat should be true on the first tick"
+        );
+        assert_eq!(timer.repeated(), 1, "One repeat should have been recorded");
+        assert_eq!(
+            timer.elapsed(),
+            0.5,
+            "Elapsed should carry remaining time after the repeat"
+        );
+
+        timer.tick(0.5);
+        assert!(
+            !timer.finished(),
+            "Infinite timer should still never finish"
+        );
+        assert!(
+            timer.just_finished_repeat(),
+            "just_finished_repeat should be true on subsequent ticks"
+        );
+        assert_eq!(
+            timer.repeated(),
+            2,
+            "Second repeat should have been recorded"
+        );
+        assert!(
+            (timer.elapsed() - timer.from()).abs() < f32::EPSILON,
+            "Elapsed should again reset to 'from'"
+        );
+    }
 }
