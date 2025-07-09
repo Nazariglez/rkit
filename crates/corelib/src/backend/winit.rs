@@ -10,7 +10,7 @@ use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode as WKeyCode, PhysicalKey};
-use winit::window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId};
+use winit::window::{CursorGrabMode, CursorIcon, Fullscreen, Window, WindowAttributes, WindowId};
 
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
@@ -33,7 +33,6 @@ use crate::time;
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));
 
-#[derive(Default)]
 pub(crate) struct WinitBackend {
     window: Option<Window>,
     request_close: bool,
@@ -48,6 +47,23 @@ pub(crate) struct WinitBackend {
     #[cfg(feature = "gamepad")]
     gilrs: GilrsBackend,
     gfx: Option<GfxBackend>,
+}
+
+impl Default for WinitBackend {
+    fn default() -> Self {
+        Self {
+            window: Default::default(),
+            request_close: Default::default(),
+            mouse_state: Default::default(),
+            keyboard_state: Default::default(),
+            pixelated: Default::default(),
+            cursor_locked: Default::default(),
+            cursor_visible: true,
+            #[cfg(feature = "gamepad")]
+            gilrs: Default::default(),
+            gfx: Default::default(),
+        }
+    }
 }
 
 impl BackendImpl<GfxBackend> for WinitBackend {
@@ -208,17 +224,19 @@ impl BackendImpl<GfxBackend> for WinitBackend {
 
         let res = self.window.as_mut().unwrap().set_cursor_grab(mode);
         if let Err(err) = res {
-            log::warn!("Error locking cursor: {}", err.to_string());
+            log::warn!("Error locking cursor: {err}");
             return;
         }
 
         self.cursor_locked = lock;
     }
 
+    #[inline]
     fn is_cursor_locked(&self) -> bool {
         self.cursor_locked
     }
 
+    #[inline]
     fn set_cursor_visible(&mut self, visible: bool) {
         if self.cursor_visible == visible {
             return;
@@ -228,6 +246,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         self.cursor_visible = visible;
     }
 
+    #[inline]
     fn is_cursor_visible(&self) -> bool {
         self.cursor_visible
     }
@@ -257,6 +276,7 @@ struct Runner<S> {
     update: Box<dyn FnMut(&mut S)>,
     resize: Box<dyn FnMut(&mut S)>,
     vsync: bool,
+    cursor_visible: bool,
     pixelated_offscreen: bool,
     interval: Option<Interval>,
 }
@@ -273,6 +293,7 @@ impl<S> ApplicationHandler for Runner<S> {
 
         let win = event_loop.create_window(attrs).unwrap();
         win.set_ime_allowed(true); // allow for chars
+        win.set_cursor_visible(self.cursor_visible);
 
         let win_size = win.inner_size();
         let gfx_initiated = get_backend().gfx.is_some();
@@ -287,7 +308,7 @@ impl<S> ApplicationHandler for Runner<S> {
                     log::trace!("Surface updated");
                 }
                 Err(e) => {
-                    log::error!("Error updating surface on Gfx backend: {}", e);
+                    log::error!("Error updating surface on Gfx backend: {e}");
                 }
             }
         } else {
@@ -303,7 +324,7 @@ impl<S> ApplicationHandler for Runner<S> {
                     log::trace!("Surface initiated");
                 }
                 Err(e) => {
-                    log::error!("Error initiating Gfx backend: {}", e);
+                    log::error!("Error initiating Gfx backend: {e}");
                 }
             }
         }
@@ -454,6 +475,7 @@ where
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let vsync = window.vsync;
+    let cursor_visible = window.cursor;
     let interval = window
         .max_fps
         .map(|max| spin_sleep_util::interval(Duration::from_secs(1) / max as u32));
@@ -467,6 +489,7 @@ where
         update: update_cb,
         resize: resize_cb,
         vsync,
+        cursor_visible,
         interval,
         pixelated_offscreen,
     };
@@ -502,6 +525,7 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         vsync: _,
         max_fps: _,
         pixelated: _,
+        cursor: _,
     } = config;
 
     let mut attrs = WindowAttributes::default()

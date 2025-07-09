@@ -1,6 +1,6 @@
 use super::events::EventIterator;
 use super::input::*;
-use super::utils::{canvas_add_event_listener, get_gk_size, set_size_dpi};
+use super::utils::{canvas_add_event_listener, get_gk_size, set_cursor_visible, set_size_dpi};
 use crate::app::WindowConfig;
 use crate::math::{UVec2, uvec2};
 use glam::{Vec2, vec2};
@@ -92,6 +92,8 @@ impl WebWindow {
         } = config.size;
         set_size_dpi(&canvas, width, height);
 
+        set_cursor_visible(&canvas, config.cursor);
+
         let events = Rc::new(RefCell::new(EventIterator::default()));
         let cursor_locked = Rc::new(RefCell::new(false));
         let cursor_lock_request = Rc::new(RefCell::new(None));
@@ -125,6 +127,7 @@ impl WebWindow {
         Ok(win)
     }
 
+    #[inline]
     pub fn is_fullscreen(&self) -> bool {
         // TODO how fast is this? maybe is better to use a Rc<RefCell<bool>>?
         self.document
@@ -132,39 +135,62 @@ impl WebWindow {
             .is_some_and(|el| &el == self.canvas.as_ref())
     }
 
+    #[inline]
     pub fn toggle_fullscreen(&mut self) {
         let full = !self.is_fullscreen();
         self.fullscreen_request.replace(Some(full));
     }
 
+    #[inline]
     pub fn set_size(&mut self, width: u32, height: u32) {
         set_size_dpi(&self.canvas, width as _, height as _);
         self.config.size = uvec2(width, height);
     }
 
+    #[inline]
     pub fn set_min_size(&mut self, width: u32, height: u32) {
         self.config.min_size = Some(uvec2(width, height));
         *self.min_size.borrow_mut() = self.config.min_size;
     }
 
+    #[inline]
     pub fn set_max_size(&mut self, width: u32, height: u32) {
         self.config.max_size = Some(uvec2(width, height));
         *self.max_size.borrow_mut() = self.config.max_size;
     }
 
+    #[inline]
     pub fn size(&self) -> Vec2 {
         let (w, h) = get_gk_size(&self.canvas);
         vec2(w as _, h as _)
     }
 
+    #[inline]
     pub fn set_title(&mut self, title: &str) {
         self.config.title = title.to_owned();
     }
 
+    #[inline]
     pub fn title(&self) -> &str {
         &self.config.title
     }
 
+    #[inline]
+    fn set_cursor_visible(&mut self, visible: bool) {
+        if self.config.cursor == visible {
+            return;
+        }
+
+        set_cursor_visible(&self.canvas, visible);
+        self.config.cursor = visible;
+    }
+
+    #[inline]
+    fn is_cursor_visible(&self) -> bool {
+        self.config.cursor
+    }
+
+    #[inline]
     pub fn exit(&self) {
         *self.close_requested.borrow_mut() = true;
     }

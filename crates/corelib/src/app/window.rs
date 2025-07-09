@@ -11,6 +11,7 @@ pub struct WindowConfig {
     pub vsync: bool,
     pub max_fps: Option<u8>,
     pub pixelated: bool,
+    pub cursor: bool,
 }
 
 impl Default for WindowConfig {
@@ -25,6 +26,7 @@ impl Default for WindowConfig {
             vsync: true,
             max_fps: None,
             pixelated: false,
+            cursor: true,
         }
     }
 }
@@ -82,6 +84,12 @@ impl WindowConfig {
     /// Use Nearest filter for the offscreen texture
     pub fn pixelated(mut self, pixelated: bool) -> Self {
         self.pixelated = pixelated;
+        self
+    }
+
+    /// Hide or show the cursor
+    pub fn cursor(mut self, visible: bool) -> Self {
+        self.cursor = visible;
         self
     }
 }

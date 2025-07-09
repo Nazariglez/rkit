@@ -1,8 +1,10 @@
-use crate::gfx;
-use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
-use crate::postfx::pfx::PostFx;
-use crate::postfx::sys::IOPostFxData;
-use corelib::gfx::{RenderTexture, TextureFilter};
+use crate::{
+    gfx::{
+        self, BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, RenderTexture,
+        Renderer, TextureFilter,
+    },
+    postfx::{pfx::PostFx, sys::IOPostFxData},
+};
 use encase::{ShaderType, UniformBuffer};
 
 // Based in the BlurFx from pixi.js

@@ -1,6 +1,14 @@
-use wasm_bindgen::JsCast;
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{JsCast, prelude::*};
 use web_sys::{HtmlCanvasElement, Window};
+
+#[inline]
+pub(crate) fn set_cursor_visible(canvas: &HtmlCanvasElement, visible: bool) {
+    let mode = if visible { "" } else { "none" };
+
+    if let Err(e) = canvas.style().set_property("cursor", mode) {
+        log::error!("{e:?}");
+    }
+}
 
 pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) {
     let auto_res = canvas
@@ -40,6 +48,7 @@ pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) 
     }
 }
 
+#[inline]
 pub(crate) fn request_animation_frame(win: &Window, f: &Closure<dyn FnMut()>) -> i32 {
     win.request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK")
@@ -108,6 +117,7 @@ where
     Ok(closure)
 }
 
+#[inline]
 pub(crate) fn canvas_position_from_global(
     canvas: &HtmlCanvasElement,
     evt: web_sys::MouseEvent,
@@ -116,6 +126,7 @@ pub(crate) fn canvas_position_from_global(
     (x as _, y as _)
 }
 
+#[inline]
 fn canvas_pos(canvas: &HtmlCanvasElement, client_x: i32, client_y: i32) -> (f32, f32) {
     let client_x = client_x as f32;
     let client_y = client_y as f32;
