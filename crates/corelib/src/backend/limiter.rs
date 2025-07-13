@@ -77,7 +77,7 @@ fn duration_from_mode(mode: LimitMode, hz: Option<f64>) -> Duration {
     let auto_dt = Duration::from_secs_f64(1.0 / hz.unwrap_or(60.0));
     match mode {
         LimitMode::Auto => auto_dt,
-        LimitMode::Manual(dt) => dt.min(auto_dt),
+        LimitMode::Manual(dt) => dt.max(auto_dt),
         LimitMode::Off => Duration::ZERO,
     }
 }
