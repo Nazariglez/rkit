@@ -352,7 +352,7 @@ impl<S> ApplicationHandler for Runner<S> {
             .and_then(|win| win.current_monitor())
             .and_then(|mon| {
                 mon.refresh_rate_millihertz()
-                    .map(|milli| (milli as f64) / 1_000.0)
+                    .map(|milli| (milli as f64) / 1_000.0 - 0.5)
             });
 
         // update the limiter's target delta according to the new hz

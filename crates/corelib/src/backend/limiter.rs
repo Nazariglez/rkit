@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+use crate::time::fps;
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum LimitMode {
     Auto,
@@ -14,8 +16,7 @@ impl LimitMode {
         !matches!(self, LimitMode::Off)
     }
 
-    #[inline]
-    pub fn from_framerate(fps: f64) -> Self {
+    pub fn from_fps(fps: f64) -> Self {
         LimitMode::Manual(Duration::from_secs_f64(1.0 / fps))
     }
 }
@@ -24,6 +25,7 @@ pub(super) struct FpsLimiter {
     mode: LimitMode,
     target_delta: Duration,
     last_frame_end: Instant,
+    oversleep: Duration,
 }
 
 impl FpsLimiter {
@@ -33,6 +35,7 @@ impl FpsLimiter {
             mode,
             target_delta: duration_from_mode(mode, monitor_hz),
             last_frame_end: Instant::now(),
+            oversleep: Duration::ZERO,
         }
     }
 
@@ -41,23 +44,35 @@ impl FpsLimiter {
         let is_enabled = self.mode.is_enabled();
         let has_dt = self.target_delta > Duration::ZERO;
 
+        let prev_elapsed = self.last_frame_end.elapsed();
+
         let can_tick = is_enabled && has_dt;
         if can_tick {
-            let now = Instant::now();
-            let elapsed = now.duration_since(self.last_frame_end);
-            let can_sleep = elapsed < self.target_delta;
+            let sleep_time = self
+                .target_delta
+                .saturating_sub(prev_elapsed + self.oversleep);
+            let can_sleep = sleep_time > Duration::ZERO;
             println!(
-                "elapsed {elapsed:?} < target_delta {:?} = {can_sleep:?}",
-                self.target_delta
+                "prev_elapsed {prev_elapsed:?} | target_delta {:?} | can_sleep = {can_sleep:?} | oversleep = {:?}",
+                self.target_delta, self.oversleep,
             );
+
             if can_sleep {
-                let sleep_time = self.target_delta - elapsed;
                 println!("sleep {sleep_time:?}");
                 spin_sleep::sleep(sleep_time);
             }
         }
 
+        let after_elapsed = self.last_frame_end.elapsed();
+
         self.last_frame_end = Instant::now();
+        self.oversleep = after_elapsed.saturating_sub(self.target_delta);
+
+        println!(
+            "post frame {after_elapsed:?}, oversleep {:?} -> final fps {}",
+            self.oversleep,
+            fps()
+        );
     }
 
     #[inline(always)]
@@ -99,7 +114,7 @@ mod tests {
     #[test]
     fn from_framerate_computes_inverse() {
         let fps = 30.0;
-        let dt = LimitMode::from_framerate(fps);
+        let dt = LimitMode::from_fps(fps);
         assert!(matches!(dt, LimitMode::Manual(_)));
 
         if let LimitMode::Manual(d) = dt {
