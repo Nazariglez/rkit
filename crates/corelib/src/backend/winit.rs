@@ -1,9 +1,9 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use crate::backend::limiter::{FpsLimiter, LimitMode};
 use crate::math::uvec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
-use spin_sleep_util::Interval;
 use std::time::Duration;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
@@ -278,7 +278,8 @@ struct Runner<S> {
     vsync: bool,
     cursor_visible: bool,
     pixelated_offscreen: bool,
-    interval: Option<Interval>,
+    fps_limiter: FpsLimiter,
+    request_redraw: bool,
 }
 
 impl<S> ApplicationHandler for Runner<S> {
@@ -339,6 +340,31 @@ impl<S> ApplicationHandler for Runner<S> {
             self.state = Some(init_cb());
         }
         CORE_EVENTS_MAP.borrow().trigger(CoreEvent::Init);
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // fetch the monitor frecuency to calculate the frame pacing
+        // this will avoid the input lag just keeping the input events
+        // close to the draw event
+        let monitor_hz = get_backend()
+            .window
+            .as_ref()
+            .and_then(|win| win.current_monitor())
+            .and_then(|mon| {
+                mon.refresh_rate_millihertz()
+                    .map(|milli| (milli as f64) / 1_000.0)
+            });
+
+        // update the limiter's target delta according to the new hz
+        self.fps_limiter.update(monitor_hz);
+
+        // if necessary sleep until the next frame
+        self.fps_limiter.tick();
+
+        if self.request_redraw {
+            get_backend().window.as_ref().unwrap().request_redraw();
+            self.request_redraw = false;
+        }
     }
 
     fn window_event(
@@ -430,13 +456,10 @@ impl<S> ApplicationHandler for Runner<S> {
 
                 // post-update
                 let mut bck = get_mut_backend();
-                bck.window.as_ref().unwrap().request_redraw();
+                self.request_redraw = true;
+
                 bck.mouse_state.tick();
                 bck.keyboard_state.tick();
-
-                if let Some(interval) = &mut self.interval {
-                    interval.tick();
-                }
             }
             WindowEvent::Resized(size) => {
                 {
@@ -476,11 +499,18 @@ where
 
     let vsync = window.vsync;
     let cursor_visible = window.cursor;
-    let interval = window
-        .max_fps
-        .map(|max| spin_sleep_util::interval(Duration::from_secs(1) / max as u32));
 
     let pixelated_offscreen = window.pixelated;
+
+    let limit_mode = window
+        .max_fps
+        .map(|fps| LimitMode::Manual(Duration::from_secs_f64(1.0 / fps as f64)))
+        .or_else(|| vsync.then_some(LimitMode::Auto))
+        .unwrap_or_default();
+
+    let fps_limiter = FpsLimiter::new(limit_mode, None);
+
+    println!("FpsLimiter {limit_mode:?}");
 
     let mut runner = Runner {
         window_attrs: window_attrs(window),
@@ -490,8 +520,9 @@ where
         resize: resize_cb,
         vsync,
         cursor_visible,
-        interval,
         pixelated_offscreen,
+        fps_limiter,
+        request_redraw: true,
     };
 
     event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;

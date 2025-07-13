@@ -9,6 +9,7 @@ mod winit;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "headless"))]
 mod headless;
+mod limiter;
 
 pub(crate) use traits::{BackendImpl, GfxBackendImpl};
 
