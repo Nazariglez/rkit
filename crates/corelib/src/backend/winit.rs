@@ -352,7 +352,7 @@ impl<S> ApplicationHandler for Runner<S> {
             .and_then(|win| win.current_monitor())
             .and_then(|mon| {
                 mon.refresh_rate_millihertz()
-                    .map(|milli| (milli as f64) / 1_000.0 - 0.5)
+                    .map(|milli| (milli as f64) / 1_000.0)
             });
 
         // update the limiter's target delta according to the new hz
@@ -504,13 +504,11 @@ where
 
     let limit_mode = window
         .max_fps
-        .map(|fps| LimitMode::Manual(Duration::from_secs_f64(1.0 / fps as f64)))
+        .map(|fps| LimitMode::from_fps(fps as f64))
         .or_else(|| vsync.then_some(LimitMode::Auto))
         .unwrap_or_default();
 
     let fps_limiter = FpsLimiter::new(limit_mode, None);
-
-    println!("FpsLimiter {limit_mode:?}");
 
     let mut runner = Runner {
         window_attrs: window_attrs(window),
