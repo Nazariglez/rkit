@@ -4,12 +4,15 @@ mod traits;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod wgpu;
+
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
 mod winit;
 
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+mod limiter;
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "headless"))]
 mod headless;
-mod limiter;
 
 pub(crate) use traits::{BackendImpl, GfxBackendImpl};
 
