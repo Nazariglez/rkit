@@ -91,7 +91,7 @@ impl Manager {
                     data.panning = opts.volume;
                 }
                 Err(e) => {
-                    log::error!("Error playing sound: {}", e.to_string());
+                    log::error!("Error playing sound: {e}");
                 }
             }
             return;
@@ -114,7 +114,7 @@ impl Manager {
                 list.push(data);
             }
             Err(e) => {
-                log::error!("Error playing sound: {}", e.to_string());
+                log::error!("Error playing sound: {e}");
             }
         }
     }

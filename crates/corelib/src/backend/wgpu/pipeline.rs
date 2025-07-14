@@ -28,7 +28,7 @@ impl RenderPipeline {
     pub fn bind_group_layout_ref(&self, index: u32) -> Result<&BindGroupLayoutRef, String> {
         self.bind_group_layout
             .get(index as usize)
-            .ok_or_else(|| format!("Invalid Bind Group '{}' in pipeline", index))
+            .ok_or_else(|| format!("Invalid Bind Group '{index}' in pipeline"))
     }
 }
 

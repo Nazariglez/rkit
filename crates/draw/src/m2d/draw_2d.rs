@@ -37,8 +37,7 @@ impl AsBindGroups for &[BindGroup] {
     fn to_bind_groups(self) -> ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> {
         debug_assert!(
             self.len() <= MAX_BIND_GROUPS_PER_PIPELINE,
-            "Bind Groups must be less than {}",
-            MAX_BIND_GROUPS_PER_PIPELINE
+            "Bind Groups must be less than {MAX_BIND_GROUPS_PER_PIPELINE}"
         );
         (self as &[_]).try_into().unwrap()
     }

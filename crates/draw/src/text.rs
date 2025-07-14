@@ -543,10 +543,10 @@ impl TextSystem {
     fn clear(&mut self) -> Result<(), String> {
         self.color
             .clear()
-            .map_err(|e| format!("Cannot clear Color text atlas: {}", e))?;
+            .map_err(|e| format!("Cannot clear Color text atlas: {e}"))?;
         self.mask
             .clear()
-            .map_err(|e| format!("Cannot clear Mask text atlas: {}", e))?;
+            .map_err(|e| format!("Cannot clear Mask text atlas: {e}"))?;
 
         self.cache.clear();
         self.temp_data.clear();

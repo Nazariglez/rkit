@@ -93,7 +93,7 @@ impl AssetLoader {
     }
 
     pub(crate) fn load(&mut self, file_path: &str) -> AssetId {
-        log::info!("Loading file '{}'", file_path);
+        log::info!("Loading file '{file_path}'");
         let fut = Box::pin(self.file_loader.load_file(file_path));
         let idx = self.states.insert(AssetLoad {
             id: file_path.to_string(),
@@ -139,12 +139,12 @@ impl LoadWrapper {
                 self.loaded = true;
                 match r_buff {
                     Ok(buff) => {
-                        log::info!("File loaded: '{}'", id);
+                        log::info!("File loaded: '{id}'");
                         Some(AssetState::Loaded(buff))
                     }
                     Err(err) => {
-                        let err = format!("Cannot load file: {}: {}", id, err);
-                        log::warn!("{}", err);
+                        let err = format!("Cannot load file: {id}: {err}");
+                        log::warn!("{err}");
                         Some(AssetState::Err(err))
                     }
                 }

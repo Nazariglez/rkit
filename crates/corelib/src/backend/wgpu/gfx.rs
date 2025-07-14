@@ -94,7 +94,7 @@ impl GfxBackendImpl for GfxBackend {
 
     fn prepare_frame(&mut self) {
         if let Err(e) = self.push_frame() {
-            log::error!("Error creating frame: {}", e);
+            log::error!("Error creating frame: {e}");
         }
     }
 

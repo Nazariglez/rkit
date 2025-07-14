@@ -47,13 +47,9 @@ pub(crate) fn change_screen_event_system<S: Screen>(world: &mut World) {
         for evt in cursor.read(&evt) {
             let screen = evt.0.clone();
             if let Some(last_screen) = world.remove_resource::<S>() {
-                log::debug!("Screen: OnExit({:?})", last_screen);
+                log::debug!("Screen: OnExit({last_screen:?})");
                 world.run_schedule(OnExit(last_screen.clone()));
-                log::debug!(
-                    "Screen: OnChange(from: {:?}, to: {:?})",
-                    last_screen,
-                    screen
-                );
+                log::debug!("Screen: OnChange(from: {last_screen:?}, to: {screen:?})");
                 world.run_schedule(OnChange {
                     from: last_screen,
                     to: screen.clone(),
@@ -61,7 +57,7 @@ pub(crate) fn change_screen_event_system<S: Screen>(world: &mut World) {
             }
 
             world.insert_resource(screen.clone());
-            log::debug!("Screen: OnEnter({:?})", screen);
+            log::debug!("Screen: OnEnter({screen:?})");
             world.run_schedule(OnEnter(screen));
         }
     });

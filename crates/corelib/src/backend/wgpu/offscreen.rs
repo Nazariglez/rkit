@@ -118,7 +118,7 @@ impl OffscreenSurfaceData {
 
         let pip = gfx.create_render_pipeline(RenderPipelineDescriptor {
             label: Some("Offscreen Surface Pipeline"),
-            shader: &format!("{}\n{}", vert, frag),
+            shader: &format!("{vert}\n{frag}"),
             vertex_layout: (&[VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)] as &[_])

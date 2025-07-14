@@ -21,8 +21,8 @@ where
         match self {
             Ok(t) => t,
             Err(err) => {
-                log::error!("{}: {}", ctx, err);
-                panic!("{}: {}", ctx, err)
+                log::error!("{ctx}: {err}");
+                panic!("{ctx}: {err}")
             }
         }
     }
@@ -39,8 +39,8 @@ where
             Ok(t) => t,
             Err(err) => {
                 let ctx = f();
-                log::error!("{}: {}", ctx, err);
-                panic!("{}: {}", ctx, err)
+                log::error!("{ctx}: {err}");
+                panic!("{ctx}: {err}")
             }
         }
     }
@@ -54,8 +54,8 @@ impl<T> PanicContext<T, ()> for Option<T> {
         match self {
             Some(t) => t,
             None => {
-                log::error!("{}", ctx);
-                panic!("{}", ctx)
+                log::error!("{ctx}");
+                panic!("{ctx}")
             }
         }
     }
@@ -72,8 +72,8 @@ impl<T> PanicContext<T, ()> for Option<T> {
             Some(t) => t,
             None => {
                 let ctx = f();
-                log::error!("{}", ctx);
-                panic!("{}", ctx)
+                log::error!("{ctx}");
+                panic!("{ctx}")
             }
         }
     }
@@ -93,7 +93,7 @@ fn panic_hook(info: &PanicHookInfo) {
         .unwrap_or_else(|| "Unknown".to_string());
 
     println!("----------------");
-    println!("> CRASH REPORT <\nReason: '{}'\nLocation: '{}'", msg, loc);
+    println!("> CRASH REPORT <\nReason: '{msg}'\nLocation: '{loc}'");
     println!("----------------");
 }
 
