@@ -285,6 +285,7 @@ struct Runner<S> {
     pixelated_offscreen: bool,
     fps_limiter: FpsLimiter,
     request_redraw: bool,
+    lazy: bool,
 }
 
 impl<S> ApplicationHandler for Runner<S> {
@@ -363,7 +364,8 @@ impl<S> ApplicationHandler for Runner<S> {
         // if necessary sleep until the next frame
         self.fps_limiter.tick();
 
-        if self.request_redraw {
+        let can_render = !self.lazy || self.request_redraw;
+        if can_render {
             get_backend().window.as_ref().unwrap().request_redraw();
             self.request_redraw = false;
         }
@@ -390,12 +392,15 @@ impl<S> ApplicationHandler for Runner<S> {
                     bck.mouse_state.moving = true;
                 }
                 bck.mouse_state.cursor_on_screen = true;
+                self.request_redraw = true;
             }
             WindowEvent::CursorEntered { .. } => {
                 get_mut_backend().mouse_state.cursor_on_screen = true;
+                self.request_redraw = true;
             }
             WindowEvent::CursorLeft { .. } => {
                 get_mut_backend().mouse_state.cursor_on_screen = false;
+                self.request_redraw = true;
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let mut bck = get_mut_backend();
@@ -409,6 +414,7 @@ impl<S> ApplicationHandler for Runner<S> {
                 };
                 bck.mouse_state.wheel_delta = value;
                 bck.mouse_state.scrolling = true;
+                self.request_redraw = true;
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let btn = mouse_btn_cast(button);
@@ -417,6 +423,7 @@ impl<S> ApplicationHandler for Runner<S> {
                     ElementState::Pressed => bck.mouse_state.press(btn),
                     ElementState::Released => bck.mouse_state.release(btn),
                 }
+                self.request_redraw = true;
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let key = physical_key_cast(event.physical_key);
@@ -430,13 +437,16 @@ impl<S> ApplicationHandler for Runner<S> {
                 if let Some(txt) = event.text {
                     bck.keyboard_state.add_text(txt.as_str());
                 }
+                self.request_redraw = true;
             }
             WindowEvent::Ime(Ime::Commit(c)) => {
                 // chars
                 get_mut_backend().keyboard_state.add_text(c.as_str());
+                self.request_redraw = true;
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
+                self.request_redraw = true;
             }
             WindowEvent::RedrawRequested => {
                 time::tick();
@@ -458,8 +468,6 @@ impl<S> ApplicationHandler for Runner<S> {
 
                 // post-update
                 let mut bck = get_mut_backend();
-                self.request_redraw = true;
-
                 bck.mouse_state.tick();
                 bck.keyboard_state.tick();
             }
@@ -469,9 +477,11 @@ impl<S> ApplicationHandler for Runner<S> {
                     bck.gfx.as_mut().unwrap().resize(size.width, size.height);
                 }
                 (*self.resize)(self.state.as_mut().unwrap());
+                self.request_redraw = true;
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
+                self.request_redraw = true;
             }
             _ => (),
         }
@@ -523,6 +533,7 @@ where
         pixelated_offscreen,
         fps_limiter,
         request_redraw: true,
+        lazy: false,
     };
 
     event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;
