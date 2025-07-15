@@ -105,6 +105,7 @@ features = [
 version = "0.61.3"
 features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common"
 ]

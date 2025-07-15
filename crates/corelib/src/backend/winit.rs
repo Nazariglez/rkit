@@ -9,6 +9,8 @@ use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode as WKeyCode, PhysicalKey};
+#[cfg(windows)]
+use winit::monitor::MonitorHandle;
 use winit::window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId};
 
 #[cfg(target_arch = "wasm32")]
@@ -343,22 +345,13 @@ impl<S> ApplicationHandler for Runner<S> {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         // TODO: we probably should not get the refresh rate each frame
-        // it's unlikely to change so we may need to cache it and check 
+        // it's unlikely to change so we may need to cache it and check
         // each N seconds, or in scale/resize events?
 
         // fetch the monitor frecuency to calculate the frame pacing
         // this will avoid the input lag just keeping the input events
         // close to the draw event
-        let monitor_hz = get_native_os_monitor_fps().or_else(|| {
-            get_backend()
-                .window
-                .as_ref()
-                .and_then(|win| win.current_monitor())
-                .and_then(|mon| {
-                    mon.refresh_rate_millihertz()
-                        .map(|milli| (milli as f64) / 1_000.0)
-                })
-        });
+        let monitor_hz = monitor_fps();
 
         // update the limiter's target delta according to the new hz
         self.fps_limiter.update(monitor_hz);
@@ -793,55 +786,110 @@ fn physical_key_cast(wkey: PhysicalKey) -> KeyCode {
     }
 }
 
+#[inline(always)]
+fn monitor_fps() -> Option<f64> {
+    let bck = get_backend();
+    let win = bck.window.as_ref()?;
+    let mon = win.current_monitor()?;
+    get_native_os_monitor_fps(&mon).or_else(|| {
+        mon.refresh_rate_millihertz()
+            .map(|milli| (milli as f64) / 1_000.0)
+    })
+}
+
 /// Winit's monitor refresh rate seems to lost some accuracy on windows
 /// This function asks directly to window about the framerate
 #[cfg(windows)]
 #[inline(always)]
-fn get_native_os_monitor_fps() -> Option<f64> {
+fn get_native_os_monitor_fps(monitor: &MonitorHandle) -> Option<f64> {
+    use winit::platform::windows::MonitorHandleExtWindows;
+
     use windows::Win32::Graphics::Dxgi::{
         Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC},
-        CreateDXGIFactory1, DXGI_ENUM_MODES, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput,
+        CreateDXGIFactory1, DXGI_ENUM_MODES, IDXGIFactory1,
     };
 
-    unsafe {
-        let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
-        let adapter: IDXGIAdapter1 = factory.EnumAdapters1(0).ok()?;
-        let output: IDXGIOutput = adapter.EnumOutputs(0).ok()?;
+    use smallvec::SmallVec;
+    use std::ffi::c_void;
 
-        let mut count: u32 = 0;
-        if output
+    unsafe {
+        // pull the native HMONITOR id from winit
+        let hmon = monitor.hmonitor() as *mut c_void;
+        let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
+
+        // find the output whose DXGI_OUTPUT_DESC.Monitor matches our HMONITOR
+        let (output, width, height) = {
+            // TODO: this shit is hard to read, I should move it to it's own function
+
+            let mut found = None;
+            for adapter_idx in 0.. {
+                let adapter = factory.EnumAdapters1(adapter_idx).ok()?;
+                for output_idx in 0.. {
+                    let out = match adapter.EnumOutputs(output_idx) {
+                        Ok(o) => o,
+                        Err(_) => break,
+                    };
+                    let desc = out.GetDesc().ok()?;
+                    if desc.Monitor.0 == hmon {
+                        found = Some((out, desc));
+                        break;
+                    }
+                }
+                if found.is_some() {
+                    break;
+                }
+            }
+
+            let (out, desc) = found?;
+
+            // calculate the desktop mode dimensions to select the display mode later
+            let width = (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left) as u32;
+            let height = (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top) as u32;
+
+            (out, width, height)
+        };
+
+        // TODO: we're doing two calls here, we may want to cache this inside the runner when on windows
+        // so we avoid some extra os calls here each frame
+
+        // count modes
+        let mut count = 0;
+        output
             .GetDisplayModeList(
                 DXGI_FORMAT_R8G8B8A8_UNORM,
                 DXGI_ENUM_MODES(0),
                 &mut count,
                 None,
             )
-            .is_err()
-        {
-            return None;
-        }
+            .ok()?;
 
-        let mut modes = vec![DXGI_MODE_DESC::default(); count as usize];
-        if output
+        println!("vmodes: {count}");
+        // fetchs them
+        let mut modes: SmallVec<DXGI_MODE_DESC, 64> =
+            smallvec::smallvec![DXGI_MODE_DESC::default(); count as usize];
+        output
             .GetDisplayModeList(
                 DXGI_FORMAT_R8G8B8A8_UNORM,
                 DXGI_ENUM_MODES(0),
                 &mut count,
                 Some(modes.as_mut_ptr()),
             )
-            .is_err()
-        {
-            return None;
-        }
+            .ok()?;
 
-        let mode = modes.last()?;
-        let hz = mode.RefreshRate.Numerator as f64 / mode.RefreshRate.Denominator as f64;
-        Some(hz)
+        // pick the mode matching our desktop dimensions
+        // this should help if we move to fullscreen although I am not a win32 programmer or user
+        // so I am not sure. If this fails we fallback to the last mode in the list
+        let mode = modes
+            .iter()
+            .find(|m| m.Width == width && m.Height == height)
+            .or_else(|| modes.last())?;
+
+        Some(mode.RefreshRate.Numerator as f64 / mode.RefreshRate.Denominator as f64)
     }
 }
 
 #[cfg(not(windows))]
 #[inline(always)]
-fn get_native_os_monitor_fps() -> Option<f64> {
+fn get_native_os_monitor_fps(_monitor: &MonitorHandle) -> Option<f64> {
     None
 }
