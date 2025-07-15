@@ -144,22 +144,16 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         if let Some(win) = &mut self.window {
             let mode = is_not_fullscreen.then(|| {
                 if cfg!(not(target_os = "macos")) {
-                    // on windows or linux we try to find the best match
+                    // on windows or linux we try to find the best video mode
                     // for a exclusive fullscreen mode.
                     // The borderless mode doesn't work quite well on my machine on windows
                     // this could be a "mine" thing but I am fine using the exclusive mode
-                    let current_size = win.inner_size();
                     win.current_monitor()
                         .and_then(|monitor| {
-                            monitor
-                                .video_modes()
-                                .find(|vm| vm.size() == current_size)
-                                .or_else(|| {
-                                    monitor.video_modes().max_by_key(|vm| {
-                                        let s = vm.size();
-                                        (s.width, s.height, vm.refresh_rate_millihertz())
-                                    })
-                                })
+                            monitor.video_modes().max_by_key(|vm| {
+                                let s = vm.size();
+                                (s.width, s.height, vm.refresh_rate_millihertz())
+                            })
                         })
                         .map(Fullscreen::Exclusive)
                         .unwrap_or_else(|| Fullscreen::Borderless(win.current_monitor()))
@@ -520,12 +514,10 @@ impl<S> ApplicationHandler for Runner<S> {
                 }
                 (*self.resize)(self.state.as_mut().unwrap());
                 self.request_redraw = true;
-                println!("resize");
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
                 self.request_redraw = true;
-                println!("scale change");
             }
             _ => (),
         }
