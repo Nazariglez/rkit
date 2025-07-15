@@ -342,17 +342,23 @@ impl<S> ApplicationHandler for Runner<S> {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // TODO: we probably should not get the refresh rate each frame
+        // it's unlikely to change so we may need to cache it and check 
+        // each N seconds, or in scale/resize events?
+
         // fetch the monitor frecuency to calculate the frame pacing
         // this will avoid the input lag just keeping the input events
         // close to the draw event
-        let monitor_hz = get_backend()
-            .window
-            .as_ref()
-            .and_then(|win| win.current_monitor())
-            .and_then(|mon| {
-                mon.refresh_rate_millihertz()
-                    .map(|milli| (milli as f64) / 1_000.0)
-            });
+        let monitor_hz = get_native_os_monitor_fps().or_else(|| {
+            get_backend()
+                .window
+                .as_ref()
+                .and_then(|win| win.current_monitor())
+                .and_then(|mon| {
+                    mon.refresh_rate_millihertz()
+                        .map(|milli| (milli as f64) / 1_000.0)
+                })
+        });
 
         // update the limiter's target delta according to the new hz
         self.fps_limiter.update(monitor_hz);
@@ -785,4 +791,57 @@ fn physical_key_cast(wkey: PhysicalKey) -> KeyCode {
         },
         PhysicalKey::Unidentified(_) => KeyCode::Unknown,
     }
+}
+
+/// Winit's monitor refresh rate seems to lost some accuracy on windows
+/// This function asks directly to window about the framerate
+#[cfg(windows)]
+#[inline(always)]
+fn get_native_os_monitor_fps() -> Option<f64> {
+    use windows::Win32::Graphics::Dxgi::{
+        Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC},
+        CreateDXGIFactory1, DXGI_ENUM_MODES, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput,
+    };
+
+    unsafe {
+        let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
+        let adapter: IDXGIAdapter1 = factory.EnumAdapters1(0).ok()?;
+        let output: IDXGIOutput = adapter.EnumOutputs(0).ok()?;
+
+        let mut count: u32 = 0;
+        if output
+            .GetDisplayModeList(
+                DXGI_FORMAT_R8G8B8A8_UNORM,
+                DXGI_ENUM_MODES(0),
+                &mut count,
+                None,
+            )
+            .is_err()
+        {
+            return None;
+        }
+
+        let mut modes = vec![DXGI_MODE_DESC::default(); count as usize];
+        if output
+            .GetDisplayModeList(
+                DXGI_FORMAT_R8G8B8A8_UNORM,
+                DXGI_ENUM_MODES(0),
+                &mut count,
+                Some(modes.as_mut_ptr()),
+            )
+            .is_err()
+        {
+            return None;
+        }
+
+        let mode = modes.last()?;
+        let hz = mode.RefreshRate.Numerator as f64 / mode.RefreshRate.Denominator as f64;
+        Some(hz)
+    }
+}
+
+#[cfg(not(windows))]
+#[inline(always)]
+fn get_native_os_monitor_fps() -> Option<f64> {
+    None
 }
