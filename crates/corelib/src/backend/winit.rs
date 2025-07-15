@@ -867,9 +867,8 @@ fn get_native_os_monitor_fps(monitor: &MonitorHandle) -> Option<f64> {
             )
             .ok()?;
 
-        println!("vmodes: {count}");
         // fetchs them
-        let mut modes: SmallVec<DXGI_MODE_DESC, 64> =
+        let mut modes: SmallVec<DXGI_MODE_DESC, 128> =
             smallvec::smallvec![DXGI_MODE_DESC::default(); count as usize];
         output
             .GetDisplayModeList(
