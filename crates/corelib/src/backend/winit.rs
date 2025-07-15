@@ -9,7 +9,7 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode as WKeyCode, PhysicalKey},
     monitor::MonitorHandle,
-    window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId},
+    window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId, WindowLevel},
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -141,8 +141,20 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     fn toggle_fullscreen(&mut self) {
         debug_assert!(self.window.is_some(), "Window must be present");
         let is_not_fullscreen = !self.is_fullscreen();
-        let mode = is_not_fullscreen.then_some(Fullscreen::Borderless(None));
-        self.window.as_mut().unwrap().set_fullscreen(mode);
+        if let Some(win) = &mut self.window {
+            let mode = is_not_fullscreen.then(|| {
+                win.current_monitor().and_then(|monitor| {
+                    monitor.video_modes().next()
+                }).map(|vm| Fullscreen::Exclusive(vm))
+                .unwrap_or_else(|| Fullscreen::Borderless(win.current_monitor()))
+            });
+            log::debug!("Changing fullscreen mode to '{}'", match mode {
+                Some(Fullscreen::Borderless(_)) => "borderless",
+                Some(Fullscreen::Exclusive(_)) => "exclusive",
+                None => "none",
+            });
+            win.set_fullscreen(mode);
+        }
     }
 
     #[inline]
@@ -478,10 +490,12 @@ impl<S> ApplicationHandler for Runner<S> {
                 }
                 (*self.resize)(self.state.as_mut().unwrap());
                 self.request_redraw = true;
+                println!("resize");
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
                 self.request_redraw = true;
+                println!("scale change");
             }
             _ => (),
         }
