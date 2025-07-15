@@ -6,8 +6,7 @@ use crate::math::UVec2;
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
-    Device, Instance, Surface as RawSurface, SurfaceConfiguration, SurfaceTexture,
-    TextureFormat as RawTextureFormat,
+    Device, Instance, Surface as RawSurface, SurfaceConfiguration, SurfaceError, SurfaceTexture, TextureFormat as RawTextureFormat
 };
 use winit::raw_window_handle::HasWindowHandle;
 
@@ -21,6 +20,7 @@ pub(crate) struct Surface {
 }
 
 impl Surface {
+    #[inline]
     pub fn create_raw_surface<W>(
         window: &W,
         instance: &Instance,
@@ -82,11 +82,10 @@ impl Surface {
         surface.configure(&ctx.device, &config);
 
         log::debug!(
-            "Surface size({:?} {:?}), depth_texture({:?}), format({:?})",
+            "Surface size({:?} {:?}), depth_texture({:?}), format({raw_format:?})",
             config.width,
             config.height,
             depth_texture.size,
-            raw_format
         );
 
         Ok(Self {
@@ -98,15 +97,17 @@ impl Surface {
         })
     }
 
+    #[inline]
     pub fn resize(&mut self, device: &Device, width: u32, height: u32) {
+        debug_assert!(width > 0 && height > 0);
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(device, &self.config);
     }
 
-    pub fn frame(&self) -> Result<SurfaceTexture, String> {
+    #[inline]
+    pub fn frame(&self) -> Result<SurfaceTexture, SurfaceError> {
         self.surface
             .get_current_texture()
-            .map_err(|e| e.to_string())
     }
 }

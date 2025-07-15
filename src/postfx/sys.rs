@@ -185,6 +185,12 @@ impl PostProcessSys {
             .unwrap_or_else(window_size)
             .as_uvec2();
 
+        let can_render = size.x > 0 && size.y > 0;
+        if !can_render {
+            // minized windows on win_os can have size 0 so we skip the frame
+            return Ok(());
+        }
+
         let io_tex = self.textures.get_or_insert_mut(size, || {
             log::info!(
                 "Creating PostProcess IOTextures with size: ({}, {})",
@@ -350,8 +356,14 @@ impl PostProcessSys {
         )
     }
 
-    pub fn check_and_get_pfx_frame(&mut self) -> Result<&RenderTexture, String> {
+    pub fn check_and_get_pfx_frame(&mut self) -> Result<Option<&RenderTexture>, String> {
         let size = window_size().as_uvec2();
+        let can_render = size.x > 0 && size.y > 0;
+        if !can_render {
+            // on win_os minimized wwindows report 0 size 
+            return Ok(None);
+        }
+
         let rt = self
             .frame_rt
             .get_or_insert_with(|| create_frame_rt(size).unwrap());
@@ -360,7 +372,7 @@ impl PostProcessSys {
             *rt = create_frame_rt(size)?;
         }
 
-        Ok(rt)
+        Ok(Some(rt))
     }
 }
 

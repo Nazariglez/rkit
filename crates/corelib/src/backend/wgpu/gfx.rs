@@ -2,7 +2,7 @@
 
 use crate::backend::traits::GfxBackendImpl;
 use crate::backend::wgpu::context::Context;
-use crate::backend::wgpu::frame::DrawFrame;
+use crate::backend::wgpu::frame::{self, DrawFrame};
 use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
 use crate::backend::wgpu::surface::Surface;
 use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
@@ -17,6 +17,7 @@ use crate::gfx::{MAX_BINDING_ENTRIES, Sampler, SamplerDescriptor};
 use crate::math::{UVec2, vec2};
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
+use glam::uvec2;
 use std::borrow::Cow;
 use std::sync::Arc;
 use utils::helpers::next_pot2;
@@ -42,6 +43,8 @@ pub(crate) struct GfxBackend {
 
     // used as intermediate for surface and pipeline texture formats
     offscreen: Option<OffscreenSurfaceData>,
+
+    last_size: UVec2,
 
     last_frame_stats: GpuStats,
     current_stats: GpuStats,
@@ -93,6 +96,12 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn prepare_frame(&mut self) {
+        let can_render = self.surface.config.width > 0 && self.surface.config.height > 0;
+        if !can_render {
+            // on win_os minized windows can report 0 size, skip rendering
+            return;
+        }
+
         if let Err(e) = self.push_frame() {
             log::error!("Error creating frame: {e}");
         }
@@ -112,11 +121,20 @@ impl GfxBackendImpl for GfxBackend {
             .take()
             .ok_or_else(|| "Invalid Offscreen surface".to_string())
             .unwrap();
+
+        let can_render = offscreen.texture.size.x > 0.0 && offscreen.texture.size.y > 0.0;
+        if !can_render {
+            // if minimized on windows just skip
+            return Ok(());
+        }
+
         self.render_to(&offscreen.texture, renderer)?;
         self.offscreen = Some(offscreen);
 
         if !renderer.passes.is_empty() {
-            self.frame.as_mut().unwrap().dirty = true;
+            if let Some(frame) = &mut self.frame {
+                frame.dirty = true;
+            }
         }
 
         Ok(())
@@ -127,6 +145,13 @@ impl GfxBackendImpl for GfxBackend {
             texture.texture.write,
             "Cannot write data to a static render texture"
         );
+
+        let can_render = texture.size.x > 0.0 && texture.size.y > 0.0;
+        if !can_render {
+            // skip rendering when minized on window
+            return Ok(());
+        }
+
         let mut encoder = self
             .ctx
             .device
@@ -807,6 +832,7 @@ impl GfxBackend {
             surface,
             frame: None,
             offscreen: None,
+            last_size: win_size,
             last_frame_stats: GpuStats::default(),
             current_stats: GpuStats::default(),
         };
@@ -818,22 +844,34 @@ impl GfxBackend {
     }
 
     fn push_frame(&mut self) -> Result<(), String> {
-        let frame = self.surface.frame()?;
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let encoder = self
-            .ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Frame Encode"),
-            });
-        self.frame = Some(DrawFrame {
-            frame,
-            view,
-            encoder,
-            dirty: false,
-        });
+        match self.surface.frame() {
+            Ok(frame) => {
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let encoder =
+                    self.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Frame Encode"),
+                        });
+                self.frame = Some(DrawFrame {
+                    frame,
+                    view,
+                    encoder,
+                    dirty: false,
+                });
+            }
+            Err(err) => match err {
+                wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
+                    log::debug!("Resizng surface because: {err}");
+                    self.resize(self.last_size.x, self.last_size.y);
+                }
+                e => {
+                    return Err(e.to_string());
+                }
+            },
+        };
 
         Ok(())
     }
@@ -965,9 +1003,6 @@ impl GfxBackend {
 
     fn present_to_screen(&mut self) {
         match self.frame.take() {
-            None => {
-                log::error!("Cannot find a frame to present.");
-            }
             Some(mut df) => {
                 if df.dirty {
                     // TODO change this: "take" is ugly as hell
@@ -982,10 +1017,21 @@ impl GfxBackend {
                     frame.present();
                 }
             }
+            _ => {
+                log::debug!("Cannot find a frame to present. Skipping.");
+            }
         }
     }
 
+    #[inline]
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        let can_resize = width > 0 && height > 0;
+        if !can_resize {
+            return;
+        }
+
+        self.last_size = uvec2(width, height);
+
         self.surface.resize(&self.ctx.device, width, height);
         let mut offscreen = self.offscreen.take().unwrap();
         offscreen.update(self).unwrap();

@@ -54,6 +54,11 @@ impl UICameraInfo {
             return false;
         }
 
+        let can_update = size.x > 0.0 && size.y > 0.0;
+        if !can_update {
+            return false;
+        }
+
         self.cam_size = size;
         self.layout_size = size;
         self.projection =
@@ -234,6 +239,12 @@ where
 
     /// Updates the camera info from a Camera2D and marks layout as dirty if needed
     pub fn set_camera(&mut self, cam: &Camera2D) {
+        let cam_size = cam.size();
+        let can_set = cam_size.x > 0.0 && cam_size.y > 0.0;
+        if !can_set {
+            return;
+        }
+
         let info = UICameraInfo::from_base(cam);
         if info != self.cam_info {
             self.cam_info = info;

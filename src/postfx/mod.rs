@@ -31,7 +31,13 @@ where
 {
     // the RT cloned to avoid borrow issues in case the user pass a PostProcess command
     // cloning a RT is cheap because all types inside are references or small numbers
-    let rt = SYS.borrow_mut().check_and_get_pfx_frame()?.clone();
+    let opt_rt = SYS.borrow_mut().check_and_get_pfx_frame()?.cloned();
+    let Some(rt) = opt_rt else {
+        // cannot adquire texture but there is a no error this means
+        // that the window is probably miminized, so we skip the rendering process
+        return Ok(());
+    };
+
     gfx::render_to_texture(&rt, renderer)
 }
 
