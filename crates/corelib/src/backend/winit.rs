@@ -143,16 +143,46 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         let is_not_fullscreen = !self.is_fullscreen();
         if let Some(win) = &mut self.window {
             let mode = is_not_fullscreen.then(|| {
-                win.current_monitor().and_then(|monitor| {
-                    monitor.video_modes().next()
-                }).map(|vm| Fullscreen::Exclusive(vm))
-                .unwrap_or_else(|| Fullscreen::Borderless(win.current_monitor()))
+                if cfg!(not(target_os = "macos")) {
+                    // on windows or linux we try to find the best match
+                    // for a exclusive fullscreen mode.
+                    // The borderless mode doesn't work quite well on my machine on windows
+                    // this could be a "mine" thing but I am fine using the exclusive mode
+                    let current_size = win.inner_size();
+                    win.current_monitor()
+                        .and_then(|monitor| {
+                            monitor
+                                .video_modes()
+                                .find(|vm| vm.size() == current_size)
+                                .or_else(|| {
+                                    monitor.video_modes().max_by_key(|vm| {
+                                        let s = vm.size();
+                                        (s.width, s.height, vm.refresh_rate_millihertz())
+                                    })
+                                })
+                        })
+                        .map(Fullscreen::Exclusive)
+                        .unwrap_or_else(|| Fullscreen::Borderless(win.current_monitor()))
+                } else {
+                    // let's use on macos the borderless it works similar to exclusive allowing to
+                    // to control manually when go out
+                    Fullscreen::Borderless(win.current_monitor())
+                }
             });
-            log::debug!("Changing fullscreen mode to '{}'", match mode {
-                Some(Fullscreen::Borderless(_)) => "borderless",
-                Some(Fullscreen::Exclusive(_)) => "exclusive",
-                None => "none",
-            });
+            log::debug!(
+                "Changing fullscreen mode to '{}'",
+                match &mode {
+                    Some(Fullscreen::Borderless(_)) => "borderless".to_string(),
+                    Some(Fullscreen::Exclusive(vm)) => format!(
+                        "exclusive ({},{}) {}.{}hz",
+                        vm.size().width,
+                        vm.size().height,
+                        vm.refresh_rate_millihertz() / 1000,
+                        vm.refresh_rate_millihertz() % 1000
+                    ),
+                    None => "none".to_string(),
+                }
+            );
             win.set_fullscreen(mode);
         }
     }
@@ -819,8 +849,9 @@ fn physical_key_cast(wkey: PhysicalKey) -> KeyCode {
 fn monitor_fps() -> Option<f64> {
     let bck = get_backend();
     let win = bck.window.as_ref()?;
+    let fullscreen = win.fullscreen();
     let mon = win.current_monitor()?;
-    get_native_os_monitor_fps(&mon).or_else(|| {
+    get_native_os_monitor_fps(&mon, fullscreen).or_else(|| {
         mon.refresh_rate_millihertz()
             .map(|milli| (milli as f64) / 1_000.0)
     })
@@ -830,7 +861,10 @@ fn monitor_fps() -> Option<f64> {
 /// This function asks directly to window about the framerate
 #[cfg(windows)]
 #[inline(always)]
-fn get_native_os_monitor_fps(monitor: &MonitorHandle) -> Option<f64> {
+fn get_native_os_monitor_fps(
+    monitor: &MonitorHandle,
+    fullscreen: Option<Fullscreen>,
+) -> Option<f64> {
     use winit::platform::windows::MonitorHandleExtWindows;
 
     use windows::Win32::Graphics::Dxgi::{
@@ -840,6 +874,14 @@ fn get_native_os_monitor_fps(monitor: &MonitorHandle) -> Option<f64> {
 
     use smallvec::SmallVec;
     use std::ffi::c_void;
+
+    // if in exclusive fullscreen mode return the selected hz from the video mode
+    match fullscreen {
+        Some(Fullscreen::Exclusive(vm)) => {
+            return Some(vm.refresh_rate_millihertz() as f64 / 1000.0);
+        }
+        _ => {}
+    }
 
     unsafe {
         // pull the native HMONITOR id from winit
@@ -918,6 +960,9 @@ fn get_native_os_monitor_fps(monitor: &MonitorHandle) -> Option<f64> {
 
 #[cfg(not(windows))]
 #[inline(always)]
-fn get_native_os_monitor_fps(_monitor: &MonitorHandle) -> Option<f64> {
+fn get_native_os_monitor_fps(
+    _monitor: &MonitorHandle,
+    fullscreen: Option<Fullscreen>,
+) -> Option<f64> {
     None
 }
