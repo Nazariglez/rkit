@@ -1,5 +1,7 @@
-use crate::backend::{BackendImpl, get_backend, get_mut_backend};
-use crate::math::Vec2;
+use crate::{
+    backend::{BackendImpl, get_backend, get_mut_backend},
+    math::Vec2,
+};
 
 #[cfg(feature = "gamepad")]
 mod gamepad;

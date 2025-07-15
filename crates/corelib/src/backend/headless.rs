@@ -5,12 +5,11 @@ use spin_sleep_util::Interval;
 use time::Duration;
 
 use crate::{
+    backend::traits::{BackendImpl, GfxBackendImpl},
     builder::AppBuilder,
     events::{CORE_EVENTS_MAP, CoreEvent},
     input::{KeyboardState, MouseState},
 };
-
-use super::{BackendImpl, GfxBackendImpl};
 
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;

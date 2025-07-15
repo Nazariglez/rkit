@@ -1,5 +1,4 @@
-use crate::app::WindowConfig;
-use crate::backend::run;
+use crate::{app::WindowConfig, backend::run};
 
 #[cfg(feature = "logs")]
 use crate::app::logger::{LogConfig, init_logs};

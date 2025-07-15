@@ -1,12 +1,10 @@
-use core::fmt;
-use std::fmt::Display;
-use std::panic::PanicHookInfo;
+use std::{fmt::Display, panic::PanicHookInfo};
 
 pub trait PanicContext<T, E> {
     fn or_panic(self, ctx: &str) -> T;
     fn or_panic_with<F, S>(self, f: F) -> T
     where
-        S: fmt::Display,
+        S: Display,
         F: FnOnce() -> S;
 }
 
@@ -32,7 +30,7 @@ where
     #[inline(never)]
     fn or_panic_with<F, S>(self, f: F) -> T
     where
-        S: fmt::Display,
+        S: Display,
         F: FnOnce() -> S,
     {
         match self {
@@ -65,7 +63,7 @@ impl<T> PanicContext<T, ()> for Option<T> {
     #[inline(never)]
     fn or_panic_with<F, S>(self, f: F) -> T
     where
-        S: fmt::Display,
+        S: Display,
         F: FnOnce() -> S,
     {
         match self {

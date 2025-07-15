@@ -119,11 +119,11 @@ where
 
     // write to a temp file, if the process is stopped by the os (power loss, etc...)
     // we do not corrupt the lastest save file
-    let temp_filename = format!("{}.{}.{}", slot, ts, TEMP_EXT);
+    let temp_filename = format!("{slot}.{ts}.{TEMP_EXT}");
     let tmp_filepath = dir.join(&temp_filename);
     {
         let mut f =
-            fs::File::create(&tmp_filepath).map_err(|e| format!("File create error: {}", e))?;
+            fs::File::create(&tmp_filepath).map_err(|e| format!("File create error: {e}"))?;
 
         // we append to the compressed data the checksum as a u32 in little endian so we can read
         // later the checksum and check if the file was altered, detecting corruptions or manual
@@ -180,7 +180,7 @@ fn read_metadata(file_path: &PathBuf) -> Result<SaveMetadata, String> {
         .map_err(|_| "Corrupt header: sys flags slice has wrong length".to_string())
         .map(u16::from_le_bytes)?;
     let sys_flags = SaveFlags::from_bits(sys_flags_bits)
-        .ok_or_else(|| format!("Unknown flags: {}", sys_flags_bits))?;
+        .ok_or_else(|| format!("Unknown flags: {sys_flags_bits}"))?;
 
     let user_flags = header[14..16]
         .try_into()
@@ -274,9 +274,8 @@ where
     // return early if the file is too small even for the header
     if raw.len() < HEADER_LEN {
         return Err(format!(
-            "File too small: {} bytes (need at least {})",
+            "File too small: {} bytes (need at least {HEADER_LEN})",
             raw.len(),
-            HEADER_LEN
         ));
     }
 
@@ -369,9 +368,9 @@ pub fn clean_backups(base_dir: &str, slot: &str, keep: usize) -> Result<usize, S
     let mut backups = Vec::new();
 
     // find all backup files matching "slot.timestamp.bak"
-    for entry in fs::read_dir(&dir).map_err(|e| format!("Read save directory error: {}", e))? {
+    for entry in fs::read_dir(&dir).map_err(|e| format!("Read save directory error: {e}"))? {
         let path = entry
-            .map_err(|e| format!("Directory entry error: {}", e))?
+            .map_err(|e| format!("Directory entry error: {e}"))?
             .path();
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             if ext != BACKUP_EXT {
@@ -399,8 +398,7 @@ pub fn clean_backups(base_dir: &str, slot: &str, keep: usize) -> Result<usize, S
     // Delete any backups beyond the first `keep`
     let mut deleted = 0;
     for &(_, ref path) in backups.iter().skip(keep) {
-        fs::remove_file(path)
-            .map_err(|e| format!("Failed to delete '{}': {}", path.display(), e))?;
+        fs::remove_file(path).map_err(|e| format!("Failed to delete '{}': {e}", path.display()))?;
         deleted += 1;
     }
 
@@ -413,9 +411,9 @@ pub fn clear_save_files(base_dir: &str, slots: Option<&[&str]>) -> Result<usize,
     let dir = data_dir(base_dir)?;
 
     let mut deleted = 0;
-    for entry in fs::read_dir(&dir).map_err(|e| format!("Read save directory error: {}", e))? {
+    for entry in fs::read_dir(&dir).map_err(|e| format!("Read save directory error: {e}"))? {
         let path = entry
-            .map_err(|e| format!("Directory entry error: {}", e))?
+            .map_err(|e| format!("Directory entry error: {e}"))?
             .path();
 
         let fname = match path.file_name().and_then(|n| n.to_str()) {
@@ -451,7 +449,7 @@ pub fn clear_save_files(base_dir: &str, slots: Option<&[&str]>) -> Result<usize,
         // at this point means we can delete the file because either it matches the name or there
         // were no names provided
         fs::remove_file(&path)
-            .map_err(|e| format!("Failed to delete '{}': {}", path.display(), e))?;
+            .map_err(|e| format!("Failed to delete '{}': {e}", path.display()))?;
         deleted += 1;
     }
 
@@ -466,7 +464,7 @@ where
         .iter()
         .filter_map(|slot| {
             load_last_saved_file::<D>(base_dir, slot)
-                .inspect_err(|e| log::warn!("Error loading save for slot '{}': {e}", slot))
+                .inspect_err(|e| log::warn!("Error loading save for slot '{slot}': {e}"))
                 .ok()
                 .flatten()
         })
@@ -800,9 +798,7 @@ mod tests {
         let stem = backups[0].file_stem().and_then(|s| s.to_str()).unwrap();
         assert!(
             stem.starts_with(slot),
-            "Backup filename stem should start with `{}`, got `{}`",
-            slot,
-            stem
+            "Backup filename stem should start with `{slot}`, got `{stem}`",
         );
     }
 

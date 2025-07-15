@@ -1,5 +1,7 @@
-use crate::backend::{BackendImpl, get_backend, get_mut_backend};
-use crate::math::{Vec2, vec2};
+use crate::{
+    backend::{BackendImpl, get_backend, get_mut_backend},
+    math::{Vec2, vec2},
+};
 
 mod window;
 pub use window::*;

@@ -1,7 +1,5 @@
 use fastrand::Rng as RawRng;
-use std::cell::RefCell;
-use std::collections::Bound;
-use std::ops::RangeBounds;
+use std::{cell::RefCell, collections::Bound, ops::RangeBounds};
 
 thread_local! {
     static LOCAL_RNG: RefCell<Rng> = RefCell::new(Rng::new());

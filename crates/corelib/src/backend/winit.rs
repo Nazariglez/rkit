@@ -1,35 +1,39 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use crate::backend::limiter::{FpsLimiter, LimitMode};
-use crate::math::uvec2;
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
-use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode as WKeyCode, PhysicalKey};
-#[cfg(windows)]
-use winit::monitor::MonitorHandle;
-use winit::window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId};
+use winit::{
+    application::ApplicationHandler,
+    dpi::{LogicalSize, PhysicalPosition},
+    event::{ElementState, Ime, MouseButton as WMouseButton, MouseScrollDelta, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode as WKeyCode, PhysicalKey},
+    monitor::MonitorHandle,
+    window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId},
+};
 
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
 
-use super::traits::{BackendImpl, GfxBackendImpl};
-use crate::app::WindowConfig;
-use crate::backend::wgpu::GfxBackend;
-use crate::builder::AppBuilder;
-use crate::input::{KeyCode, KeyboardState, MouseButton, MouseState};
-use crate::math::{Vec2, vec2};
+use crate::{
+    app::WindowConfig,
+    backend::{
+        limiter::{FpsLimiter, LimitMode},
+        traits::{BackendImpl, GfxBackendImpl},
+        wgpu::GfxBackend,
+    },
+    builder::AppBuilder,
+    events::{CORE_EVENTS_MAP, CoreEvent},
+    input::{KeyCode, KeyboardState, MouseButton, MouseState},
+    math::{Vec2, uvec2, vec2},
+    time,
+};
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
 #[cfg(feature = "gamepad")]
 use crate::backend::gamepad_gilrs::GilrsBackend;
-use crate::events::{CORE_EVENTS_MAP, CoreEvent};
 #[cfg(feature = "gamepad")]
 use crate::input::GamepadState;
-use crate::time;
 
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));

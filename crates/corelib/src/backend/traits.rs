@@ -1,11 +1,12 @@
-use crate::gfx::{
-    BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, GpuStats, Limits, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
-    SamplerDescriptor, Texture, TextureData, TextureDescriptor,
+use crate::{
+    gfx::{
+        BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, GpuStats, Limits, RenderPipeline,
+        RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
+        SamplerDescriptor, Texture, TextureData, TextureDescriptor,
+    },
+    input::{KeyboardState, MouseState},
+    math::{UVec2, Vec2},
 };
-use crate::input::{KeyboardState, MouseState};
-use crate::math::UVec2;
-use crate::math::Vec2;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 #[cfg(feature = "gamepad")]

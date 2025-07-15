@@ -1,5 +1,4 @@
 use std::time::Duration;
-
 use spin_sleep_util::Interval;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
