@@ -1,18 +1,33 @@
 use crate::prelude::{App, OnEnginePostFrame, OnEnginePreFrame, OnEngineSetup, Plugin};
 use bevy_ecs::prelude::*;
-use corelib::app::*;
-use corelib::input::{hide_cursor, is_cursor_visible, show_cursor};
-use corelib::math::{Vec2, uvec2};
+use corelib::{
+    app::*,
+    input::{hide_cursor, is_cursor_visible, show_cursor},
+    math::{Vec2, uvec2},
+};
 use macros::Deref;
+
+#[derive(Event, Debug, Clone, Copy)]
+pub struct WindowResizeEvent {
+    pub size: Vec2,
+}
 
 #[derive(Default)]
 pub struct WindowPlugin;
 
 impl Plugin for WindowPlugin {
     fn apply(&self, app: &mut App) {
-        app.add_systems(OnEngineSetup, init_window_system)
+        app.add_event::<WindowResizeEvent>()
+            .add_systems(OnEngineSetup, init_window_system)
             .add_systems(OnEnginePreFrame, populate_window_system)
-            .add_systems(OnEnginePostFrame, sync_window_system);
+            .add_systems(OnEnginePostFrame, sync_window_system)
+            .extend_with(|builder| {
+                builder.resize(|world: &mut World| {
+                    world.send_event(WindowResizeEvent {
+                        size: window_size(),
+                    });
+                })
+            });
     }
 }
 
@@ -181,6 +196,12 @@ impl Window {
 
         self.fullscreen = fullscreen;
         self.dirty = true;
+    }
+
+    #[inline]
+    pub fn toggle_fullscreen(&mut self) {
+        let is_fullscreen = self.is_fullscreen();
+        self.set_fullscreen(!is_fullscreen);
     }
 
     #[inline]

@@ -1,24 +1,32 @@
-use super::exit::app_exit_system;
 use super::prelude::*;
-use crate::app::{LogConfig, WindowConfig};
-use crate::ecs::plugin::{BaseSchedules, Plugin};
-use crate::ecs::schedules::{
-    OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate, OnPostFrame,
-    OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender, OnPreUpdate, OnRender,
-    OnSetup, OnUpdate,
+use crate::{
+    app::{LogConfig, WindowConfig},
+    ecs::{
+        exit::app_exit_system,
+        plugin::{BaseSchedules, Plugin},
+        schedules::{
+            OnCleanup, OnEnginePostFrame, OnEnginePreFrame, OnFixedUpdate, OnPostFixedUpdate,
+            OnPostFrame, OnPostRender, OnPostUpdate, OnPreFixedUpdate, OnPreFrame, OnPreRender,
+            OnPreUpdate, OnRender, OnSetup, OnUpdate,
+        },
+        screen::Screen,
+    },
 };
-use crate::ecs::screen::Screen;
-use bevy_ecs::event::EventRegistry;
-use bevy_ecs::schedule::ScheduleLabel;
-use bevy_ecs::system::SystemId;
+use bevy_ecs::{event::EventRegistry, schedule::ScheduleLabel, system::SystemId};
 use bevy_tasks::{ComputeTaskPool, TaskPool};
+
+pub(crate) type AppBuilder = corelib::AppBuilder<World>;
 
 pub struct App {
     pub world: World,
-    exit_sys: SystemId,
+
     pub(crate) fixed_updates: Vec<u8>,
     pub(crate) window_config: WindowConfig,
     pub(crate) log_config: LogConfig,
+
+    exit_sys: SystemId,
+
+    extensions: Vec<Box<dyn FnOnce(AppBuilder) -> AppBuilder>>,
 }
 
 impl Default for App {
@@ -38,6 +46,7 @@ impl App {
             fixed_updates: vec![],
             window_config: Default::default(),
             log_config: Default::default(),
+            extensions: vec![],
         };
 
         ComputeTaskPool::get_or_init(TaskPool::default);
@@ -184,11 +193,20 @@ impl App {
         self
     }
 
+    pub(crate) fn extend_with<F>(&mut self, cb: F) -> &mut Self
+    where
+        F: FnOnce(AppBuilder) -> AppBuilder + 'static,
+    {
+        self.extensions.push(Box::new(cb));
+        self
+    }
+
     pub fn run(&mut self) -> Result<(), String> {
         let mut world = std::mem::take(&mut self.world);
         let exit_sys = self.exit_sys;
         let window_config = self.window_config.clone();
         let log_config = self.log_config.clone();
+        let extensions = std::mem::take(&mut self.extensions);
 
         let mut builder = crate::init_with(|| {
             world.run_schedule(OnEngineSetup);
@@ -229,6 +247,10 @@ impl App {
         });
 
         builder = builder.cleanup(|world: &mut World| world.run_schedule(OnCleanup));
+
+        for ext in extensions {
+            builder = ext(builder);
+        }
 
         builder.run()
     }
