@@ -20,6 +20,8 @@
     * do we want to hide keyboard, mouse and ime under features?
 
 - know issues:
+    * save files not working on wasm (fs issue, fallback to localstorage)
+    * fullscreen commands not working quite well sometimes due to the security issue that requires user interaction
     * complex chars like áéí etc... don't work on wasm, we need to use composition events on a hidden input elements
     * local transform2d is not working right for star (or/and path2d?)
     * gfx_render_texture looks a bit weird when textures overlap, like darker colors?
