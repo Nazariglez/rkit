@@ -310,7 +310,7 @@ fn init_window_system(mut cmds: Commands) {
     });
 }
 
-fn populate_window_system(mut win: ResMut<Window>) {
+fn populate_window_system(mut win: ResMut<Window>, mut evt: EventWriter<WindowResizeEvent>) {
     // sometimes the user can do changess on the "setup" callback
     // that will be override by this, so if the window is dirty skip
     // the population, this will be normalized later on the sync event
@@ -319,7 +319,15 @@ fn populate_window_system(mut win: ResMut<Window>) {
     }
 
     win.size = window_size();
-    win.fullscreen = is_window_fullscreen();
+    let fullscreen = is_window_fullscreen();
+    if win.fullscreen != fullscreen {
+        win.fullscreen = is_window_fullscreen();
+        // if the user disables manually on mac form the bar the fullscreen
+        // mode the is_window_fullscreen will still return true for a few iterations
+        // re-sending the resize event we make sure that there is at least one
+        // event to listen when the states doesn't matches between windows and system
+        evt.send(WindowResizeEvent { size: win.size() });
+    }
     win.focused = is_window_focused();
     win.dpi_scale = window_dpi_scale();
     win.screen_size = screen_size();

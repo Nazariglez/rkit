@@ -516,7 +516,6 @@ impl<S> ApplicationHandler for Runner<S> {
                 self.request_redraw = true;
             }
             WindowEvent::ScaleFactorChanged { .. } => {
-                // println!("scale factor: {scale_factor:?} size:{inner_size_writer:?}");
                 self.request_redraw = true;
             }
             _ => (),
