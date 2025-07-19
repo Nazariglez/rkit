@@ -20,6 +20,7 @@ pub struct LogConfig {
     levels_for: FxHashMap<String, log::LevelFilter>,
     colored: bool,
     verbose: bool,
+    file_path: Option<std::path::PathBuf>,
 }
 
 impl Default for LogConfig {
@@ -35,6 +36,7 @@ impl Default for LogConfig {
             levels_for: Default::default(),
             colored: cfg!(debug_assertions),
             verbose: false,
+            file_path: None,
         }
     }
 }
@@ -94,6 +96,15 @@ impl LogConfig {
     /// Log everything including dependencies
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
+        self
+    }
+
+    /// Save logs to a file
+    pub fn to_file<P>(mut self, path: P) -> Self
+    where
+        P: Into<std::path::PathBuf>,
+    {
+        self.file_path = Some(path.into());
         self
     }
 }
@@ -174,6 +185,28 @@ fn panic_to_log_error_hook(info: &std::panic::PanicHookInfo) {
     }
 }
 
+fn chain_save_to_file(dispatch: fern::Dispatch, config: &LogConfig) -> fern::Dispatch {
+    match &config.file_path {
+        Some(path) => {
+            let file = std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(path);
+
+            match file {
+                Ok(file) => dispatch.chain(file),
+                Err(e) => {
+                    print_apply_error(&e.to_string());
+                    dispatch
+                }
+            }
+        }
+        None => dispatch,
+    }
+
+    // FIXME: log to file must be non-blockin IO, we need to chain an async writer here
+}
+
 pub(crate) fn init_logs(mut config: LogConfig) {
     set_panic_hook();
 
@@ -240,6 +273,11 @@ pub(crate) fn init_logs(mut config: LogConfig) {
                 message = message,
             ))
         });
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        dispatch = chain_save_to_file(dispatch, &config);
     }
 
     if let Err(e) = dispatch.apply() {
