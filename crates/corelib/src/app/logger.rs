@@ -139,9 +139,43 @@ fn print_apply_error(e: &str) {
     println!("Error initializing logs: {e}");
 }
 
-pub(crate) fn init_logs(mut config: LogConfig) {
-    #[cfg(target_arch = "wasm32")]
+#[cfg(target_arch = "wasm32")]
+fn set_panic_hook() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_panic_hook() {
+    use std::panic::{self, PanicHookInfo};
+
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info: &PanicHookInfo| {
+        panic_to_log_error_hook(info);
+        default_hook(info);
+    }));
+}
+
+fn panic_to_log_error_hook(info: &std::panic::PanicHookInfo) {
+    let payload = if let Some(payload) = info.payload().downcast_ref::<&str>() {
+        payload
+    } else if let Some(payload) = info.payload().downcast_ref::<String>() {
+        payload.as_str()
+    } else {
+        "Unknown"
+    };
+
+    match info.location() {
+        Some(location) => log::error!(
+            "Panic at '{}:{}': {payload}",
+            location.file(),
+            location.line()
+        ),
+        None => log::error!("Panic: {payload}"),
+    }
+}
+
+pub(crate) fn init_logs(mut config: LogConfig) {
+    set_panic_hook();
 
     if !config.verbose {
         let mut disabled = vec![
