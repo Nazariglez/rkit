@@ -147,7 +147,7 @@ fn print_apply_error(e: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn print_apply_error(e: &str) {
-    println!("Error initializing logs: {e}");
+    eprintln!("Error initializing logs: {e}");
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -185,26 +185,46 @@ fn panic_to_log_error_hook(info: &std::panic::PanicHookInfo) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn chain_save_to_file(dispatch: fern::Dispatch, config: &LogConfig) -> fern::Dispatch {
-    match &config.file_path {
-        Some(path) => {
-            let file = std::fs::OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(path);
+    use std::io::Write;
+    use std::sync::mpsc::channel;
 
-            match file {
-                Ok(file) => dispatch.chain(file),
-                Err(e) => {
-                    print_apply_error(&e.to_string());
-                    dispatch
-                }
+    // if there is no file_path defined just skip
+    let Some(path) = &config.file_path else {
+        return dispatch;
+    };
+
+    // create or open the file the user requests
+    let file = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path);
+
+    let mut file = match file {
+        Ok(file) => file,
+        Err(e) => {
+            print_apply_error(&e.to_string());
+            return dispatch;
+        }
+    };
+
+    // we need a second thread to manage the IO because it's "slow"
+    // and in-games we don't want to be waiting for the filesystem alsmot never
+    // so we use the sender to send the logs to the other thread
+    // WARN: Panic logs may be lost because the second thread could not wait
+    // until getting the last message. However in my "manual tests" this seems
+    // to be working fine, so I am not overthinking it to find a solution yet.
+    let (tx, rx) = channel::<String>();
+    std::thread::spawn(move || {
+        for ln in rx {
+            if let Err(e) = write!(file, "{ln}") {
+                eprintln!("Log write line error: {e}")
             }
         }
-        None => dispatch,
-    }
+    });
 
-    // FIXME: log to file must be non-blockin IO, we need to chain an async writer here
+    dispatch.chain(tx)
 }
 
 pub(crate) fn init_logs(mut config: LogConfig) {
@@ -240,7 +260,8 @@ pub(crate) fn init_logs(mut config: LogConfig) {
 
     dispatch = chain_output(dispatch);
 
-    if config.colored {
+    let use_colors = config.file_path.is_none() && config.colored;
+    if use_colors {
         use fern::colors::{Color, ColoredLevelConfig};
 
         let color_level = ColoredLevelConfig::new()
