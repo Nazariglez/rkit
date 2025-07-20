@@ -54,7 +54,8 @@ strum.workspace = true
 strum_macros.workspace = true
 crossbeam-channel = "0.5.15"
 
-# loggin
+# logging
+chrono = { version = "0.4.41", optional = true }
 fern = { version = "0.7.1", optional = true, features = ["colored"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -107,7 +108,7 @@ features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common"
+    "Win32_Graphics_Dxgi_Common",
 ]
 
 [features]
@@ -123,6 +124,7 @@ gamepad = ["dep:gilrs"]
 logs = [
     "dep:time",
     "dep:fern",
+    "dep:chrono",
     "dep:console_log",
     "dep:console_error_panic_hook",
 ]

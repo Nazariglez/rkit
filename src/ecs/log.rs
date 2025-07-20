@@ -67,4 +67,26 @@ impl LogPlugin {
         self.0 = self.0.verbose(verbose);
         self
     }
+
+    /// Log files to a directory
+    pub fn to_files_dir<P>(mut self, path: P) -> Self
+    where
+        P: Into<std::path::PathBuf>,
+    {
+        self.0 = self.0.to_files_dir(path);
+        self
+    }
+
+    /// Keep only N log files removing the old ones.
+    /// If none is passed then no files is removed
+    pub fn max_log_files(mut self, max: Option<usize>) -> Self {
+        self.0 = self.0.max_log_files(max);
+        self
+    }
+
+    /// Format the log files name, by default is "%Y-%m-%d"
+    pub fn file_name_format(mut self, format: &str) -> Self {
+        self.0 = self.0.file_name_format(format);
+        self
+    }
 }

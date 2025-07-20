@@ -12,6 +12,8 @@ extern "C" {
     pub fn console_error(s: &str);
 }
 
+const LOG_FILE_EXT: &str = "log";
+
 /// Configure the logs output
 /// Logs will show a timestamp using the UTC time with format `[year]-[month]-[day] [hour]:[minutes]:[seconds]`
 #[derive(Clone)]
@@ -20,7 +22,9 @@ pub struct LogConfig {
     levels_for: FxHashMap<String, log::LevelFilter>,
     colored: bool,
     verbose: bool,
-    file_path: Option<std::path::PathBuf>,
+    log_files_path: Option<std::path::PathBuf>,
+    log_files_format: String,
+    max_log_files: Option<usize>,
 }
 
 impl Default for LogConfig {
@@ -36,7 +40,9 @@ impl Default for LogConfig {
             levels_for: Default::default(),
             colored: cfg!(debug_assertions),
             verbose: false,
-            file_path: None,
+            log_files_path: None,
+            log_files_format: "%Y-%m-%d".to_string(),
+            max_log_files: Some(10),
         }
     }
 }
@@ -99,12 +105,25 @@ impl LogConfig {
         self
     }
 
-    /// Save logs to a file
-    pub fn to_file<P>(mut self, path: P) -> Self
+    /// Save logs as files to directory
+    pub fn to_files_dir<P>(mut self, path: P) -> Self
     where
         P: Into<std::path::PathBuf>,
     {
-        self.file_path = Some(path.into());
+        self.log_files_path = Some(path.into());
+        self
+    }
+
+    /// Keep only N log files removing the old ones.
+    /// If none is passed then no files is removed
+    pub fn max_log_files(mut self, max: Option<usize>) -> Self {
+        self.max_log_files = max;
+        self
+    }
+
+    /// Format the log files name, by default is "%Y-%m-%d"
+    pub fn file_name_format(mut self, format: &str) -> Self {
+        self.log_files_format = format.to_string();
         self
     }
 }
@@ -191,15 +210,63 @@ fn chain_save_to_file(dispatch: fern::Dispatch, config: &LogConfig) -> fern::Dis
     use std::sync::mpsc::channel;
 
     // if there is no file_path defined just skip
-    let Some(path) = &config.file_path else {
+    let Some(path) = &config.log_files_path else {
         return dispatch;
     };
 
+    // create the logs directory if needed
+    let res =
+        std::fs::create_dir_all(path).map_err(|e| format!("Cannot create save directory: {e}"));
+    if let Err(e) = res {
+        print_apply_error(&e.to_string());
+        return dispatch;
+    }
+
+    // remove old logs if necessary
+    if let Some(max) = config.max_log_files {
+        use std::time::SystemTime;
+
+        // filter by log extensions
+        let mut log_files = std::fs::read_dir(path)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter_map(|e| {
+                        e.path()
+                            .extension()
+                            .is_some_and(|ext| ext.to_str() == Some(LOG_FILE_EXT))
+                            .then_some(e.path())
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        // sort by modified time, oldest first
+        log_files.sort_by_key(|p| {
+            std::fs::metadata(p)
+                .and_then(|m| m.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH)
+        });
+
+        // delete old ones
+        if log_files.len() > max {
+            let remove_len = log_files.len() - max;
+            log_files.into_iter().take(remove_len).for_each(|old_file| {
+                let _ = std::fs::remove_file(old_file);
+            });
+        }
+    }
+
     // create or open the file the user requests
+    let file_name = chrono::Utc::now()
+        .format(&config.log_files_format)
+        .to_string();
+    let file_path = path.join(file_name).with_extension(LOG_FILE_EXT);
+
     let file = std::fs::OpenOptions::new()
         .append(true)
         .create(true)
-        .open(path);
+        .open(file_path);
 
     let mut file = match file {
         Ok(file) => file,
@@ -260,7 +327,7 @@ pub(crate) fn init_logs(mut config: LogConfig) {
 
     dispatch = chain_output(dispatch);
 
-    let use_colors = config.file_path.is_none() && config.colored;
+    let use_colors = config.log_files_path.is_none() && config.colored;
     if use_colors {
         use fern::colors::{Color, ColoredLevelConfig};
 
