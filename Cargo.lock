@@ -3095,7 +3095,6 @@ dependencies = [
  "log",
  "macros",
  "once_cell",
- "platform-dirs",
  "rustc-hash 2.1.1",
  "scene-graph",
  "serde",
@@ -4022,6 +4021,7 @@ dependencies = [
  "arrayvec",
  "lru",
  "macros",
+ "platform-dirs",
  "rustc-hash 2.1.1",
 ]
 

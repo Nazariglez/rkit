@@ -8,4 +8,7 @@ macros.workspace = true
 rustc-hash.workspace = true
 arrayvec.workspace = true
 
-lru = { version = "0.13" , default-features = false }
+lru = { version = "0.13", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+platform-dirs = "0.3.0"

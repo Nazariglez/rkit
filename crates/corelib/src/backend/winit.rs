@@ -9,7 +9,7 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode as WKeyCode, PhysicalKey},
     monitor::MonitorHandle,
-    window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId, WindowLevel},
+    window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId},
 };
 
 #[cfg(target_arch = "wasm32")]

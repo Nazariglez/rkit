@@ -1,3 +1,20 @@
+/// Returns the User's data directory depending on the enviroment
+/// The `web` build will return None
+#[inline(always)]
+pub fn user_data_path(base: &str) -> Option<std::path::PathBuf> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        platform_dirs::AppDirs::new(Some(base), false).map(|d| d.data_dir)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
+    }
+}
+
+/// Returns the next power of two number
+#[inline(always)]
 pub const fn next_pot2(x: usize) -> usize {
     if x == 0 {
         return 1;

@@ -1,5 +1,4 @@
 use brotli::{CompressorWriter, Decompressor};
-use platform_dirs::AppDirs;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -7,6 +6,7 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
+use utils::helpers::user_data_path;
 
 /// header len is [checksum:u32][timestamp:u64][sys_flags:u16][user_flags:u16]
 const HEADER_LEN: usize = 4 + 8 + 2 + 2;
@@ -52,8 +52,7 @@ pub struct SaveData<D> {
 fn data_dir(base_dir: &str) -> Result<PathBuf, String> {
     match std::env::var("SAVE_FILE_DIR").ok() {
         Some(p) => Ok(PathBuf::from(p).join(base_dir)),
-        None => AppDirs::new(Some(base_dir), false)
-            .map(|d| d.data_dir)
+        None => user_data_path(base_dir)
             .ok_or_else(|| "Unable to set a folder to save the savefile.".to_string()),
     }
 }
