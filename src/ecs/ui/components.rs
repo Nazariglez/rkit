@@ -54,6 +54,11 @@ impl UINode {
         Rect::new(self.position(), self.size())
     }
 
+    #[inline]
+    pub fn is_visible(&self) -> bool {
+        self.global_alpha() > 0.0
+    }
+
     pub(super) fn update_transform(&mut self, transform: &UITransform, parent: Mat3) {
         let pivot_offset = transform.pivot * self.size;
         let position = self.position + transform.offset;
