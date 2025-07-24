@@ -1,11 +1,14 @@
 #![allow(unused)]
 use std::f32::consts::PI;
 use std::ops::{Add, Mul, Sub};
+use std::process::Output;
 
 pub type EaseFn = fn(f32) -> f32;
 
 pub trait Interpolable: Copy + Sized {
-    fn interpolate(self, to: Self, progress: f32, easing: EaseFn) -> Self;
+    fn interpolate<F>(self, to: Self, progress: f32, easing: F) -> Self
+    where
+        F: Fn(f32) -> f32;
 }
 
 impl<T> Interpolable for T
@@ -17,7 +20,10 @@ where
         + Sub<Output = Self>
         + Sized,
 {
-    fn interpolate(self, to: Self, progress: f32, easing: EaseFn) -> Self {
+    fn interpolate<F>(self, to: Self, progress: f32, easing: F) -> Self
+    where
+        F: Fn(f32) -> f32,
+    {
         self + ((to - self) * easing(progress))
     }
 }

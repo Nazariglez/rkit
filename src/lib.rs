@@ -17,6 +17,7 @@ pub mod ui;
 pub mod ecs;
 
 pub mod or_panic;
+pub mod particles;
 pub mod prelude;
 pub mod timer;
 
