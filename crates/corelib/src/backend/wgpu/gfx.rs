@@ -763,9 +763,18 @@ impl GfxBackendImpl for GfxBackend {
 
     fn limits(&self) -> Limits {
         let raw_limits = self.ctx.device.limits();
+        let surface_formats = self
+            .surface
+            .capabilities
+            .formats
+            .iter()
+            .filter_map(|tx| TextureFormat::from_wgpu(*tx))
+            .collect();
+
         Limits {
             max_texture_size_2d: raw_limits.max_texture_dimension_2d,
             max_texture_size_3d: raw_limits.max_texture_dimension_3d,
+            surface_formats,
         }
     }
 

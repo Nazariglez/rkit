@@ -1,3 +1,5 @@
+use strum_macros::EnumCount;
+
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct TextureId(pub(crate) u64);
 
@@ -56,7 +58,7 @@ pub enum TextureFilter {
 
 /// Enum representing texture formats supported by WebGL2
 /// which is the min compatibility layer we aim for
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, EnumCount)]
 pub enum TextureFormat {
     // Single channel 8-bit textures
     R8UNorm, // WebGL2: GL_R8
@@ -124,6 +126,15 @@ pub enum TextureFormat {
 }
 
 impl TextureFormat {
+    #[inline]
+    pub fn is_srgb(&self) -> bool {
+        matches!(
+            self,
+            TextureFormat::Rgba8UNormSrgb | TextureFormat::Bgra8UNormSrgb
+        )
+    }
+
+    #[inline]
     pub fn channels(&self) -> u8 {
         match self {
             TextureFormat::R8UNorm

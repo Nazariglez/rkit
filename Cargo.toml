@@ -115,6 +115,9 @@ bevy_tasks = { version = "0.15", default-features = false, features = [
 web-time = { workspace = true, optional = true }
 taffy = { version = "0.7.6", optional = true }
 
+# egui deps
+egui = { version = "0.32", optional = true }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { workspace = true, optional = true, features = ["js"] }
 
@@ -135,6 +138,7 @@ default = [
   "logs",
   "ui",
   "ecs",
+  "egui",
 ]
 # enable headless/server mode
 headless = ["corelib/headless"]
@@ -181,3 +185,5 @@ save = [
 ]
 # enable locale method
 locale = ["dep:fluent", "dep:unic-langid"]
+# enable egui support
+egui = ["dep:egui"]

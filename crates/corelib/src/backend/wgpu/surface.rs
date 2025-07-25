@@ -6,7 +6,8 @@ use crate::math::UVec2;
 use std::sync::Arc;
 use wgpu::rwh::HasDisplayHandle;
 use wgpu::{
-    Device, Instance, Surface as RawSurface, SurfaceConfiguration, SurfaceError, SurfaceTexture, TextureFormat as RawTextureFormat
+    Device, Instance, Surface as RawSurface, SurfaceCapabilities, SurfaceConfiguration,
+    SurfaceError, SurfaceTexture, TextureFormat as RawTextureFormat,
 };
 use winit::raw_window_handle::HasWindowHandle;
 
@@ -16,7 +17,7 @@ pub(crate) struct Surface {
     pub config: SurfaceConfiguration,
     pub depth_texture: Texture,
     pub raw_format: RawTextureFormat,
-    // pub capabilities: Arc<SurfaceCapabilities>,
+    pub capabilities: Arc<SurfaceCapabilities>,
 }
 
 impl Surface {
@@ -93,7 +94,7 @@ impl Surface {
             config,
             depth_texture,
             raw_format,
-            // capabilities: Arc::new(capabilities),
+            capabilities: Arc::new(capabilities),
         })
     }
 
@@ -107,7 +108,6 @@ impl Surface {
 
     #[inline]
     pub fn frame(&self) -> Result<SurfaceTexture, SurfaceError> {
-        self.surface
-            .get_current_texture()
+        self.surface.get_current_texture()
     }
 }

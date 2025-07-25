@@ -21,6 +21,9 @@ pub mod particles;
 pub mod prelude;
 pub mod timer;
 
+#[cfg(feature = "egui")]
+pub mod egui;
+
 #[doc(inline)]
 pub use corelib::*;
 

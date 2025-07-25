@@ -65,8 +65,8 @@ fn setup_system(mut cmds: Commands) {
                 angle: 0.0,
                 amount: 0.0,
             },
-            repeat: Some(2),
-            delay: 1.0,
+            repeat: None,
+            delay: 0.0,
             sort: None,
             attributes: Attributes {
                 textures: vec![], // No textures for now, will render as colored squares
@@ -244,7 +244,7 @@ fn update_system(
     mouse: Res<Mouse>,
 ) {
     let dt = time.delta_f32();
-    let config = &configs.burst;
+    let config = &configs.basic;
     particles.iter_mut().for_each(|(mut p, mut pos)| {
         pos.0 = mouse.position();
 
