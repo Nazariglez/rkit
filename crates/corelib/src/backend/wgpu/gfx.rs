@@ -235,6 +235,10 @@ impl GfxBackendImpl for GfxBackend {
                 if let Some(pip) = rp.pipeline {
                     rpass.set_pipeline(&pip.raw);
 
+                    if let Some([x, y, width, height]) = rp.scissors {
+                        rpass.set_scissor_rect(x, y, width, height);
+                    }
+
                     let mut vertex_buffers_slot = 0;
                     let mut indexed = false;
                     rp.buffers.iter().for_each(|buff| {

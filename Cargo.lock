@@ -1099,6 +1099,7 @@ version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a631732d995184114016fab22fc7e3faf73d6841c2d7650395fe251fbcd9285"
 dependencies = [
+ "bytemuck",
  "emath",
 ]
 
@@ -1129,6 +1130,9 @@ name = "emath"
 version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45f057b141e7e46340c321400be74b793543b1b213036f0f989c35d35957c32e"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "encase"
@@ -1181,6 +1185,7 @@ checksum = "94cca02195f0552c17cabdc02f39aa9ab6fbd815dac60ab1cd3d5b0aa6f9551c"
 dependencies = [
  "ab_glyph",
  "ahash",
+ "bytemuck",
  "ecolor",
  "emath",
  "epaint_default_fonts",

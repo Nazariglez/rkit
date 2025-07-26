@@ -48,7 +48,7 @@ arrayvec = "0.7.6"
 nohash-hasher = "0.2.0"
 smol_str = "0.3.2"
 lazy_static = "1.5.0"
-bytemuck = "1.21.0"
+bytemuck = "1.23.0"
 encase = { version = "0.11", features = ["glam", "arrayvec", "smallvec"] }
 smallvec = "2.0.0-alpha.10"
 once_cell = "1.20.3"
@@ -116,7 +116,8 @@ web-time = { workspace = true, optional = true }
 taffy = { version = "0.7.6", optional = true }
 
 # egui deps
-egui = { version = "0.32", optional = true }
+egui = { version = "0.32", optional = true, features = ["bytemuck"] }
+bytemuck = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { workspace = true, optional = true, features = ["js"] }
@@ -186,4 +187,4 @@ save = [
 # enable locale method
 locale = ["dep:fluent", "dep:unic-langid"]
 # enable egui support
-egui = ["dep:egui"]
+egui = ["dep:egui", "dep:bytemuck"]

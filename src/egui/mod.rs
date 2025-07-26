@@ -1,25 +1,22 @@
-use crate::ecs::prelude::*;
-use crate::math::Vec2;
+use crate::{ecs::prelude::*, math::Vec2};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use corelib::{
     app::{window_dpi_scale, window_size},
     gfx::{
-        self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, IndexFormat, RenderPipeline,
-        Renderer, Texture, TextureFormat, VertexFormat,
+        self, BindGroup, BindGroupLayout, BindGroupLayoutRef, BindingType, BlendMode, Buffer,
+        Color, IndexFormat, RenderPipeline, RenderTexture, Renderer, Sampler, Texture,
+        TextureFormat, VertexFormat,
     },
+    math::{self, UVec2},
 };
-use egui::epaint::ClippedShape;
+use egui::epaint::ImageDelta;
 pub use egui::*;
 use encase::{ShaderType, UniformBuffer};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
-use std::cell::RefCell;
 
-pub(crate) static EGUI_PAINTER: Lazy<AtomicRefCell<EguiPainter>> = Lazy::new(|| {
-    // corelib::app::on_sys_post_update(clean_2d);
-
-    AtomicRefCell::new(EguiPainter::default())
-});
+pub(crate) static EGUI_PAINTER: Lazy<AtomicRefCell<EguiPainter>> =
+    Lazy::new(|| AtomicRefCell::new(EguiPainter::default()));
 
 fn get_egui_painter() -> AtomicRef<'static, EguiPainter> {
     EGUI_PAINTER.borrow()
@@ -27,6 +24,11 @@ fn get_egui_painter() -> AtomicRef<'static, EguiPainter> {
 
 fn get_mut_egui_painter() -> AtomicRefMut<'static, EguiPainter> {
     EGUI_PAINTER.borrow_mut()
+}
+
+struct CachedTexBindGroup {
+    tex: Texture,
+    bind: BindGroup,
 }
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, ShaderType)]
@@ -38,12 +40,13 @@ struct EguiLocals {
 
 struct EguiPainter {
     pipeline: RenderPipeline,
+    linear_sampler: Sampler,
     vbo: Buffer,
+    ebo: Buffer,
     ubo: Buffer,
     ubs: UniformBuffer<[u8; 16]>,
-    ebo: Buffer,
-
-    textures: FxHashMap<TextureId, Texture>,
+    ubo_bind: BindGroup,
+    textures: FxHashMap<TextureId, CachedTexBindGroup>,
 }
 
 impl Default for EguiPainter {
@@ -69,6 +72,13 @@ impl Default for EguiPainter {
             .build()
             .unwrap();
 
+        let linear_sampler = gfx::create_sampler()
+            .with_label("EguiPainter Linear Sampler")
+            .with_min_filter(gfx::TextureFilter::Linear)
+            .with_mag_filter(gfx::TextureFilter::Linear)
+            .build()
+            .unwrap();
+
         let surface_formats = gfx::limits().surface_formats;
         let target_format = surface_formats
             .iter()
@@ -87,6 +97,7 @@ impl Default for EguiPainter {
         };
 
         let pipeline = gfx::create_render_pipeline(include_str!("./egui.wgsl"))
+            .with_label("Egui RenderPipeline")
             .with_vertex_layout(
                 gfx::VertexLayout::new()
                     .with_attr(0, VertexFormat::Float32x2)
@@ -107,21 +118,236 @@ impl Default for EguiPainter {
             )
             .with_index_format(IndexFormat::UInt32)
             .with_blend_mode(BlendMode::NORMAL)
-            .with_compatible_texture(target_format)
+            // .with_compatible_texture(target_format)
+            // .with_compatible_texture(TextureFormat::Rgba8UNormSrgb)
             .with_fragment_entry(fs_entry)
-            .with_primitive(gfx::Primitive::TriangleStrip)
+            .with_primitive(gfx::Primitive::Triangles)
+            .build()
+            .unwrap();
+
+        let ubo_bind = gfx::create_bind_group()
+            .with_label("EguiPainter UBO BindGroup")
+            .with_layout(pipeline.bind_group_layout_ref(0).unwrap())
+            .with_uniform(0, &ubo)
             .build()
             .unwrap();
 
         Self {
             pipeline,
+            linear_sampler,
             vbo,
+            ebo,
             ubo,
             ubs,
-            ebo,
+            ubo_bind,
             textures: FxHashMap::default(),
         }
     }
+}
+
+fn bind_group_from(tex: &Texture, sampler: &Sampler, layout: &BindGroupLayoutRef) -> BindGroup {
+    gfx::create_bind_group()
+        .with_label("EguiPainter Texture BindGroup")
+        .with_layout(layout)
+        .with_texture(0, tex)
+        .with_sampler(1, sampler)
+        .build()
+        .unwrap()
+}
+
+fn create_texture(data: &[u8], width: u32, height: u32) -> Texture {
+    gfx::create_texture()
+        .with_label("EguiPainter Texture")
+        .from_bytes(data, width, height)
+        .with_format(TextureFormat::Rgba8UNorm)
+        .build()
+        .unwrap()
+}
+
+fn empty_texture(width: u32, height: u32) -> Texture {
+    gfx::create_texture()
+        .with_label("EguiPainter Texture")
+        .with_empty_size(width, height)
+        .with_format(TextureFormat::Rgba8UNorm)
+        .build()
+        .unwrap()
+}
+
+fn update_texture(tex: &mut Texture, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
+    gfx::write_texture(tex)
+        .with_offset(UVec2::new(x, y))
+        .with_size(UVec2::new(width, height))
+        .from_data(data)
+        .build()
+        .unwrap();
+}
+
+impl EguiPainter {
+    pub fn paint(
+        &mut self,
+        primitives: &[ClippedPrimitive],
+        target: Option<&gfx::RenderTexture>,
+    ) -> Result<(), String> {
+        for ClippedPrimitive {
+            clip_rect,
+            primitive,
+        } in primitives.iter()
+        {
+            //
+            match primitive {
+                epaint::Primitive::Mesh(mesh) => self.paint_mesh(mesh, clip_rect, target)?,
+                epaint::Primitive::Callback(paint_callback) => {
+                    log::warn!("Egui CALLBACK unimplemented.");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn paint_mesh(
+        &mut self,
+        mesh: &Mesh,
+        clip_rect: &Rect,
+        target: Option<&RenderTexture>,
+    ) -> Result<(), String> {
+        //
+        let tex_bind = self
+            .textures
+            .get(&mesh.texture_id)
+            .ok_or_else(|| format!("Invalid Egui texture id '{:?}'", mesh.texture_id))?;
+
+        gfx::write_buffer(&self.vbo)
+            .with_data(&mesh.vertices)
+            .build()?;
+
+        gfx::write_buffer(&self.ebo)
+            .with_data(&mesh.indices)
+            .build()?;
+
+        let target_size = target.map_or_else(window_size, |t| t.size());
+        let [sx, sy, sw, sh] = scissor_rect(clip_rect, window_dpi_scale(), target_size);
+        if sw == 0 || sh == 0 {
+            return Ok(());
+        }
+
+        let mut renderer = Renderer::new();
+        renderer
+            .begin_pass()
+            .scissors(sx, sy, sw, sh)
+            .pipeline(&self.pipeline)
+            .bindings(&[&self.ubo_bind, &tex_bind.bind])
+            .buffers(&[&self.vbo, &self.ebo])
+            .draw(0..mesh.indices.len() as u32);
+
+        match target {
+            Some(rt) => gfx::render_to_texture(rt, &renderer),
+            None => gfx::render_to_frame(&renderer),
+        }
+    }
+
+    // pub fn add_texture(&mut self, tex: &Texture) -> SizedTexture {
+    // // TODO: instead of texture we may need a sprite to know which sampler to use?
+    // // similar to draw2d?
+    //
+    //     let id = TextureId::User(tex.id().into());
+    //     let size = tex.size();
+    //     self.textures.insert(id, tex.clone());
+    //     SizedTexture {
+    //         id,
+    //         size: egui::Vec2::new(size.x, size.y),
+    //     }
+    // }
+
+    pub fn set_texture(&mut self, id: TextureId, delta: &ImageDelta) {
+        let [width, height] = delta.image.size();
+
+        // update texture
+        if let Some([x, y]) = delta.pos {
+            let cached = self.textures.entry(id).or_insert_with(|| {
+                let tex = empty_texture(width as _, height as _);
+                let bind = bind_group_from(
+                    &tex,
+                    &self.linear_sampler,
+                    self.pipeline.bind_group_layout_ref(1).unwrap(),
+                );
+                CachedTexBindGroup { tex, bind }
+            });
+
+            match &delta.image {
+                ImageData::Color(image) => {
+                    debug_assert_eq!(
+                        image.width() * image.height(),
+                        image.pixels.len(),
+                        "Mismatch between texture size and texel count"
+                    );
+
+                    let data = bytemuck::cast_slice(image.pixels.as_ref());
+                    update_texture(
+                        &mut cached.tex,
+                        x as _,
+                        y as _,
+                        width as _,
+                        height as _,
+                        data,
+                    );
+                }
+            }
+
+            return;
+        }
+
+        // create a new texture
+        let tex = match &delta.image {
+            egui::ImageData::Color(image) => {
+                debug_assert_eq!(
+                    image.width() * image.height(),
+                    image.pixels.len(),
+                    "Mismatch between texture size and texel count"
+                );
+
+                let data = bytemuck::cast_slice(image.pixels.as_ref());
+                create_texture(data, width as _, height as _)
+            }
+        };
+
+        let bind = bind_group_from(
+            &tex,
+            &self.linear_sampler,
+            self.pipeline.bind_group_layout_ref(1).unwrap(),
+        );
+        self.textures.insert(id, CachedTexBindGroup { tex, bind });
+    }
+
+    pub fn remove_texture(&mut self, id: impl Into<TextureId>) {
+        self.textures.remove(&id.into());
+    }
+}
+
+fn scissor_rect(clip_rect: &egui::Rect, pixels_per_point: f32, target_size: Vec2) -> [u32; 4] {
+    let t_size = (target_size * pixels_per_point).as_uvec2();
+
+    let clip_min_x = pixels_per_point * clip_rect.min.x;
+    let clip_min_y = pixels_per_point * clip_rect.min.y;
+    let clip_max_x = pixels_per_point * clip_rect.max.x;
+    let clip_max_y = pixels_per_point * clip_rect.max.y;
+
+    let clip_min_x = clip_min_x.round() as u32;
+    let clip_min_y = clip_min_y.round() as u32;
+    let clip_max_x = clip_max_x.round() as u32;
+    let clip_max_y = clip_max_y.round() as u32;
+
+    let clip_min_x = clip_min_x.clamp(0, t_size.x);
+    let clip_min_y = clip_min_y.clamp(0, t_size.y);
+    let clip_max_x = clip_max_x.clamp(clip_min_x, t_size.x);
+    let clip_max_y = clip_max_y.clamp(clip_min_y, t_size.y);
+
+    let x = clip_min_x;
+    let y = clip_min_y;
+    let width = clip_max_x - clip_min_x;
+    let height = clip_max_y - clip_min_y;
+
+    [x, y, width, height]
 }
 
 #[derive(Debug, Default)]
@@ -199,8 +425,7 @@ impl gfx::AsRenderer for EguiDraw {
 
         let screen_size = target.map(|t| t.size()).unwrap_or_else(window_size);
 
-        // //
-        // let screen_size_in_points = screen_size / window_dpi_scale();
+        // let screen_size = screen_size / window_dpi_scale();
 
         painter
             .ubs
@@ -215,14 +440,16 @@ impl gfx::AsRenderer for EguiDraw {
             .with_data(painter.ubs.as_ref())
             .build()?;
 
-        // TODO: update textures delta here
+        self.textures_delta.set.iter().for_each(|(id, delta)| {
+            painter.set_texture(*id, delta);
+        });
 
-        let mut renderer = Renderer::new();
-        let pass = renderer.begin_pass();
-        if let Some(color) = self.clear {
-            pass.clear_color(color.as_linear());
-        }
+        painter.paint(&self.primitives, target)?;
 
-        self.flush(&renderer, target)
+        self.textures_delta.free.iter().for_each(|id| {
+            painter.remove_texture(*id);
+        });
+
+        Ok(())
     }
 }

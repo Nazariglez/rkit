@@ -9,6 +9,12 @@ impl From<u64> for TextureId {
     }
 }
 
+impl From<TextureId> for u64 {
+    fn from(value: TextureId) -> Self {
+        value.0
+    }
+}
+
 #[derive(Debug, Default, Copy, Clone)]
 pub struct TextureDescriptor<'a> {
     pub label: Option<&'a str>,

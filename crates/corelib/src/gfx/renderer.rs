@@ -1,15 +1,20 @@
-use crate::backend::gfx::BindGroup;
-use crate::backend::{BackendImpl, GfxBackendImpl, get_mut_backend};
-use crate::gfx::consts::{
-    MAX_BIND_GROUPS_PER_PIPELINE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE, MAX_VERTEX_BUFFERS,
+use crate::{
+    backend::{BackendImpl, GfxBackendImpl, get_mut_backend, gfx::BindGroup},
+    gfx::{
+        Buffer, Color, RenderPipeline, RenderTexture,
+        consts::{
+            MAX_BIND_GROUPS_PER_PIPELINE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE, MAX_VERTEX_BUFFERS,
+        },
+        pipeline::ClearOptions,
+    },
+    math::{Vec2, vec2},
 };
-use crate::gfx::pipeline::ClearOptions;
-use crate::gfx::{Buffer, Color, RenderPipeline, RenderTexture};
 use arrayvec::ArrayVec;
-use glam::{Vec2, vec2};
 use smallvec::SmallVec;
-use std::collections::Bound;
-use std::ops::{Range, RangeBounds};
+use std::{
+    collections::Bound,
+    ops::{Range, RangeBounds},
+};
 
 const MAX_BUFFERS: usize = MAX_VERTEX_BUFFERS + MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE + 1;
 
@@ -28,6 +33,7 @@ pub struct RenderPass<'a> {
     pub(crate) vertices: SmallVec<RPassVertices, 10>,
     pub(crate) bind_groups: ArrayVec<&'a BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
     pub(crate) stencil_ref: Option<u8>,
+    pub(crate) scissors: Option<[u32; 4]>,
 }
 
 impl<'a> RenderPass<'a> {
@@ -57,6 +63,11 @@ impl<'a> RenderPass<'a> {
 
     pub fn clear_stencil(&mut self, stencil: u32) -> &mut Self {
         self.clear_options.stencil = Some(stencil);
+        self
+    }
+
+    pub fn scissors(&mut self, x: u32, y: u32, width: u32, height: u32) -> &mut Self {
+        self.scissors = Some([x, y, width, height]);
         self
     }
 
