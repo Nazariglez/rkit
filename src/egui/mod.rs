@@ -9,13 +9,13 @@ use corelib::{
     },
     math::{self, UVec2},
 };
-use egui::epaint::ImageDelta;
 pub use egui::*;
+use egui::{Event, epaint::ImageDelta};
 use encase::{ShaderType, UniformBuffer};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 
-pub(crate) static EGUI_PAINTER: Lazy<AtomicRefCell<EguiPainter>> =
+static EGUI_PAINTER: Lazy<AtomicRefCell<EguiPainter>> =
     Lazy::new(|| AtomicRefCell::new(EguiPainter::default()));
 
 fn get_egui_painter() -> AtomicRef<'static, EguiPainter> {
@@ -249,7 +249,7 @@ impl EguiPainter {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()
-            .scissors(sx, sy, sw, sh)
+            // .scissors(sx, sy, sw, sh)
             .pipeline(&self.pipeline)
             .bindings(&[&self.ubo_bind, &tex_bind.bind])
             .buffers(&[&self.vbo, &self.ebo])
@@ -375,7 +375,8 @@ impl Plugin for EguiPlugin {
             clear_color: None,
         };
 
-        app.add_resource(ctx);
+        app.add_resource(ctx)
+            .add_systems(OnPreRender, read_input_system);
     }
 }
 
@@ -466,4 +467,22 @@ impl gfx::AsRenderer for EguiDraw {
 
         Ok(())
     }
+}
+
+fn read_input_system(mouse: Res<Mouse>, mut ctx: ResMut<EguiContext>, time: Res<Time>) {
+    let input = &mut ctx.raw_input;
+    input.time = Some(match input.time {
+        Some(t) => t + time.delta().as_secs_f64(),
+        None => 0.0,
+    });
+
+    let mouse_pos = mouse.position();
+    mouse.pressed_buttons().iter().for_each(|btn| {
+        // input.events.push(Event::PointerButton {
+        //     pos: (),
+        //     button: (),
+        //     pressed: (),
+        //     modifiers: (),
+        // });
+    });
 }
