@@ -319,7 +319,7 @@ fn generate_shader(axis: ShaderAxis, ks: KernelSize) -> Result<RenderPipeline, S
         .replace("{{SAMPLING}}", &blur_sampling_src);
 
     gfx::create_render_pipeline(&shader)
-        .with_label(&format!("BlurFx {:?} Pipeline", axis))
+        .with_label(&format!("BlurFx {axis:?} Pipeline"))
         .with_bind_group_layout(
             BindGroupLayout::new()
                 .with_entry(

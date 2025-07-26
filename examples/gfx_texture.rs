@@ -63,6 +63,8 @@ impl State {
             .from_image(include_bytes!("assets/ferris.png"))
             .build()?;
 
+        println!("tex {:?}", texture.format());
+
         let sampler = gfx::create_sampler().build()?;
 
         let bind_group = gfx::create_bind_group()

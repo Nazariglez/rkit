@@ -9,8 +9,7 @@ mod rgb_split_fx;
 mod shadow_fx;
 mod sys;
 
-use crate::gfx;
-use crate::gfx::AsRenderer;
+use crate::gfx::{self, AsRenderer};
 use sys::SYS;
 
 pub use alpha_fx::*;

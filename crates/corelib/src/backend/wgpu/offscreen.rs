@@ -92,7 +92,7 @@ impl OffscreenSurfaceData {
             depth: false,
             width: gfx.surface.config.width,
             height: gfx.surface.config.height,
-            format: TextureFormat::Rgba8UNormSrgb, // compatible with all platforms even web
+            format: None,
         })?;
 
         let filter = if pixelated {
@@ -208,7 +208,7 @@ impl OffscreenSurfaceData {
             depth: false,
             width: gfx.surface.config.width,
             height: gfx.surface.config.height,
-            format: TextureFormat::Rgba8UNormSrgb, // compatible with all platforms even web
+            format: None,
         })?;
         self.texture = texture;
 

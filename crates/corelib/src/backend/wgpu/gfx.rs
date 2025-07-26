@@ -414,20 +414,14 @@ impl GfxBackendImpl for GfxBackend {
             .enumerate()
             .for_each(|(i, buff)| buff.attributes = &attrs[i]);
 
-        // compatible formats by default for pipelines
-        let mut compatible_formats: ArrayVec<WTextureFormat, MAX_PIPELINE_COMPATIBLE_TEXTURES> =
-            ArrayVec::new();
-        desc.compatible_textures.iter().for_each(|tf| {
-            let wgpu_tf = tf.as_wgpu();
-            if compatible_formats.contains(&wgpu_tf) {
-                return;
-            }
-
-            compatible_formats.push(wgpu_tf);
-        });
+        let mut compatible_formats = desc
+            .compatible_textures
+            .iter()
+            .map(|tf| tf.as_wgpu())
+            .collect::<ArrayVec<_, MAX_PIPELINE_COMPATIBLE_TEXTURES>>();
 
         if compatible_formats.is_empty() {
-            compatible_formats.push(TextureFormat::Rgba8UNormSrgb.as_wgpu());
+            compatible_formats.push(self.surface.raw_format);
         }
 
         let blend = desc.blend_mode.map(|bm| bm.as_wgpu());
@@ -724,7 +718,9 @@ impl GfxBackendImpl for GfxBackend {
         let texture = self.create_texture(
             TextureDescriptor {
                 label: Some("Create RenderTexture inner color texture"),
-                format: desc.format,
+                format: desc
+                    .format
+                    .unwrap_or_else(|| TextureFormat::from_wgpu(self.surface.raw_format).unwrap()),
                 write: true,
             },
             Some(TextureData {

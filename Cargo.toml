@@ -128,6 +128,7 @@ bytemuck = { workspace = true, features = ["derive"] }
 shipyard = "0.7.6"
 static_assertions = "1.1.0"
 tempfile = "3.20.0"
+egui_demo_lib = "0.32"
 
 [features]
 default = [
@@ -140,6 +141,7 @@ default = [
   "ui",
   "ecs",
   "egui",
+  "postfx",
 ]
 # enable headless/server mode
 headless = ["corelib/headless"]

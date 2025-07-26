@@ -3,9 +3,9 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use corelib::{
     app::{window_dpi_scale, window_size},
     gfx::{
-        self, BindGroup, BindGroupLayout, BindGroupLayoutRef, BindingType, BlendMode, Buffer,
-        Color, IndexFormat, RenderPipeline, RenderTexture, Renderer, Sampler, Texture,
-        TextureFormat, VertexFormat,
+        self, BindGroup, BindGroupLayout, BindGroupLayoutRef, BindingType, BlendComponent,
+        BlendFactor, BlendMode, BlendOperation, Buffer, Color, IndexFormat, RenderPipeline,
+        RenderTexture, Renderer, Sampler, Texture, TextureFormat, VertexFormat,
     },
     math::{self, UVec2},
 };
@@ -82,7 +82,8 @@ impl Default for EguiPainter {
         let surface_formats = gfx::limits().surface_formats;
         let target_format = surface_formats
             .iter()
-            .find(|t| matches!(t, TextureFormat::Rgba8UNorm | TextureFormat::Bgra8UNorm))
+            // .find(|t| matches!(t, TextureFormat::Rgba8UNorm | TextureFormat::Bgra8UNorm))
+            .find(|t| t.is_srgb())
             .or_else(|| surface_formats.first())
             .cloned()
             .unwrap();
@@ -95,6 +96,8 @@ impl Default for EguiPainter {
         } else {
             "fs_main_gamma_framebuffer"
         };
+
+        log::debug!("TODO: remove me -> selected format {target_format:?} {fs_entry:?}");
 
         let pipeline = gfx::create_render_pipeline(include_str!("./egui.wgsl"))
             .with_label("Egui RenderPipeline")
@@ -117,9 +120,19 @@ impl Default for EguiPainter {
                     .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
             )
             .with_index_format(IndexFormat::UInt32)
-            .with_blend_mode(BlendMode::NORMAL)
+            .with_blend_mode(BlendMode {
+                color: BlendComponent {
+                    src: BlendFactor::One,
+                    dst: BlendFactor::InverseSourceAlpha,
+                    op: BlendOperation::Add,
+                },
+                alpha: BlendComponent {
+                    src: BlendFactor::InverseDestinationAlpha,
+                    dst: BlendFactor::One,
+                    op: BlendOperation::Add,
+                },
+            })
             // .with_compatible_texture(target_format)
-            // .with_compatible_texture(TextureFormat::Rgba8UNormSrgb)
             .with_fragment_entry(fs_entry)
             .with_primitive(gfx::Primitive::Triangles)
             .build()
@@ -160,6 +173,7 @@ fn create_texture(data: &[u8], width: u32, height: u32) -> Texture {
         .with_label("EguiPainter Texture")
         .from_bytes(data, width, height)
         .with_format(TextureFormat::Rgba8UNorm)
+        .with_write_flag(true)
         .build()
         .unwrap()
 }
@@ -168,6 +182,7 @@ fn empty_texture(width: u32, height: u32) -> Texture {
     gfx::create_texture()
         .with_label("EguiPainter Texture")
         .with_empty_size(width, height)
+        .with_write_flag(true)
         .with_format(TextureFormat::Rgba8UNorm)
         .build()
         .unwrap()
@@ -282,7 +297,7 @@ impl EguiPainter {
                         "Mismatch between texture size and texel count"
                     );
 
-                    let data = bytemuck::cast_slice(image.pixels.as_ref());
+                    let data = bytemuck::cast_slice(&image.pixels);
                     update_texture(
                         &mut cached.tex,
                         x as _,
@@ -305,8 +320,7 @@ impl EguiPainter {
                     image.pixels.len(),
                     "Mismatch between texture size and texel count"
                 );
-
-                let data = bytemuck::cast_slice(image.pixels.as_ref());
+                let data = bytemuck::cast_slice(&image.pixels);
                 create_texture(data, width as _, height as _)
             }
         };

@@ -66,6 +66,7 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         include_str!("../../resources/to_linear.wgsl"),
     );
     let pip = gfx::create_render_pipeline(&shader)
+        .with_label("Draw2D default shapes pipeline")
         .with_vertex_layout(
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)

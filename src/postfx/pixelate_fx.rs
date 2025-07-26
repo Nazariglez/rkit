@@ -1,9 +1,14 @@
-use crate::gfx;
-use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
-use crate::math::Vec2;
-use crate::postfx::pfx::{PostFx, create_pfx_pipeline};
-use crate::postfx::sys::IOPostFxData;
-use corelib::gfx::TextureFilter;
+use crate::{
+    gfx::{
+        self, BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer,
+        TextureFilter,
+    },
+    math::Vec2,
+    postfx::{
+        pfx::{PostFx, create_pfx_pipeline},
+        sys::IOPostFxData,
+    },
+};
 use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl

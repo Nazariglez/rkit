@@ -1,7 +1,10 @@
-use crate::gfx;
-use crate::gfx::{BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer};
-use crate::postfx::pfx::{PostFx, create_pfx_pipeline};
-use crate::postfx::sys::IOPostFxData;
+use crate::{
+    gfx::{self, BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer},
+    postfx::{
+        pfx::{PostFx, create_pfx_pipeline},
+        sys::IOPostFxData,
+    },
+};
 use encase::{ShaderType, UniformBuffer};
 
 // language=wgsl

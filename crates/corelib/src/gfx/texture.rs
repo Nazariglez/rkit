@@ -44,7 +44,7 @@ pub struct RenderTextureDescriptor<'a> {
     pub depth: bool,
     pub width: u32,
     pub height: u32,
-    pub format: TextureFormat,
+    pub format: Option<TextureFormat>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]

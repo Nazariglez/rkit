@@ -1,14 +1,16 @@
-use crate::app::window_size;
-use crate::gfx::{
-    self, AsRenderer, BindGroup, BlendMode, Color, RenderPipeline, RenderTexture, RenderTextureId,
-    Renderer, Sampler, SamplerId, TextureFilter,
+use crate::{
+    app::window_size,
+    gfx::{
+        self, AsRenderer, BindGroup, BlendMode, Color, RenderPipeline, RenderTexture,
+        RenderTextureId, Renderer, Sampler, SamplerId, TextureFilter,
+    },
+    math::UVec2,
+    postfx::pfx::{PostFx, PostProcess, create_pfx_pipeline},
+    utils::FastCache,
 };
-use crate::math::UVec2;
-use crate::postfx::pfx::{PostFx, PostProcess, create_pfx_pipeline};
 use atomic_refcell::AtomicRefCell;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
-use utils::fast_cache::FastCache;
 
 const MAX_CACHED_TEXTURES: usize = 12;
 
@@ -360,7 +362,7 @@ impl PostProcessSys {
         let size = window_size().as_uvec2();
         let can_render = size.x > 0 && size.y > 0;
         if !can_render {
-            // on win_os minimized wwindows report 0 size 
+            // on win_os minimized wwindows report 0 size
             return Ok(None);
         }
 

@@ -1,9 +1,12 @@
-use crate::gfx::{
-    self, BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer, TextureFilter,
+use crate::{
+    gfx::{
+        self, BindGroup, BindGroupLayout, BindingType, Buffer, RenderPipeline, Renderer,
+        TextureFilter,
+    },
+    math::Vec2,
+    postfx::{IOPostFxData, PostFx, create_pfx_pipeline},
+    time,
 };
-use crate::math::Vec2;
-use crate::postfx::{IOPostFxData, PostFx, create_pfx_pipeline};
-use crate::time;
 use encase::{ShaderType, UniformBuffer};
 
 // TODO: line number by height?

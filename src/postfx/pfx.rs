@@ -1,5 +1,5 @@
 use crate::postfx::sys::{IOPostFxData, SYS};
-use corelib::gfx;
+use corelib::gfx::{self, TextureFormat};
 use corelib::gfx::{
     AsRenderer, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder, RenderTexture,
     TextureFilter,
@@ -96,15 +96,17 @@ pub fn create_pfx_pipeline<F: FnOnce(RenderPipelineBuilder) -> Result<RenderPipe
     fragment: &str,
     cb: F,
 ) -> Result<RenderPipeline, String> {
-    let shader = format!("{}\n{}", VERT, fragment);
-    let builder = gfx::create_render_pipeline(&shader).with_bind_group_layout(
-        BindGroupLayout::new()
-            .with_entry(
-                BindingType::texture(0)
-                    .with_fragment_visibility(true)
-                    .with_vertex_visibility(true),
-            )
-            .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
-    );
+    let shader = format!("{VERT}\n{fragment}");
+    let builder = gfx::create_render_pipeline(&shader)
+        .with_label("PostFX RenderPipeline")
+        .with_bind_group_layout(
+            BindGroupLayout::new()
+                .with_entry(
+                    BindingType::texture(0)
+                        .with_fragment_visibility(true)
+                        .with_vertex_visibility(true),
+                )
+                .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
+        );
     cb(builder)
 }

@@ -62,8 +62,9 @@ impl Surface {
             .formats
             .iter()
             .find(|f| f.is_srgb())
+            .or_else(|| capabilities.formats.first())
             .copied()
-            .unwrap_or(capabilities.formats[0]);
+            .expect("No supported formats for main surface");
 
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
