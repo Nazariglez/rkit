@@ -36,6 +36,8 @@ pub struct Mouse {
     cursor_on_window: bool,
     moving: bool,
     scrolling: bool,
+    just_enter: bool,
+    just_left: bool,
 }
 
 impl Mouse {
@@ -145,6 +147,16 @@ impl Mouse {
         self.btn_released.clone()
     }
 
+    #[inline]
+    pub fn just_enter(&self) -> bool {
+        self.just_enter
+    }
+
+    #[inline]
+    pub fn just_left(&self) -> bool {
+        self.just_left
+    }
+
     pub(crate) fn clear_down_btn(&mut self, btn: MouseButton) {
         self.btn_down.remove(btn);
     }
@@ -172,6 +184,8 @@ fn init_mouse_system(mut cmds: Commands) {
         cursor_on_window: is_cursor_on_screen(),
         moving: is_mouse_moving(),
         scrolling: is_mouse_scrolling(),
+        just_enter: false,
+        just_left: false,
     })
 }
 
@@ -184,9 +198,14 @@ fn populate_mouse_system(mut mouse: ResMut<Mouse>) {
     mouse.btn_released = mouse_btns_released();
     mouse.cursor_lock = is_cursor_locked();
     mouse.cursor_visible = is_cursor_visible();
-    mouse.cursor_on_window = is_cursor_on_screen();
     mouse.moving = is_mouse_moving();
     mouse.scrolling = is_mouse_scrolling();
+
+    let was_on_window = mouse.cursor_on_window;
+    let is_on_window = is_cursor_on_screen();
+    mouse.just_left = was_on_window && !is_on_window;
+    mouse.just_enter = is_on_window && !was_on_window;
+    mouse.cursor_on_window = is_on_window;
 }
 
 fn sync_mouse_system(mut mouse: ResMut<Mouse>) {
@@ -231,14 +250,17 @@ pub struct Keyboard {
 }
 
 impl Keyboard {
+    #[inline]
     pub fn is_down(&self, key: KeyCode) -> bool {
         self.key_down.contains(key)
     }
 
+    #[inline]
     pub fn just_pressed(&self, key: KeyCode) -> bool {
         self.key_pressed.contains(key)
     }
 
+    #[inline]
     pub fn just_released(&self, key: KeyCode) -> bool {
         self.key_released.contains(key)
     }
@@ -256,6 +278,26 @@ impl Keyboard {
     #[inline]
     pub fn released_keys(&self) -> KeyCodeList {
         self.key_released.clone()
+    }
+
+    #[inline]
+    pub fn is_alt_down(&self) -> bool {
+        self.is_down(KeyCode::AltLeft) || self.is_down(KeyCode::AltRight)
+    }
+
+    #[inline]
+    pub fn is_crtl_down(&self) -> bool {
+        self.is_down(KeyCode::ControlLeft) || self.is_down(KeyCode::ControlRight)
+    }
+
+    #[inline]
+    pub fn is_shift_down(&self) -> bool {
+        self.is_down(KeyCode::ShiftLeft) || self.is_down(KeyCode::ShiftRight)
+    }
+
+    #[inline]
+    pub fn is_super_down(&self) -> bool {
+        self.is_down(KeyCode::SuperLeft) || self.is_down(KeyCode::SuperRight)
     }
 }
 
