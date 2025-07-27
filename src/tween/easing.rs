@@ -20,6 +20,7 @@ where
         + Sub<Output = Self>
         + Sized,
 {
+    #[inline(always)]
     fn interpolate<F>(self, to: Self, progress: f32, easing: F) -> Self
     where
         F: Fn(f32) -> f32,
