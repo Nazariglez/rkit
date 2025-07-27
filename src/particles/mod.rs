@@ -2,6 +2,7 @@ use std::ops::{Add, Mul};
 
 use draw::Draw2D;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     ecs::prelude::*,
@@ -42,7 +43,7 @@ impl Particles {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Curve {
     #[default]
     Linear,
@@ -109,7 +110,7 @@ fn linear_keyframes(t: f32, keyframes: &[(f32, f32)]) -> f32 {
     value
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Value<T: Interpolable> {
     Fixed(T),
     Range { min: T, max: T },
@@ -141,7 +142,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attr<T: Interpolable> {
     pub initial: Value<T>,
     pub behavior: Option<Behavior<T>>,
@@ -166,23 +167,31 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Behavior<T: Interpolable> {
     Fixed { start: T, end: T, curve: Curve },
     Increment(T),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticleFxConfig {
     pub emitters: Vec<EmitterConfig>,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Default for ParticleFxConfig {
+    fn default() -> Self {
+        Self {
+            emitters: vec![EmitterConfig::default()],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum EmitterKind {
     Square(Vec2),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SortBy {
     SpawnBottom,
     SpawnTop,
@@ -190,13 +199,13 @@ pub enum SortBy {
     AxisYDesc,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Gravity {
     pub angle: f32,
     pub amount: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmitterConfig {
     pub id: String,
     pub kind: EmitterKind,
@@ -212,9 +221,78 @@ pub struct EmitterConfig {
     pub attributes: Attributes,
 }
 
-#[derive(Debug, Clone)]
+impl Default for EmitterConfig {
+    fn default() -> Self {
+        Self {
+            id: "my_emitter".to_string(),
+            kind: EmitterKind::Square(Vec2::splat(4.0)),
+            offset: Vec2::ZERO,
+            index: 0.0,
+            particles_per_wave: 1000,
+            wave_time: 4.0,
+            delay: 0.0,
+            repeat: None,
+            gravity: Gravity {
+                angle: 0.0,
+                amount: 0.0,
+            },
+            sort: None,
+            attributes: Attributes {
+                // textures: vec![],
+                lifetime: Value::Range { min: 0.5, max: 1.0 },
+                scale_x: Attr {
+                    initial: Value::Fixed(1.0),
+                    behavior: None,
+                },
+                scale_y: Attr {
+                    initial: Value::Fixed(1.0),
+                    behavior: None,
+                },
+                red: Attr {
+                    initial: Value::Fixed(1.0),
+                    behavior: None,
+                },
+                blue: Attr {
+                    initial: Value::Fixed(1.0),
+                    behavior: None,
+                },
+                green: Attr {
+                    initial: Value::Fixed(1.0),
+                    behavior: None,
+                },
+                alpha: Attr {
+                    initial: Value::Fixed(1.0),
+                    behavior: None,
+                },
+                speed: Attr {
+                    initial: Value::Range {
+                        min: 80.0,
+                        max: 150.0,
+                    },
+                    behavior: None,
+                },
+                rotation: Attr {
+                    initial: Value::Range {
+                        min: 0.0,
+                        max: 360f32.to_radians(),
+                    },
+                    behavior: None,
+                },
+                angle: Attr {
+                    initial: Value::Range {
+                        min: 0.0,
+                        max: 360f32.to_radians(),
+                    },
+                    behavior: None,
+                },
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attributes {
-    pub textures: Vec<gfx::Texture>,
+    // pub textures: Vec<gfx::Texture>,
     pub lifetime: Value<f32>,
     pub scale_x: Attr<f32>,
     pub scale_y: Attr<f32>,
@@ -272,13 +350,13 @@ pub struct ParticleFx {
 
 impl ParticleFx {
     pub fn reset(&mut self) {
-        self.emitters.iter_mut().for_each(|mut emitter| {
+        self.emitters.iter_mut().for_each(|emitter| {
             emitter.reset();
         });
     }
 
     pub fn clear(&mut self) {
-        self.emitters.iter_mut().for_each(|mut emitter| {
+        self.emitters.iter_mut().for_each(|emitter| {
             emitter.clear();
         });
     }

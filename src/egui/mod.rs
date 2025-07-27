@@ -403,7 +403,7 @@ impl Plugin for EguiPlugin {
         };
 
         app.add_resource(ctx)
-            .add_systems(OnPreRender, read_input_system);
+            .add_systems(OnPreUpdate, read_input_system);
     }
 }
 
@@ -415,6 +415,14 @@ pub struct EguiContext {
 }
 
 impl EguiContext {
+    pub fn wants_pointer(&self) -> bool {
+        self.ctx.wants_pointer_input()
+    }
+
+    pub fn wants_keyboard(&self) -> bool {
+        self.ctx.wants_keyboard_input()
+    }
+
     pub fn clear(&mut self, color: Color) -> &mut Self {
         self.clear_color = Some(color);
         self
