@@ -1,16 +1,18 @@
 use crate::ecs::plugin::Plugin;
 use crate::prelude::{App, OnEnginePostFrame, OnEnginePreFrame, OnEngineSetup};
 use bevy_ecs::prelude::*;
-use corelib::input::{
-    hide_cursor, is_cursor_locked, is_cursor_on_screen, is_cursor_visible, is_mouse_moving,
-    is_mouse_scrolling, keys_down, keys_pressed, keys_released, lock_cursor, mouse_btns_down,
-    mouse_btns_pressed, mouse_btns_released, mouse_motion_delta, mouse_position, mouse_wheel_delta,
-    show_cursor, unlock_cursor,
+use corelib::{
+    input::{
+        hide_cursor, is_cursor_locked, is_cursor_on_screen, is_cursor_visible, is_mouse_moving,
+        is_mouse_scrolling, keys_down, keys_pressed, keys_released, lock_cursor, mouse_btns_down,
+        mouse_btns_pressed, mouse_btns_released, mouse_motion_delta, mouse_position,
+        mouse_wheel_delta, show_cursor, text_pressed, unlock_cursor,
+    },
+    math::Vec2,
 };
-use corelib::math::Vec2;
 
 // re-export common use types
-pub use corelib::input::{KeyCode, KeyCodeList, MouseButton, MouseButtonList};
+pub use corelib::input::{KeyCode, KeyCodeList, MouseButton, MouseButtonList, TextList};
 
 // -- Mouse
 pub struct MousePlugin;
@@ -247,6 +249,7 @@ pub struct Keyboard {
     key_pressed: KeyCodeList,
     key_down: KeyCodeList,
     key_released: KeyCodeList,
+    text_pressed: TextList,
 }
 
 impl Keyboard {
@@ -281,6 +284,11 @@ impl Keyboard {
     }
 
     #[inline]
+    pub fn pressed_text(&self) -> TextList {
+        self.text_pressed.clone()
+    }
+
+    #[inline]
     pub fn is_alt_down(&self) -> bool {
         self.is_down(KeyCode::AltLeft) || self.is_down(KeyCode::AltRight)
     }
@@ -306,6 +314,7 @@ fn init_keyboard_system(mut cmds: Commands) {
         key_pressed: keys_pressed(),
         key_down: keys_down(),
         key_released: keys_released(),
+        text_pressed: text_pressed(),
     })
 }
 
@@ -313,4 +322,5 @@ fn populate_keyboard_system(mut keyboard: ResMut<Keyboard>) {
     keyboard.key_down = keys_down();
     keyboard.key_pressed = keys_pressed();
     keyboard.key_released = keys_released();
+    keyboard.text_pressed = text_pressed();
 }

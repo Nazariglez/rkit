@@ -586,7 +586,7 @@ impl GfxBackendImpl for GfxBackend {
             let required = offset as usize + data.len();
             let next_size = next_buffer_size(buffer.size(), required);
 
-            log::info!(
+            log::debug!(
                 "Updating Buffer '{}' size from {} to {}",
                 buffer.inner_label,
                 buffer.size(),
@@ -604,7 +604,7 @@ impl GfxBackendImpl for GfxBackend {
 
             // copy current memory to the new one
             if offset > 0 {
-                log::info!(
+                log::debug!(
                     "Copying Buffer '{}' memory until offset {}",
                     buffer.inner_label,
                     offset
