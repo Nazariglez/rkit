@@ -3,6 +3,7 @@ use std::ops::{Add, Mul};
 use draw::Draw2D;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use strum_macros::AsRefStr;
 
 use crate::{
     ecs::prelude::*,
@@ -244,12 +245,12 @@ impl Default for ParticleFxConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, AsRefStr, Serialize, Deserialize)]
 pub enum EmitterKind {
-    Square(Vec2),
+    Rect(Vec2),
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SortBy {
     SpawnBottom,
     SpawnTop,
@@ -283,7 +284,7 @@ impl Default for EmitterConfig {
     fn default() -> Self {
         Self {
             id: "my_emitter".to_string(),
-            kind: EmitterKind::Square(Vec2::splat(4.0)),
+            kind: EmitterKind::Rect(Vec2::splat(4.0)),
             offset: Vec2::ZERO,
             index: 0.0,
             particles_per_wave: 1000,
@@ -464,7 +465,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
             return;
         };
 
-        let pos = p.pos;
+        let origin_position = p.pos;
         let spawning = p.spawning;
         config
             .emitters
@@ -484,7 +485,16 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 let can_spawn = spawning && running && !in_delay;
                 if can_spawn {
                     for _ in 0..to_spawn {
-                        let p = Particle::new(attrs, pos + cfg.offset);
+                        let pos = match cfg.kind {
+                            EmitterKind::Rect(size) => {
+                                let center = origin_position + cfg.offset;
+                                let half = size * 0.5;
+                                let min = center - half;
+                                let max = center + half;
+                                vec2(random::range(min.x..max.x), random::range(min.y..max.y))
+                            }
+                        };
+                        let p = Particle::new(attrs, pos);
                         emitter.particles.push(p);
                     }
                 }

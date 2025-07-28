@@ -231,7 +231,7 @@ impl EguiPainter {
         let mut renderer = Renderer::new();
         renderer
             .begin_pass()
-            // .scissors(sx, sy, sw, sh)
+            .scissors(sx, sy, sw, sh)
             .pipeline(&self.pipeline)
             .bindings(&[&self.ubo_bind, &tex_bind.bind])
             .buffers(&[&self.vbo, &self.ebo])

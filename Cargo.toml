@@ -192,4 +192,4 @@ locale = ["dep:fluent", "dep:unic-langid"]
 # enable egui support
 egui = ["dep:egui", "dep:bytemuck"]
 # enable particles 
-particles = ["dep:serde", "dep:serde_json"]
+particles = ["dep:serde", "dep:serde_json", "dep:strum", "dep:strum_macros"]

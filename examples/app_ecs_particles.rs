@@ -22,7 +22,7 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
         ParticleFxConfig {
             emitters: vec![EmitterConfig {
                 id: "simple".to_string(),
-                kind: EmitterKind::Square(vec2(100.0, 100.0)),
+                kind: EmitterKind::Rect(vec2(100.0, 100.0)),
                 offset: Vec2::ZERO,
                 index: 0.0,
                 particles_per_wave: 10000,
@@ -103,7 +103,7 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
         ParticleFxConfig {
             emitters: vec![EmitterConfig {
                 id: "simple".to_string(),
-                kind: EmitterKind::Square(vec2(100.0, 100.0)),
+                kind: EmitterKind::Rect(vec2(100.0, 100.0)),
                 offset: Vec2::ZERO,
                 index: 0.0,
                 particles_per_wave: 1000,
