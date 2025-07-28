@@ -6,14 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ecs::prelude::*,
-    gfx::{self, Color},
+    gfx::Color,
     math::{Vec2, vec2},
     random,
-    tween::{Interpolable, LINEAR},
+    tween::*,
 };
 
-// TODO: Range must be just To(pos, curve) (from init)
-// add events for when it ends, repeats, etc...
+// TODO: add events for when it ends, repeats, etc...
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ParticlesSysSet;
@@ -33,7 +32,7 @@ impl Plugin for ParticlesPlugin {
 pub struct Particles(FxHashMap<String, ParticleFxConfig>);
 
 impl Particles {
-    pub fn create_fx(&self, id: &str, pos: Vec2) -> Option<ParticleFx> {
+    pub fn create_component(&self, id: &str, pos: Vec2) -> Option<ParticleFx> {
         self.0.get(id).map(|config| ParticleFx {
             id: id.to_string(),
             pos,
@@ -43,10 +42,39 @@ impl Particles {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Curve {
-    #[default]
     Linear,
+    InQuad,
+    OutQuad,
+    InOutQuad,
+    InCubic,
+    OutCubic,
+    InOutCubic,
+    InQuart,
+    OutQuart,
+    InOutQuart,
+    InQuint,
+    OutQuint,
+    InOutQuint,
+    InSine,
+    OutSine,
+    InOutSine,
+    InExpo,
+    OutExpo,
+    InOutExpo,
+    InCirc,
+    OutCirc,
+    InOutCirc,
+    InElastic,
+    OutElastic,
+    InOutElastic,
+    InBack,
+    OutBack,
+    InOutBack,
+    InBounce,
+    OutBounce,
+    InOutBounce,
     Custom(Vec<(f32, f32)>),
 }
 
@@ -58,6 +86,36 @@ impl Curve {
     {
         match self {
             Curve::Linear => start.interpolate(end, progress, LINEAR),
+            Curve::InQuad => start.interpolate(end, progress, IN_QUAD),
+            Curve::OutQuad => start.interpolate(end, progress, OUT_QUAD),
+            Curve::InOutQuad => start.interpolate(end, progress, IN_OUT_QUAD),
+            Curve::InCubic => start.interpolate(end, progress, IN_CUBIC),
+            Curve::OutCubic => start.interpolate(end, progress, OUT_CUBIC),
+            Curve::InOutCubic => start.interpolate(end, progress, IN_OUT_CUBIC),
+            Curve::InQuart => start.interpolate(end, progress, IN_QUART),
+            Curve::OutQuart => start.interpolate(end, progress, OUT_QUART),
+            Curve::InOutQuart => start.interpolate(end, progress, IN_OUT_QUART),
+            Curve::InQuint => start.interpolate(end, progress, IN_QUINT),
+            Curve::OutQuint => start.interpolate(end, progress, OUT_QUINT),
+            Curve::InOutQuint => start.interpolate(end, progress, IN_OUT_QUINT),
+            Curve::InSine => start.interpolate(end, progress, IN_SINE),
+            Curve::OutSine => start.interpolate(end, progress, OUT_SINE),
+            Curve::InOutSine => start.interpolate(end, progress, IN_OUT_SINE),
+            Curve::InExpo => start.interpolate(end, progress, IN_EXPO),
+            Curve::OutExpo => start.interpolate(end, progress, OUT_EXPO),
+            Curve::InOutExpo => start.interpolate(end, progress, IN_OUT_EXPO),
+            Curve::InCirc => start.interpolate(end, progress, IN_CIRC),
+            Curve::OutCirc => start.interpolate(end, progress, OUT_CIRC),
+            Curve::InOutCirc => start.interpolate(end, progress, IN_OUT_CIRC),
+            Curve::InElastic => start.interpolate(end, progress, IN_ELASTIC),
+            Curve::OutElastic => start.interpolate(end, progress, OUT_ELASTIC),
+            Curve::InOutElastic => start.interpolate(end, progress, IN_OUT_ELASTIC),
+            Curve::InBack => start.interpolate(end, progress, IN_BACK),
+            Curve::OutBack => start.interpolate(end, progress, OUT_BACK),
+            Curve::InOutBack => start.interpolate(end, progress, IN_OUT_BACK),
+            Curve::InBounce => start.interpolate(end, progress, IN_BOUNCE),
+            Curve::OutBounce => start.interpolate(end, progress, OUT_BOUNCE),
+            Curve::InOutBounce => start.interpolate(end, progress, IN_OUT_BOUNCE),
             Curve::Custom(keyframes) => {
                 start.interpolate(end, progress, |t: f32| linear_keyframes(t, keyframes))
             }
@@ -158,18 +216,18 @@ where
     }
 
     #[inline(always)]
-    pub fn apply(&self, from: T, delta: f32, progress: f32) -> T {
+    pub fn apply(&self, initial: T, current: T, delta: f32, progress: f32) -> T {
         match &self.behavior {
-            Some(Behavior::Fixed { start, end, curve }) => curve.apply(*start, *end, progress),
-            Some(Behavior::Increment(val)) => from + *val * delta,
-            None => from,
+            Some(Behavior::To { value, curve }) => curve.apply(initial, *value, progress),
+            Some(Behavior::Increment(val)) => current + *val * delta,
+            None => current,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Behavior<T: Interpolable> {
-    Fixed { start: T, end: T, curve: Curve },
+    To { value: T, curve: Curve },
     Increment(T),
 }
 
@@ -329,15 +387,51 @@ impl ParticleEmitter {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Particle {
     pub life: f32,
     pub pos: Vec2,
+    pub initial_scale: Vec2,
     pub scale: Vec2,
+    pub initial_color: Color,
     pub color: Color,
+    pub initial_speed: f32,
     pub speed: f32,
+    pub initial_angle: f32,
     pub angle: f32,
+    pub initial_rotation: f32,
     pub rotation: f32,
+}
+
+impl Particle {
+    fn new(attrs: &Attributes, pos: Vec2) -> Self {
+        let life = attrs.lifetime.val();
+        let scale = vec2(attrs.scale_x.init(), attrs.scale_y.init());
+        let color = Color::rgba(
+            attrs.red.init(),
+            attrs.green.init(),
+            attrs.blue.init(),
+            attrs.alpha.init(),
+        );
+        let speed = attrs.speed.init();
+        let angle = attrs.angle.init();
+        let rotation = attrs.rotation.init();
+
+        Self {
+            life,
+            pos,
+            initial_scale: scale,
+            scale,
+            initial_color: color,
+            color,
+            initial_speed: speed,
+            speed,
+            initial_angle: angle,
+            angle,
+            initial_rotation: rotation,
+            rotation,
+        }
+    }
 }
 
 #[derive(Component, Debug, Default, Clone)]
@@ -390,38 +484,32 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 let can_spawn = spawning && running && !in_delay;
                 if can_spawn {
                     for _ in 0..to_spawn {
-                        let p = Particle {
-                            life: attrs.lifetime.val(),
-                            pos: pos + cfg.offset, // TODO: random pos based on shape
-                            scale: vec2(
-                                cfg.attributes.scale_x.init(),
-                                cfg.attributes.scale_y.init(),
-                            ),
-                            color: Color::rgba(
-                                attrs.red.init(),
-                                attrs.green.init(),
-                                attrs.blue.init(),
-                                attrs.alpha.init(),
-                            ),
-                            speed: attrs.speed.init(),
-                            angle: attrs.angle.init(),
-                            rotation: attrs.rotation.init(),
-                        };
+                        let p = Particle::new(attrs, pos + cfg.offset);
                         emitter.particles.push(p);
                     }
                 }
 
                 emitter.particles.iter_mut().for_each(|p| {
                     let progress = 1.0 - (p.life / attrs.lifetime.max());
-                    p.scale.x = attrs.scale_x.apply(p.scale.x, dt, progress);
-                    p.scale.y = attrs.scale_y.apply(p.scale.y, dt, progress);
-                    p.color.r = attrs.red.apply(p.color.r, dt, progress);
-                    p.color.g = attrs.green.apply(p.color.g, dt, progress);
-                    p.color.b = attrs.blue.apply(p.color.b, dt, progress);
-                    p.color.a = attrs.alpha.apply(p.color.a, dt, progress);
-                    p.speed = attrs.speed.apply(p.speed, dt, progress);
-                    p.rotation = attrs.rotation.apply(p.rotation, dt, progress);
-                    p.angle = attrs.angle.apply(p.angle, dt, progress);
+                    p.scale.x = attrs
+                        .scale_x
+                        .apply(p.initial_scale.x, p.scale.x, dt, progress);
+                    p.scale.y = attrs
+                        .scale_y
+                        .apply(p.initial_scale.y, p.scale.y, dt, progress);
+                    p.color.r = attrs.red.apply(p.initial_color.r, p.color.r, dt, progress);
+                    p.color.g = attrs
+                        .green
+                        .apply(p.initial_color.g, p.color.g, dt, progress);
+                    p.color.b = attrs.blue.apply(p.initial_color.b, p.color.b, dt, progress);
+                    p.color.a = attrs
+                        .alpha
+                        .apply(p.initial_color.a, p.color.a, dt, progress);
+                    p.speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
+                    p.rotation = attrs
+                        .rotation
+                        .apply(p.initial_rotation, p.rotation, dt, progress);
+                    p.angle = attrs.angle.apply(p.initial_angle, p.angle, dt, progress);
                     p.pos += Vec2::from_angle(p.angle) * p.speed * dt;
 
                     p.life -= dt;

@@ -35,29 +35,25 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
                 delay: 0.0,
                 sort: None,
                 attributes: Attributes {
-                    textures: vec![], // No textures for now, will render as colored squares
                     lifetime: Value::Range { min: 1.0, max: 3.0 }, // Particles live 1-3 seconds
                     scale_x: Attr {
                         initial: Value::Fixed(1.0),
-                        behavior: Some(Behavior::Fixed {
-                            start: 1.0,
-                            end: 0.0,
+                        behavior: Some(Behavior::To {
+                            value: 0.0,
                             curve: Curve::Linear,
                         }),
                     },
                     scale_y: Attr {
                         initial: Value::Fixed(1.0),
-                        behavior: Some(Behavior::Fixed {
-                            start: 1.0,
-                            end: 0.0,
+                        behavior: Some(Behavior::To {
+                            value: 0.0,
                             curve: Curve::Linear,
                         }),
                     },
                     red: Attr {
                         initial: Value::Range { min: 0.4, max: 1.0 },
-                        behavior: Some(Behavior::Fixed {
-                            start: 0.4,
-                            end: 1.0,
+                        behavior: Some(Behavior::To {
+                            value: 1.0,
                             curve: Curve::Linear,
                         }),
                     },
@@ -71,9 +67,8 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
                     },
                     alpha: Attr {
                         initial: Value::Fixed(1.0),
-                        behavior: Some(Behavior::Fixed {
-                            start: 1.0,
-                            end: 0.0,
+                        behavior: Some(Behavior::To {
+                            value: 0.0,
                             curve: Curve::Linear,
                         }),
                     },
@@ -121,29 +116,25 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
                 delay: 0.3,
                 sort: None,
                 attributes: Attributes {
-                    textures: vec![], // No textures for now, will render as colored squares
                     lifetime: Value::Range { min: 1.0, max: 3.0 }, // Particles live 1-3 seconds
                     scale_x: Attr {
                         initial: Value::Fixed(1.0),
-                        behavior: Some(Behavior::Fixed {
-                            start: 1.0,
-                            end: 0.0,
+                        behavior: Some(Behavior::To {
+                            value: 0.0,
                             curve: Curve::Linear,
                         }),
                     },
                     scale_y: Attr {
                         initial: Value::Fixed(1.0),
-                        behavior: Some(Behavior::Fixed {
-                            start: 1.0,
-                            end: 0.0,
+                        behavior: Some(Behavior::To {
+                            value: 0.0,
                             curve: Curve::Linear,
                         }),
                     },
                     red: Attr {
                         initial: Value::Range { min: 0.4, max: 1.0 },
-                        behavior: Some(Behavior::Fixed {
-                            start: 0.4,
-                            end: 1.0,
+                        behavior: Some(Behavior::To {
+                            value: 1.0,
                             curve: Curve::Linear,
                         }),
                     },
@@ -157,9 +148,8 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
                     },
                     alpha: Attr {
                         initial: Value::Fixed(1.0),
-                        behavior: Some(Behavior::Fixed {
-                            start: 1.0,
-                            end: 0.0,
+                        behavior: Some(Behavior::To {
+                            value: 0.0,
                             curve: Curve::Linear,
                         }),
                     },
@@ -186,7 +176,11 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
         },
     );
 
-    cmds.spawn(configs.create_fx("basic", window.size() * 0.5).unwrap());
+    cmds.spawn(
+        configs
+            .create_component("basic", window.size() * 0.5)
+            .unwrap(),
+    );
 }
 
 fn update_system(mouse: Res<Mouse>, mut particles: Query<&mut ParticleFx>) {

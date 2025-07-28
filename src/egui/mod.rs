@@ -40,6 +40,10 @@ pub struct EguiContext {
 }
 
 impl EguiContext {
+    pub fn is_using_pointer(&self) -> bool {
+        self.ctx.is_pointer_over_area() || self.ctx.is_using_pointer()
+    }
+
     pub fn wants_pointer(&self) -> bool {
         self.ctx.wants_pointer_input()
     }
