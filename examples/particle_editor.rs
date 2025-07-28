@@ -117,6 +117,7 @@ fn draw_system(
                 .translate(emitter_pos);
 
             match cfg.emitters[i].kind {
+                EmitterKind::Point => {}
                 EmitterKind::Rect(size) => {
                     draw.rect(Vec2::ZERO, size)
                         .origin(Vec2::splat(0.5))
@@ -125,6 +126,22 @@ fn draw_system(
                         .fill()
                         .stroke_color(Color::WHITE)
                         .stroke(2.0);
+                }
+                EmitterKind::Circle(radius) => {
+                    draw.circle(radius)
+                        .origin(Vec2::splat(0.5))
+                        .translate(emitter_pos)
+                        .fill_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
+                        .fill()
+                        .stroke_color(Color::WHITE)
+                        .stroke(2.0);
+                }
+                EmitterKind::Ring { radius, width } => {
+                    draw.circle(radius)
+                        .origin(Vec2::splat(0.5))
+                        .translate(emitter_pos)
+                        .stroke_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
+                        .stroke(width);
                 }
             }
         }
@@ -298,11 +315,35 @@ fn draw_system(
                                 egui::ComboBox::from_label("")
                                     .selected_text(cfg.emitters[i].kind.as_ref())
                                     .show_ui(ui, |ui| {
-                                        let square = EmitterKind::Rect(Vec2::splat(4.0));
+                                        let point = EmitterKind::Point;
+                                        ui.selectable_value(
+                                            &mut cfg.emitters[i].kind,
+                                            point,
+                                            point.as_ref(),
+                                        );
+
+                                        let square = EmitterKind::Rect(Vec2::splat(150.0));
                                         ui.selectable_value(
                                             &mut cfg.emitters[i].kind,
                                             square,
                                             square.as_ref(),
+                                        );
+
+                                        let circle = EmitterKind::Circle(100.0);
+                                        ui.selectable_value(
+                                            &mut cfg.emitters[i].kind,
+                                            circle,
+                                            circle.as_ref(),
+                                        );
+
+                                        let ring = EmitterKind::Ring {
+                                            radius: 100.0,
+                                            width: 20.0,
+                                        };
+                                        ui.selectable_value(
+                                            &mut cfg.emitters[i].kind,
+                                            ring,
+                                            ring.as_ref(),
                                         );
                                     });
                             });
@@ -313,7 +354,7 @@ fn draw_system(
                                         ui.label("Width: ");
                                         ui.add(
                                             egui::DragValue::new(&mut size.x)
-                                                .range(0.0..=1000.0)
+                                                .range(1.0..=1000.0)
                                                 .clamp_existing_to_range(true)
                                                 .speed(1.0),
                                         );
@@ -323,12 +364,43 @@ fn draw_system(
                                         ui.label("Height: ");
                                         ui.add(
                                             egui::DragValue::new(&mut size.y)
-                                                .range(0.0..=1000.0)
+                                                .range(1.0..=1000.0)
                                                 .clamp_existing_to_range(true)
                                                 .speed(1.0),
                                         );
                                     });
                                 }
+                                EmitterKind::Circle(radius) => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Radius: ");
+                                        ui.add(
+                                            egui::DragValue::new(radius)
+                                                .range(1.0..=1000.0)
+                                                .clamp_existing_to_range(true)
+                                                .speed(1.0),
+                                        );
+                                    });
+                                }
+                                EmitterKind::Ring { radius, width } => {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Radius: ");
+                                        ui.add(
+                                            egui::DragValue::new(radius)
+                                                .range(1.0..=1000.0)
+                                                .clamp_existing_to_range(true)
+                                                .speed(1.0),
+                                        );
+
+                                        ui.label("Width: ");
+                                        ui.add(
+                                            egui::DragValue::new(width)
+                                                .range(1.0..=1000.0)
+                                                .clamp_existing_to_range(true)
+                                                .speed(1.0),
+                                        );
+                                    });
+                                }
+                                EmitterKind::Point => {}
                             }
 
                             ui.separator();
@@ -385,9 +457,79 @@ fn draw_system(
             });
 
         egui::SidePanel::right("right_panel")
-            .min_width(200.0)
+            .resizable(false)
+            .min_width(300.0)
             .show(ctx, |ui| {
-                ui.label("Right Panel");
+                if let Some(i) = state.selected_emitter {
+                    if i < cfg.emitters.len() {
+                        ui.separator();
+                        ui.group(|ui| {
+                            ui.heading(format!("Emitter #{i} Attributes:"));
+                            ui.separator();
+
+                            egui::CollapsingHeader::new("Lifetime: ")
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    value_box(
+                                        ui,
+                                        &mut cfg.emitters[i].attributes.lifetime,
+                                        "lifetime",
+                                    );
+                                });
+
+                            ui.separator();
+
+                            egui::CollapsingHeader::new("Scale").show(ui, |ui| {
+                                ui.label("Initial X: ");
+                                value_box(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.scale_x.initial,
+                                    "init_scale_x",
+                                );
+
+                                ui.label("Initial Y: ");
+                                value_box(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.scale_y.initial,
+                                    "init_scale_y",
+                                );
+                                ui.separator();
+                                ui.label("Behavior X: ");
+                                behavior_box(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.scale_x.behavior,
+                                    2.0,
+                                    "behavior_scale_x",
+                                );
+                                ui.label("Behavior Y: ");
+                                behavior_box(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.scale_y.behavior,
+                                    2.0,
+                                    "behavior_scale_y",
+                                );
+                            });
+
+                            egui::CollapsingHeader::new("Speed").show(ui, |ui| {
+                                ui.label("Initial: ");
+                                value_box(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.speed.initial,
+                                    "init_speed",
+                                );
+
+                                ui.separator();
+                                ui.label("Behavior: ");
+                                behavior_box(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.speed.behavior,
+                                    150.0,
+                                    "behavior_speed",
+                                );
+                            });
+                        });
+                    }
+                }
             });
 
         egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
@@ -402,4 +544,84 @@ fn draw_system(
     });
 
     gfx::render_to_frame(&edraw).unwrap();
+}
+
+fn value_box(ui: &mut egui::Ui, value: &mut Value<f32>, id: &str) {
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(value.as_ref())
+            .show_ui(ui, |ui| {
+                let val = Value::Fixed(2.0);
+                ui.selectable_value(value, val, val.as_ref());
+
+                let val = Value::Range { min: 0.5, max: 3.0 };
+                ui.selectable_value(value, val, val.as_ref());
+            });
+
+        match value {
+            Value::Fixed(val) => {
+                ui.add(egui::Slider::new(val, 0.1..=100.0));
+            }
+            Value::Range { min, max } => {
+                ui.label("Min: ");
+                ui.add(
+                    egui::DragValue::new(min)
+                        .range(0.1..=1000.0)
+                        .clamp_existing_to_range(true)
+                        .speed(0.1),
+                );
+
+                ui.separator();
+
+                ui.label("Max: ");
+                ui.add(
+                    egui::DragValue::new(max)
+                        .range(*min..=1000.0)
+                        .clamp_existing_to_range(true)
+                        .speed(0.1),
+                );
+            }
+        }
+    });
+}
+
+fn behavior_box(ui: &mut egui::Ui, value: &mut Option<Behavior<f32>>, to: f32, id: &str) {
+    ui.horizontal(|ui| {
+        let selected = value
+            .as_ref()
+            .map_or("None", |v| {
+                let s: &str = v.as_ref();
+                s
+            })
+            .to_string();
+
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(selected)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(value, None, "None");
+
+                let val = Behavior::To {
+                    value: to,
+                    curve: Curve::Linear,
+                };
+                ui.selectable_value(value, Some(val.clone()), val.as_ref());
+
+                let val = Behavior::Increment(to * 0.017);
+                ui.selectable_value(value, Some(val.clone()), val.as_ref());
+            });
+    });
+
+    ui.horizontal(|ui| match value {
+        Some(Behavior::To { value, curve }) => {
+            ui.label("To: ");
+            ui.add(egui::DragValue::new(value).speed(0.1));
+
+            // TODO: curve
+        }
+        Some(Behavior::Increment(inc)) => {
+            ui.label("Amount: ");
+            ui.add(egui::DragValue::new(inc).speed(0.1));
+        }
+        None => {}
+    });
 }

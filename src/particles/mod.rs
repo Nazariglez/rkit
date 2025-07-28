@@ -1,4 +1,7 @@
-use std::ops::{Add, Mul};
+use std::{
+    f32::consts::TAU,
+    ops::{Add, Mul},
+};
 
 use draw::Draw2D;
 use rustc_hash::FxHashMap;
@@ -169,7 +172,7 @@ fn linear_keyframes(t: f32, keyframes: &[(f32, f32)]) -> f32 {
     value
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, AsRefStr, Serialize, Deserialize)]
 pub enum Value<T: Interpolable> {
     Fixed(T),
     Range { min: T, max: T },
@@ -226,7 +229,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, AsRefStr, Serialize, Deserialize)]
 pub enum Behavior<T: Interpolable> {
     To { value: T, curve: Curve },
     Increment(T),
@@ -247,7 +250,10 @@ impl Default for ParticleFxConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, AsRefStr, Serialize, Deserialize)]
 pub enum EmitterKind {
+    Point,
     Rect(Vec2),
+    Circle(f32),
+    Ring { radius: f32, width: f32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -284,11 +290,11 @@ impl Default for EmitterConfig {
     fn default() -> Self {
         Self {
             id: "my_emitter".to_string(),
-            kind: EmitterKind::Rect(Vec2::splat(4.0)),
+            kind: EmitterKind::Point,
             offset: Vec2::ZERO,
             index: 0.0,
             particles_per_wave: 1000,
-            wave_time: 4.0,
+            wave_time: 1.0,
             delay: 0.0,
             repeat: None,
             gravity: Gravity {
@@ -485,13 +491,29 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 let can_spawn = spawning && running && !in_delay;
                 if can_spawn {
                     for _ in 0..to_spawn {
+                        let center = origin_position + cfg.offset;
                         let pos = match cfg.kind {
+                            EmitterKind::Point => center,
                             EmitterKind::Rect(size) => {
-                                let center = origin_position + cfg.offset;
                                 let half = size * 0.5;
                                 let min = center - half;
                                 let max = center + half;
                                 vec2(random::range(min.x..max.x), random::range(min.y..max.y))
+                            }
+                            EmitterKind::Circle(radius) => {
+                                let theta = random::range(0.0..TAU);
+                                let r = radius * random::range(0.0f32..1.0).sqrt();
+                                let offset = Vec2::new(r * theta.cos(), r * theta.sin());
+                                center + offset
+                            }
+                            EmitterKind::Ring { radius, width } => {
+                                let half = width * 0.5;
+                                let r_min = (radius - half).max(0.0);
+                                let r_max = radius + half;
+                                let u = random::range(r_min * r_min..r_max * r_max);
+                                let r = u.sqrt();
+                                let theta = random::range(0.0..TAU);
+                                center + Vec2::new(r * theta.cos(), r * theta.sin())
                             }
                         };
                         let p = Particle::new(attrs, pos);
