@@ -82,15 +82,10 @@ impl Default for EguiPainter {
             .unwrap();
 
         let fs_entry = if target_format.is_srgb() {
-            log::warn!(
-                "Detected a linear (sRGBA aware) framebuffer {target_format:?}. egui prefers Rgba8Unorm or Bgra8Unorm"
-            );
             "fs_main_linear_framebuffer"
         } else {
             "fs_main_gamma_framebuffer"
         };
-
-        log::debug!("TODO: remove me -> selected format {target_format:?} {fs_entry:?}");
 
         let pipeline = gfx::create_render_pipeline(include_str!("./egui.wgsl"))
             .with_label("Egui RenderPipeline")
