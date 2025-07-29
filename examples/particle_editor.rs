@@ -1,12 +1,17 @@
+use draw::Transform2D;
 use egui::{Align, RichText};
+use rfd::FileDialog;
 use rkit::{
     draw::create_draw_2d,
     ecs::prelude::*,
     egui::{EguiContext, EguiPlugin, Layout},
     gfx::{self, Color, LinearColor},
-    math::Vec2,
+    math::{Vec2, Vec3, vec3},
     particles::*,
 };
+use strum::IntoEnumIterator;
+
+const EXT: &str = "gkpfx";
 
 #[derive(Resource)]
 struct State {
@@ -44,12 +49,15 @@ fn main() -> Result<(), String> {
 }
 
 fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<Window>) {
-    configs.insert("my_fx".to_string(), ParticleFxConfig::default());
-    cmds.spawn(
-        configs
-            .create_component("my_fx", window.size() * 0.5)
-            .unwrap(),
-    );
+    cmds.queue(LoadParticleConfigCmd {
+        config: ParticleFxConfig::default(),
+    });
+    // configs.insert("my_fx".to_string(), ParticleFxConfig::default());
+    // cmds.spawn(
+    //     configs
+    //         .create_component("my_fx", window.size() * 0.5)
+    //         .unwrap(),
+    // );
 }
 
 fn update_system(
@@ -79,6 +87,7 @@ fn update_system(
 }
 
 fn draw_system(
+    mut cmds: Commands,
     fx: Single<&mut ParticleFx>,
     mut ectx: ResMut<EguiContext>,
     mut configs: ResMut<Particles>,
@@ -111,6 +120,15 @@ fn draw_system(
                 .alpha(0.9)
                 .width(2.0);
 
+            let emitter_rot = cfg.emitters[i].rotation;
+            draw.push_matrix(
+                Transform2D::builder()
+                    .set_origin(Vec2::splat(0.5))
+                    .set_translation(emitter_pos)
+                    .set_rotation(emitter_rot)
+                    .build()
+                    .as_mat3(),
+            );
             draw.circle(2.0)
                 .color(Color::RED)
                 .origin(Vec2::splat(0.5))
@@ -121,7 +139,6 @@ fn draw_system(
                 EmitterKind::Rect(size) => {
                     draw.rect(Vec2::ZERO, size)
                         .origin(Vec2::splat(0.5))
-                        .translate(emitter_pos)
                         .fill_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
                         .fill()
                         .stroke_color(Color::WHITE)
@@ -130,7 +147,6 @@ fn draw_system(
                 EmitterKind::Circle(radius) => {
                     draw.circle(radius)
                         .origin(Vec2::splat(0.5))
-                        .translate(emitter_pos)
                         .fill_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
                         .fill()
                         .stroke_color(Color::WHITE)
@@ -139,11 +155,11 @@ fn draw_system(
                 EmitterKind::Ring { radius, width } => {
                     draw.circle(radius)
                         .origin(Vec2::splat(0.5))
-                        .translate(emitter_pos)
                         .stroke_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
                         .stroke(width);
                 }
             }
+            draw.pop_matrix();
         }
     }
 
@@ -161,39 +177,36 @@ fn draw_system(
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Load").clicked() {
-                    // if let Some(path) = FileDialog::new()
-                    //     .add_filter("Particle FX", &["json"])
-                    //     .pick_file()
-                    // {
-                    //     match std::fs::read_to_string(&path).and_then(|s| {
-                    //         serde_json::from_str::<ParticleFxConfig>(&s).map_err(Into::into)
-                    //     }) {
-                    //         Ok(cfg) => {
-                    //             configs.insert("my_fx".to_string(), cfg.clone());
-                    //             fx.reload_from_config(cfg);
-                    //             println!("Loaded config from {:?}", path);
-                    //         }
-                    //         Err(e) => {
-                    //             eprintln!("Load error: {}", e);
-                    //         }
-                    //     }
-                    // }
+                    if let Some(path) = FileDialog::new()
+                        .add_filter("Particles", &[EXT])
+                        .pick_file()
+                    {
+                        match std::fs::read_to_string(&path).and_then(|s| {
+                            serde_json::from_str::<ParticleFxConfig>(&s).map_err(Into::into)
+                        }) {
+                            Ok(cfg) => {
+                                cmds.queue(LoadParticleConfigCmd { config: cfg });
+                            }
+                            Err(e) => {
+                                eprintln!("Load error: {e}");
+                            }
+                        }
+                    }
                 }
 
                 if ui.button("Save").clicked() {
-                    // if let Some(path) = FileDialog::new()
-                    //     .set_file_name("particles.json")
-                    //     .save_file()
-                    // {
-                    //     if let Some(cfg) = configs.get("my_fx") {
-                    //         match serde_json::to_string_pretty(cfg)
-                    //             .and_then(|j| fs::write(&path, j).map_err(Into::into))
-                    //         {
-                    //             Ok(_) => println!("Saved config to {:?}", path),
-                    //             Err(e) => eprintln!("Save error: {}", e),
-                    //         }
-                    //     }
-                    // }
+                    if let Some(path) = FileDialog::new()
+                        .set_file_name(format!("particles.{EXT}"))
+                        .save_file()
+                    {
+                        match serde_json::to_string_pretty(cfg)
+                            .map_err(|e| e.to_string())
+                            .and_then(|j| std::fs::write(&path, j).map_err(|e| e.to_string()))
+                        {
+                            Ok(_) => println!("Saved config to {path:?}"),
+                            Err(e) => eprintln!("Save error: {e}"),
+                        }
+                    }
                 }
 
                 ui.separator();
@@ -308,6 +321,13 @@ fn draw_system(
                                 );
                                 ui.separator();
                                 ui.toggle_value(&mut state.offset_edit_mode, "Visual Mode");
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Rotation: ");
+                                let mut rot = cfg.emitters[i].rotation.to_degrees();
+                                ui.add(egui::Slider::new(&mut rot, -360.0f32..=360.0));
+                                cfg.emitters[i].rotation = rot.to_radians();
                             });
 
                             ui.horizontal(|ui| {
@@ -510,6 +530,7 @@ fn draw_system(
                                 );
                             });
 
+                            ui.separator();
                             egui::CollapsingHeader::new("Speed").show(ui, |ui| {
                                 ui.label("Initial: ");
                                 value_box(
@@ -526,6 +547,352 @@ fn draw_system(
                                     150.0,
                                     "behavior_speed",
                                 );
+                            });
+
+                            ui.separator();
+                            egui::CollapsingHeader::new("Rotation").show(ui, |ui| {
+                                ui.label("Initial: ");
+                                value_box_angle(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.rotation.initial,
+                                    "init_rotation",
+                                );
+
+                                ui.separator();
+                                ui.label("Behavior: ");
+                                behavior_box_angle(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.rotation.behavior,
+                                    150.0,
+                                    "behavior_rotation",
+                                );
+                            });
+
+                            ui.separator();
+                            egui::CollapsingHeader::new("Angle").show(ui, |ui| {
+                                ui.label("Initial: ");
+                                value_box_angle(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.angle.initial,
+                                    "init_direction",
+                                );
+
+                                ui.separator();
+                                ui.label("Behavior: ");
+                                behavior_box_angle(
+                                    ui,
+                                    &mut cfg.emitters[i].attributes.angle.behavior,
+                                    150.0,
+                                    "behavior_direction",
+                                );
+                            });
+
+                            ui.separator();
+                            egui::CollapsingHeader::new("Color").show(ui, |ui| {
+                                ui.label("Initial: ");
+                                ui.horizontal(|ui| {
+                                    let init_value = &mut cfg.emitters[i].attributes.rgb.initial;
+                                    egui::ComboBox::from_id_salt("init_color")
+                                        .selected_text(init_value.as_ref())
+                                        .show_ui(ui, |ui| {
+                                            let val = Value::Fixed(Vec3::splat(1.0));
+                                            ui.selectable_value(init_value, val, val.as_ref());
+
+                                            let val = Value::Range {
+                                                min: Vec3::splat(0.0),
+                                                max: Vec3::splat(1.0),
+                                            };
+                                            ui.selectable_value(init_value, val, val.as_ref());
+                                        });
+
+                                    match init_value {
+                                        Value::Fixed(val) => {
+                                            let mut rgb = linear_rgb_from(*val);
+                                            ui.color_edit_button_rgb(&mut rgb);
+                                            *val = gamme_rgb_from(rgb);
+                                        }
+                                        Value::Range { min, max } => {
+                                            ui.label("Min: ");
+                                            let mut min_rgb = linear_rgb_from(*min);
+                                            ui.color_edit_button_rgb(&mut min_rgb);
+                                            *min = gamme_rgb_from(min_rgb);
+
+                                            ui.separator();
+
+                                            ui.label("Max: ");
+                                            let mut max_rgb = linear_rgb_from(*max);
+                                            ui.color_edit_button_rgb(&mut max_rgb);
+                                            *max = gamme_rgb_from(max_rgb);
+                                        }
+                                    }
+                                });
+                                ui.separator();
+
+                                ui.label("Behavior: ");
+                                ui.horizontal(|ui| {
+                                    let value = &mut cfg.emitters[i].attributes.rgb.behavior;
+                                    let selected = value
+                                        .as_ref()
+                                        .map_or("None", |v| {
+                                            let s: &str = v.as_ref();
+                                            s
+                                        })
+                                        .to_string();
+
+                                    egui::ComboBox::from_id_salt("behavior_rgb")
+                                        .selected_text(selected)
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(value, None, "None");
+
+                                            let val = ColorBehavior::Simple(Behavior::To {
+                                                value: Vec3::splat(1.0),
+                                                curve: Curve::Linear,
+                                            });
+                                            ui.selectable_value(
+                                                value,
+                                                Some(val.clone()),
+                                                val.as_ref(),
+                                            );
+
+                                            let val = ColorBehavior::ByChannel {
+                                                red: None,
+                                                green: None,
+                                                blue: None,
+                                            };
+                                            ui.selectable_value(
+                                                value,
+                                                Some(val.clone()),
+                                                val.as_ref(),
+                                            );
+                                        });
+
+                                    if let Some(ColorBehavior::Simple(behavior)) = value {
+                                        egui::ComboBox::from_id_salt("behavior_rgb_simple")
+                                            .selected_text(behavior.as_ref())
+                                            .show_ui(ui, |ui| {
+                                                let val = Behavior::To {
+                                                    value: Vec3::splat(1.0),
+                                                    curve: Curve::Linear,
+                                                };
+                                                ui.selectable_value(
+                                                    behavior,
+                                                    val.clone(),
+                                                    val.as_ref(),
+                                                );
+
+                                                let val = Behavior::Increment(Vec3::splat(0.0));
+                                                ui.selectable_value(
+                                                    behavior,
+                                                    val.clone(),
+                                                    val.as_ref(),
+                                                );
+                                            });
+                                    }
+                                });
+
+                                ui.horizontal(|ui| {
+                                    match &mut cfg.emitters[i].attributes.rgb.behavior {
+                                        Some(ColorBehavior::Simple(Behavior::To {
+                                            value,
+                                            curve,
+                                        })) => {
+                                            let mut rgb = linear_rgb_from(*value);
+                                            ui.color_edit_button_rgb(&mut rgb);
+                                            *value = gamme_rgb_from(rgb);
+                                            ui.separator();
+                                            ui.label("Curve: ");
+                                            egui::ComboBox::from_id_salt("color_simple_to_curve")
+                                                .selected_text(curve.as_ref())
+                                                .show_ui(ui, |ui| {
+                                                    Curve::iter().for_each(|c| {
+                                                        ui.selectable_value(
+                                                            curve,
+                                                            c.clone(),
+                                                            c.as_ref(),
+                                                        );
+                                                    });
+                                                });
+                                        }
+                                        Some(ColorBehavior::Simple(Behavior::Increment(val))) => {
+                                            ui.label("Amount: ");
+                                            let mut n = val.x;
+                                            ui.add(egui::Slider::new(&mut n, -1.0..=1.0));
+                                            *val = Vec3::splat(n);
+                                        }
+                                        _ => {}
+                                    }
+                                });
+
+                                if let Some(ColorBehavior::ByChannel { red, green, blue }) =
+                                    &mut cfg.emitters[i].attributes.rgb.behavior
+                                {
+                                    [("Red", red), ("Green", green), ("Blue", blue)]
+                                        .into_iter()
+                                        .for_each(|(name, value)| {
+                                            ui.horizontal(|ui| {
+                                                ui.label(format!("{name}: "));
+
+                                                let selected = value
+                                                    .as_ref()
+                                                    .map_or("None", |v| {
+                                                        let s: &str = v.as_ref();
+                                                        s
+                                                    })
+                                                    .to_string();
+
+                                                egui::ComboBox::from_id_salt(format!(
+                                                    "channel_{name}_behavior"
+                                                ))
+                                                .selected_text(selected)
+                                                .show_ui(ui, |ui| {
+                                                    ui.selectable_value(value, None, "None");
+
+                                                    let val = Behavior::To {
+                                                        value: 1.0,
+                                                        curve: Curve::Linear,
+                                                    };
+                                                    ui.selectable_value(
+                                                        value,
+                                                        Some(val.clone()),
+                                                        val.as_ref(),
+                                                    );
+
+                                                    let val = Behavior::Increment(0.0);
+                                                    ui.selectable_value(
+                                                        value,
+                                                        Some(val.clone()),
+                                                        val.as_ref(),
+                                                    );
+                                                });
+
+                                                match value {
+                                                    Some(Behavior::To { value, curve }) => {
+                                                        ui.label("To: ");
+                                                        ui.add(egui::Slider::new(
+                                                            value,
+                                                            -1.0..=1.0,
+                                                        ));
+
+                                                        ui.separator();
+                                                        egui::ComboBox::from_id_salt(format!(
+                                                            "channel_{name}_curve"
+                                                        ))
+                                                        .selected_text(curve.as_ref())
+                                                        .show_ui(ui, |ui| {
+                                                            Curve::iter().for_each(|c| {
+                                                                ui.selectable_value(
+                                                                    curve,
+                                                                    c.clone(),
+                                                                    c.as_ref(),
+                                                                );
+                                                            });
+                                                        });
+                                                    }
+                                                    Some(Behavior::Increment(inc)) => {
+                                                        ui.label("Amount: ");
+                                                        ui.add(
+                                                            egui::DragValue::new(inc).speed(0.1),
+                                                        );
+                                                    }
+                                                    None => {}
+                                                }
+                                            });
+                                        });
+                                }
+                            });
+
+                            ui.separator();
+                            egui::CollapsingHeader::new("Alpha").show(ui, |ui| {
+                                let value = &mut cfg.emitters[i].attributes.alpha.initial;
+                                ui.label("Initial: ");
+                                ui.horizontal(|ui| {
+                                    egui::ComboBox::from_id_salt("init_alpha")
+                                        .selected_text(value.as_ref())
+                                        .show_ui(ui, |ui| {
+                                            let val = Value::Fixed(1.0);
+                                            ui.selectable_value(value, val, val.as_ref());
+
+                                            let val = Value::Range { min: 0.0, max: 1.0 };
+                                            ui.selectable_value(value, val, val.as_ref());
+                                        });
+
+                                    if let Value::Fixed(val) = value {
+                                        ui.add(egui::Slider::new(val, 0.0..=1.0));
+                                    }
+                                });
+
+                                if let Value::Range { min, max } = value {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Min: ");
+                                        ui.add(egui::Slider::new(min, 0.0..=1.0));
+
+                                        ui.separator();
+
+                                        ui.label("Max: ");
+                                        ui.add(egui::Slider::new(max, *min..=1.0));
+                                    });
+                                }
+
+                                ui.separator();
+                                ui.label("Behavior: ");
+                                let value = &mut cfg.emitters[i].attributes.alpha.behavior;
+                                ui.horizontal(|ui| {
+                                    let selected = value
+                                        .as_ref()
+                                        .map_or("None", |v| {
+                                            let s: &str = v.as_ref();
+                                            s
+                                        })
+                                        .to_string();
+
+                                    egui::ComboBox::from_id_salt("behavior_alpha")
+                                        .selected_text(selected)
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(value, None, "None");
+
+                                            let val = Behavior::To {
+                                                value: 1.0,
+                                                curve: Curve::Linear,
+                                            };
+                                            ui.selectable_value(
+                                                value,
+                                                Some(val.clone()),
+                                                val.as_ref(),
+                                            );
+
+                                            let val = Behavior::Increment(1.0);
+                                            ui.selectable_value(
+                                                value,
+                                                Some(val.clone()),
+                                                val.as_ref(),
+                                            );
+                                        });
+
+                                    match value {
+                                        Some(Behavior::To { value, curve }) => {
+                                            ui.label("To: ");
+                                            ui.add(egui::Slider::new(value, 0.0..=1.0));
+
+                                            ui.separator();
+                                            egui::ComboBox::from_id_salt("alpha_curve")
+                                                .selected_text(curve.as_ref())
+                                                .show_ui(ui, |ui| {
+                                                    Curve::iter().for_each(|c| {
+                                                        ui.selectable_value(
+                                                            curve,
+                                                            c.clone(),
+                                                            c.as_ref(),
+                                                        );
+                                                    });
+                                                });
+                                        }
+                                        Some(Behavior::Increment(inc)) => {
+                                            ui.label("Amount: ");
+                                            ui.add(egui::DragValue::new(inc).speed(0.1));
+                                        }
+                                        None => {}
+                                    }
+                                });
                             });
                         });
                     }
@@ -585,6 +952,40 @@ fn value_box(ui: &mut egui::Ui, value: &mut Value<f32>, id: &str) {
     });
 }
 
+fn value_box_angle(ui: &mut egui::Ui, value: &mut Value<f32>, id: &str) {
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(value.as_ref())
+            .show_ui(ui, |ui| {
+                let val = Value::Fixed(2.0);
+                ui.selectable_value(value, val, val.as_ref());
+
+                let val = Value::Range { min: 0.5, max: 3.0 };
+                ui.selectable_value(value, val, val.as_ref());
+            });
+
+        if let Value::Fixed(val) = value {
+            ui.add(egui::Slider::new(val, 0.0..=100.0));
+        }
+    });
+
+    if let Value::Range { min, max } = value {
+        ui.horizontal(|ui| {
+            ui.label("Min: ");
+            let mut min_rot = min.to_degrees();
+            ui.add(egui::Slider::new(&mut min_rot, -360f32..=360.0));
+            *min = min_rot.to_radians();
+
+            ui.separator();
+
+            ui.label("Max: ");
+            let mut max_rot = max.to_degrees();
+            ui.add(egui::Slider::new(&mut max_rot, min_rot..=360.0));
+            *max = max_rot.to_radians();
+        });
+    }
+}
+
 fn behavior_box(ui: &mut egui::Ui, value: &mut Option<Behavior<f32>>, to: f32, id: &str) {
     ui.horizontal(|ui| {
         let selected = value
@@ -606,22 +1007,113 @@ fn behavior_box(ui: &mut egui::Ui, value: &mut Option<Behavior<f32>>, to: f32, i
                 };
                 ui.selectable_value(value, Some(val.clone()), val.as_ref());
 
-                let val = Behavior::Increment(to * 0.017);
+                let val = Behavior::Increment(to);
                 ui.selectable_value(value, Some(val.clone()), val.as_ref());
             });
-    });
 
-    ui.horizontal(|ui| match value {
-        Some(Behavior::To { value, curve }) => {
-            ui.label("To: ");
-            ui.add(egui::DragValue::new(value).speed(0.1));
+        match value {
+            Some(Behavior::To { value, curve }) => {
+                ui.label("To: ");
+                ui.add(egui::DragValue::new(value).speed(0.1));
 
-            // TODO: curve
+                ui.separator();
+                egui::ComboBox::from_id_salt(format!("{id}_curve"))
+                    .selected_text(curve.as_ref())
+                    .show_ui(ui, |ui| {
+                        Curve::iter().for_each(|c| {
+                            ui.selectable_value(curve, c.clone(), c.as_ref());
+                        });
+                    });
+            }
+            Some(Behavior::Increment(inc)) => {
+                ui.label("Amount: ");
+                ui.add(egui::DragValue::new(inc).speed(0.1));
+            }
+            None => {}
         }
-        Some(Behavior::Increment(inc)) => {
-            ui.label("Amount: ");
-            ui.add(egui::DragValue::new(inc).speed(0.1));
-        }
-        None => {}
     });
+}
+
+fn behavior_box_angle(ui: &mut egui::Ui, value: &mut Option<Behavior<f32>>, to: f32, id: &str) {
+    ui.horizontal(|ui| {
+        let selected = value
+            .as_ref()
+            .map_or("None", |v| {
+                let s: &str = v.as_ref();
+                s
+            })
+            .to_string();
+
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(selected)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(value, None, "None");
+
+                let val = Behavior::To {
+                    value: to,
+                    curve: Curve::Linear,
+                };
+                ui.selectable_value(value, Some(val.clone()), val.as_ref());
+
+                let val = Behavior::Increment(to);
+                ui.selectable_value(value, Some(val.clone()), val.as_ref());
+            });
+
+        match value {
+            Some(Behavior::To { value, curve }) => {
+                ui.label("To: ");
+                let mut rot = value.to_degrees();
+                ui.add(egui::Slider::new(&mut rot, -360f32..=360.0));
+                *value = rot.to_radians();
+
+                ui.separator();
+                egui::ComboBox::from_id_salt(format!("{id}_curve"))
+                    .selected_text(curve.as_ref())
+                    .show_ui(ui, |ui| {
+                        Curve::iter().for_each(|c| {
+                            ui.selectable_value(curve, c.clone(), c.as_ref());
+                        });
+                    });
+            }
+            Some(Behavior::Increment(inc)) => {
+                ui.label("Amount: ");
+                ui.add(egui::DragValue::new(inc).speed(0.1));
+            }
+            None => {}
+        }
+    });
+}
+
+fn linear_rgb_from(val: Vec3) -> [f32; 3] {
+    Color::from(val.to_array()).as_linear().to_rgb()
+}
+
+fn gamme_rgb_from(val: [f32; 3]) -> Vec3 {
+    let linear_rgb = Color::from_linear_rgb(LinearColor {
+        r: val[0],
+        g: val[1],
+        b: val[2],
+        a: 1.0,
+    });
+    vec3(linear_rgb.r, linear_rgb.g, linear_rgb.b)
+}
+
+struct LoadParticleConfigCmd {
+    config: ParticleFxConfig,
+}
+
+impl Command for LoadParticleConfigCmd {
+    fn apply(self, world: &mut World) {
+        let win_size = world.resource::<Window>().size();
+        if let Ok(fx_e) = world
+            .query_filtered::<Entity, With<ParticleFx>>()
+            .get_single(world)
+        {
+            world.despawn(fx_e);
+        }
+        let mut configs = world.resource_mut::<Particles>();
+        configs.insert("my_fx".to_string(), self.config.clone());
+        let component = configs.create_component("my_fx", win_size * 0.5).unwrap();
+        world.spawn(component);
+    }
 }

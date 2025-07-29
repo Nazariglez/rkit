@@ -1,12 +1,14 @@
 use std::{
+    array,
     f32::consts::TAU,
     ops::{Add, Mul},
 };
 
+use corelib::math::{Vec3, vec3};
 use draw::Draw2D;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use strum_macros::AsRefStr;
+use strum_macros::{AsRefStr, EnumIter};
 
 use crate::{
     ecs::prelude::*,
@@ -46,7 +48,7 @@ impl Particles {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, AsRefStr, EnumIter, Serialize, Deserialize)]
 pub enum Curve {
     Linear,
     InQuad,
@@ -236,6 +238,59 @@ pub enum Behavior<T: Interpolable> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorAttr {
+    pub initial: Value<Vec3>,
+    pub behavior: Option<ColorBehavior>,
+}
+
+impl ColorAttr {
+    #[inline(always)]
+    pub fn init(&self) -> Vec3 {
+        match self.initial {
+            Value::Fixed(t) => t,
+            Value::Range { min, max } => {
+                let r = min.x.interpolate(max.x, random::r#gen(), LINEAR);
+                let g = min.y.interpolate(max.y, random::r#gen(), LINEAR);
+                let b = min.z.interpolate(max.z, random::r#gen(), LINEAR);
+                vec3(r, g, b)
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn apply(&self, initial: Vec3, current: Vec3, delta: f32, progress: f32) -> Vec3 {
+        match &self.behavior {
+            Some(ColorBehavior::Simple(behavior)) => match behavior {
+                Behavior::To { value, curve } => curve.apply(initial, *value, progress),
+                Behavior::Increment(val) => current + *val * delta,
+            },
+            Some(ColorBehavior::ByChannel { red, green, blue }) => {
+                let base = [red, green, blue];
+                let rgb = array::from_fn(|i| match base[i] {
+                    Some(Behavior::To { value, curve }) => {
+                        curve.apply(initial[i], *value, progress)
+                    }
+                    Some(Behavior::Increment(val)) => current[i] + *val * delta,
+                    None => current[i],
+                });
+                rgb.into()
+            }
+            None => current,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, AsRefStr, Serialize, Deserialize)]
+pub enum ColorBehavior {
+    Simple(Behavior<Vec3>),
+    ByChannel {
+        red: Option<Behavior<f32>>,
+        green: Option<Behavior<f32>>,
+        blue: Option<Behavior<f32>>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticleFxConfig {
     pub emitters: Vec<EmitterConfig>,
 }
@@ -280,6 +335,7 @@ pub struct EmitterConfig {
     pub wave_time: f32,
     pub delay: f32,
     pub repeat: Option<usize>,
+    pub rotation: f32,
     pub gravity: Gravity,
     pub sort: Option<SortBy>,
     // pub blend_mode: todo!(),
@@ -293,10 +349,11 @@ impl Default for EmitterConfig {
             kind: EmitterKind::Point,
             offset: Vec2::ZERO,
             index: 0.0,
-            particles_per_wave: 1000,
+            particles_per_wave: 2,
             wave_time: 1.0,
             delay: 0.0,
             repeat: None,
+            rotation: 0.0,
             gravity: Gravity {
                 angle: 0.0,
                 amount: 0.0,
@@ -304,7 +361,7 @@ impl Default for EmitterConfig {
             sort: None,
             attributes: Attributes {
                 // textures: vec![],
-                lifetime: Value::Range { min: 0.5, max: 1.0 },
+                lifetime: Value::Range { min: 0.2, max: 2.0 },
                 scale_x: Attr {
                     initial: Value::Fixed(1.0),
                     behavior: None,
@@ -313,16 +370,8 @@ impl Default for EmitterConfig {
                     initial: Value::Fixed(1.0),
                     behavior: None,
                 },
-                red: Attr {
-                    initial: Value::Fixed(1.0),
-                    behavior: None,
-                },
-                blue: Attr {
-                    initial: Value::Fixed(1.0),
-                    behavior: None,
-                },
-                green: Attr {
-                    initial: Value::Fixed(1.0),
+                rgb: ColorAttr {
+                    initial: Value::Fixed(vec3(1.0, 1.0, 1.0)),
                     behavior: None,
                 },
                 alpha: Attr {
@@ -331,8 +380,8 @@ impl Default for EmitterConfig {
                 },
                 speed: Attr {
                     initial: Value::Range {
-                        min: 80.0,
-                        max: 150.0,
+                        min: 60.0,
+                        max: 90.0,
                     },
                     behavior: None,
                 },
@@ -361,9 +410,7 @@ pub struct Attributes {
     pub lifetime: Value<f32>,
     pub scale_x: Attr<f32>,
     pub scale_y: Attr<f32>,
-    pub red: Attr<f32>,
-    pub blue: Attr<f32>,
-    pub green: Attr<f32>,
+    pub rgb: ColorAttr,
     pub alpha: Attr<f32>,
     pub speed: Attr<f32>,
     pub rotation: Attr<f32>,
@@ -414,12 +461,8 @@ impl Particle {
     fn new(attrs: &Attributes, pos: Vec2) -> Self {
         let life = attrs.lifetime.val();
         let scale = vec2(attrs.scale_x.init(), attrs.scale_y.init());
-        let color = Color::rgba(
-            attrs.red.init(),
-            attrs.green.init(),
-            attrs.blue.init(),
-            attrs.alpha.init(),
-        );
+        let rgb = attrs.rgb.init();
+        let color = Color::rgba(rgb.x, rgb.y, rgb.z, attrs.alpha.init());
         let speed = attrs.speed.init();
         let angle = attrs.angle.init();
         let rotation = attrs.rotation.init();
@@ -492,19 +535,18 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 if can_spawn {
                     for _ in 0..to_spawn {
                         let center = origin_position + cfg.offset;
-                        let pos = match cfg.kind {
-                            EmitterKind::Point => center,
+                        let local_pos = match cfg.kind {
+                            EmitterKind::Point => Vec2::ZERO,
                             EmitterKind::Rect(size) => {
                                 let half = size * 0.5;
-                                let min = center - half;
-                                let max = center + half;
+                                let min = -half;
+                                let max = half;
                                 vec2(random::range(min.x..max.x), random::range(min.y..max.y))
                             }
                             EmitterKind::Circle(radius) => {
                                 let theta = random::range(0.0..TAU);
                                 let r = radius * random::range(0.0f32..1.0).sqrt();
-                                let offset = Vec2::new(r * theta.cos(), r * theta.sin());
-                                center + offset
+                                vec2(r * theta.cos(), r * theta.sin())
                             }
                             EmitterKind::Ring { radius, width } => {
                                 let half = width * 0.5;
@@ -513,10 +555,21 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                                 let u = random::range(r_min * r_min..r_max * r_max);
                                 let r = u.sqrt();
                                 let theta = random::range(0.0..TAU);
-                                center + Vec2::new(r * theta.cos(), r * theta.sin())
+                                vec2(r * theta.cos(), r * theta.sin())
                             }
                         };
-                        let p = Particle::new(attrs, pos);
+
+                        let local_rotated = if cfg.rotation != 0.0 {
+                            let (s, c) = cfg.rotation.sin_cos();
+                            vec2(
+                                local_pos.x * c - local_pos.y * s,
+                                local_pos.x * s + local_pos.y * c,
+                            )
+                        } else {
+                            local_pos
+                        };
+
+                        let p = Particle::new(attrs, center + local_rotated);
                         emitter.particles.push(p);
                     }
                 }
@@ -529,14 +582,21 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                     p.scale.y = attrs
                         .scale_y
                         .apply(p.initial_scale.y, p.scale.y, dt, progress);
-                    p.color.r = attrs.red.apply(p.initial_color.r, p.color.r, dt, progress);
-                    p.color.g = attrs
-                        .green
-                        .apply(p.initial_color.g, p.color.g, dt, progress);
-                    p.color.b = attrs.blue.apply(p.initial_color.b, p.color.b, dt, progress);
+
+                    let rgb = attrs.rgb.apply(
+                        p.initial_color.to_rgb().into(),
+                        p.color.to_rgb().into(),
+                        dt,
+                        progress,
+                    );
+                    p.color.r = rgb.x.clamp(0.0, 1.0);
+                    p.color.g = rgb.y.clamp(0.0, 1.0);
+                    p.color.b = rgb.z.clamp(0.0, 1.0);
                     p.color.a = attrs
                         .alpha
-                        .apply(p.initial_color.a, p.color.a, dt, progress);
+                        .apply(p.initial_color.a, p.color.a, dt, progress)
+                        .clamp(0.0, 1.0);
+
                     p.speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
                     p.rotation = attrs
                         .rotation
@@ -584,6 +644,3 @@ impl ParticlesDraw2DExt for Draw2D {
         });
     }
 }
-
-// https://github.com/Nazariglez/perenquen/blob/master/src/particle/ParticleEmitter.js
-// https://github.com/pixijs-userland/particle-emitter?tab=readme-ov-file
