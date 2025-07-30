@@ -20,6 +20,7 @@ struct State {
     clear_color: Color,
     selected_emitter: Option<usize>,
     offset_edit_mode: bool,
+    zoom: f32,
 }
 
 impl Default for State {
@@ -28,6 +29,7 @@ impl Default for State {
             clear_color: Color::BLACK,
             selected_emitter: Some(0),
             offset_edit_mode: false,
+            zoom: 1.0,
         }
     }
 }
@@ -68,6 +70,7 @@ fn update_system(
     ctx: Res<EguiContext>,
     mut configs: ResMut<Particles>,
     mut state: ResMut<State>,
+    window: Res<Window>,
 ) {
     fx.spawning = true;
 
@@ -76,15 +79,17 @@ fn update_system(
     }
 
     if mouse.is_down(MouseButton::Left) {
+        let center = window.size() * 0.5;
+        let mouse_world = (mouse.position() - center) / state.zoom + center;
+
         if state.offset_edit_mode {
             if let Some(i) = state.selected_emitter {
                 let cfg = configs.get_mut(&fx.id).unwrap();
-                cfg.emitters[i].offset = mouse.position() - fx.pos;
+                cfg.emitters[i].offset = mouse_world - fx.pos;
                 return;
             }
         }
-
-        fx.pos = mouse.position();
+        fx.pos = mouse_world;
     }
 }
 
@@ -95,6 +100,7 @@ fn draw_system(
     mut configs: ResMut<Particles>,
     mut state: ResMut<State>,
     time: Res<Time>,
+    window: Res<Window>,
 ) {
     let mut fx = fx.into_inner();
     let fx_id = fx.id.clone();
@@ -105,6 +111,16 @@ fn draw_system(
     // clear the backgroung
     let mut draw = create_draw_2d();
     draw.clear(state.clear_color);
+
+    draw.push_matrix(
+        Transform2D::builder()
+            .set_size(window.size())
+            .set_translation(window.size() * 0.5)
+            .set_origin(Vec2::splat(0.5))
+            .set_scale(Vec2::splat(state.zoom))
+            .build()
+            .as_mat3(),
+    );
 
     // draw the particle first
     draw.particle(&fx);
@@ -178,6 +194,8 @@ fn draw_system(
             draw.pop_matrix();
         }
     }
+
+    draw.pop_matrix();
 
     gfx::render_to_frame(&draw).unwrap();
 
@@ -347,6 +365,20 @@ fn draw_system(
                             });
 
                             ui.horizontal(|ui| {
+                                ui.label("Sort: ");
+                                let value = &mut cfg.emitters[i].sort;
+                                egui::ComboBox::from_id_salt("spawn_sort")
+                                    .selected_text(value.as_ref())
+                                    .show_ui(ui, |ui| {
+                                        SortBy::iter().for_each(|val| {
+                                            ui.selectable_value(value, val, val.as_ref());
+                                        });
+                                    });
+                            });
+
+                            ui.separator();
+
+                            ui.horizontal(|ui| {
                                 ui.label("Shape: ");
                                 egui::ComboBox::from_label("")
                                     .selected_text(cfg.emitters[i].kind.as_ref())
@@ -447,21 +479,23 @@ fn draw_system(
                                     });
                                 }
                                 EmitterShape::Burst { count, radius } => {
-                                    ui.label("Radius: ");
-                                    ui.add(
-                                        egui::DragValue::new(radius)
-                                            .range(1.0..=1000.0)
-                                            .clamp_existing_to_range(true)
-                                            .speed(1.0),
-                                    );
+                                    ui.horizontal(|ui| {
+                                        ui.label("Radius: ");
+                                        ui.add(
+                                            egui::DragValue::new(radius)
+                                                .range(1.0..=1000.0)
+                                                .clamp_existing_to_range(true)
+                                                .speed(1.0),
+                                        );
 
-                                    ui.label("Count: ");
-                                    ui.add(
-                                        egui::DragValue::new(count)
-                                            .range(1..=50)
-                                            .clamp_existing_to_range(true)
-                                            .speed(1.0),
-                                    );
+                                        ui.label("Count: ");
+                                        ui.add(
+                                            egui::DragValue::new(count)
+                                                .range(1..=50)
+                                                .clamp_existing_to_range(true)
+                                                .speed(1.0),
+                                        );
+                                    });
                                 }
                                 EmitterShape::Point => {}
                             }
@@ -966,6 +1000,10 @@ fn draw_system(
                 ui.label(format!("Ms: {ms:.0}"));
                 ui.separator();
                 ui.label(format!("Particles: {particles_amount}"));
+
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add(egui::Slider::new(&mut state.zoom, 0.1..=5.0).text("Zoom"));
+                });
             });
         });
     });

@@ -1,5 +1,6 @@
 use std::{
     array,
+    cmp::Ordering,
     f32::consts::TAU,
     ops::{Add, Mul},
 };
@@ -312,12 +313,12 @@ pub enum EmitterShape {
     Burst { count: usize, radius: f32 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, AsRefStr, EnumIter, Serialize, Deserialize)]
 pub enum SortBy {
-    SpawnBottom,
-    SpawnTop,
-    AxisYAsc,
-    AxisYDesc,
+    #[default]
+    SpawnOnTop,
+    SpawnOnBottom,
+    TopDownSort,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -338,7 +339,7 @@ pub struct EmitterConfig {
     pub repeat: Option<usize>,
     pub rotation: f32,
     pub gravity: Gravity,
-    pub sort: Option<SortBy>,
+    pub sort: SortBy,
     // pub blend_mode: todo!(),
     pub attributes: Attributes,
 }
@@ -359,7 +360,7 @@ impl Default for EmitterConfig {
                 angle: 0.0,
                 amount: 0.0,
             },
-            sort: None,
+            sort: SortBy::default(),
             attributes: Attributes {
                 // textures: vec![],
                 lifetime: Value::Range { min: 0.2, max: 2.0 },
@@ -444,6 +445,7 @@ impl ParticleEmitter {
 
 #[derive(Debug, Clone)]
 pub struct Particle {
+    pub spawn_time: f32,
     pub life: f32,
     pub pos: Vec2,
     pub initial_scale: Vec2,
@@ -459,7 +461,7 @@ pub struct Particle {
 }
 
 impl Particle {
-    fn new(attrs: &Attributes, pos: Vec2) -> Self {
+    fn new(attrs: &Attributes, pos: Vec2, spawn_time: f32) -> Self {
         let life = attrs.lifetime.val();
         let scale = vec2(attrs.scale_x.init(), attrs.scale_y.init());
         let rgb = attrs.rgb.init();
@@ -469,6 +471,7 @@ impl Particle {
         let rotation = attrs.rotation.init();
 
         Self {
+            spawn_time,
             life,
             pos,
             initial_scale: scale,
@@ -563,19 +566,14 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                                 for i in 0..count {
                                     let angle = TAU * (i as f32) / (count as f32);
                                     let local_pos = Vec2::from_angle(angle) * radius;
-
-                                    let local_rotated = if cfg.rotation != 0.0 {
-                                        let (s, c) = cfg.rotation.sin_cos();
-                                        vec2(
-                                            local_pos.x * c - local_pos.y * s,
-                                            local_pos.x * s + local_pos.y * c,
-                                        )
-                                    } else {
-                                        local_pos
-                                    };
-
-                                    let p = Particle::new(attrs, center + local_rotated);
-                                    emitter.particles.push(p);
+                                    spawn_particle(
+                                        center,
+                                        local_pos,
+                                        cfg.rotation,
+                                        attrs,
+                                        emitter,
+                                        time.elapsed_f32(),
+                                    );
                                 }
 
                                 skip_spawn = true;
@@ -584,18 +582,14 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                         };
 
                         if !skip_spawn {
-                            let local_rotated = if cfg.rotation != 0.0 {
-                                let (s, c) = cfg.rotation.sin_cos();
-                                vec2(
-                                    local_pos.x * c - local_pos.y * s,
-                                    local_pos.x * s + local_pos.y * c,
-                                )
-                            } else {
-                                local_pos
-                            };
-
-                            let p = Particle::new(attrs, center + local_rotated);
-                            emitter.particles.push(p);
+                            spawn_particle(
+                                center,
+                                local_pos,
+                                cfg.rotation,
+                                attrs,
+                                emitter,
+                                time.elapsed_f32(),
+                            );
                         }
                     }
                 }
@@ -633,21 +627,39 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                         .rotation
                         .apply(p.initial_rotation, p.rotation, dt, progress);
 
-                    // TODO: apply gravity
-
                     // Now we set the movement of the particle based in different attributes
                     p.speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
                     p.direction = attrs
                         .direction
                         .apply(p.initial_angle, p.direction, dt, progress);
 
+                    // we need to calculate gravirt as well
                     let vel = Vec2::from_angle(p.direction) * p.speed;
                     let gravity = Vec2::from_angle(cfg.gravity.angle) * cfg.gravity.amount;
 
+                    // and then apply all to get the current position
                     p.pos += (vel + gravity) * dt;
 
                     p.life -= dt;
                 });
+
+                match cfg.sort {
+                    SortBy::SpawnOnBottom => {
+                        if to_spawn > 0 {
+                            emitter.particles.sort_unstable_by(|a, b| {
+                                b.spawn_time
+                                    .partial_cmp(&a.spawn_time)
+                                    .unwrap_or(Ordering::Equal)
+                            });
+                        }
+                    }
+                    SortBy::TopDownSort => {
+                        emitter.particles.sort_unstable_by(|a, b| {
+                            a.pos.y.partial_cmp(&b.pos.y).unwrap_or(Ordering::Equal)
+                        });
+                    }
+                    _ => {}
+                }
 
                 if emitter.delay > 0.0 {
                     emitter.delay -= dt;
@@ -685,4 +697,26 @@ impl ParticlesDraw2DExt for Draw2D {
             });
         });
     }
+}
+
+fn spawn_particle(
+    center: Vec2,
+    local_pos: Vec2,
+    rotation: f32,
+    attrs: &Attributes,
+    emitter: &mut ParticleEmitter,
+    spawn_time: f32,
+) {
+    let local_rotated = if rotation != 0.0 {
+        let (s, c) = rotation.sin_cos();
+        vec2(
+            local_pos.x * c - local_pos.y * s,
+            local_pos.x * s + local_pos.y * c,
+        )
+    } else {
+        local_pos
+    };
+
+    let p = Particle::new(attrs, center + local_rotated, spawn_time);
+    emitter.particles.push(p);
 }
