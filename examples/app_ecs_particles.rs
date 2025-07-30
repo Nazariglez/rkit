@@ -86,7 +86,7 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
                         },
                         behavior: Some(Behavior::Increment(180.0f32.to_radians())), // Rotate 180 degrees per second
                     },
-                    angle: Attr {
+                    direction: Attr {
                         initial: Value::Range {
                             min: 0.0,
                             max: 360.0f32.to_radians(),
@@ -164,7 +164,7 @@ fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<
                         },
                         behavior: Some(Behavior::Increment(180.0f32.to_radians())), // Rotate 180 degrees per second
                     },
-                    angle: Attr {
+                    direction: Attr {
                         initial: Value::Range {
                             min: 0.0,
                             max: 360.0f32.to_radians(),

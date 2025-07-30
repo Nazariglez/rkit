@@ -166,7 +166,7 @@ fn draw_system(
     gfx::render_to_frame(&draw).unwrap();
 
     let fps = time.fps();
-    let ms = time.delta_f32();
+    let ms = time.delta_f32() * 1000.0;
     let particles_amount = fx
         .emitters
         .iter()
@@ -426,6 +426,23 @@ fn draw_system(
                             ui.separator();
 
                             ui.horizontal(|ui| {
+                                //
+                                ui.label("Gravity: ");
+                                ui.add(
+                                    egui::DragValue::new(&mut cfg.emitters[i].gravity.amount)
+                                        .speed(1.0),
+                                );
+
+                                ui.separator();
+                                ui.label("Angle: ");
+                                let mut rot = cfg.emitters[i].gravity.angle.to_degrees();
+                                ui.add(egui::Slider::new(&mut rot, -360.0..=360.0));
+                                cfg.emitters[i].gravity.angle = rot.to_radians();
+                            });
+
+                            ui.separator();
+
+                            ui.horizontal(|ui| {
                                 ui.label("Particles per wave: ");
                                 ui.add(egui::Slider::new(
                                     &mut cfg.emitters[i].particles_per_wave,
@@ -573,7 +590,7 @@ fn draw_system(
                                 ui.label("Initial: ");
                                 value_box_angle(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.angle.initial,
+                                    &mut cfg.emitters[i].attributes.direction.initial,
                                     "init_direction",
                                 );
 
@@ -581,7 +598,7 @@ fn draw_system(
                                 ui.label("Behavior: ");
                                 behavior_box_angle(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.angle.behavior,
+                                    &mut cfg.emitters[i].attributes.direction.behavior,
                                     150.0,
                                     "behavior_direction",
                                 );
@@ -903,7 +920,7 @@ fn draw_system(
             ui.horizontal(|ui| {
                 ui.label(format!("Fps: {fps:.0}"));
                 ui.separator();
-                ui.label(format!("Delta: {ms:.2} ms"));
+                ui.label(format!("Ms: {ms:.0}"));
                 ui.separator();
                 ui.label(format!("Particles: {particles_amount}"));
             });

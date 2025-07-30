@@ -392,7 +392,7 @@ impl Default for EmitterConfig {
                     },
                     behavior: None,
                 },
-                angle: Attr {
+                direction: Attr {
                     initial: Value::Range {
                         min: 0.0,
                         max: 360f32.to_radians(),
@@ -414,7 +414,7 @@ pub struct Attributes {
     pub alpha: Attr<f32>,
     pub speed: Attr<f32>,
     pub rotation: Attr<f32>,
-    pub angle: Attr<f32>,
+    pub direction: Attr<f32>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -452,7 +452,7 @@ pub struct Particle {
     pub initial_speed: f32,
     pub speed: f32,
     pub initial_angle: f32,
-    pub angle: f32,
+    pub direction: f32,
     pub initial_rotation: f32,
     pub rotation: f32,
 }
@@ -464,7 +464,7 @@ impl Particle {
         let rgb = attrs.rgb.init();
         let color = Color::rgba(rgb.x, rgb.y, rgb.z, attrs.alpha.init());
         let speed = attrs.speed.init();
-        let angle = attrs.angle.init();
+        let angle = attrs.direction.init();
         let rotation = attrs.rotation.init();
 
         Self {
@@ -477,7 +477,7 @@ impl Particle {
             initial_speed: speed,
             speed,
             initial_angle: angle,
-            angle,
+            direction: angle,
             initial_rotation: rotation,
             rotation,
         }
@@ -575,7 +575,11 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 }
 
                 emitter.particles.iter_mut().for_each(|p| {
+                    // The progress is defined based on the maximum lifetime of the particle
                     let progress = 1.0 - (p.life / attrs.lifetime.max());
+
+                    // The scale define the size, there is no size in pixel but we use
+                    // a scale based on the particle shape or texture
                     p.scale.x = attrs
                         .scale_x
                         .apply(p.initial_scale.x, p.scale.x, dt, progress);
@@ -583,6 +587,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                         .scale_y
                         .apply(p.initial_scale.y, p.scale.y, dt, progress);
 
+                    // The color is defined by channels with alpha as a different property
                     let rgb = attrs.rgb.apply(
                         p.initial_color.to_rgb().into(),
                         p.color.to_rgb().into(),
@@ -597,12 +602,23 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                         .apply(p.initial_color.a, p.color.a, dt, progress)
                         .clamp(0.0, 1.0);
 
-                    p.speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
+                    // The rotation define the angle of the particle from its own center
                     p.rotation = attrs
                         .rotation
                         .apply(p.initial_rotation, p.rotation, dt, progress);
-                    p.angle = attrs.angle.apply(p.initial_angle, p.angle, dt, progress);
-                    p.pos += Vec2::from_angle(p.angle) * p.speed * dt;
+
+                    // TODO: apply gravity
+
+                    // Now we set the movement of the particle based in different attributes
+                    p.speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
+                    p.direction = attrs
+                        .direction
+                        .apply(p.initial_angle, p.direction, dt, progress);
+
+                    let vel = Vec2::from_angle(p.direction) * p.speed;
+                    let gravity = Vec2::from_angle(cfg.gravity.angle) * cfg.gravity.amount;
+
+                    p.pos += (vel + gravity) * dt;
 
                     p.life -= dt;
                 });
