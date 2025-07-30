@@ -304,11 +304,12 @@ impl Default for ParticleFxConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, AsRefStr, Serialize, Deserialize)]
-pub enum EmitterKind {
+pub enum EmitterShape {
     Point,
     Rect(Vec2),
     Circle(f32),
     Ring { radius: f32, width: f32 },
+    Burst { count: usize, radius: f32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -328,7 +329,7 @@ pub struct Gravity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmitterConfig {
     pub id: String,
-    pub kind: EmitterKind,
+    pub kind: EmitterShape,
     pub offset: Vec2,
     pub index: f32,
     pub particles_per_wave: usize,
@@ -346,7 +347,7 @@ impl Default for EmitterConfig {
     fn default() -> Self {
         Self {
             id: "my_emitter".to_string(),
-            kind: EmitterKind::Point,
+            kind: EmitterShape::Point,
             offset: Vec2::ZERO,
             index: 0.0,
             particles_per_wave: 2,
@@ -534,21 +535,22 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 let can_spawn = spawning && running && !in_delay;
                 if can_spawn {
                     for _ in 0..to_spawn {
+                        let mut skip_spawn = false;
                         let center = origin_position + cfg.offset;
                         let local_pos = match cfg.kind {
-                            EmitterKind::Point => Vec2::ZERO,
-                            EmitterKind::Rect(size) => {
+                            EmitterShape::Point => Vec2::ZERO,
+                            EmitterShape::Rect(size) => {
                                 let half = size * 0.5;
                                 let min = -half;
                                 let max = half;
                                 vec2(random::range(min.x..max.x), random::range(min.y..max.y))
                             }
-                            EmitterKind::Circle(radius) => {
+                            EmitterShape::Circle(radius) => {
                                 let theta = random::range(0.0..TAU);
                                 let r = radius * random::range(0.0f32..1.0).sqrt();
                                 vec2(r * theta.cos(), r * theta.sin())
                             }
-                            EmitterKind::Ring { radius, width } => {
+                            EmitterShape::Ring { radius, width } => {
                                 let half = width * 0.5;
                                 let r_min = (radius - half).max(0.0);
                                 let r_max = radius + half;
@@ -557,20 +559,44 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                                 let theta = random::range(0.0..TAU);
                                 vec2(r * theta.cos(), r * theta.sin())
                             }
+                            EmitterShape::Burst { count, radius } => {
+                                for i in 0..count {
+                                    let angle = TAU * (i as f32) / (count as f32);
+                                    let local_pos = Vec2::from_angle(angle) * radius;
+
+                                    let local_rotated = if cfg.rotation != 0.0 {
+                                        let (s, c) = cfg.rotation.sin_cos();
+                                        vec2(
+                                            local_pos.x * c - local_pos.y * s,
+                                            local_pos.x * s + local_pos.y * c,
+                                        )
+                                    } else {
+                                        local_pos
+                                    };
+
+                                    let p = Particle::new(attrs, center + local_rotated);
+                                    emitter.particles.push(p);
+                                }
+
+                                skip_spawn = true;
+                                Vec2::ZERO
+                            }
                         };
 
-                        let local_rotated = if cfg.rotation != 0.0 {
-                            let (s, c) = cfg.rotation.sin_cos();
-                            vec2(
-                                local_pos.x * c - local_pos.y * s,
-                                local_pos.x * s + local_pos.y * c,
-                            )
-                        } else {
-                            local_pos
-                        };
+                        if !skip_spawn {
+                            let local_rotated = if cfg.rotation != 0.0 {
+                                let (s, c) = cfg.rotation.sin_cos();
+                                vec2(
+                                    local_pos.x * c - local_pos.y * s,
+                                    local_pos.x * s + local_pos.y * c,
+                                )
+                            } else {
+                                local_pos
+                            };
 
-                        let p = Particle::new(attrs, center + local_rotated);
-                        emitter.particles.push(p);
+                            let p = Particle::new(attrs, center + local_rotated);
+                            emitter.particles.push(p);
+                        }
                     }
                 }
 

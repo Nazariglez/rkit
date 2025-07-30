@@ -1,3 +1,5 @@
+use std::f32::consts::TAU;
+
 use draw::Transform2D;
 use egui::{Align, RichText};
 use rfd::FileDialog;
@@ -135,8 +137,8 @@ fn draw_system(
                 .translate(emitter_pos);
 
             match cfg.emitters[i].kind {
-                EmitterKind::Point => {}
-                EmitterKind::Rect(size) => {
+                EmitterShape::Point => {}
+                EmitterShape::Rect(size) => {
                     draw.rect(Vec2::ZERO, size)
                         .origin(Vec2::splat(0.5))
                         .fill_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
@@ -144,7 +146,7 @@ fn draw_system(
                         .stroke_color(Color::WHITE)
                         .stroke(2.0);
                 }
-                EmitterKind::Circle(radius) => {
+                EmitterShape::Circle(radius) => {
                     draw.circle(radius)
                         .origin(Vec2::splat(0.5))
                         .fill_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
@@ -152,11 +154,25 @@ fn draw_system(
                         .stroke_color(Color::WHITE)
                         .stroke(2.0);
                 }
-                EmitterKind::Ring { radius, width } => {
+                EmitterShape::Ring { radius, width } => {
                     draw.circle(radius)
                         .origin(Vec2::splat(0.5))
                         .stroke_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
                         .stroke(width);
+                }
+                EmitterShape::Burst { count, radius } => {
+                    for i in 0..count {
+                        let angle = TAU * (i as f32) / (count as f32);
+                        let local_pos = Vec2::from_angle(angle) * radius;
+
+                        draw.circle(5.0)
+                            .origin(Vec2::splat(0.5))
+                            .translate(local_pos)
+                            .fill_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
+                            .fill()
+                            .stroke_color(Color::WHITE)
+                            .stroke(2.0);
+                    }
                 }
             }
             draw.pop_matrix();
@@ -335,28 +351,28 @@ fn draw_system(
                                 egui::ComboBox::from_label("")
                                     .selected_text(cfg.emitters[i].kind.as_ref())
                                     .show_ui(ui, |ui| {
-                                        let point = EmitterKind::Point;
+                                        let point = EmitterShape::Point;
                                         ui.selectable_value(
                                             &mut cfg.emitters[i].kind,
                                             point,
                                             point.as_ref(),
                                         );
 
-                                        let square = EmitterKind::Rect(Vec2::splat(150.0));
+                                        let square = EmitterShape::Rect(Vec2::splat(150.0));
                                         ui.selectable_value(
                                             &mut cfg.emitters[i].kind,
                                             square,
                                             square.as_ref(),
                                         );
 
-                                        let circle = EmitterKind::Circle(100.0);
+                                        let circle = EmitterShape::Circle(100.0);
                                         ui.selectable_value(
                                             &mut cfg.emitters[i].kind,
                                             circle,
                                             circle.as_ref(),
                                         );
 
-                                        let ring = EmitterKind::Ring {
+                                        let ring = EmitterShape::Ring {
                                             radius: 100.0,
                                             width: 20.0,
                                         };
@@ -365,11 +381,21 @@ fn draw_system(
                                             ring,
                                             ring.as_ref(),
                                         );
+
+                                        let burst = EmitterShape::Burst {
+                                            count: 8,
+                                            radius: 100.0,
+                                        };
+                                        ui.selectable_value(
+                                            &mut cfg.emitters[i].kind,
+                                            burst,
+                                            burst.as_ref(),
+                                        );
                                     });
                             });
 
                             match &mut cfg.emitters[i].kind {
-                                EmitterKind::Rect(size) => {
+                                EmitterShape::Rect(size) => {
                                     ui.horizontal(|ui| {
                                         ui.label("Width: ");
                                         ui.add(
@@ -390,7 +416,7 @@ fn draw_system(
                                         );
                                     });
                                 }
-                                EmitterKind::Circle(radius) => {
+                                EmitterShape::Circle(radius) => {
                                     ui.horizontal(|ui| {
                                         ui.label("Radius: ");
                                         ui.add(
@@ -401,7 +427,7 @@ fn draw_system(
                                         );
                                     });
                                 }
-                                EmitterKind::Ring { radius, width } => {
+                                EmitterShape::Ring { radius, width } => {
                                     ui.horizontal(|ui| {
                                         ui.label("Radius: ");
                                         ui.add(
@@ -420,7 +446,24 @@ fn draw_system(
                                         );
                                     });
                                 }
-                                EmitterKind::Point => {}
+                                EmitterShape::Burst { count, radius } => {
+                                    ui.label("Radius: ");
+                                    ui.add(
+                                        egui::DragValue::new(radius)
+                                            .range(1.0..=1000.0)
+                                            .clamp_existing_to_range(true)
+                                            .speed(1.0),
+                                    );
+
+                                    ui.label("Count: ");
+                                    ui.add(
+                                        egui::DragValue::new(count)
+                                            .range(1..=50)
+                                            .clamp_existing_to_range(true)
+                                            .speed(1.0),
+                                    );
+                                }
+                                EmitterShape::Point => {}
                             }
 
                             ui.separator();
