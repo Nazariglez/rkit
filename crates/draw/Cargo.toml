@@ -14,6 +14,8 @@ atomic_refcell.workspace = true
 arrayvec.workspace = true
 rustc-hash.workspace = true
 num.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 lyon = "1.0.1"
 

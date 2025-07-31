@@ -64,15 +64,19 @@ fn main() -> Result<(), String> {
                 .vsync(true),
         )
         .add_resource(State::default())
-        .add_systems(OnSetup, setup_system)
+        .add_systems(OnSetup, setup_system.after(ParticlesSysSet))
         .add_systems(OnUpdate, update_system.before(ParticlesSysSet))
         .add_systems(OnRender, draw_system)
         .run()
 }
 
-fn setup_system(mut cmds: Commands) {
+fn setup_system(mut cmds: Commands, config: Res<Particles>, mut state: ResMut<State>) {
     cmds.queue(LoadParticleConfigCmd {
         config: ParticleFxConfig::default(),
+    });
+
+    config.iter_sprites().for_each(|(id, sprite)| {
+        state.sprites.insert(id.clone(), sprite.clone());
     });
 }
 
@@ -368,9 +372,9 @@ fn draw_system(
                         })));
                     }
                 });
-                for id in state.sprites.keys() {
-                    ui.label(format!("• {id}"));
-                }
+                // for id in state.sprites.keys() {
+                //     ui.label(format!("• {id}"));
+                // }
                 ui.separator();
 
                 ui.heading("Emitters");

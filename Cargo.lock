@@ -1284,6 +1284,8 @@ dependencies = [
  "num",
  "once_cell",
  "rustc-hash 2.1.1",
+ "serde",
+ "serde_json",
  "smallvec 2.0.0-alpha.11",
  "utils",
 ]

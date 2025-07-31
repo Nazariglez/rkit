@@ -5,8 +5,11 @@ use std::{
     ops::{Add, Mul},
 };
 
-use corelib::math::{Vec3, vec3};
-use draw::{Draw2D, Sprite};
+use corelib::{
+    gfx::TextureFilter,
+    math::{Vec3, vec3},
+};
+use draw::{Draw2D, Sprite, create_sprite, create_sprites_from_spritesheet};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumIter};
@@ -30,6 +33,10 @@ pub struct ParticlesPlugin;
 impl Plugin for ParticlesPlugin {
     fn apply(&self, app: &mut App) {
         app.add_resource(Particles::default())
+            .add_systems(
+                OnSetup,
+                load_default_particles_system.in_set(ParticlesSysSet),
+            )
             .add_systems(OnUpdate, update_system.in_set(ParticlesSysSet))
             .configure_sets(OnUpdate, ParticlesSysSet);
     }
@@ -52,6 +59,11 @@ pub struct Particles {
 }
 
 impl Particles {
+    #[inline]
+    pub fn iter_sprites(&self) -> impl Iterator<Item = (&String, &Sprite)> {
+        self.sprites.iter()
+    }
+
     #[inline]
     pub fn add_sprite(&mut self, id: &str, sprite: Sprite) {
         // find emitter that could use this sprite and add it to them
@@ -597,6 +609,23 @@ impl ParticleFx {
             emitter.clear();
         });
     }
+}
+
+fn load_default_particles_system(mut config: ResMut<Particles>) {
+    let spritesheet = create_sprite()
+        .from_image(include_bytes!("./particles.png"))
+        .with_label("Particles Default Spritesheet")
+        .with_min_filter(TextureFilter::Nearest)
+        .with_mag_filter(TextureFilter::Nearest)
+        .build()
+        .unwrap();
+
+    let sprites =
+        create_sprites_from_spritesheet(include_bytes!("./particles.json"), &spritesheet).unwrap();
+
+    sprites.into_iter().for_each(|(id, sprite)| {
+        config.add_sprite(&id, sprite);
+    });
 }
 
 fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs: Res<Particles>) {
