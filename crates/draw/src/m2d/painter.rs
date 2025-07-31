@@ -5,7 +5,10 @@ use crate::{
     create_text_2d_pipeline_ctx,
 };
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use corelib::{gfx::{self, BindGroup, Buffer, RenderPipeline}, math::Mat4};
+use corelib::{
+    gfx::{self, BindGroup, Buffer, RenderPipeline},
+    math::Mat4,
+};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use utils::drop_signal::DropSignal;

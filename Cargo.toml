@@ -129,6 +129,7 @@ shipyard = "0.7.6"
 static_assertions = "1.1.0"
 tempfile = "3.20.0"
 egui_demo_lib = "0.32"
+futures = "0.3"
 rfd = "0.15.4"
 
 [features]

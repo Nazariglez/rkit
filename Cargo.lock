@@ -3786,6 +3786,7 @@ dependencies = [
  "encase",
  "fastrand",
  "fluent",
+ "futures",
  "heapless",
  "indexmap",
  "log",

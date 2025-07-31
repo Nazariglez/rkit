@@ -6,7 +6,7 @@ use std::{
 };
 
 use corelib::math::{Vec3, vec3};
-use draw::Draw2D;
+use draw::{Draw2D, Sprite};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumIter};
@@ -35,15 +35,101 @@ impl Plugin for ParticlesPlugin {
     }
 }
 
-#[derive(Resource, Default, Clone, Deref)]
-pub struct Particles(FxHashMap<String, ParticleFxConfig>);
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ParticleSprite {
+    Id(String),
+    #[serde(skip)]
+    Sprite {
+        id: Option<String>,
+        sprite: Sprite,
+    },
+}
+
+#[derive(Resource, Default, Clone)]
+pub struct Particles {
+    sprites: FxHashMap<String, Sprite>,
+    config: FxHashMap<String, ParticleFxConfig>,
+}
 
 impl Particles {
+    #[inline]
+    pub fn add_sprite(&mut self, id: &str, sprite: Sprite) {
+        // find emitter that could use this sprite and add it to them
+        for cfg in self.config.values_mut() {
+            for emitter in &mut cfg.emitters {
+                for ps in &mut emitter.sprites {
+                    if let ParticleSprite::Id(ps_id) = ps {
+                        if ps_id == id {
+                            *ps = ParticleSprite::Sprite {
+                                id: Some(id.to_string()),
+                                sprite: sprite.clone(),
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        self.sprites.insert(id.to_string(), sprite);
+    }
+
+    #[inline]
+    pub fn add_config(&mut self, id: &str, mut cfg: ParticleFxConfig) {
+        // update sprite references in the config before storing it
+        for emitter in &mut cfg.emitters {
+            for ps in &mut emitter.sprites {
+                if let ParticleSprite::Id(ps_id) = ps {
+                    if let Some(sprite) = self.sprites.get(ps_id) {
+                        *ps = ParticleSprite::Sprite {
+                            id: Some(ps_id.to_string()),
+                            sprite: sprite.clone(),
+                        };
+                    }
+                }
+            }
+        }
+
+        self.config.insert(id.to_string(), cfg);
+    }
+
+    #[inline]
+    pub fn get_config(&self, id: &str) -> Option<&ParticleFxConfig> {
+        self.config.get(id)
+    }
+
+    #[inline]
+    pub fn get_config_mut(&mut self, id: &str) -> Option<&mut ParticleFxConfig> {
+        self.config.get_mut(id)
+    }
+
+    #[inline]
     pub fn create_component(&self, id: &str, pos: Vec2) -> Option<ParticleFx> {
-        self.0.get(id).map(|config| ParticleFx {
+        let cfg = self.config.get(id)?;
+
+        let emitters = cfg
+            .emitters
+            .iter()
+            .map(|emitter_config| {
+                let sprites: Vec<Sprite> = emitter_config
+                    .sprites
+                    .iter()
+                    .filter_map(|ps| match ps {
+                        ParticleSprite::Sprite { sprite, .. } => Some(sprite.clone()),
+                        _ => None,
+                    })
+                    .collect();
+
+                ParticleEmitter {
+                    sprites,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        Some(ParticleFx {
             id: id.to_string(),
             pos,
-            emitters: vec![ParticleEmitter::default(); config.emitters.len()],
+            emitters,
             spawning: false,
         })
     }
@@ -310,7 +396,7 @@ pub enum EmitterShape {
     Rect(Vec2),
     Circle(f32),
     Ring { radius: f32, width: f32 },
-    Burst { count: usize, radius: f32 },
+    Radial { count: usize, radius: f32 },
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, AsRefStr, EnumIter, Serialize, Deserialize)]
@@ -341,6 +427,7 @@ pub struct EmitterConfig {
     pub gravity: Gravity,
     pub sort: SortBy,
     // pub blend_mode: todo!(),
+    pub sprites: Vec<ParticleSprite>,
     pub attributes: Attributes,
 }
 
@@ -361,8 +448,8 @@ impl Default for EmitterConfig {
                 amount: 0.0,
             },
             sort: SortBy::default(),
+            sprites: vec![],
             attributes: Attributes {
-                // textures: vec![],
                 lifetime: Value::Range { min: 0.2, max: 2.0 },
                 scale_x: Attr {
                     initial: Value::Fixed(1.0),
@@ -408,7 +495,6 @@ impl Default for EmitterConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attributes {
-    // pub textures: Vec<gfx::Texture>,
     pub lifetime: Value<f32>,
     pub scale_x: Attr<f32>,
     pub scale_y: Attr<f32>,
@@ -426,6 +512,7 @@ pub struct ParticleEmitter {
     pub delay: f32,
     pub ended: bool,
     pub repeats: usize,
+    pub sprites: Vec<Sprite>,
     pub particles: Vec<Particle>,
 }
 
@@ -445,6 +532,7 @@ impl ParticleEmitter {
 
 #[derive(Debug, Clone)]
 pub struct Particle {
+    pub sprite: Option<usize>,
     pub spawn_time: f32,
     pub life: f32,
     pub pos: Vec2,
@@ -461,7 +549,7 @@ pub struct Particle {
 }
 
 impl Particle {
-    fn new(attrs: &Attributes, pos: Vec2, spawn_time: f32) -> Self {
+    fn new(attrs: &Attributes, pos: Vec2, spawn_time: f32, sprite_idx: Option<usize>) -> Self {
         let life = attrs.lifetime.val();
         let scale = vec2(attrs.scale_x.init(), attrs.scale_y.init());
         let rgb = attrs.rgb.init();
@@ -471,6 +559,7 @@ impl Particle {
         let rotation = attrs.rotation.init();
 
         Self {
+            sprite: sprite_idx,
             spawn_time,
             life,
             pos,
@@ -513,7 +602,7 @@ impl ParticleFx {
 fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs: Res<Particles>) {
     let dt = time.delta_f32();
     particles.iter_mut().for_each(|mut p| {
-        let Some(config) = configs.get(&p.id) else {
+        let Some(config) = configs.config.get(&p.id) else {
             log::warn!("Invalid particle id: {}", &p.id);
             return;
         };
@@ -562,7 +651,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                                 let theta = random::range(0.0..TAU);
                                 vec2(r * theta.cos(), r * theta.sin())
                             }
-                            EmitterShape::Burst { count, radius } => {
+                            EmitterShape::Radial { count, radius } => {
                                 for i in 0..count {
                                     let angle = TAU * (i as f32) / (count as f32);
                                     let local_pos = Vec2::from_angle(angle) * radius;
@@ -688,12 +777,24 @@ impl ParticlesDraw2DExt for Draw2D {
     fn particle(&mut self, fx: &ParticleFx) {
         fx.emitters.iter().for_each(|emitter| {
             emitter.particles.iter().for_each(|p| {
-                self.rect(Vec2::ZERO, Vec2::splat(10.0))
-                    .origin(Vec2::splat(0.5))
-                    .translate(p.pos)
-                    .scale(p.scale)
-                    .rotation(p.rotation)
-                    .color(p.color);
+                match p.sprite.and_then(|idx| emitter.sprites.get(idx)) {
+                    Some(sprite) => {
+                        self.image(sprite)
+                            .origin(Vec2::splat(0.5))
+                            .translate(p.pos)
+                            .scale(p.scale)
+                            .rotation(p.rotation)
+                            .color(p.color);
+                    }
+                    None => {
+                        self.rect(Vec2::ZERO, Vec2::splat(10.0))
+                            .origin(Vec2::splat(0.5))
+                            .translate(p.pos)
+                            .scale(p.scale)
+                            .rotation(p.rotation)
+                            .color(p.color);
+                    }
+                }
             });
         });
     }
@@ -717,6 +818,12 @@ fn spawn_particle(
         local_pos
     };
 
-    let p = Particle::new(attrs, center + local_rotated, spawn_time);
+    let sprite_idx = if emitter.sprites.is_empty() {
+        None
+    } else {
+        Some(random::range(0..emitter.sprites.len()))
+    };
+
+    let p = Particle::new(attrs, center + local_rotated, spawn_time, sprite_idx);
     emitter.particles.push(p);
 }

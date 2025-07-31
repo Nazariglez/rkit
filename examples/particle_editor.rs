@@ -1,8 +1,12 @@
-use std::f32::consts::TAU;
+use std::{
+    f32::consts::TAU,
+    task::{Context, Poll},
+};
 
-use draw::Transform2D;
-use egui::{Align, RichText};
-use rfd::FileDialog;
+use draw::{Sprite, Transform2D, create_sprite};
+use egui::Align;
+use futures::{future::BoxFuture, task::noop_waker_ref};
+use rfd::{AsyncFileDialog, FileHandle};
 use rkit::{
     draw::create_draw_2d,
     ecs::prelude::*,
@@ -11,9 +15,18 @@ use rkit::{
     math::{Vec2, Vec3, vec3},
     particles::*,
 };
+use rustc_hash::FxHashMap;
 use strum::IntoEnumIterator;
 
-const EXT: &str = "gkpfx";
+const EXT: &str = "gkp";
+
+enum FileCmd {
+    Save(BoxFuture<'static, Option<FileHandle>>),
+    Load(BoxFuture<'static, Option<FileHandle>>),
+    LoadTexture(BoxFuture<'static, Option<FileHandle>>),
+}
+
+struct FileCmdRes(Option<FileCmd>);
 
 #[derive(Resource)]
 struct State {
@@ -21,6 +34,8 @@ struct State {
     selected_emitter: Option<usize>,
     offset_edit_mode: bool,
     zoom: f32,
+    file_name: String,
+    sprites: FxHashMap<String, Sprite>,
 }
 
 impl Default for State {
@@ -30,12 +45,15 @@ impl Default for State {
             selected_emitter: Some(0),
             offset_edit_mode: false,
             zoom: 1.0,
+            file_name: format!("my_particle.{EXT}"),
+            sprites: FxHashMap::default(),
         }
     }
 }
 
 fn main() -> Result<(), String> {
     App::new()
+        .add_non_send_resource(FileCmdRes(None))
         .add_plugin(MainPlugins::default())
         .add_plugin(EguiPlugin::default())
         .add_plugin(ParticlesPlugin)
@@ -52,25 +70,21 @@ fn main() -> Result<(), String> {
         .run()
 }
 
-fn setup_system(mut cmds: Commands, mut configs: ResMut<Particles>, window: Res<Window>) {
+fn setup_system(mut cmds: Commands) {
     cmds.queue(LoadParticleConfigCmd {
         config: ParticleFxConfig::default(),
     });
-    // configs.insert("my_fx".to_string(), ParticleFxConfig::default());
-    // cmds.spawn(
-    //     configs
-    //         .create_component("my_fx", window.size() * 0.5)
-    //         .unwrap(),
-    // );
 }
 
 fn update_system(
+    mut cmds: Commands,
     mut fx: Single<&mut ParticleFx>,
     mouse: Res<Mouse>,
     ctx: Res<EguiContext>,
-    mut configs: ResMut<Particles>,
-    mut state: ResMut<State>,
     window: Res<Window>,
+    mut state: ResMut<State>,
+    mut particles: ResMut<Particles>,
+    mut file_cmd: NonSendMut<FileCmdRes>,
 ) {
     fx.spawning = true;
 
@@ -84,27 +98,116 @@ fn update_system(
 
         if state.offset_edit_mode {
             if let Some(i) = state.selected_emitter {
-                let cfg = configs.get_mut(&fx.id).unwrap();
+                let cfg = particles.get_config_mut(&fx.id).unwrap();
                 cfg.emitters[i].offset = mouse_world - fx.pos;
                 return;
             }
         }
         fx.pos = mouse_world;
     }
+
+    if let Some(cmd) = &mut file_cmd.0 {
+        match cmd {
+            FileCmd::Load(fut) => {
+                let waker = noop_waker_ref();
+                let mut cx = Context::from_waker(waker);
+
+                match fut.as_mut().poll(&mut cx) {
+                    Poll::Ready(opt_handle) => {
+                        if let Some(handle) = opt_handle {
+                            match std::fs::read_to_string(handle.path()).and_then(|s| {
+                                serde_json::from_str::<ParticleFxConfig>(&s).map_err(Into::into)
+                            }) {
+                                Ok(cfg) => {
+                                    cmds.queue(LoadParticleConfigCmd { config: cfg });
+                                    state.file_name = handle.file_name();
+                                }
+                                Err(e) => {
+                                    eprintln!("Load error: {e}");
+                                }
+                            }
+                        }
+                        file_cmd.0 = None;
+                    }
+                    Poll::Pending => {}
+                }
+            }
+            FileCmd::Save(fut) => {
+                let waker = noop_waker_ref();
+                let mut cx = Context::from_waker(waker);
+
+                match fut.as_mut().poll(&mut cx) {
+                    Poll::Ready(opt_handle) => {
+                        if let Some(handle) = opt_handle {
+                            let cfg = particles.get_config("my_fx").unwrap();
+                            match serde_json::to_string_pretty(cfg)
+                                .map_err(|e| e.to_string())
+                                .and_then(|j| {
+                                    println!("Saving {j}");
+                                    std::fs::write(handle.path(), j).map_err(|e| e.to_string())
+                                }) {
+                                Ok(_) => println!("Saved config to {:?}", handle.path()),
+                                Err(e) => eprintln!("Save error: {e}"),
+                            }
+                        }
+                        file_cmd.0 = None;
+                    }
+                    Poll::Pending => {}
+                }
+            }
+            FileCmd::LoadTexture(fut) => {
+                let waker = noop_waker_ref();
+                let mut cx = Context::from_waker(waker);
+                if let Poll::Ready(opt) = fut.as_mut().poll(&mut cx) {
+                    if let Some(handle) = opt {
+                        if let Ok(bytes) = std::fs::read(handle.path()) {
+                            if let Ok(sprite) = create_sprite().from_image(&bytes).build() {
+                                let id = handle.file_name();
+                                state.sprites.insert(id.clone(), sprite.clone());
+
+                                //  sync particle
+                                if let Some(cfg) = particles.get_config_mut(&fx.id) {
+                                    let emitter_idx = state.selected_emitter.unwrap_or(0);
+                                    if !cfg.emitters[emitter_idx].sprites.iter().any(|ps| matches!(ps, ParticleSprite::Id(existing) if existing == &id)) {
+                                        cfg.emitters[emitter_idx].sprites.push(ParticleSprite::Id(id.clone()));
+                                    }
+
+                                    fx.emitters[emitter_idx].sprites = cfg.emitters[emitter_idx]
+                                        .sprites
+                                        .iter()
+                                        .filter_map(|ps| match ps {
+                                            ParticleSprite::Id(id) => {
+                                                state.sprites.get(id).cloned()
+                                            }
+                                            ParticleSprite::Sprite { sprite, .. } => {
+                                                Some(sprite.clone())
+                                            }
+                                        })
+                                        .collect();
+                                }
+                            }
+                        }
+                    }
+                    file_cmd.0 = None;
+                }
+            }
+        }
+    }
 }
 
 fn draw_system(
     mut cmds: Commands,
     fx: Single<&mut ParticleFx>,
-    mut ectx: ResMut<EguiContext>,
-    mut configs: ResMut<Particles>,
-    mut state: ResMut<State>,
     time: Res<Time>,
     window: Res<Window>,
+    mut ectx: ResMut<EguiContext>,
+    mut particles: ResMut<Particles>,
+    mut state: ResMut<State>,
+    mut file_cmd: NonSendMut<FileCmdRes>,
 ) {
     let mut fx = fx.into_inner();
     let fx_id = fx.id.clone();
-    let Some(cfg) = configs.get_mut(&fx_id) else {
+    let Some(cfg) = particles.get_config_mut(&fx_id) else {
         return;
     };
 
@@ -176,7 +279,7 @@ fn draw_system(
                         .stroke_color(Color::rgba(0.1, 0.3, 0.7, 0.5))
                         .stroke(width);
                 }
-                EmitterShape::Burst { count, radius } => {
+                EmitterShape::Radial { count, radius } => {
                     for i in 0..count {
                         let angle = TAU * (i as f32) / (count as f32);
                         let local_pos = Vec2::from_angle(angle) * radius;
@@ -211,36 +314,22 @@ fn draw_system(
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Load").clicked() {
-                    if let Some(path) = FileDialog::new()
-                        .add_filter("Particles", &[EXT])
-                        .pick_file()
-                    {
-                        match std::fs::read_to_string(&path).and_then(|s| {
-                            serde_json::from_str::<ParticleFxConfig>(&s).map_err(Into::into)
-                        }) {
-                            Ok(cfg) => {
-                                cmds.queue(LoadParticleConfigCmd { config: cfg });
-                            }
-                            Err(e) => {
-                                eprintln!("Load error: {e}");
-                            }
-                        }
-                    }
+                    file_cmd.0 = Some(FileCmd::Load(Box::pin(async {
+                        AsyncFileDialog::new()
+                            .add_filter("particles", &[EXT])
+                            .pick_file()
+                            .await
+                    })));
                 }
 
                 if ui.button("Save").clicked() {
-                    if let Some(path) = FileDialog::new()
-                        .set_file_name(format!("particles.{EXT}"))
-                        .save_file()
-                    {
-                        match serde_json::to_string_pretty(cfg)
-                            .map_err(|e| e.to_string())
-                            .and_then(|j| std::fs::write(&path, j).map_err(|e| e.to_string()))
-                        {
-                            Ok(_) => println!("Saved config to {path:?}"),
-                            Err(e) => eprintln!("Save error: {e}"),
-                        }
-                    }
+                    let file_name = state.file_name.clone();
+                    file_cmd.0 = Some(FileCmd::Save(Box::pin(async move {
+                        AsyncFileDialog::new()
+                            .set_file_name(&file_name)
+                            .save_file()
+                            .await
+                    })));
                 }
 
                 ui.separator();
@@ -268,6 +357,22 @@ fn draw_system(
             .min_width(300.0)
             .resizable(false)
             .show(ctx, |ui| {
+                ui.heading("Textures");
+                ui.horizontal(|ui| {
+                    if ui.small_button("➕ Load…").clicked() {
+                        file_cmd.0 = Some(FileCmd::LoadTexture(Box::pin(async {
+                            AsyncFileDialog::new()
+                                .add_filter("image", &["png", "jpg", "jpeg"])
+                                .pick_file()
+                                .await
+                        })));
+                    }
+                });
+                for id in state.sprites.keys() {
+                    ui.label(format!("• {id}"));
+                }
+                ui.separator();
+
                 ui.heading("Emitters");
 
                 if ui.small_button("Add Emitter").clicked() {
@@ -414,7 +519,7 @@ fn draw_system(
                                             ring.as_ref(),
                                         );
 
-                                        let burst = EmitterShape::Burst {
+                                        let burst = EmitterShape::Radial {
                                             count: 8,
                                             radius: 100.0,
                                         };
@@ -478,7 +583,7 @@ fn draw_system(
                                         );
                                     });
                                 }
-                                EmitterShape::Burst { count, radius } => {
+                                EmitterShape::Radial { count, radius } => {
                                     ui.horizontal(|ui| {
                                         ui.label("Radius: ");
                                         ui.add(
@@ -560,6 +665,69 @@ fn draw_system(
                                     cfg.emitters[i].repeat = None;
                                 }
                             });
+
+                            ui.separator();
+
+                            ui.heading("Textures:");
+
+                            let mut all_ids = state.sprites.keys().cloned().collect::<Vec<_>>();
+                            for ps in &cfg.emitters[i].sprites {
+                                if let ParticleSprite::Id(id) = ps {
+                                    if !all_ids.contains(id) {
+                                        all_ids.push(id.clone());
+                                    }
+                                }
+                            }
+                            all_ids.sort();
+                            all_ids.dedup();
+
+                            for sprite_id in all_ids {
+                                let loaded = state.sprites.contains_key(&sprite_id);
+                                let mut selected =
+                                    cfg.emitters[i].sprites.iter().any(|ps| match ps {
+                                        ParticleSprite::Id(id) => id == &sprite_id,
+                                        ParticleSprite::Sprite { id: Some(id2), .. } => {
+                                            id2 == &sprite_id
+                                        }
+                                        _ => false,
+                                    });
+
+                                let label = if loaded {
+                                    egui::RichText::new(&sprite_id)
+                                } else {
+                                    egui::RichText::new(&sprite_id).color(egui::Color32::RED)
+                                };
+
+                                if ui.checkbox(&mut selected, label).changed() {
+                                    if selected {
+                                        cfg.emitters[i]
+                                            .sprites
+                                            .push(ParticleSprite::Id(sprite_id.clone()));
+                                    } else {
+                                        cfg.emitters[i].sprites.retain(|ps| match ps {
+                                            ParticleSprite::Id(id) => id != &sprite_id,
+                                            ParticleSprite::Sprite { id: Some(id2), .. } => {
+                                                id2 != &sprite_id
+                                            }
+                                            _ => true,
+                                        });
+                                    }
+
+                                    fx.emitters[i].sprites = cfg.emitters[i]
+                                        .sprites
+                                        .iter()
+                                        .filter_map(|ps| match ps {
+                                            ParticleSprite::Id(id) => {
+                                                state.sprites.get(id).cloned()
+                                            }
+                                            ParticleSprite::Sprite { sprite, .. } => {
+                                                Some(sprite.clone())
+                                            }
+                                            _ => None,
+                                        })
+                                        .collect();
+                                }
+                            }
                         });
                     }
                 }
@@ -1025,7 +1193,7 @@ fn value_box(ui: &mut egui::Ui, value: &mut Value<f32>, id: &str) {
 
         match value {
             Value::Fixed(val) => {
-                ui.add(egui::Slider::new(val, 0.1..=100.0));
+                ui.add(egui::Slider::new(val, 0.1..=1000.0));
             }
             Value::Range { min, max } => {
                 ui.label("Min: ");
@@ -1063,7 +1231,7 @@ fn value_box_angle(ui: &mut egui::Ui, value: &mut Value<f32>, id: &str) {
             });
 
         if let Value::Fixed(val) = value {
-            ui.add(egui::Slider::new(val, 0.0..=100.0));
+            ui.add(egui::Slider::new(val, 0.0..=1000.0));
         }
     });
 
@@ -1210,7 +1378,7 @@ impl Command for LoadParticleConfigCmd {
             world.despawn(fx_e);
         }
         let mut configs = world.resource_mut::<Particles>();
-        configs.insert("my_fx".to_string(), self.config.clone());
+        configs.add_config("my_fx", self.config.clone());
         let component = configs.create_component("my_fx", win_size * 0.5).unwrap();
         world.spawn(component);
     }

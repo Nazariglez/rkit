@@ -1,5 +1,5 @@
-use std::time::Duration;
 use spin_sleep_util::Interval;
+use std::time::Duration;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum LimitMode {
