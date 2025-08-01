@@ -6,10 +6,12 @@ use crate::{
     },
     math::{UVec2, Vec2},
 };
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use atomic_refcell::{AtomicRefCell, AtomicRefMut};
+use draw::{Sprite, create_sprite};
 use egui::{
     ClippedPrimitive, ImageData, Mesh, Rect, TextureId, TextureOptions,
     epaint::{self, ImageDelta},
+    load::SizedTexture,
 };
 use encase::{ShaderType, UniformBuffer};
 use once_cell::sync::Lazy;
@@ -18,17 +20,12 @@ use rustc_hash::FxHashMap;
 pub(super) static EGUI_PAINTER: Lazy<AtomicRefCell<EguiPainter>> =
     Lazy::new(|| AtomicRefCell::new(EguiPainter::default()));
 
-pub(super) fn get_egui_painter() -> AtomicRef<'static, EguiPainter> {
-    EGUI_PAINTER.borrow()
-}
-
 pub(super) fn get_mut_egui_painter() -> AtomicRefMut<'static, EguiPainter> {
     EGUI_PAINTER.borrow_mut()
 }
 
 struct CachedTexture {
-    tex: Texture,
-    sampler: Sampler,
+    sprite: Sprite,
     bind: BindGroup,
 }
 
@@ -186,7 +183,7 @@ impl EguiPainter {
                 epaint::Primitive::Mesh(mesh) => {
                     self.paint_mesh(mesh, clip_rect, target, win_size, win_dpi)?
                 }
-                epaint::Primitive::Callback(paint_callback) => {
+                epaint::Primitive::Callback(_paint_callback) => {
                     log::warn!("Egui CALLBACK unimplemented.");
                 }
             }
@@ -238,18 +235,27 @@ impl EguiPainter {
         }
     }
 
-    // pub fn add_texture(&mut self, tex: &Texture) -> SizedTexture {
-    // // TODO: instead of texture we may need a sprite to know which sampler to use?
-    // // similar to draw2d?
-    //
-    //     let id = TextureId::User(tex.id().into());
-    //     let size = tex.size();
-    //     self.textures.insert(id, tex.clone());
-    //     SizedTexture {
-    //         id,
-    //         size: egui::Vec2::new(size.x, size.y),
-    //     }
-    // }
+    pub fn add_sprite(&mut self, sprite: &Sprite) -> SizedTexture {
+        let id = TextureId::User(sprite.texture().id().into());
+        let size = sprite.size();
+        let bind = bind_group_from(
+            sprite.texture(),
+            sprite.sampler(),
+            self.pipeline.bind_group_layout_ref(1).unwrap(),
+        );
+        self.textures.insert(
+            id,
+            CachedTexture {
+                sprite: sprite.clone(),
+                bind,
+            },
+        );
+
+        SizedTexture {
+            id,
+            size: egui::Vec2::new(size.x, size.y),
+        }
+    }
 
     pub fn set_texture(&mut self, id: TextureId, delta: &ImageDelta) {
         let [width, height] = delta.image.size();
@@ -264,7 +270,13 @@ impl EguiPainter {
                     &sampler,
                     self.pipeline.bind_group_layout_ref(1).unwrap(),
                 );
-                CachedTexture { tex, sampler, bind }
+                let sprite = create_sprite()
+                    .from_texture(&tex)
+                    .with_sampler(&sampler)
+                    .build()
+                    .unwrap();
+
+                CachedTexture { sprite, bind }
             });
 
             match &delta.image {
@@ -277,7 +289,7 @@ impl EguiPainter {
 
                     let data = bytemuck::cast_slice(&image.pixels);
                     update_texture(
-                        &mut cached.tex,
+                        cached.sprite.texture(),
                         x as _,
                         y as _,
                         width as _,
@@ -310,8 +322,12 @@ impl EguiPainter {
             &sampler,
             self.pipeline.bind_group_layout_ref(1).unwrap(),
         );
-        self.textures
-            .insert(id, CachedTexture { tex, sampler, bind });
+        let sprite = create_sprite()
+            .from_texture(&tex)
+            .with_sampler(&sampler)
+            .build()
+            .unwrap();
+        self.textures.insert(id, CachedTexture { sprite, bind });
     }
 
     pub fn remove_texture(&mut self, id: impl Into<TextureId>) {
@@ -369,7 +385,7 @@ fn empty_texture(width: u32, height: u32) -> Texture {
         .unwrap()
 }
 
-fn update_texture(tex: &mut Texture, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
+fn update_texture(tex: &Texture, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
     gfx::write_texture(tex)
         .with_offset(UVec2::new(x, y))
         .with_size(UVec2::new(width, height))

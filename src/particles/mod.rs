@@ -546,6 +546,7 @@ impl ParticleEmitter {
 pub struct Particle {
     pub sprite: Option<usize>,
     pub spawn_time: f32,
+    pub total_life: f32,
     pub life: f32,
     pub pos: Vec2,
     pub initial_scale: Vec2,
@@ -562,7 +563,7 @@ pub struct Particle {
 
 impl Particle {
     fn new(attrs: &Attributes, pos: Vec2, spawn_time: f32, sprite_idx: Option<usize>) -> Self {
-        let life = attrs.lifetime.val();
+        let total_life = attrs.lifetime.val();
         let scale = vec2(attrs.scale_x.init(), attrs.scale_y.init());
         let rgb = attrs.rgb.init();
         let color = Color::rgba(rgb.x, rgb.y, rgb.z, attrs.alpha.init());
@@ -573,7 +574,8 @@ impl Particle {
         Self {
             sprite: sprite_idx,
             spawn_time,
-            life,
+            total_life,
+            life: 0.0,
             pos,
             initial_scale: scale,
             scale,
@@ -649,7 +651,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 emitter.spawn_accumulator += spawn_rate * dt;
                 let to_spawn = emitter.spawn_accumulator.floor() as usize;
                 emitter.spawn_accumulator -= to_spawn as f32;
-                emitter.particles.retain(|p| p.life > 0.0);
+                emitter.particles.retain(|p| p.life < p.total_life);
 
                 let running = !emitter.ended;
                 let in_delay = emitter.delay > 0.0;
@@ -714,7 +716,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
 
                 emitter.particles.iter_mut().for_each(|p| {
                     // The progress is defined based on the maximum lifetime of the particle
-                    let progress = 1.0 - (p.life / attrs.lifetime.max());
+                    let progress = p.life / attrs.lifetime.max();
 
                     // The scale define the size, there is no size in pixel but we use
                     // a scale based on the particle shape or texture
@@ -758,7 +760,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                     // and then apply all to get the current position
                     p.pos += (vel + gravity) * dt;
 
-                    p.life -= dt;
+                    p.life = (p.life + dt).min(p.total_life);
                 });
 
                 match cfg.sort {

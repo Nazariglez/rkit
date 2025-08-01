@@ -4,7 +4,7 @@ use std::{
 };
 
 use draw::{Sprite, Transform2D, create_sprite};
-use egui::Align;
+use egui::{Align, Color32, load::SizedTexture};
 use futures::{future::BoxFuture, task::noop_waker_ref};
 use rfd::{AsyncFileDialog, FileHandle};
 use rkit::{
@@ -28,6 +28,11 @@ enum FileCmd {
 
 struct FileCmdRes(Option<FileCmd>);
 
+struct EguiSprite {
+    sized: SizedTexture,
+    sprite: Sprite,
+}
+
 #[derive(Resource)]
 struct State {
     clear_color: Color,
@@ -35,7 +40,7 @@ struct State {
     offset_edit_mode: bool,
     zoom: f32,
     file_name: String,
-    sprites: FxHashMap<String, Sprite>,
+    sprites: FxHashMap<String, EguiSprite>,
 }
 
 impl Default for State {
@@ -70,13 +75,25 @@ fn main() -> Result<(), String> {
         .run()
 }
 
-fn setup_system(mut cmds: Commands, config: Res<Particles>, mut state: ResMut<State>) {
+fn setup_system(
+    mut cmds: Commands,
+    config: Res<Particles>,
+    mut state: ResMut<State>,
+    mut ectx: ResMut<EguiContext>,
+) {
     cmds.queue(LoadParticleConfigCmd {
         config: ParticleFxConfig::default(),
     });
 
     config.iter_sprites().for_each(|(id, sprite)| {
-        state.sprites.insert(id.clone(), sprite.clone());
+        let sized_tex = ectx.add_sprite(sprite);
+        state.sprites.insert(
+            id.clone(),
+            EguiSprite {
+                sized: sized_tex,
+                sprite: sprite.clone(),
+            },
+        );
     });
 }
 
@@ -84,7 +101,7 @@ fn update_system(
     mut cmds: Commands,
     mut fx: Single<&mut ParticleFx>,
     mouse: Res<Mouse>,
-    ctx: Res<EguiContext>,
+    mut ectx: ResMut<EguiContext>,
     window: Res<Window>,
     mut state: ResMut<State>,
     mut particles: ResMut<Particles>,
@@ -92,7 +109,7 @@ fn update_system(
 ) {
     fx.spawning = true;
 
-    if ctx.is_using_pointer() {
+    if ectx.is_using_pointer() {
         return;
     }
 
@@ -167,7 +184,13 @@ fn update_system(
                         if let Ok(bytes) = std::fs::read(handle.path()) {
                             if let Ok(sprite) = create_sprite().from_image(&bytes).build() {
                                 let id = handle.file_name();
-                                state.sprites.insert(id.clone(), sprite.clone());
+                                state.sprites.insert(
+                                    id.clone(),
+                                    EguiSprite {
+                                        sized: ectx.add_sprite(&sprite),
+                                        sprite: sprite.clone(),
+                                    },
+                                );
 
                                 //  sync particle
                                 if let Some(cfg) = particles.get_config_mut(&fx.id) {
@@ -181,7 +204,7 @@ fn update_system(
                                         .iter()
                                         .filter_map(|ps| match ps {
                                             ParticleSprite::Id(id) => {
-                                                state.sprites.get(id).cloned()
+                                                state.sprites.get(id).map(|es| es.sprite.clone())
                                             }
                                             ParticleSprite::Sprite { sprite, .. } => {
                                                 Some(sprite.clone())
@@ -674,64 +697,83 @@ fn draw_system(
 
                             ui.heading("Textures:");
 
-                            let mut all_ids = state.sprites.keys().cloned().collect::<Vec<_>>();
-                            for ps in &cfg.emitters[i].sprites {
-                                if let ParticleSprite::Id(id) = ps {
-                                    if !all_ids.contains(id) {
-                                        all_ids.push(id.clone());
-                                    }
-                                }
-                            }
-                            all_ids.sort();
-                            all_ids.dedup();
+                            egui::ScrollArea::vertical()
+                                .auto_shrink(false)
+                                .show(ui, |ui| {
+                                    ui.horizontal_wrapped(|ui| {
+                                        for (ps_id, es) in &state.sprites {
+                                            let selected =
+                                                cfg.emitters[i].sprites.iter().any(|ps| match ps {
+                                                    ParticleSprite::Id(existing) => {
+                                                        existing == ps_id
+                                                    }
+                                                    ParticleSprite::Sprite { sprite, .. } => {
+                                                        sprite == &es.sprite
+                                                    }
+                                                });
+                                            // .any(|ps| matches!(ps, ParticleSprite::Id(existing) if existing == id));
 
-                            for sprite_id in all_ids {
-                                let loaded = state.sprites.contains_key(&sprite_id);
-                                let mut selected =
-                                    cfg.emitters[i].sprites.iter().any(|ps| match ps {
-                                        ParticleSprite::Id(id) => id == &sprite_id,
-                                        ParticleSprite::Sprite { id: Some(id2), .. } => {
-                                            id2 == &sprite_id
+                                            let frame = es.sprite.frame();
+                                            let min = frame.min();
+                                            let max = frame.max();
+                                            let uv_min = min / es.sprite.texture().size();
+                                            let uv_max = max / es.sprite.texture().size();
+
+                                            let img = egui::Image::new(es.sized)
+                                                .uv(egui::Rect {
+                                                    min: egui::Pos2 {
+                                                        x: uv_min.x,
+                                                        y: uv_min.y,
+                                                    },
+                                                    max: egui::Pos2 {
+                                                        x: uv_max.x,
+                                                        y: uv_max.y,
+                                                    },
+                                                })
+                                                .fit_to_exact_size(egui::Vec2::new(32.0, 32.0))
+                                                .bg_fill(if selected {
+                                                    Color32::from_rgb(50, 50, 100)
+                                                } else {
+                                                    Color32::BLACK
+                                                });
+
+                                            let thumb = egui::ImageButton::new(img)
+                                                .frame(false)
+                                                .selected(selected);
+                                            // .on_hover_text(id);
+
+                                            if ui.add(thumb).clicked() {
+                                                if selected {
+                                                    cfg.emitters[i].sprites.retain(|ps| match ps {
+                                                        ParticleSprite::Id(existing) => {
+                                                            existing != ps_id
+                                                        }
+                                                        ParticleSprite::Sprite {
+                                                            sprite, ..
+                                                        } => sprite != &es.sprite,
+                                                    });
+                                                } else {
+                                                    cfg.emitters[i]
+                                                        .sprites
+                                                        .push(ParticleSprite::Id(ps_id.clone()));
+                                                }
+                                                fx.emitters[i].sprites = cfg.emitters[i]
+                                                    .sprites
+                                                    .iter()
+                                                    .filter_map(|ps| match ps {
+                                                        ParticleSprite::Id(id) => state
+                                                            .sprites
+                                                            .get(id)
+                                                            .map(|es| es.sprite.clone()),
+                                                        ParticleSprite::Sprite {
+                                                            sprite, ..
+                                                        } => Some(sprite.clone()),
+                                                    })
+                                                    .collect();
+                                            }
                                         }
-                                        _ => false,
                                     });
-
-                                let label = if loaded {
-                                    egui::RichText::new(&sprite_id)
-                                } else {
-                                    egui::RichText::new(&sprite_id).color(egui::Color32::RED)
-                                };
-
-                                if ui.checkbox(&mut selected, label).changed() {
-                                    if selected {
-                                        cfg.emitters[i]
-                                            .sprites
-                                            .push(ParticleSprite::Id(sprite_id.clone()));
-                                    } else {
-                                        cfg.emitters[i].sprites.retain(|ps| match ps {
-                                            ParticleSprite::Id(id) => id != &sprite_id,
-                                            ParticleSprite::Sprite { id: Some(id2), .. } => {
-                                                id2 != &sprite_id
-                                            }
-                                            _ => true,
-                                        });
-                                    }
-
-                                    fx.emitters[i].sprites = cfg.emitters[i]
-                                        .sprites
-                                        .iter()
-                                        .filter_map(|ps| match ps {
-                                            ParticleSprite::Id(id) => {
-                                                state.sprites.get(id).cloned()
-                                            }
-                                            ParticleSprite::Sprite { sprite, .. } => {
-                                                Some(sprite.clone())
-                                            }
-                                            _ => None,
-                                        })
-                                        .collect();
-                                }
-                            }
+                                });
                         });
                     }
                 }
@@ -1174,7 +1216,7 @@ fn draw_system(
                 ui.label(format!("Particles: {particles_amount}"));
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add(egui::Slider::new(&mut state.zoom, 0.1..=5.0).text("Zoom"));
+                    ui.add(egui::Slider::new(&mut state.zoom, 0.1..=10.0).text("Zoom"));
                 });
             });
         });

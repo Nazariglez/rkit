@@ -11,10 +11,12 @@ use crate::{
         time::Time,
         window::{Window as RWindow, WindowResizeEvent},
     },
+    egui::painter::get_mut_egui_painter,
     gfx::{self, Color},
 };
-use egui::Event;
+use draw::Sprite;
 pub use egui::*;
+use egui::{Event, load::SizedTexture};
 
 #[derive(Debug, Default)]
 pub struct EguiPlugin {}
@@ -40,23 +42,33 @@ pub struct EguiContext {
 }
 
 impl EguiContext {
+    #[inline]
+    pub fn add_sprite(&mut self, sprite: &Sprite) -> SizedTexture {
+        get_mut_egui_painter().add_sprite(sprite)
+    }
+
+    #[inline]
     pub fn is_using_pointer(&self) -> bool {
         self.ctx.is_pointer_over_area() || self.ctx.is_using_pointer()
     }
 
+    #[inline]
     pub fn wants_pointer(&self) -> bool {
         self.ctx.wants_pointer_input()
     }
 
+    #[inline]
     pub fn wants_keyboard(&self) -> bool {
         self.ctx.wants_keyboard_input()
     }
 
+    #[inline]
     pub fn clear(&mut self, color: Color) -> &mut Self {
         self.clear_color = Some(color);
         self
     }
 
+    #[inline]
     pub fn run<F>(&mut self, cb: F) -> EguiDraw
     where
         F: FnMut(&Context),
