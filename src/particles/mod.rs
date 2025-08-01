@@ -7,7 +7,7 @@ use std::{
 
 use corelib::{
     gfx::TextureFilter,
-    math::{Vec3, vec3},
+    math::{Rect, Vec3, vec3},
 };
 use draw::{Draw2D, Sprite, create_sprite, create_sprites_from_spritesheet};
 use rustc_hash::FxHashMap;
@@ -622,11 +622,14 @@ fn load_default_particles_system(mut config: ResMut<Particles>) {
         .build()
         .unwrap();
 
-    let sprites =
-        create_sprites_from_spritesheet(include_bytes!("./particles.json"), &spritesheet).unwrap();
+    let cols = 16;
+    let particles = 64;
+    let size = Vec2::splat(16.0);
 
-    sprites.into_iter().for_each(|(id, sprite)| {
-        config.add_sprite(&id, sprite);
+    (0..particles).for_each(|n| {
+        let pos = vec2((n % cols) as f32 * size.x, (n / cols) as f32 * size.y);
+        let sprite = spritesheet.clone_with_frame(Rect::new(pos, size));
+        config.add_sprite(&format!("particle_{n}"), sprite);
     });
 }
 
