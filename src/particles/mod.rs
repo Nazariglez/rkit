@@ -9,7 +9,7 @@ use corelib::{
     gfx::TextureFilter,
     math::{Rect, Vec3, vec3},
 };
-use draw::{Draw2D, Sprite, create_sprite, create_sprites_from_spritesheet};
+use draw::{Draw2D, Sprite, create_sprite};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumIter};
@@ -486,12 +486,15 @@ impl Default for EmitterConfig {
                     },
                     behavior: None,
                 },
-                rotation: Attr {
-                    initial: Value::Range {
-                        min: 0.0,
-                        max: 360f32.to_radians(),
+                rotation: RotationAttr {
+                    lock_to_angle: false,
+                    attr: Attr {
+                        initial: Value::Range {
+                            min: 0.0,
+                            max: 360f32.to_radians(),
+                        },
+                        behavior: None,
                     },
-                    behavior: None,
                 },
                 direction: Attr {
                     initial: Value::Range {
@@ -506,6 +509,12 @@ impl Default for EmitterConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotationAttr {
+    pub lock_to_angle: bool,
+    pub attr: Attr<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attributes {
     pub lifetime: Value<f32>,
     pub scale_x: Attr<f32>,
@@ -513,7 +522,7 @@ pub struct Attributes {
     pub rgb: ColorAttr,
     pub alpha: Attr<f32>,
     pub speed: Attr<f32>,
-    pub rotation: Attr<f32>,
+    pub rotation: RotationAttr,
     pub direction: Attr<f32>,
 }
 
@@ -569,7 +578,7 @@ impl Particle {
         let color = Color::rgba(rgb.x, rgb.y, rgb.z, attrs.alpha.init());
         let speed = attrs.speed.init();
         let angle = attrs.direction.init();
-        let rotation = attrs.rotation.init();
+        let rotation = attrs.rotation.attr.init();
 
         Self {
             sprite: sprite_idx,
@@ -745,23 +754,30 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                         .apply(p.initial_color.a, p.color.a, dt, progress)
                         .clamp(0.0, 1.0);
 
-                    // The rotation define the angle of the particle from its own center
-                    p.rotation = attrs
-                        .rotation
-                        .apply(p.initial_rotation, p.rotation, dt, progress);
-
                     // Now we set the movement of the particle based in different attributes
-                    p.speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
-                    p.direction = attrs
-                        .direction
-                        .apply(p.initial_angle, p.direction, dt, progress);
+                    let speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
+                    let direction =
+                        attrs
+                            .direction
+                            .apply(p.initial_angle, p.direction, dt, progress);
 
-                    // we need to calculate gravirt as well
-                    let vel = Vec2::from_angle(p.direction) * p.speed;
                     let gravity = Vec2::from_angle(cfg.gravity.angle) * cfg.gravity.amount;
+                    let vel = Vec2::from_angle(direction) * speed + gravity * dt;
+                    p.speed = vel.length();
+                    p.direction = vel.to_angle();
+
+                    // The rotation define the angle of the particle from its own center
+                    p.rotation = if attrs.rotation.lock_to_angle {
+                        p.direction + p.initial_rotation
+                    } else {
+                        attrs
+                            .rotation
+                            .attr
+                            .apply(p.initial_rotation, p.rotation, dt, progress)
+                    };
 
                     // and then apply all to get the current position
-                    p.pos += (vel + gravity) * dt;
+                    p.pos += vel * dt;
 
                     p.life = (p.life + dt).min(p.total_life);
                 });

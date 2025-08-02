@@ -862,22 +862,129 @@ fn draw_system(
                                 ui.label("Initial: ");
                                 value_box_angle(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.rotation.initial,
+                                    &mut cfg.emitters[i].attributes.rotation.attr.initial,
                                     "init_rotation",
                                 );
 
                                 ui.separator();
                                 ui.label("Behavior: ");
-                                behavior_box_angle(
-                                    ui,
-                                    &mut cfg.emitters[i].attributes.rotation.behavior,
-                                    150.0,
-                                    "behavior_rotation",
-                                );
+
+                                #[derive(Debug, Clone, PartialEq)]
+                                enum RotVal {
+                                    Lock,
+                                    Behave(Behavior<f32>),
+                                }
+
+                                let mut value = if cfg.emitters[i].attributes.rotation.lock_to_angle
+                                {
+                                    Some(RotVal::Lock)
+                                } else {
+                                    cfg.emitters[i]
+                                        .attributes
+                                        .rotation
+                                        .attr
+                                        .behavior
+                                        .clone()
+                                        .map(RotVal::Behave)
+                                };
+
+                                ui.horizontal(|ui| {
+                                    let selected = value
+                                        .as_ref()
+                                        .map_or("None", |v| {
+                                            let s: &str = match v {
+                                                RotVal::Lock => "LockToAngle",
+                                                RotVal::Behave(behavior) => behavior.as_ref(),
+                                            };
+                                            s
+                                        })
+                                        .to_string();
+
+                                    egui::ComboBox::from_id_salt("rot_behavior")
+                                        .selected_text(selected)
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut value, None, "None");
+
+                                            ui.selectable_value(
+                                                &mut value,
+                                                Some(RotVal::Lock),
+                                                "LockToAngle",
+                                            );
+
+                                            let val = RotVal::Behave(Behavior::To {
+                                                value: 180.0,
+                                                curve: Curve::Linear,
+                                            });
+                                            ui.selectable_value(
+                                                &mut value,
+                                                Some(val.clone()),
+                                                "To",
+                                            );
+
+                                            let val = RotVal::Behave(Behavior::Increment(1.0));
+                                            ui.selectable_value(
+                                                &mut value,
+                                                Some(val.clone()),
+                                                "Increment",
+                                            );
+                                        });
+
+                                    match value {
+                                        Some(RotVal::Lock) => {
+                                            cfg.emitters[i].attributes.rotation.lock_to_angle =
+                                                true;
+                                            cfg.emitters[i].attributes.rotation.attr.behavior =
+                                                None;
+                                        }
+                                        Some(RotVal::Behave(mut behavior)) => {
+                                            match &mut behavior {
+                                                Behavior::To { value, curve } => {
+                                                    ui.label("To: ");
+                                                    let mut rot = value.to_degrees();
+                                                    ui.add(egui::Slider::new(
+                                                        &mut rot,
+                                                        -360f32..=360.0,
+                                                    ));
+                                                    *value = rot.to_radians();
+
+                                                    ui.separator();
+                                                    egui::ComboBox::from_id_salt(format!(
+                                                        "{rot}_curve"
+                                                    ))
+                                                    .selected_text(curve.as_ref())
+                                                    .show_ui(ui, |ui| {
+                                                        Curve::iter().for_each(|c| {
+                                                            ui.selectable_value(
+                                                                curve,
+                                                                c.clone(),
+                                                                c.as_ref(),
+                                                            );
+                                                        });
+                                                    });
+                                                }
+                                                Behavior::Increment(inc) => {
+                                                    ui.label("Amount: ");
+                                                    ui.add(egui::DragValue::new(inc).speed(0.1));
+                                                }
+                                            }
+
+                                            cfg.emitters[i].attributes.rotation.lock_to_angle =
+                                                false;
+                                            cfg.emitters[i].attributes.rotation.attr.behavior =
+                                                Some(behavior);
+                                        }
+                                        None => {
+                                            cfg.emitters[i].attributes.rotation.lock_to_angle =
+                                                false;
+                                            cfg.emitters[i].attributes.rotation.attr.behavior =
+                                                None;
+                                        }
+                                    }
+                                });
                             });
 
                             ui.separator();
-                            egui::CollapsingHeader::new("Angle").show(ui, |ui| {
+                            egui::CollapsingHeader::new("Direction").show(ui, |ui| {
                                 ui.label("Initial: ");
                                 value_box_angle(
                                     ui,
@@ -890,7 +997,7 @@ fn draw_system(
                                 behavior_box_angle(
                                     ui,
                                     &mut cfg.emitters[i].attributes.direction.behavior,
-                                    150.0,
+                                    1.0,
                                     "behavior_direction",
                                 );
                             });
