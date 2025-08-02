@@ -132,8 +132,14 @@ impl Particles {
                     .collect();
 
                 ParticleEmitter {
+                    def: emitter_config.def.clone(),
                     sprites,
-                    ..Default::default()
+                    spawn_accumulator: 0.0,
+                    time: 0.0,
+                    delay: 0.0,
+                    ended: false,
+                    repeats: 0,
+                    particles: vec![],
                 }
             })
             .collect();
@@ -279,6 +285,15 @@ pub enum Value<T: Interpolable> {
     Range { min: T, max: T },
 }
 
+impl<T> Default for Value<T>
+where
+    T: Default + Interpolable,
+{
+    fn default() -> Self {
+        Self::Fixed(Default::default())
+    }
+}
+
 impl<T> Value<T>
 where
     T: Interpolable,
@@ -311,6 +326,15 @@ pub struct Attr<T: Interpolable> {
     pub behavior: Option<Behavior<T>>,
 }
 
+impl Default for Attr<f32> {
+    fn default() -> Self {
+        Self {
+            initial: Default::default(),
+            behavior: Default::default(),
+        }
+    }
+}
+
 impl<T> Attr<T>
 where
     T: Interpolable + Mul<f32, Output = T> + Add<Output = T>,
@@ -336,7 +360,7 @@ pub enum Behavior<T: Interpolable> {
     Increment(T),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ColorAttr {
     pub initial: Value<Vec3>,
     pub behavior: Option<ColorBehavior>,
@@ -402,13 +426,20 @@ impl Default for ParticleFxConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, AsRefStr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, AsRefStr, Serialize, Deserialize)]
 pub enum EmitterShape {
+    #[default]
     Point,
     Rect(Vec2),
     Circle(f32),
-    Ring { radius: f32, width: f32 },
-    Radial { count: usize, radius: f32 },
+    Ring {
+        radius: f32,
+        width: f32,
+    },
+    Radial {
+        count: usize,
+        radius: f32,
+    },
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, AsRefStr, EnumIter, Serialize, Deserialize)]
@@ -419,18 +450,16 @@ pub enum SortBy {
     TopDownSort,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct Gravity {
     pub angle: f32,
     pub amount: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EmitterConfig {
-    pub id: String,
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct EmitterDef {
     pub kind: EmitterShape,
     pub offset: Vec2,
-    pub index: f32,
     pub particles_per_wave: usize,
     pub wave_time: f32,
     pub delay: f32,
@@ -438,57 +467,70 @@ pub struct EmitterConfig {
     pub rotation: f32,
     pub gravity: Gravity,
     pub sort: SortBy,
+    pub attributes: Attributes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmitterConfig {
+    pub id: String,
+    pub def: EmitterDef,
     // pub blend_mode: todo!(),
     pub sprites: Vec<ParticleSprite>,
-    pub attributes: Attributes,
 }
 
 impl Default for EmitterConfig {
     fn default() -> Self {
         Self {
             id: "my_emitter".to_string(),
-            kind: EmitterShape::Point,
-            offset: Vec2::ZERO,
-            index: 0.0,
-            particles_per_wave: 2,
-            wave_time: 1.0,
-            delay: 0.0,
-            repeat: None,
-            rotation: 0.0,
-            gravity: Gravity {
-                angle: 0.0,
-                amount: 0.0,
-            },
-            sort: SortBy::default(),
-            sprites: vec![],
-            attributes: Attributes {
-                lifetime: Value::Range { min: 0.2, max: 2.0 },
-                scale_x: Attr {
-                    initial: Value::Fixed(1.0),
-                    behavior: None,
+            def: EmitterDef {
+                kind: EmitterShape::Point,
+                offset: Vec2::ZERO,
+                particles_per_wave: 2,
+                wave_time: 1.0,
+                delay: 0.0,
+                repeat: None,
+                rotation: 0.0,
+                gravity: Gravity {
+                    angle: 0.0,
+                    amount: 0.0,
                 },
-                scale_y: Attr {
-                    initial: Value::Fixed(1.0),
-                    behavior: None,
-                },
-                rgb: ColorAttr {
-                    initial: Value::Fixed(vec3(1.0, 1.0, 1.0)),
-                    behavior: None,
-                },
-                alpha: Attr {
-                    initial: Value::Fixed(1.0),
-                    behavior: None,
-                },
-                speed: Attr {
-                    initial: Value::Range {
-                        min: 60.0,
-                        max: 90.0,
+                sort: SortBy::default(),
+                attributes: Attributes {
+                    lifetime: Value::Range { min: 0.2, max: 2.0 },
+                    scale_x: Attr {
+                        initial: Value::Fixed(1.0),
+                        behavior: None,
                     },
-                    behavior: None,
-                },
-                rotation: RotationAttr {
-                    lock_to_angle: false,
-                    attr: Attr {
+                    scale_y: Attr {
+                        initial: Value::Fixed(1.0),
+                        behavior: None,
+                    },
+                    rgb: ColorAttr {
+                        initial: Value::Fixed(vec3(1.0, 1.0, 1.0)),
+                        behavior: None,
+                    },
+                    alpha: Attr {
+                        initial: Value::Fixed(1.0),
+                        behavior: None,
+                    },
+                    speed: Attr {
+                        initial: Value::Range {
+                            min: 60.0,
+                            max: 90.0,
+                        },
+                        behavior: None,
+                    },
+                    rotation: RotationAttr {
+                        lock_to_angle: false,
+                        attr: Attr {
+                            initial: Value::Range {
+                                min: 0.0,
+                                max: 360f32.to_radians(),
+                            },
+                            behavior: None,
+                        },
+                    },
+                    direction: Attr {
                         initial: Value::Range {
                             min: 0.0,
                             max: 360f32.to_radians(),
@@ -496,25 +538,19 @@ impl Default for EmitterConfig {
                         behavior: None,
                     },
                 },
-                direction: Attr {
-                    initial: Value::Range {
-                        min: 0.0,
-                        max: 360f32.to_radians(),
-                    },
-                    behavior: None,
-                },
             },
+            sprites: vec![],
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RotationAttr {
     pub lock_to_angle: bool,
     pub attr: Attr<f32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Attributes {
     pub lifetime: Value<f32>,
     pub scale_x: Attr<f32>,
@@ -528,6 +564,7 @@ pub struct Attributes {
 
 #[derive(Debug, Default, Clone)]
 pub struct ParticleEmitter {
+    pub def: EmitterDef,
     pub spawn_accumulator: f32,
     pub time: f32,
     pub delay: f32,
@@ -657,9 +694,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
             .iter()
             .zip(p.emitters.iter_mut())
             .for_each(|(cfg, emitter)| {
-                let attrs = &cfg.attributes;
-
-                let spawn_rate = cfg.particles_per_wave as f32 / cfg.wave_time;
+                let spawn_rate = emitter.def.particles_per_wave as f32 / emitter.def.wave_time;
                 emitter.spawn_accumulator += spawn_rate * dt;
                 let to_spawn = emitter.spawn_accumulator.floor() as usize;
                 emitter.spawn_accumulator -= to_spawn as f32;
@@ -671,8 +706,8 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                 if can_spawn {
                     for _ in 0..to_spawn {
                         let mut skip_spawn = false;
-                        let center = origin_position + cfg.offset;
-                        let local_pos = match cfg.kind {
+                        let center = origin_position + emitter.def.offset;
+                        let local_pos = match emitter.def.kind {
                             EmitterShape::Point => Vec2::ZERO,
                             EmitterShape::Rect(size) => {
                                 let half = size * 0.5;
@@ -698,14 +733,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                                 for i in 0..count {
                                     let angle = TAU * (i as f32) / (count as f32);
                                     let local_pos = Vec2::from_angle(angle) * radius;
-                                    spawn_particle(
-                                        center,
-                                        local_pos,
-                                        cfg.rotation,
-                                        attrs,
-                                        emitter,
-                                        time.elapsed_f32(),
-                                    );
+                                    spawn_particle(center, local_pos, emitter, time.elapsed_f32());
                                 }
 
                                 skip_spawn = true;
@@ -714,33 +742,32 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                         };
 
                         if !skip_spawn {
-                            spawn_particle(
-                                center,
-                                local_pos,
-                                cfg.rotation,
-                                attrs,
-                                emitter,
-                                time.elapsed_f32(),
-                            );
+                            spawn_particle(center, local_pos, emitter, time.elapsed_f32());
                         }
                     }
                 }
 
                 emitter.particles.iter_mut().for_each(|p| {
                     // The progress is defined based on the maximum lifetime of the particle
-                    let progress = p.life / attrs.lifetime.max();
+                    let progress = p.life / emitter.def.attributes.lifetime.max();
 
                     // The scale define the size, there is no size in pixel but we use
                     // a scale based on the particle shape or texture
-                    p.scale.x = attrs
-                        .scale_x
-                        .apply(p.initial_scale.x, p.scale.x, dt, progress);
-                    p.scale.y = attrs
-                        .scale_y
-                        .apply(p.initial_scale.y, p.scale.y, dt, progress);
+                    p.scale.x = emitter.def.attributes.scale_x.apply(
+                        p.initial_scale.x,
+                        p.scale.x,
+                        dt,
+                        progress,
+                    );
+                    p.scale.y = emitter.def.attributes.scale_y.apply(
+                        p.initial_scale.y,
+                        p.scale.y,
+                        dt,
+                        progress,
+                    );
 
                     // The color is defined by channels with alpha as a different property
-                    let rgb = attrs.rgb.apply(
+                    let rgb = emitter.def.attributes.rgb.apply(
                         p.initial_color.to_rgb().into(),
                         p.color.to_rgb().into(),
                         dt,
@@ -749,31 +776,43 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                     p.color.r = rgb.x.clamp(0.0, 1.0);
                     p.color.g = rgb.y.clamp(0.0, 1.0);
                     p.color.b = rgb.z.clamp(0.0, 1.0);
-                    p.color.a = attrs
+                    p.color.a = emitter
+                        .def
+                        .attributes
                         .alpha
                         .apply(p.initial_color.a, p.color.a, dt, progress)
                         .clamp(0.0, 1.0);
 
                     // Now we set the movement of the particle based in different attributes
-                    let speed = attrs.speed.apply(p.initial_speed, p.speed, dt, progress);
-                    let direction =
-                        attrs
-                            .direction
-                            .apply(p.initial_angle, p.direction, dt, progress);
+                    let speed =
+                        emitter
+                            .def
+                            .attributes
+                            .speed
+                            .apply(p.initial_speed, p.speed, dt, progress);
+                    let direction = emitter.def.attributes.direction.apply(
+                        p.initial_angle,
+                        p.direction,
+                        dt,
+                        progress,
+                    );
 
-                    let gravity = Vec2::from_angle(cfg.gravity.angle) * cfg.gravity.amount;
+                    let gravity =
+                        Vec2::from_angle(emitter.def.gravity.angle) * emitter.def.gravity.amount;
                     let vel = Vec2::from_angle(direction) * speed + gravity * dt;
                     p.speed = vel.length();
                     p.direction = vel.to_angle();
 
                     // The rotation define the angle of the particle from its own center
-                    p.rotation = if attrs.rotation.lock_to_angle {
+                    p.rotation = if emitter.def.attributes.rotation.lock_to_angle {
                         p.direction + p.initial_rotation
                     } else {
-                        attrs
-                            .rotation
-                            .attr
-                            .apply(p.initial_rotation, p.rotation, dt, progress)
+                        emitter.def.attributes.rotation.attr.apply(
+                            p.initial_rotation,
+                            p.rotation,
+                            dt,
+                            progress,
+                        )
                     };
 
                     // and then apply all to get the current position
@@ -782,7 +821,7 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                     p.life = (p.life + dt).min(p.total_life);
                 });
 
-                match cfg.sort {
+                match emitter.def.sort {
                     SortBy::SpawnOnBottom => {
                         if to_spawn > 0 {
                             emitter.particles.sort_unstable_by(|a, b| {
@@ -804,10 +843,10 @@ fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs
                     emitter.delay -= dt;
                 } else {
                     emitter.time += dt;
-                    if emitter.time >= cfg.wave_time {
-                        emitter.delay = cfg.delay;
+                    if emitter.time >= emitter.def.wave_time {
+                        emitter.delay = emitter.def.delay;
                         emitter.time = 0.0;
-                        if let Some(repeat) = cfg.repeat {
+                        if let Some(repeat) = emitter.def.repeat {
                             emitter.repeats += 1;
                             if emitter.repeats >= repeat {
                                 emitter.ended = true;
@@ -850,16 +889,9 @@ impl ParticlesDraw2DExt for Draw2D {
     }
 }
 
-fn spawn_particle(
-    center: Vec2,
-    local_pos: Vec2,
-    rotation: f32,
-    attrs: &Attributes,
-    emitter: &mut ParticleEmitter,
-    spawn_time: f32,
-) {
-    let local_rotated = if rotation != 0.0 {
-        let (s, c) = rotation.sin_cos();
+fn spawn_particle(center: Vec2, local_pos: Vec2, emitter: &mut ParticleEmitter, spawn_time: f32) {
+    let local_rotated = if emitter.def.rotation != 0.0 {
+        let (s, c) = emitter.def.rotation.sin_cos();
         vec2(
             local_pos.x * c - local_pos.y * s,
             local_pos.x * s + local_pos.y * c,
@@ -874,6 +906,11 @@ fn spawn_particle(
         Some(random::range(0..emitter.sprites.len()))
     };
 
-    let p = Particle::new(attrs, center + local_rotated, spawn_time, sprite_idx);
+    let p = Particle::new(
+        &emitter.def.attributes,
+        center + local_rotated,
+        spawn_time,
+        sprite_idx,
+    );
     emitter.particles.push(p);
 }

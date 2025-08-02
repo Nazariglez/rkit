@@ -109,6 +109,13 @@ fn update_system(
 ) {
     fx.spawning = true;
 
+    //set emitter definitions
+    if let Some(cfg) = particles.get_config("my_fx") {
+        cfg.emitters.iter().enumerate().for_each(|(n, cfg)| {
+            fx.emitters[n].def = cfg.def.clone();
+        });
+    }
+
     if ectx.is_using_pointer() {
         return;
     }
@@ -120,7 +127,7 @@ fn update_system(
         if state.offset_edit_mode {
             if let Some(i) = state.selected_emitter {
                 let cfg = particles.get_config_mut(&fx.id).unwrap();
-                cfg.emitters[i].offset = mouse_world - fx.pos;
+                cfg.emitters[i].def.offset = mouse_world - fx.pos;
                 return;
             }
         }
@@ -262,13 +269,13 @@ fn draw_system(
                 .origin(Vec2::splat(0.5))
                 .translate(fx.pos);
 
-            let emitter_pos = fx.pos + cfg.emitters[i].offset;
+            let emitter_pos = fx.pos + cfg.emitters[i].def.offset;
             draw.line(fx.pos, emitter_pos)
                 .color(Color::GREEN)
                 .alpha(0.9)
                 .width(2.0);
 
-            let emitter_rot = cfg.emitters[i].rotation;
+            let emitter_rot = cfg.emitters[i].def.rotation;
             draw.push_matrix(
                 Transform2D::builder()
                     .set_origin(Vec2::splat(0.5))
@@ -282,7 +289,7 @@ fn draw_system(
                 .origin(Vec2::splat(0.5))
                 .translate(emitter_pos);
 
-            match cfg.emitters[i].kind {
+            match cfg.emitters[i].def.kind {
                 EmitterShape::Point => {}
                 EmitterShape::Rect(size) => {
                     draw.rect(Vec2::ZERO, size)
@@ -404,7 +411,30 @@ fn draw_system(
 
                 if ui.small_button("Add Emitter").clicked() {
                     cfg.emitters.push(EmitterConfig::default());
-                    fx.emitters.push(ParticleEmitter::default());
+                    fx.emitters.push(ParticleEmitter {
+                        def: EmitterDef {
+                            kind: EmitterShape::Point,
+                            offset: Vec2::ZERO,
+                            particles_per_wave: 2,
+                            wave_time: 1.0,
+                            delay: 0.0,
+                            repeat: None,
+                            rotation: 0.0,
+                            gravity: Gravity {
+                                angle: 0.0,
+                                amount: 0.0,
+                            },
+                            sort: SortBy::SpawnOnTop,
+                            attributes: Attributes::default(),
+                        },
+                        spawn_accumulator: 0.0,
+                        time: 0.0,
+                        delay: 0.0,
+                        ended: false,
+                        repeats: 0,
+                        sprites: vec![],
+                        particles: vec![],
+                    });
 
                     // select new emitter
                     let new_idx = cfg.emitters.len() - 1;
@@ -478,12 +508,14 @@ fn draw_system(
                             ui.horizontal(|ui| {
                                 ui.label("Offset X: ");
                                 ui.add(
-                                    egui::DragValue::new(&mut cfg.emitters[i].offset.x).speed(1.0),
+                                    egui::DragValue::new(&mut cfg.emitters[i].def.offset.x)
+                                        .speed(1.0),
                                 );
                                 ui.separator();
                                 ui.label("Offset Y: ");
                                 ui.add(
-                                    egui::DragValue::new(&mut cfg.emitters[i].offset.y).speed(1.0),
+                                    egui::DragValue::new(&mut cfg.emitters[i].def.offset.y)
+                                        .speed(1.0),
                                 );
                                 ui.separator();
                                 ui.toggle_value(&mut state.offset_edit_mode, "Visual Mode");
@@ -491,14 +523,14 @@ fn draw_system(
 
                             ui.horizontal(|ui| {
                                 ui.label("Rotation: ");
-                                let mut rot = cfg.emitters[i].rotation.to_degrees();
+                                let mut rot = cfg.emitters[i].def.rotation.to_degrees();
                                 ui.add(egui::Slider::new(&mut rot, -360.0f32..=360.0));
-                                cfg.emitters[i].rotation = rot.to_radians();
+                                cfg.emitters[i].def.rotation = rot.to_radians();
                             });
 
                             ui.horizontal(|ui| {
                                 ui.label("Sort: ");
-                                let value = &mut cfg.emitters[i].sort;
+                                let value = &mut cfg.emitters[i].def.sort;
                                 egui::ComboBox::from_id_salt("spawn_sort")
                                     .selected_text(value.as_ref())
                                     .show_ui(ui, |ui| {
@@ -513,25 +545,25 @@ fn draw_system(
                             ui.horizontal(|ui| {
                                 ui.label("Shape: ");
                                 egui::ComboBox::from_label("")
-                                    .selected_text(cfg.emitters[i].kind.as_ref())
+                                    .selected_text(cfg.emitters[i].def.kind.as_ref())
                                     .show_ui(ui, |ui| {
                                         let point = EmitterShape::Point;
                                         ui.selectable_value(
-                                            &mut cfg.emitters[i].kind,
+                                            &mut cfg.emitters[i].def.kind,
                                             point,
                                             point.as_ref(),
                                         );
 
                                         let square = EmitterShape::Rect(Vec2::splat(150.0));
                                         ui.selectable_value(
-                                            &mut cfg.emitters[i].kind,
+                                            &mut cfg.emitters[i].def.kind,
                                             square,
                                             square.as_ref(),
                                         );
 
                                         let circle = EmitterShape::Circle(100.0);
                                         ui.selectable_value(
-                                            &mut cfg.emitters[i].kind,
+                                            &mut cfg.emitters[i].def.kind,
                                             circle,
                                             circle.as_ref(),
                                         );
@@ -541,7 +573,7 @@ fn draw_system(
                                             width: 20.0,
                                         };
                                         ui.selectable_value(
-                                            &mut cfg.emitters[i].kind,
+                                            &mut cfg.emitters[i].def.kind,
                                             ring,
                                             ring.as_ref(),
                                         );
@@ -551,14 +583,14 @@ fn draw_system(
                                             radius: 100.0,
                                         };
                                         ui.selectable_value(
-                                            &mut cfg.emitters[i].kind,
+                                            &mut cfg.emitters[i].def.kind,
                                             burst,
                                             burst.as_ref(),
                                         );
                                     });
                             });
 
-                            match &mut cfg.emitters[i].kind {
+                            match &mut cfg.emitters[i].def.kind {
                                 EmitterShape::Rect(size) => {
                                     ui.horizontal(|ui| {
                                         ui.label("Width: ");
@@ -638,15 +670,15 @@ fn draw_system(
                                 //
                                 ui.label("Gravity: ");
                                 ui.add(
-                                    egui::DragValue::new(&mut cfg.emitters[i].gravity.amount)
+                                    egui::DragValue::new(&mut cfg.emitters[i].def.gravity.amount)
                                         .speed(1.0),
                                 );
 
                                 ui.separator();
                                 ui.label("Angle: ");
-                                let mut rot = cfg.emitters[i].gravity.angle.to_degrees();
+                                let mut rot = cfg.emitters[i].def.gravity.angle.to_degrees();
                                 ui.add(egui::Slider::new(&mut rot, -360.0..=360.0));
-                                cfg.emitters[i].gravity.angle = rot.to_radians();
+                                cfg.emitters[i].def.gravity.angle = rot.to_radians();
                             });
 
                             ui.separator();
@@ -654,7 +686,7 @@ fn draw_system(
                             ui.horizontal(|ui| {
                                 ui.label("Particles per wave: ");
                                 ui.add(egui::Slider::new(
-                                    &mut cfg.emitters[i].particles_per_wave,
+                                    &mut cfg.emitters[i].def.particles_per_wave,
                                     1..=30_000,
                                 ));
                             });
@@ -662,24 +694,27 @@ fn draw_system(
                             ui.horizontal(|ui| {
                                 ui.label("Wave time: ");
                                 ui.add(egui::Slider::new(
-                                    &mut cfg.emitters[i].wave_time,
+                                    &mut cfg.emitters[i].def.wave_time,
                                     0.017..=60.0,
                                 ));
                             });
 
                             ui.horizontal(|ui| {
                                 ui.label("Delay: ");
-                                ui.add(egui::Slider::new(&mut cfg.emitters[i].delay, 0.0..=60.0));
+                                ui.add(egui::Slider::new(
+                                    &mut cfg.emitters[i].def.delay,
+                                    0.0..=60.0,
+                                ));
                             });
 
                             ui.horizontal(|ui| {
                                 ui.label("Repeats: ");
-                                let mut is_some = cfg.emitters[i].repeat.is_some();
+                                let mut is_some = cfg.emitters[i].def.repeat.is_some();
                                 let txt = if is_some { "Yes" } else { "No" };
                                 ui.toggle_value(&mut is_some, txt);
 
                                 if is_some {
-                                    let mut n = cfg.emitters[i].repeat.unwrap_or(1);
+                                    let mut n = cfg.emitters[i].def.repeat.unwrap_or(1);
                                     ui.add(
                                         egui::DragValue::new(&mut n)
                                             .speed(0.1)
@@ -687,9 +722,9 @@ fn draw_system(
                                             .clamp_existing_to_range(true),
                                     );
 
-                                    cfg.emitters[i].repeat = Some(n);
+                                    cfg.emitters[i].def.repeat = Some(n);
                                 } else {
-                                    cfg.emitters[i].repeat = None;
+                                    cfg.emitters[i].def.repeat = None;
                                 }
                             });
 
@@ -800,7 +835,7 @@ fn draw_system(
                                 .show(ui, |ui| {
                                     value_box(
                                         ui,
-                                        &mut cfg.emitters[i].attributes.lifetime,
+                                        &mut cfg.emitters[i].def.attributes.lifetime,
                                         "lifetime",
                                     );
                                 });
@@ -811,28 +846,28 @@ fn draw_system(
                                 ui.label("Initial X: ");
                                 value_box(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.scale_x.initial,
+                                    &mut cfg.emitters[i].def.attributes.scale_x.initial,
                                     "init_scale_x",
                                 );
 
                                 ui.label("Initial Y: ");
                                 value_box(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.scale_y.initial,
+                                    &mut cfg.emitters[i].def.attributes.scale_y.initial,
                                     "init_scale_y",
                                 );
                                 ui.separator();
                                 ui.label("Behavior X: ");
                                 behavior_box(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.scale_x.behavior,
+                                    &mut cfg.emitters[i].def.attributes.scale_x.behavior,
                                     2.0,
                                     "behavior_scale_x",
                                 );
                                 ui.label("Behavior Y: ");
                                 behavior_box(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.scale_y.behavior,
+                                    &mut cfg.emitters[i].def.attributes.scale_y.behavior,
                                     2.0,
                                     "behavior_scale_y",
                                 );
@@ -843,7 +878,7 @@ fn draw_system(
                                 ui.label("Initial: ");
                                 value_box(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.speed.initial,
+                                    &mut cfg.emitters[i].def.attributes.speed.initial,
                                     "init_speed",
                                 );
 
@@ -851,7 +886,7 @@ fn draw_system(
                                 ui.label("Behavior: ");
                                 behavior_box(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.speed.behavior,
+                                    &mut cfg.emitters[i].def.attributes.speed.behavior,
                                     150.0,
                                     "behavior_speed",
                                 );
@@ -862,7 +897,7 @@ fn draw_system(
                                 ui.label("Initial: ");
                                 value_box_angle(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.rotation.attr.initial,
+                                    &mut cfg.emitters[i].def.attributes.rotation.attr.initial,
                                     "init_rotation",
                                 );
 
@@ -875,18 +910,19 @@ fn draw_system(
                                     Behave(Behavior<f32>),
                                 }
 
-                                let mut value = if cfg.emitters[i].attributes.rotation.lock_to_angle
-                                {
-                                    Some(RotVal::Lock)
-                                } else {
-                                    cfg.emitters[i]
-                                        .attributes
-                                        .rotation
-                                        .attr
-                                        .behavior
-                                        .clone()
-                                        .map(RotVal::Behave)
-                                };
+                                let mut value =
+                                    if cfg.emitters[i].def.attributes.rotation.lock_to_angle {
+                                        Some(RotVal::Lock)
+                                    } else {
+                                        cfg.emitters[i]
+                                            .def
+                                            .attributes
+                                            .rotation
+                                            .attr
+                                            .behavior
+                                            .clone()
+                                            .map(RotVal::Behave)
+                                    };
 
                                 ui.horizontal(|ui| {
                                     let selected = value
@@ -931,9 +967,9 @@ fn draw_system(
 
                                     match value {
                                         Some(RotVal::Lock) => {
-                                            cfg.emitters[i].attributes.rotation.lock_to_angle =
+                                            cfg.emitters[i].def.attributes.rotation.lock_to_angle =
                                                 true;
-                                            cfg.emitters[i].attributes.rotation.attr.behavior =
+                                            cfg.emitters[i].def.attributes.rotation.attr.behavior =
                                                 None;
                                         }
                                         Some(RotVal::Behave(mut behavior)) => {
@@ -968,15 +1004,15 @@ fn draw_system(
                                                 }
                                             }
 
-                                            cfg.emitters[i].attributes.rotation.lock_to_angle =
+                                            cfg.emitters[i].def.attributes.rotation.lock_to_angle =
                                                 false;
-                                            cfg.emitters[i].attributes.rotation.attr.behavior =
+                                            cfg.emitters[i].def.attributes.rotation.attr.behavior =
                                                 Some(behavior);
                                         }
                                         None => {
-                                            cfg.emitters[i].attributes.rotation.lock_to_angle =
+                                            cfg.emitters[i].def.attributes.rotation.lock_to_angle =
                                                 false;
-                                            cfg.emitters[i].attributes.rotation.attr.behavior =
+                                            cfg.emitters[i].def.attributes.rotation.attr.behavior =
                                                 None;
                                         }
                                     }
@@ -988,7 +1024,7 @@ fn draw_system(
                                 ui.label("Initial: ");
                                 value_box_angle(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.direction.initial,
+                                    &mut cfg.emitters[i].def.attributes.direction.initial,
                                     "init_direction",
                                 );
 
@@ -996,7 +1032,7 @@ fn draw_system(
                                 ui.label("Behavior: ");
                                 behavior_box_angle(
                                     ui,
-                                    &mut cfg.emitters[i].attributes.direction.behavior,
+                                    &mut cfg.emitters[i].def.attributes.direction.behavior,
                                     1.0,
                                     "behavior_direction",
                                 );
@@ -1006,7 +1042,8 @@ fn draw_system(
                             egui::CollapsingHeader::new("Color").show(ui, |ui| {
                                 ui.label("Initial: ");
                                 ui.horizontal(|ui| {
-                                    let init_value = &mut cfg.emitters[i].attributes.rgb.initial;
+                                    let init_value =
+                                        &mut cfg.emitters[i].def.attributes.rgb.initial;
                                     egui::ComboBox::from_id_salt("init_color")
                                         .selected_text(init_value.as_ref())
                                         .show_ui(ui, |ui| {
@@ -1045,7 +1082,7 @@ fn draw_system(
 
                                 ui.label("Behavior: ");
                                 ui.horizontal(|ui| {
-                                    let value = &mut cfg.emitters[i].attributes.rgb.behavior;
+                                    let value = &mut cfg.emitters[i].def.attributes.rgb.behavior;
                                     let selected = value
                                         .as_ref()
                                         .map_or("None", |v| {
@@ -1106,7 +1143,7 @@ fn draw_system(
                                 });
 
                                 ui.horizontal(|ui| {
-                                    match &mut cfg.emitters[i].attributes.rgb.behavior {
+                                    match &mut cfg.emitters[i].def.attributes.rgb.behavior {
                                         Some(ColorBehavior::Simple(Behavior::To {
                                             value,
                                             curve,
@@ -1139,7 +1176,7 @@ fn draw_system(
                                 });
 
                                 if let Some(ColorBehavior::ByChannel { red, green, blue }) =
-                                    &mut cfg.emitters[i].attributes.rgb.behavior
+                                    &mut cfg.emitters[i].def.attributes.rgb.behavior
                                 {
                                     [("Red", red), ("Green", green), ("Blue", blue)]
                                         .into_iter()
@@ -1218,7 +1255,7 @@ fn draw_system(
 
                             ui.separator();
                             egui::CollapsingHeader::new("Alpha").show(ui, |ui| {
-                                let value = &mut cfg.emitters[i].attributes.alpha.initial;
+                                let value = &mut cfg.emitters[i].def.attributes.alpha.initial;
                                 ui.label("Initial: ");
                                 ui.horizontal(|ui| {
                                     egui::ComboBox::from_id_salt("init_alpha")
@@ -1250,7 +1287,7 @@ fn draw_system(
 
                                 ui.separator();
                                 ui.label("Behavior: ");
-                                let value = &mut cfg.emitters[i].attributes.alpha.behavior;
+                                let value = &mut cfg.emitters[i].def.attributes.alpha.behavior;
                                 ui.horizontal(|ui| {
                                     let selected = value
                                         .as_ref()
@@ -1376,15 +1413,17 @@ fn value_box_angle(ui: &mut egui::Ui, value: &mut Value<f32>, id: &str) {
         egui::ComboBox::from_id_salt(id)
             .selected_text(value.as_ref())
             .show_ui(ui, |ui| {
-                let val = Value::Fixed(2.0);
+                let val = Value::Fixed(0.0);
                 ui.selectable_value(value, val, val.as_ref());
 
-                let val = Value::Range { min: 0.5, max: 3.0 };
+                let val = Value::Range { min: 0.0, max: 1.0 };
                 ui.selectable_value(value, val, val.as_ref());
             });
 
         if let Value::Fixed(val) = value {
-            ui.add(egui::Slider::new(val, 0.0..=1000.0));
+            let mut vv = val.to_degrees();
+            ui.add(egui::Slider::new(&mut vv, 0.0..=1000.0));
+            *val = vv.to_radians();
         }
     });
 
