@@ -149,6 +149,7 @@ impl Particles {
             pos,
             emitters,
             spawning: false,
+            disabled: false,
         })
     }
 }
@@ -643,9 +644,18 @@ pub struct ParticleFx {
     pub pos: Vec2,
     pub emitters: Vec<ParticleEmitter>,
     pub spawning: bool,
+    pub disabled: bool,
 }
 
 impl ParticleFx {
+    pub fn disable(&mut self) {
+        self.disabled = true;
+    }
+
+    pub fn enable(&mut self) {
+        self.disabled = false;
+    }
+
     pub fn reset(&mut self) {
         self.emitters.iter_mut().for_each(|emitter| {
             emitter.reset();
@@ -656,6 +666,49 @@ impl ParticleFx {
         self.emitters.iter_mut().for_each(|emitter| {
             emitter.clear();
         });
+    }
+
+    pub fn bounds(&self) -> Rect {
+        if self.emitters.is_empty() {
+            return Rect::new(self.pos, Vec2::ONE);
+        }
+
+        let mut min = Vec2::splat(f32::INFINITY);
+        let mut max = Vec2::splat(f32::NEG_INFINITY);
+
+        for emitter in &self.emitters {
+            let offset = emitter.def.offset;
+            let (shape_min, shape_max) = match emitter.def.kind {
+                EmitterShape::Point => (Vec2::ZERO, Vec2::ZERO),
+                EmitterShape::Rect(size) => {
+                    let half = size * 0.5;
+                    (-half, half)
+                }
+                EmitterShape::Circle(r) => {
+                    let v = Vec2::splat(r);
+                    (-v, v)
+                }
+                EmitterShape::Ring { radius, width } => {
+                    let outer = radius + width * 0.5;
+                    let v = Vec2::splat(outer);
+                    (-v, v)
+                }
+                EmitterShape::Radial { radius, .. } => {
+                    let v = Vec2::splat(radius);
+                    (-v, v)
+                }
+            };
+
+            let local_min = self.pos + offset + shape_min;
+            let local_max = self.pos + offset + shape_max;
+
+            min.x = min.x.min(local_min.x);
+            min.y = min.y.min(local_min.y);
+            max.x = max.x.max(local_max.x);
+            max.y = max.y.max(local_max.y);
+        }
+
+        Rect::new(min, max - min)
     }
 }
 
@@ -681,181 +734,189 @@ fn load_default_particles_system(mut config: ResMut<Particles>) {
 
 fn update_system(mut particles: Query<&mut ParticleFx>, time: Res<Time>, configs: Res<Particles>) {
     let dt = time.delta_f32();
-    particles.iter_mut().for_each(|mut p| {
-        let Some(config) = configs.config.get(&p.id) else {
-            log::warn!("Invalid particle id: {}", &p.id);
-            return;
-        };
+    particles
+        .iter_mut()
+        .filter(|p| !p.disabled)
+        .for_each(|mut p| {
+            let Some(config) = configs.config.get(&p.id) else {
+                log::warn!("Invalid particle id: {}", &p.id);
+                return;
+            };
 
-        let origin_position = p.pos;
-        let spawning = p.spawning;
-        config
-            .emitters
-            .iter()
-            .zip(p.emitters.iter_mut())
-            .for_each(|(cfg, emitter)| {
-                let spawn_rate = emitter.def.particles_per_wave as f32 / emitter.def.wave_time;
-                emitter.spawn_accumulator += spawn_rate * dt;
-                let to_spawn = emitter.spawn_accumulator.floor() as usize;
-                emitter.spawn_accumulator -= to_spawn as f32;
-                emitter.particles.retain(|p| p.life < p.total_life);
+            let origin_position = p.pos;
+            let spawning = p.spawning;
+            config
+                .emitters
+                .iter()
+                .zip(p.emitters.iter_mut())
+                .for_each(|(cfg, emitter)| {
+                    let spawn_rate = emitter.def.particles_per_wave as f32 / emitter.def.wave_time;
+                    emitter.spawn_accumulator += spawn_rate * dt;
+                    let to_spawn = emitter.spawn_accumulator.floor() as usize;
+                    emitter.spawn_accumulator -= to_spawn as f32;
+                    emitter.particles.retain(|p| p.life < p.total_life);
 
-                let running = !emitter.ended;
-                let in_delay = emitter.delay > 0.0;
-                let can_spawn = spawning && running && !in_delay;
-                if can_spawn {
-                    for _ in 0..to_spawn {
-                        let mut skip_spawn = false;
-                        let center = origin_position + emitter.def.offset;
-                        let local_pos = match emitter.def.kind {
-                            EmitterShape::Point => Vec2::ZERO,
-                            EmitterShape::Rect(size) => {
-                                let half = size * 0.5;
-                                let min = -half;
-                                let max = half;
-                                vec2(random::range(min.x..max.x), random::range(min.y..max.y))
-                            }
-                            EmitterShape::Circle(radius) => {
-                                let theta = random::range(0.0..TAU);
-                                let r = radius * random::range(0.0f32..1.0).sqrt();
-                                vec2(r * theta.cos(), r * theta.sin())
-                            }
-                            EmitterShape::Ring { radius, width } => {
-                                let half = width * 0.5;
-                                let r_min = (radius - half).max(0.0);
-                                let r_max = radius + half;
-                                let u = random::range(r_min * r_min..r_max * r_max);
-                                let r = u.sqrt();
-                                let theta = random::range(0.0..TAU);
-                                vec2(r * theta.cos(), r * theta.sin())
-                            }
-                            EmitterShape::Radial { count, radius } => {
-                                for i in 0..count {
-                                    let angle = TAU * (i as f32) / (count as f32);
-                                    let local_pos = Vec2::from_angle(angle) * radius;
-                                    spawn_particle(center, local_pos, emitter, time.elapsed_f32());
+                    let running = !emitter.ended;
+                    let in_delay = emitter.delay > 0.0;
+                    let can_spawn = spawning && running && !in_delay;
+                    if can_spawn {
+                        for _ in 0..to_spawn {
+                            let mut skip_spawn = false;
+                            let center = origin_position + emitter.def.offset;
+                            let local_pos = match emitter.def.kind {
+                                EmitterShape::Point => Vec2::ZERO,
+                                EmitterShape::Rect(size) => {
+                                    let half = size * 0.5;
+                                    let min = -half;
+                                    let max = half;
+                                    vec2(random::range(min.x..max.x), random::range(min.y..max.y))
                                 }
+                                EmitterShape::Circle(radius) => {
+                                    let theta = random::range(0.0..TAU);
+                                    let r = radius * random::range(0.0f32..1.0).sqrt();
+                                    vec2(r * theta.cos(), r * theta.sin())
+                                }
+                                EmitterShape::Ring { radius, width } => {
+                                    let half = width * 0.5;
+                                    let r_min = (radius - half).max(0.0);
+                                    let r_max = radius + half;
+                                    let u = random::range(r_min * r_min..r_max * r_max);
+                                    let r = u.sqrt();
+                                    let theta = random::range(0.0..TAU);
+                                    vec2(r * theta.cos(), r * theta.sin())
+                                }
+                                EmitterShape::Radial { count, radius } => {
+                                    for i in 0..count {
+                                        let angle = TAU * (i as f32) / (count as f32);
+                                        let local_pos = Vec2::from_angle(angle) * radius;
+                                        spawn_particle(
+                                            center,
+                                            local_pos,
+                                            emitter,
+                                            time.elapsed_f32(),
+                                        );
+                                    }
 
-                                skip_spawn = true;
-                                Vec2::ZERO
+                                    skip_spawn = true;
+                                    Vec2::ZERO
+                                }
+                            };
+
+                            if !skip_spawn {
+                                spawn_particle(center, local_pos, emitter, time.elapsed_f32());
                             }
-                        };
-
-                        if !skip_spawn {
-                            spawn_particle(center, local_pos, emitter, time.elapsed_f32());
                         }
                     }
-                }
 
-                emitter.particles.iter_mut().for_each(|p| {
-                    // The progress is defined based on the maximum lifetime of the particle
-                    let progress = p.life / emitter.def.attributes.lifetime.max();
+                    emitter.particles.iter_mut().for_each(|p| {
+                        // The progress is defined based on the maximum lifetime of the particle
+                        let progress = p.life / emitter.def.attributes.lifetime.max();
 
-                    // The scale define the size, there is no size in pixel but we use
-                    // a scale based on the particle shape or texture
-                    p.scale.x = emitter.def.attributes.scale_x.apply(
-                        p.initial_scale.x,
-                        p.scale.x,
-                        dt,
-                        progress,
-                    );
-                    p.scale.y = emitter.def.attributes.scale_y.apply(
-                        p.initial_scale.y,
-                        p.scale.y,
-                        dt,
-                        progress,
-                    );
-
-                    // The color is defined by channels with alpha as a different property
-                    let rgb = emitter.def.attributes.rgb.apply(
-                        p.initial_color.to_rgb().into(),
-                        p.color.to_rgb().into(),
-                        dt,
-                        progress,
-                    );
-                    p.color.r = rgb.x.clamp(0.0, 1.0);
-                    p.color.g = rgb.y.clamp(0.0, 1.0);
-                    p.color.b = rgb.z.clamp(0.0, 1.0);
-                    p.color.a = emitter
-                        .def
-                        .attributes
-                        .alpha
-                        .apply(p.initial_color.a, p.color.a, dt, progress)
-                        .clamp(0.0, 1.0);
-
-                    // Now we set the movement of the particle based in different attributes
-                    let speed =
-                        emitter
-                            .def
-                            .attributes
-                            .speed
-                            .apply(p.initial_speed, p.speed, dt, progress);
-                    let direction = emitter.def.attributes.direction.apply(
-                        p.initial_angle,
-                        p.direction,
-                        dt,
-                        progress,
-                    );
-
-                    let gravity =
-                        Vec2::from_angle(emitter.def.gravity.angle) * emitter.def.gravity.amount;
-                    let vel = Vec2::from_angle(direction) * speed + gravity * dt;
-                    p.speed = vel.length();
-                    p.direction = vel.to_angle();
-
-                    // The rotation define the angle of the particle from its own center
-                    p.rotation = if emitter.def.attributes.rotation.lock_to_angle {
-                        p.direction + p.initial_rotation
-                    } else {
-                        emitter.def.attributes.rotation.attr.apply(
-                            p.initial_rotation,
-                            p.rotation,
+                        // The scale define the size, there is no size in pixel but we use
+                        // a scale based on the particle shape or texture
+                        p.scale.x = emitter.def.attributes.scale_x.apply(
+                            p.initial_scale.x,
+                            p.scale.x,
                             dt,
                             progress,
-                        )
-                    };
+                        );
+                        p.scale.y = emitter.def.attributes.scale_y.apply(
+                            p.initial_scale.y,
+                            p.scale.y,
+                            dt,
+                            progress,
+                        );
 
-                    // and then apply all to get the current position
-                    p.pos += vel * dt;
+                        // The color is defined by channels with alpha as a different property
+                        let rgb = emitter.def.attributes.rgb.apply(
+                            p.initial_color.to_rgb().into(),
+                            p.color.to_rgb().into(),
+                            dt,
+                            progress,
+                        );
+                        p.color.r = rgb.x.clamp(0.0, 1.0);
+                        p.color.g = rgb.y.clamp(0.0, 1.0);
+                        p.color.b = rgb.z.clamp(0.0, 1.0);
+                        p.color.a = emitter
+                            .def
+                            .attributes
+                            .alpha
+                            .apply(p.initial_color.a, p.color.a, dt, progress)
+                            .clamp(0.0, 1.0);
 
-                    p.life = (p.life + dt).min(p.total_life);
-                });
+                        // Now we set the movement of the particle based in different attributes
+                        let speed = emitter.def.attributes.speed.apply(
+                            p.initial_speed,
+                            p.speed,
+                            dt,
+                            progress,
+                        );
+                        let direction = emitter.def.attributes.direction.apply(
+                            p.initial_angle,
+                            p.direction,
+                            dt,
+                            progress,
+                        );
 
-                match emitter.def.sort {
-                    SortBy::SpawnOnBottom => {
-                        if to_spawn > 0 {
+                        let gravity = Vec2::from_angle(emitter.def.gravity.angle)
+                            * emitter.def.gravity.amount;
+                        let vel = Vec2::from_angle(direction) * speed + gravity * dt;
+                        p.speed = vel.length();
+                        p.direction = vel.to_angle();
+
+                        // The rotation define the angle of the particle from its own center
+                        p.rotation = if emitter.def.attributes.rotation.lock_to_angle {
+                            p.direction + p.initial_rotation
+                        } else {
+                            emitter.def.attributes.rotation.attr.apply(
+                                p.initial_rotation,
+                                p.rotation,
+                                dt,
+                                progress,
+                            )
+                        };
+
+                        // and then apply all to get the current position
+                        p.pos += vel * dt;
+
+                        p.life = (p.life + dt).min(p.total_life);
+                    });
+
+                    match emitter.def.sort {
+                        SortBy::SpawnOnBottom => {
+                            if to_spawn > 0 {
+                                emitter.particles.sort_unstable_by(|a, b| {
+                                    b.spawn_time
+                                        .partial_cmp(&a.spawn_time)
+                                        .unwrap_or(Ordering::Equal)
+                                });
+                            }
+                        }
+                        SortBy::TopDownSort => {
                             emitter.particles.sort_unstable_by(|a, b| {
-                                b.spawn_time
-                                    .partial_cmp(&a.spawn_time)
-                                    .unwrap_or(Ordering::Equal)
+                                a.pos.y.partial_cmp(&b.pos.y).unwrap_or(Ordering::Equal)
                             });
                         }
+                        _ => {}
                     }
-                    SortBy::TopDownSort => {
-                        emitter.particles.sort_unstable_by(|a, b| {
-                            a.pos.y.partial_cmp(&b.pos.y).unwrap_or(Ordering::Equal)
-                        });
-                    }
-                    _ => {}
-                }
 
-                if emitter.delay > 0.0 {
-                    emitter.delay -= dt;
-                } else {
-                    emitter.time += dt;
-                    if emitter.time >= emitter.def.wave_time {
-                        emitter.delay = emitter.def.delay;
-                        emitter.time = 0.0;
-                        if let Some(repeat) = emitter.def.repeat {
-                            emitter.repeats += 1;
-                            if emitter.repeats >= repeat {
-                                emitter.ended = true;
+                    if emitter.delay > 0.0 {
+                        emitter.delay -= dt;
+                    } else {
+                        emitter.time += dt;
+                        if emitter.time >= emitter.def.wave_time {
+                            emitter.delay = emitter.def.delay;
+                            emitter.time = 0.0;
+                            if let Some(repeat) = emitter.def.repeat {
+                                emitter.repeats += 1;
+                                if emitter.repeats >= repeat {
+                                    emitter.ended = true;
+                                }
                             }
                         }
                     }
-                }
-            });
-    });
+                });
+        });
 }
 
 pub trait ParticlesDraw2DExt {
