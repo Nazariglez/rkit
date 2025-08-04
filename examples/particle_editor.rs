@@ -70,7 +70,7 @@ fn main() -> Result<(), String> {
         )
         .add_resource(State::default())
         .add_systems(OnSetup, setup_system.after(ParticlesSysSet))
-        .add_systems(OnUpdate, update_system.before(ParticlesSysSet))
+        .add_systems(OnUpdate, (update_system.before(ParticlesSysSet),))
         .add_systems(OnRender, draw_system)
         .run()
 }
@@ -107,8 +107,6 @@ fn update_system(
     mut particles: ResMut<Particles>,
     mut file_cmd: NonSendMut<FileCmdRes>,
 ) {
-    fx.spawning = true;
-
     //set emitter definitions
     if let Some(cfg) = particles.get_config("my_fx") {
         cfg.emitters.iter().enumerate().for_each(|(n, cfg)| {
@@ -391,20 +389,15 @@ fn draw_system(
             .min_width(300.0)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.heading("Textures");
                 ui.horizontal(|ui| {
-                    if ui.small_button("➕ Load…").clicked() {
-                        file_cmd.0 = Some(FileCmd::LoadTexture(Box::pin(async {
-                            AsyncFileDialog::new()
-                                .add_filter("image", &["png", "jpg", "jpeg"])
-                                .pick_file()
-                                .await
-                        })));
+                    let btn_state = if fx.spawning { "Stop" } else { "Start" };
+                    if ui.button(btn_state).clicked() {
+                        fx.spawning = !fx.spawning;
+                        fx.reset();
                     }
+
+                    ui.checkbox(&mut fx.is_local, "Is Local");
                 });
-                // for id in state.sprites.keys() {
-                //     ui.label(format!("• {id}"));
-                // }
                 ui.separator();
 
                 ui.heading("Emitters");
@@ -731,6 +724,19 @@ fn draw_system(
                             ui.separator();
 
                             ui.heading("Textures:");
+
+                            ui.horizontal(|ui| {
+                                if ui.small_button("➕ Load…").clicked() {
+                                    file_cmd.0 = Some(FileCmd::LoadTexture(Box::pin(async {
+                                        AsyncFileDialog::new()
+                                            .add_filter("image", &["png", "jpg", "jpeg"])
+                                            .pick_file()
+                                            .await
+                                    })));
+                                }
+                            });
+
+                            ui.separator();
 
                             egui::ScrollArea::vertical()
                                 .auto_shrink(false)
