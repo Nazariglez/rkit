@@ -7,7 +7,7 @@ use std::{
 
 use corelib::{
     gfx::TextureFilter,
-    math::{Rect, Vec3, vec3},
+    math::{Mat3, Rect, Vec3, vec3},
 };
 use draw::{Draw2D, Sprite, create_sprite};
 use rustc_hash::FxHashMap;
@@ -756,7 +756,7 @@ fn update_system(
         .iter_mut()
         .filter(|(_, p)| !(p.disabled || p.ended))
         .for_each(|(entity, mut p)| {
-            let origin_position = p.pos;
+            let origin_position = if p.is_local { Vec2::ZERO } else { p.pos };
             let spawning = p.spawning;
             p.emitters.iter_mut().for_each(|emitter| {
                 let spawn_rate = emitter.def.particles_per_wave as f32 / emitter.def.wave_time;
@@ -943,6 +943,11 @@ pub trait ParticlesDraw2DExt {
 
 impl ParticlesDraw2DExt for Draw2D {
     fn particle(&mut self, fx: &ParticleFx) {
+        let is_local = fx.is_local;
+        if is_local {
+            self.push_matrix(Mat3::from_translation(fx.pos));
+        }
+
         fx.emitters.iter().for_each(|emitter| {
             emitter.particles.iter().for_each(|p| {
                 match p.sprite.and_then(|idx| emitter.sprites.get(idx)) {
@@ -965,6 +970,10 @@ impl ParticlesDraw2DExt for Draw2D {
                 }
             });
         });
+
+        if is_local {
+            self.pop_matrix();
+        }
     }
 }
 
