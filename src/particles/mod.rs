@@ -29,7 +29,7 @@ pub struct ParticlesSysSet;
 
 #[derive(Event, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ParticleEndEvent {
-    entity: Entity,
+    pub entity: Entity,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -931,8 +931,6 @@ fn update_system(
                 p.spawning = false;
                 p.ended = true;
                 evt.send(ParticleEndEvent { entity });
-
-                println!("send end event");
             }
         });
 }
