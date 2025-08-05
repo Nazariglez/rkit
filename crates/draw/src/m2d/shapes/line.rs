@@ -1,7 +1,8 @@
-use crate::m2d::shapes::Path2D;
-use crate::{Draw2D, DrawPipelineId, Element2D, Transform2D};
-use corelib::gfx::Color;
-use corelib::math::{Vec2, bvec2};
+use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
+use corelib::{
+    gfx::Color,
+    math::{Mat3, Vec2, bvec2},
+};
 use macros::Drawable2D;
 
 #[derive(Drawable2D)]
@@ -50,16 +51,39 @@ impl Line2D {
 
 impl Element2D for Line2D {
     fn process(&self, draw: &mut Draw2D) {
-        let mut path = Path2D::new();
-        path.transform = self.transform;
-        path.pip = self.pip;
+        let p1 = self.p1;
+        let p2 = self.p2;
 
-        path.move_to(self.p1)
-            .line_to(self.p2)
-            .stroke(self.stroke_width)
-            .color(self.color.with_alpha(self.color.a * self.alpha))
-            .close();
+        // calculate corners
+        let dir = (p2 - p1).normalize_or_zero();
+        let perp = Vec2::new(-dir.y, dir.x) * (self.stroke_width * 0.5);
+        let pa = p1 + perp;
+        let pb = p1 - perp;
+        let pc = p2 - perp;
+        let pd = p2 + perp;
 
-        path.process(draw)
+        let c = self.color.with_alpha(self.color.a * self.alpha);
+
+        let indices: [u32; 6] = [0, 1, 2, 0, 2, 3];
+
+        #[rustfmt::skip]
+        let mut vertices: [f32; 24] = [
+            pa.x, pa.y, c.r, c.g, c.b, c.a,
+            pb.x, pb.y, c.r, c.g, c.b, c.a,
+            pc.x, pc.y, c.r, c.g, c.b, c.a,
+            pd.x, pd.y, c.r, c.g, c.b, c.a,
+        ];
+
+        let matrix: Mat3 = self
+            .transform
+            .map_or(Mat3::IDENTITY, |mut t| t.updated_mat3());
+
+        draw.add_to_batch(DrawingInfo {
+            pipeline: self.pip,
+            vertices: &mut vertices,
+            indices: &indices,
+            transform: matrix,
+            sprite: None,
+        });
     }
 }

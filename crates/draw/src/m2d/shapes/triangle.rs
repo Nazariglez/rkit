@@ -1,9 +1,12 @@
 use super::size_from_vertices;
-use crate::m2d::shapes::Path2D;
-use crate::shapes::TessMode;
-use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
-use corelib::gfx::Color;
-use corelib::math::{Mat3, Vec2, bvec2};
+use crate::{
+    Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D, m2d::shapes::Path2D,
+    shapes::TessMode,
+};
+use corelib::{
+    gfx::Color,
+    math::{Mat3, Vec2, bvec2},
+};
 use macros::Drawable2D;
 
 #[derive(Drawable2D)]
