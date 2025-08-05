@@ -1,7 +1,7 @@
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, Transform2D};
 use corelib::{
     gfx::Color,
-    math::{Mat3, Vec2, bvec2},
+    math::{Mat3, Vec2, bvec2, vec2},
 };
 use macros::Drawable2D;
 
@@ -56,7 +56,7 @@ impl Element2D for Line2D {
 
         // calculate corners
         let dir = (p2 - p1).normalize_or_zero();
-        let perp = Vec2::new(-dir.y, dir.x) * (self.stroke_width * 0.5);
+        let perp = vec2(-dir.y, dir.x) * (self.stroke_width * 0.5);
         let pa = p1 + perp;
         let pb = p1 - perp;
         let pc = p2 - perp;
@@ -64,17 +64,17 @@ impl Element2D for Line2D {
 
         let c = self.color.with_alpha(self.color.a * self.alpha);
 
-        let indices: [u32; 6] = [0, 1, 2, 0, 2, 3];
+        let indices = [0, 1, 2, 0, 2, 3];
 
         #[rustfmt::skip]
-        let mut vertices: [f32; 24] = [
+        let mut vertices = [
             pa.x, pa.y, c.r, c.g, c.b, c.a,
             pb.x, pb.y, c.r, c.g, c.b, c.a,
             pc.x, pc.y, c.r, c.g, c.b, c.a,
             pd.x, pd.y, c.r, c.g, c.b, c.a,
         ];
 
-        let matrix: Mat3 = self
+        let matrix = self
             .transform
             .map_or(Mat3::IDENTITY, |mut t| t.updated_mat3());
 
