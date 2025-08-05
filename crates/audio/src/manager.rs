@@ -1,10 +1,13 @@
+use std::time::Duration;
+
 use crate::sound::{InstanceId, SoundId};
 use crate::{Sound, SoundInstance, clean_audio_manager};
 use atomic_refcell::AtomicRefCell;
 use kira::sound::PlaybackState;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::{
-    AudioManager, AudioManagerSettings, Decibels, DefaultBackend, Panning, PlaybackRate, Tween,
+    AudioManager, AudioManagerSettings, Decibels, DefaultBackend, Panning, PlaybackRate, StartTime,
+    Tween,
 };
 use num::Zero;
 use once_cell::sync::Lazy;
@@ -360,6 +363,7 @@ fn create_sound_from_bytes(id: u64, bytes: &[u8]) -> Result<Sound, String> {
 
 #[derive(Copy, Clone)]
 pub struct PlayOptions {
+    pub start_at: Option<f32>,
     pub volume: f32,
     pub repeat: bool,
     pub pitch: f32,
@@ -369,6 +373,7 @@ pub struct PlayOptions {
 impl Default for PlayOptions {
     fn default() -> Self {
         Self {
+            start_at: None,
             volume: 1.0,
             repeat: false,
             pitch: 1.0,
@@ -380,7 +385,10 @@ impl Default for PlayOptions {
 impl From<PlayOptions> for StaticSoundSettings {
     fn from(value: PlayOptions) -> Self {
         Self {
-            start_time: Default::default(),
+            start_time: value
+                .start_at
+                .map(|t| StartTime::Delayed(Duration::from_secs_f32(t)))
+                .unwrap_or_default(),
             start_position: Default::default(),
             loop_region: value.repeat.then_some((..).into()),
             reverse: false,

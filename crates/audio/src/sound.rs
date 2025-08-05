@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use kira::sound::static_sound::StaticSoundData;
 
 #[derive(Clone)]
@@ -33,8 +35,14 @@ pub struct Sound {
 }
 
 impl Sound {
+    #[inline(always)]
     pub fn id(&self) -> SoundId {
         self.id
+    }
+
+    #[inline(always)]
+    pub fn duration(&self) -> Duration {
+        self.raw.duration()
     }
 }
 
