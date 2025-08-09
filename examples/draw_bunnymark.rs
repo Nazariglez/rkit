@@ -1,9 +1,11 @@
-use rkit::draw::{Sprite, create_draw_2d};
-use rkit::gfx::{self, Color};
-use rkit::input::{MouseButton, is_mouse_btn_down};
-use rkit::math::{Vec2, vec2};
-use rkit::random::Rng;
-use rkit::time;
+use rkit::{
+    draw::{Sprite, create_draw_2d},
+    gfx::{self, Color},
+    input::{MouseButton, is_mouse_btn_down},
+    math::{Vec2, vec2},
+    random::Rng,
+    time,
+};
 
 struct Bunny {
     pos: Vec2,

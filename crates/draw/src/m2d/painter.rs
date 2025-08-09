@@ -39,13 +39,13 @@ pub enum DrawPipelineId {
     Custom(u64),
 }
 
-struct CachedBindGroup {
-    signal: DropSignal,
-    bind: BindGroup,
+pub(crate) struct CachedBindGroup {
+    pub signal: DropSignal,
+    pub bind: BindGroup,
 }
 
 impl CachedBindGroup {
-    fn expired(&self) -> bool {
+    pub fn expired(&self) -> bool {
         self.signal.is_expired()
     }
 }

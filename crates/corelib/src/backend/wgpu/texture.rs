@@ -23,26 +23,32 @@ impl PartialEq<Self> for Texture {
 }
 
 impl Texture {
+    #[inline]
     pub fn id(&self) -> TextureId {
         self.id
     }
 
+    #[inline]
     pub fn size(&self) -> Vec2 {
         self.size
     }
 
+    #[inline]
     pub fn width(&self) -> f32 {
         self.size.x
     }
 
+    #[inline]
     pub fn height(&self) -> f32 {
         self.size.y
     }
 
+    #[inline]
     pub fn is_writable(&self) -> bool {
         self.write
     }
 
+    #[inline]
     pub fn format(&self) -> TextureFormat {
         self.format
     }
