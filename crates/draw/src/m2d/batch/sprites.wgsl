@@ -40,8 +40,8 @@ fn vs_main(@builtin(vertex_index) v_idx: u32, inst: Instance) -> VertexOut {
   var out: VertexOut;
   out.pos   = locals.mvp * vec4(world, 0.0, 1.0);
 
-  let uv01  = (quad[v_idx] * 0.5) + vec2(0.5, 0.5);
-  out.uv    = inst.uv_pos + uv01 * inst.uv_size;
+  let norm_uv  = (quad[v_idx] * 0.5) + vec2(0.5, 0.5);
+  out.uv    = inst.uv_pos + norm_uv * inst.uv_size;
 
   out.color = inst.color;
   return out;
