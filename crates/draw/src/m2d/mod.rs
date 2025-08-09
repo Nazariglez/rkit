@@ -1,3 +1,4 @@
+pub mod batch;
 mod camera;
 mod draw_2d;
 mod images;

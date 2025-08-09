@@ -1275,8 +1275,10 @@ version = "0.0.0"
 dependencies = [
  "arrayvec",
  "atomic_refcell",
+ "bytemuck",
  "corelib",
  "cosmic-text",
+ "encase",
  "etagere",
  "log",
  "lyon",
