@@ -10,6 +10,7 @@ use encase::{ShaderType, UniformBuffer};
 
 const SHADER: &str = include_str!("./circles.wgsl");
 
+/// Uniform data used by the circle shader
 #[derive(Debug, ShaderType)]
 struct Locals {
     mvp: Mat4,
@@ -24,6 +25,7 @@ impl Locals {
     }
 }
 
+/// Data for one circle instance on the GPU
 #[derive(Default, Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct GpuCircle {
@@ -38,6 +40,7 @@ struct GpuCircle {
     progress: f32,
 }
 
+/// Different ways a circle can be drawn
 #[derive(Debug, Clone, Copy)]
 enum CircleMode {
     Fill {
@@ -59,6 +62,7 @@ enum CircleMode {
 }
 
 impl CircleMode {
+    /// Converts the mode into GPU instance data
     fn to_gpu(self, center: Vec2, radius: f32) -> GpuCircle {
         match self {
             CircleMode::Fill {
@@ -108,6 +112,7 @@ impl CircleMode {
     }
 }
 
+/// Batches circles and draws them with instancing
 pub struct CircleBatcher {
     pip: RenderPipeline,
     vbo: Buffer,
@@ -187,21 +192,25 @@ impl CircleBatcher {
         })
     }
 
+    /// Sets the transform matrix
     pub fn set_transform(&mut self, transform: Mat4) {
         self.locals.mvp = transform;
         self.dirty_ubo = true;
     }
 
+    /// Enables or disables antialiasing
     pub fn set_antialias(&mut self, aa: bool) {
         self.locals.antialias = if aa { 1.0 } else { 0.0 };
         self.dirty_ubo = true;
     }
 
+    /// Removes all circles from the batch
     pub fn clear(&mut self) {
         self.entities.clear();
         self.dirty_vbo = true;
     }
 
+    /// Uploads changes to GPU buffers
     pub fn upload(&mut self) -> Result<(), String> {
         if self.dirty_ubo {
             self.dirty_ubo = false;
@@ -221,6 +230,7 @@ impl CircleBatcher {
         Ok(())
     }
 
+    /// Adds a filled circle
     #[inline]
     pub fn fill<'a>(&'a mut self, center: Vec2, radius: f32) -> CircleFillBuilder<'a> {
         CircleFillBuilder {
@@ -234,6 +244,7 @@ impl CircleBatcher {
         }
     }
 
+    /// Adds a stroked circle
     #[inline]
     pub fn stroke<'a>(&'a mut self, center: Vec2, radius: f32) -> CircleStrokeBuilder<'a> {
         CircleStrokeBuilder {
@@ -247,6 +258,7 @@ impl CircleBatcher {
         }
     }
 
+    /// Adds an arc circle
     #[inline]
     pub fn arc<'a>(&'a mut self, center: Vec2, radius: f32) -> CircleArcBuilder<'a> {
         CircleArcBuilder {
@@ -264,6 +276,7 @@ impl CircleBatcher {
         }
     }
 
+    /// Adds a load bar circle
     #[inline]
     pub fn load_bar<'a>(&'a mut self, center: Vec2, radius: f32) -> CircleLoaderBuilder<'a> {
         CircleLoaderBuilder {
@@ -281,6 +294,7 @@ impl CircleBatcher {
         }
     }
 
+    /// Draws all circles into a renderer pass
     #[inline]
     pub fn apply_pass_to<'a>(&'a self, renderer: &mut Renderer<'a>) {
         debug_assert!(
