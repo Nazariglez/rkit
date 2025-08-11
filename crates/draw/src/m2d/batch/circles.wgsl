@@ -35,6 +35,10 @@ struct VertexOutput {
   @location(8) @interpolate(flat) progress: f32,
 };
 
+// srgb_to_linear
+{{SRGB_TO_LINEAR}}
+
+
 @vertex
 fn vs_main(@builtin(vertex_index) v_idx: u32, model: VertexInput) -> VertexOutput {
   let quad = array<vec2<f32>, 6>(
@@ -49,8 +53,8 @@ fn vs_main(@builtin(vertex_index) v_idx: u32, model: VertexInput) -> VertexOutpu
   out.local_pos   = local_pos;
   out.mode        = model.mode;
   out.out_radius  = model.out_radius;
-  out.in_color    = model.in_color;
-  out.out_color   = model.out_color;
+  out.in_color    = srgb_to_linear(model.in_color);
+  out.out_color   = srgb_to_linear(model.out_color);
   out.in_radius   = model.in_radius;
   out.start_angle = model.start_angle;
   out.end_angle   = model.end_angle;
@@ -89,16 +93,13 @@ fn arc_length(start_angle: f32, end_angle: f32) -> f32 {
   return select(wrapped, 2.0 * PI, abs(wrapped) < EPSILON);
 }
 
-// srgb_to_linear
-{{SRGB_TO_LINEAR}}
-
 fn fs_fill(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32> {
   let aa_width = pixel_width * locals.aa;
   let edge_cover = cover_outer(radius_norm, 1.0, aa_width);
-  if (edge_cover <= 0.0) { discard; }
+  if (edge_cover <= 0.0) { return vec4(0.0); }
   let radial_mix = clamp(radius_norm, 0.0, 1.0);
   let color      = mix(in.in_color, in.out_color, radial_mix);
-  return srgb_to_linear(vec4(color.rgb, color.a * edge_cover));
+  return vec4(color.rgb, color.a * edge_cover);
 }
 
 fn fs_stroke(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32> {
@@ -108,8 +109,8 @@ fn fs_stroke(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32> 
   let inner_radius_norm= clamp(inner_radius_px / max(in.out_radius, EPSILON), 0.0, 1.0);
   let ring_cover       = ring_coverage(radius_norm, inner_radius_norm, aa_width);
 
-  if (ring_cover <= 0.0) { discard; }
-  return srgb_to_linear(vec4(in.out_color.rgb, in.out_color.a * ring_cover));
+  if (ring_cover <= 0.0) { return vec4(0.0); }
+  return vec4(in.out_color.rgb, in.out_color.a * ring_cover);
 }
 
 fn fs_loadbar(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32> {
@@ -136,7 +137,7 @@ fn fs_loadbar(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32>
   }
 
   let cover = ring_cover * angle_cover;
-  if (cover <= 0.0) { discard; }
+  if (cover <= 0.0) { return vec4(0.0); }
 
   let has_sweep      = sweep_angle > EPSILON;
   let progress_along = select(0.0, clamp(relative_angle / sweep_angle, 0.0, 1.0), has_sweep);
@@ -148,7 +149,7 @@ fn fs_loadbar(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32>
   let final_rgb      = mix(base_rgb, in.out_color.rgb, tail_fade);
 
   let alpha = mix(in.in_color.a, in.out_color.a, progress_along) * cover;
-  return srgb_to_linear(vec4(final_rgb, alpha));
+  return vec4(final_rgb, alpha);
 }
 
 
