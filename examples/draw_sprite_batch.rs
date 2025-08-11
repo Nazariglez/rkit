@@ -44,7 +44,7 @@ fn main() -> Result<(), String> {
 
 fn on_setup(mut cmds: Commands) {
     let mut batcher = SpriteBatcher::new().unwrap();
-    batcher.set_transform(Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0));
+    batcher.set_projection(Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0));
 
     cmds.insert_resource(Batcher(batcher));
 

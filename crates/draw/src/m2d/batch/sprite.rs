@@ -4,13 +4,13 @@ use corelib::{
         self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, RenderPipeline,
         Renderer, VertexFormat, VertexLayout, VertexStepMode,
     },
-    math::{Mat4, Vec2, Vec3},
+    math::{Mat3, Mat4, Vec2, Vec3},
 };
 use encase::{ShaderType, UniformBuffer};
 use rustc_hash::FxHashMap;
 use std::ops::Range;
 
-use crate::{CachedBindGroup, Sprite, SpriteId};
+use crate::{CachedBindGroup, Sprite, SpriteId, batch::utils::mat4_from_affine2d};
 
 const SHADER: &str = include_str!("./sprites.wgsl");
 
@@ -44,6 +44,8 @@ pub struct SpriteBatcher {
     ubs: UniformBuffer<[u8; Locals::size()]>,
     bind_locals: BindGroup,
     locals: Locals,
+    projection: Mat4,
+    transform: Mat3,
     dirty_ubo: bool,
 
     vbo: Buffer,
@@ -91,9 +93,8 @@ impl SpriteBatcher {
             .with_write_flag(true)
             .build()?;
 
-        let locals = Locals {
-            mvp: Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0),
-        };
+        let projection = Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
+        let locals = Locals { mvp: projection };
         let mut ubs = UniformBuffer::new([0; Locals::size()]);
         ubs.write(&locals).map_err(|e| e.to_string())?;
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
@@ -111,6 +112,8 @@ impl SpriteBatcher {
             ubs,
             bind_locals,
             locals,
+            projection,
+            transform: Mat3::IDENTITY,
             dirty_ubo: true,
             vbo,
             dirty_vbo: true,
@@ -122,8 +125,14 @@ impl SpriteBatcher {
     }
 
     #[inline]
-    pub fn set_transform(&mut self, mvp: Mat4) {
-        self.locals.mvp = mvp;
+    pub fn set_projection(&mut self, mvp: Mat4) {
+        self.projection = mvp;
+        self.dirty_ubo = true;
+    }
+
+    #[inline]
+    pub fn set_transform(&mut self, matrix: Mat3) {
+        self.transform = matrix;
         self.dirty_ubo = true;
     }
 
@@ -178,6 +187,7 @@ impl SpriteBatcher {
     pub fn upload(&mut self) -> Result<(), String> {
         if self.dirty_ubo {
             self.dirty_ubo = false;
+            self.locals.mvp = self.projection * mat4_from_affine2d(self.transform);
             self.ubs.write(&self.locals).map_err(|e| e.to_string())?;
             gfx::write_buffer(&self.ubo)
                 .with_data(self.ubs.as_ref())

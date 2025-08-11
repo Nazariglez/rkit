@@ -4,9 +4,11 @@ use corelib::{
         self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, RenderPipeline,
         Renderer, VertexFormat, VertexLayout, VertexStepMode,
     },
-    math::{Mat4, Vec2},
+    math::{Mat3, Mat4, Vec2},
 };
 use encase::{ShaderType, UniformBuffer};
+
+use super::utils::mat4_from_affine2d;
 
 const SHADER: &str = include_str!("./circles.wgsl");
 
@@ -121,6 +123,8 @@ pub struct CircleBatcher {
     bind_group: BindGroup,
     entities: Vec<GpuCircle>,
     locals: Locals,
+    projection: Mat4,
+    transform: Mat3,
     dirty_ubo: bool,
     dirty_vbo: bool,
 }
@@ -160,8 +164,9 @@ impl CircleBatcher {
             .with_write_flag(true)
             .build()?;
 
+        let projection = Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
         let locals = Locals {
-            mvp: Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0),
+            mvp: projection,
             fade_at: 0.9,
             antialias: 0.0,
             _pad: Vec2::ZERO,
@@ -187,14 +192,22 @@ impl CircleBatcher {
             bind_group,
             locals,
             entities: vec![],
+            projection,
+            transform: Mat3::IDENTITY,
             dirty_ubo: true,
             dirty_vbo: true,
         })
     }
 
+    /// Sets the projection matrix
+    pub fn set_projection(&mut self, projection: Mat4) {
+        self.projection = projection;
+        self.dirty_ubo = true;
+    }
+
     /// Sets the transform matrix
-    pub fn set_transform(&mut self, transform: Mat4) {
-        self.locals.mvp = transform;
+    pub fn set_transform(&mut self, transform: Mat3) {
+        self.transform = transform;
         self.dirty_ubo = true;
     }
 
@@ -214,6 +227,7 @@ impl CircleBatcher {
     pub fn upload(&mut self) -> Result<(), String> {
         if self.dirty_ubo {
             self.dirty_ubo = false;
+            self.locals.mvp = self.projection * mat4_from_affine2d(self.transform);
             self.ubs.write(&self.locals).map_err(|e| e.to_string())?;
             gfx::write_buffer(&self.ubo)
                 .with_data(self.ubs.as_ref())
