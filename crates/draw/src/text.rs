@@ -273,7 +273,6 @@ impl TextSystem {
             log::debug!("New text atlas bind_group created");
             let bg = gfx::create_bind_group()
                 .with_label("TextSystem BindGroup")
-                .with_label("")
                 .with_sampler(0, &self.linear_sampler)
                 .with_sampler(1, &self.nearest_sampler)
                 .with_texture(2, &self.mask.texture)
