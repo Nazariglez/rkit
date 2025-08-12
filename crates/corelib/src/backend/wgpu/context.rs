@@ -72,6 +72,10 @@ async fn generate_wgpu_ctx(
         .await
         .map_err(|err| err.to_string())?;
 
+    device.on_uncaptured_error(Box::new(|e| {
+        eprintln!("WGPU Error: {e}");
+        log::error!("WGPU Error: {e}");
+    }));
     log::debug!("WGPU Features {:?}", device.features());
 
     Ok((adapter, device, queue))
