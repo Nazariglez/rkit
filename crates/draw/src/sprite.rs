@@ -5,7 +5,7 @@ use corelib::gfx::{
 use corelib::math::{Rect, Vec2, vec2};
 use utils::drop_signal::DropObserver;
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct SpriteId {
     texture: TextureId,
     sampler: SamplerId,

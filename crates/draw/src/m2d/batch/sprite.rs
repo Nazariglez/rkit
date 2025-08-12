@@ -234,6 +234,7 @@ impl SpriteBatcher {
             .entry(sprite.id())
             .or_insert_with(|| {
                 let bind = gfx::create_bind_group()
+                    .with_label(&format!("SpriteBatcher BindGroup(1) for {:?}", sprite.id()))
                     .with_layout(self.pip.bind_group_layout_ref(1).unwrap())
                     .with_texture(0, sprite.texture())
                     .with_sampler(1, sprite.sampler())

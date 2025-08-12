@@ -182,11 +182,13 @@ impl TextSystem {
         // common
         let max_texture_size = gfx::limits().max_texture_size_2d;
         let linear_sampler = gfx::create_sampler()
+            .with_label("TextSystem Linear Sampler")
             .with_min_filter(TextureFilter::Linear)
             .with_mag_filter(TextureFilter::Linear)
             .build()?;
 
         let nearest_sampler = gfx::create_sampler()
+            .with_label("TextSystem Nearest Sampler")
             .with_min_filter(TextureFilter::Nearest)
             .with_mag_filter(TextureFilter::Nearest)
             .build()?;
@@ -197,6 +199,7 @@ impl TextSystem {
             DEFAULT_TEXTURE_SIZE as _,
         ));
         let texture = gfx::create_texture()
+            .with_label("TextSystem Texture Mask")
             .with_empty_size(DEFAULT_TEXTURE_SIZE, DEFAULT_TEXTURE_SIZE)
             .with_format(TextureFormat::R8UNorm)
             .with_write_flag(true)
@@ -209,12 +212,13 @@ impl TextSystem {
             current_size: DEFAULT_TEXTURE_SIZE,
         };
 
-        // mask atlas
+        // color atlas
         let allocator = BucketedAtlasAllocator::new(size2(
             DEFAULT_TEXTURE_SIZE as _,
             DEFAULT_TEXTURE_SIZE as _,
         ));
         let texture = gfx::create_texture()
+            .with_label("TextSystem Texture Color")
             .with_empty_size(DEFAULT_TEXTURE_SIZE, DEFAULT_TEXTURE_SIZE)
             .with_write_flag(true)
             .build()?;
@@ -268,6 +272,8 @@ impl TextSystem {
         if self.bind_group.is_none() {
             log::debug!("New text atlas bind_group created");
             let bg = gfx::create_bind_group()
+                .with_label("TextSystem BindGroup")
+                .with_label("")
                 .with_sampler(0, &self.linear_sampler)
                 .with_sampler(1, &self.nearest_sampler)
                 .with_texture(2, &self.mask.texture)
@@ -622,6 +628,7 @@ impl AtlasData {
         self.allocator.grow(size2(next_size as _, next_size as _));
 
         self.texture = gfx::create_texture()
+            .with_label("TextSystem Texture")
             .with_empty_size(next_size, next_size)
             .with_format(self.texture.format())
             .with_write_flag(true)

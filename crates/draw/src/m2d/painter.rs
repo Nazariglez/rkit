@@ -119,9 +119,16 @@ impl Default for Painter2D {
                 .map(|ctx| ctx.pipeline.bind_group_layout_ref(1).unwrap())
                 .unwrap();
 
-            let texture = gfx::create_texture().with_empty_size(1, 1).build().unwrap();
+            let texture = gfx::create_texture()
+                .with_label("Draw2D Dummy Texture")
+                .with_empty_size(1, 1)
+                .build()
+                .unwrap();
 
-            let sampler = gfx::create_sampler().build().unwrap();
+            let sampler = gfx::create_sampler()
+                .with_label("Draw2D Dummy Sampler")
+                .build()
+                .unwrap();
 
             gfx::create_bind_group()
                 .with_label("Dummy Sprite Bind Group")
@@ -173,6 +180,7 @@ impl Painter2D {
             .entry(sprite.id())
             .or_insert_with(|| {
                 let bind = gfx::create_bind_group()
+                    .with_label(&format!("Draw2D Sprite BindGroup for {:?}", sprite.id()))
                     .with_layout(pip.bind_group_layout_ref(1).unwrap())
                     .with_texture(0, sprite.texture())
                     .with_sampler(1, sprite.sampler())
