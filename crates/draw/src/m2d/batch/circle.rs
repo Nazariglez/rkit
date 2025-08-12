@@ -137,6 +137,7 @@ impl CircleBatcher {
         );
 
         let pip = gfx::create_render_pipeline(&shader)
+            .with_label("CircleBatcher RenderPipeline")
             .with_vertex_layout(
                 VertexLayout::new()
                     .with_step_mode(VertexStepMode::Instance)
@@ -161,6 +162,7 @@ impl CircleBatcher {
             .build()?;
 
         let vbo = gfx::create_vertex_buffer(&[] as &[f32])
+            .with_label("CircleBatcher VBO")
             .with_write_flag(true)
             .build()?;
 
@@ -176,10 +178,12 @@ impl CircleBatcher {
         ubs.write(&locals).map_err(|e| e.to_string()).unwrap();
 
         let ubo = gfx::create_uniform_buffer(ubs.as_ref())
+            .with_label("CircleBatcher UBO")
             .with_write_flag(true)
             .build()?;
 
         let bind_group = gfx::create_bind_group()
+            .with_label("CircleBatcher BindGroup")
             .with_layout(pip.bind_group_layout_ref(0)?)
             .with_uniform(0, &ubo)
             .build()?;

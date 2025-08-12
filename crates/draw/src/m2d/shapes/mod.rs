@@ -79,6 +79,7 @@ pub fn create_shapes_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
         .build()?;
 
     let bind_group = gfx::create_bind_group()
+        .with_label("Draw2D shapes BindGroup")
         .with_layout(pip.bind_group_layout_ref(0)?)
         .with_uniform(0, ubo_transform)
         .build()?;
