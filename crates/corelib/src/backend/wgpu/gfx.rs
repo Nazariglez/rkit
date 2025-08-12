@@ -1,33 +1,37 @@
 #![allow(clippy::arc_with_non_send_sync)]
 
-use crate::backend::traits::GfxBackendImpl;
-use crate::backend::wgpu::context::Context;
-use crate::backend::wgpu::frame::{self, DrawFrame};
-use crate::backend::wgpu::offscreen::OffscreenSurfaceData;
-use crate::backend::wgpu::surface::Surface;
-use crate::backend::wgpu::utils::{wgpu_depth_stencil, wgpu_shader_visibility};
-use crate::gfx::consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT};
-use crate::gfx::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
-    BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Texture,
-    TextureData, TextureDescriptor, TextureFormat, TextureId,
+use crate::{
+    backend::{
+        traits::GfxBackendImpl,
+        wgpu::{
+            context::Context,
+            frame::DrawFrame,
+            offscreen::OffscreenSurfaceData,
+            surface::Surface,
+            utils::{wgpu_depth_stencil, wgpu_shader_visibility},
+        },
+    },
+    gfx::{
+        BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
+        BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, MAX_BINDING_ENTRIES,
+        RenderPipeline, RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer,
+        Sampler, SamplerDescriptor, Texture, TextureData, TextureDescriptor, TextureFormat,
+        TextureId,
+        consts::{MAX_PIPELINE_COMPATIBLE_TEXTURES, SURFACE_DEFAULT_DEPTH_FORMAT},
+    },
+    math::{UVec2, vec2},
 };
-use crate::gfx::{MAX_BINDING_ENTRIES, Sampler, SamplerDescriptor};
-use crate::math::{UVec2, vec2};
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
 use glam::uvec2;
-use std::borrow::Cow;
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 use utils::helpers::next_pot2;
-use wgpu::rwh::HasWindowHandle;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Extent3d, GlBackendOptions,
     Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp,
     Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
-    TextureFormat as WTextureFormat,
+    rwh::HasWindowHandle,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::raw_window_handle::HasDisplayHandle;
 
@@ -131,10 +135,10 @@ impl GfxBackendImpl for GfxBackend {
         self.render_to(&offscreen.texture, renderer)?;
         self.offscreen = Some(offscreen);
 
-        if !renderer.passes.is_empty() {
-            if let Some(frame) = &mut self.frame {
-                frame.dirty = true;
-            }
+        if !renderer.passes.is_empty()
+            && let Some(frame) = &mut self.frame
+        {
+            frame.dirty = true;
         }
 
         Ok(())
@@ -307,6 +311,7 @@ impl GfxBackendImpl for GfxBackend {
         &mut self,
         desc: RenderPipelineDescriptor,
     ) -> Result<RenderPipeline, String> {
+        log::trace!("Creating RenderPipeline (label={:?})", desc.label);
         let shader = self
             .ctx
             .device
@@ -487,6 +492,11 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String> {
+        log::trace!(
+            "Creating Buffer (label={:?}, usage={:?})",
+            desc.label,
+            desc.usage
+        );
         let mut usage = desc.usage.as_wgpu();
         if desc.write {
             usage |= wgpu::BufferUsages::COPY_DST;
@@ -525,6 +535,7 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String> {
+        log::trace!("Creating BindGroup (label={:?})", desc.label);
         // NOTE: borrow checker hack to reference Arc<Buffer> later
         let buffers: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
             .entry
@@ -641,6 +652,7 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_sampler(&mut self, desc: SamplerDescriptor) -> Result<Sampler, String> {
+        log::trace!("Creating Sampler (label={:?})", desc.label);
         let raw = self.ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: desc.label,
             address_mode_u: desc.wrap_x.as_wgpu(),
@@ -670,6 +682,7 @@ impl GfxBackendImpl for GfxBackend {
         desc: TextureDescriptor,
         data: Option<TextureData>,
     ) -> Result<Texture, String> {
+        log::trace!("Creating Texture (label={:?})", desc.label);
         let id = resource_id(&mut self.next_resource_id);
         create_texture(id, &self.ctx.device, &self.ctx.queue, desc, data)
     }
@@ -714,10 +727,14 @@ impl GfxBackendImpl for GfxBackend {
         &mut self,
         desc: RenderTextureDescriptor,
     ) -> Result<RenderTexture, String> {
+        log::trace!("Creating RenderTexture (label={:?})", desc.label);
         // Create the color texture
         let texture = self.create_texture(
             TextureDescriptor {
-                label: Some("Create RenderTexture inner color texture"),
+                label: Some(&format!(
+                    "RenderTexture (label={:?}) inner color texture",
+                    desc.label
+                )),
                 format: desc
                     .format
                     .unwrap_or_else(|| TextureFormat::from_wgpu(self.surface.raw_format).unwrap()),
@@ -735,7 +752,10 @@ impl GfxBackendImpl for GfxBackend {
             let tex = desc.depth.then(|| {
                 self.create_texture(
                     TextureDescriptor {
-                        label: Some("Create RenderTexture inner color texture"),
+                        label: Some(&format!(
+                            "RenderTexture (label={:?}) inner depth texture",
+                            desc.label
+                        )),
                         format: TextureFormat::Depth32Float,
                         write: true,
                     },

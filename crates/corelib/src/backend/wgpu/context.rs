@@ -52,9 +52,11 @@ async fn generate_wgpu_ctx(
 
     log::debug!("Wgpu Adapter: {:?}", adapter.get_info());
     log::info!(
-        "Gpu Adapter: {} - {}",
+        "GPU Adapter: {} - {} ({}: {})",
         adapter.get_info().backend,
-        adapter.get_info().name
+        adapter.get_info().name,
+        adapter.get_info().driver,
+        adapter.get_info().driver_info
     );
 
     let limits = adapter.limits();
