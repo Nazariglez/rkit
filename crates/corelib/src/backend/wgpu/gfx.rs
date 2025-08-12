@@ -816,7 +816,7 @@ impl GfxBackend {
                 },
             })
         } else {
-            Instance::default()
+            Instance::new(&InstanceDescriptor::from_env_or_default())
         };
 
         let (ctx, surface) = {

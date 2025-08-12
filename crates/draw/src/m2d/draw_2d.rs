@@ -1,16 +1,24 @@
-use super::{get_2d_painter, get_mut_2d_painter};
-use crate::m2d::images::Image2D;
-use crate::m2d::mat3_stack::Mat3Stack;
-use crate::m2d::painter::DrawPipelineId;
-use crate::m2d::shapes::{Line2D, Path2D, Rectangle2D, Triangle2D};
-use crate::m2d::text::Text2D;
-use crate::sprite::Sprite;
-use crate::text::get_mut_text_system;
-use crate::{BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D};
+use crate::{
+    BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D, get_2d_painter,
+    get_mut_2d_painter,
+    m2d::{
+        images::Image2D,
+        mat3_stack::Mat3Stack,
+        painter::DrawPipelineId,
+        shapes::{Line2D, Path2D, Rectangle2D, Triangle2D},
+        text::Text2D,
+    },
+    sprite::Sprite,
+    text::get_mut_text_system,
+};
 use arrayvec::ArrayVec;
-use corelib::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
-use corelib::gfx::{self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer};
-use corelib::math::{Mat3, Mat4, Rect, Vec2, vec2, vec3, vec4};
+use corelib::{
+    gfx::{
+        self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer,
+        consts::MAX_BIND_GROUPS_PER_PIPELINE,
+    },
+    math::{Mat3, Mat4, Rect, Vec2, vec2, vec3, vec4},
+};
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
 
@@ -315,6 +323,7 @@ impl Draw2D {
     }
 
     // - Transform
+    #[inline]
     pub fn set_projection(&mut self, projection: Mat4) {
         debug_assert!(
             self.batches.is_empty(),
@@ -324,6 +333,7 @@ impl Draw2D {
         self.inverse_projection = self.projection.inverse();
     }
 
+    #[inline]
     pub fn set_size(&mut self, size: Vec2) {
         debug_assert!(
             self.batches.is_empty(),
@@ -370,11 +380,13 @@ impl Draw2D {
         self.projection
     }
 
+    #[inline]
     pub fn push_matrix(&mut self, m: Mat3) {
         self.matrix_stack.push(m);
         self.inverse_transform = None;
     }
 
+    #[inline]
     pub fn set_matrix(&mut self, m: Mat3) {
         self.matrix_stack.set_matrix(m);
         self.inverse_transform = None;
@@ -385,11 +397,13 @@ impl Draw2D {
         self.matrix_stack.matrix()
     }
 
+    #[inline]
     pub fn pop_matrix(&mut self) {
         self.matrix_stack.pop();
         self.inverse_transform = None;
     }
 
+    #[inline]
     pub fn clear_matrix_stack(&mut self) {
         self.matrix_stack.clear();
         self.inverse_transform = None;
@@ -548,22 +562,20 @@ impl AsRenderer for Draw2D {
         let mut cleared = false;
         let mut renderer = Renderer::new();
 
-        if self.batches.is_empty() {
-            if let Some(color) = self.clear_color {
-                renderer.begin_pass().clear_color(color.as_linear());
-                cleared = true;
-            }
+        if self.batches.is_empty()
+            && let Some(color) = self.clear_color
+        {
+            renderer.begin_pass().clear_color(color.as_linear());
+            cleared = true;
         }
 
         self.batches.iter().for_each(|b| {
             let pass = renderer.begin_pass();
 
             // clear only once
-            if !cleared {
-                if let Some(color) = self.clear_color {
-                    pass.clear_color(color.as_linear());
-                    cleared = true;
-                }
+            if !cleared && let Some(color) = self.clear_color {
+                pass.clear_color(color.as_linear());
+                cleared = true;
             }
 
             let binds: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
