@@ -113,22 +113,21 @@ fn fs_stroke(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32> 
   return vec4(in.out_color.rgb, in.out_color.a * ring_cover);
 }
 
-fn fs_loadbar(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32> {
-  let radial_aa_width = pixel_width * locals.aa;
+fn fs_loadbar(
+  in: VertexOutput,
+  radius_norm: f32,
+  radial_aa_width: f32,
+  relative_angle: f32,
+  angular_aa_width: f32
+) -> vec4<f32> {
+  let use_const         = (STROKE_SIZE_PX > 0.0) && (in.in_radius <= 0.0);
+  let inner_radius_px   = select(in.in_radius, max(0.0, in.out_radius - STROKE_SIZE_PX), use_const);
+  let inner_radius_norm = clamp(inner_radius_px / max(in.out_radius, EPSILON), 0.0, 1.0);
+  let ring_cover        = ring_coverage(radius_norm, inner_radius_norm, radial_aa_width);
 
-  let use_const        = (STROKE_SIZE_PX > 0.0) && (in.in_radius <= 0.0);
-  let inner_radius_px  = select(in.in_radius, max(0.0, in.out_radius - STROKE_SIZE_PX), use_const);
-  let inner_radius_norm= clamp(inner_radius_px / max(in.out_radius, EPSILON), 0.0, 1.0);
-  let ring_cover       = ring_coverage(radius_norm, inner_radius_norm, radial_aa_width);
+  let total_arc      = arc_length(in.start_angle, in.end_angle);
+  let sweep_angle    = clamp(in.progress, 0.0, 1.0) * total_arc;
 
-  var fragment_angle = atan2(in.local_pos.y, in.local_pos.x);
-  if (fragment_angle < 0.0) { fragment_angle += 2.0 * PI; }
-
-  let total_arc     = arc_length(in.start_angle, in.end_angle);
-  let sweep_angle   = clamp(in.progress, 0.0, 1.0) * total_arc;
-  let relative_angle= pos_mod(fragment_angle - in.start_angle, 2.0 * PI);
-
-  let angular_aa_width = fwidth(relative_angle) * locals.aa;
   var angle_cover: f32;
   if (angular_aa_width > 0.0) {
     angle_cover = 1.0 - smoothstep(sweep_angle - angular_aa_width, sweep_angle + angular_aa_width, relative_angle);
@@ -143,25 +142,28 @@ fn fs_loadbar(in: VertexOutput, radius_norm: f32, pixel_width: f32) -> vec4<f32>
   let progress_along = select(0.0, clamp(relative_angle / sweep_angle, 0.0, 1.0), has_sweep);
   let base_rgb       = mix(in.in_color.rgb, in.out_color.rgb, progress_along);
 
-  let fade_at        = clamp(locals.fade_at, 0.0, 1.0);
-  let tail_progress  = clamp((clamp(in.progress, 0.0, 1.0) - fade_at) / (1.0 - fade_at), 0.0, 1.0);
-  let tail_fade      = tail_progress * tail_progress * tail_progress * tail_progress * tail_progress;
-  let final_rgb      = mix(base_rgb, in.out_color.rgb, tail_fade);
+  let fade_at       = clamp(locals.fade_at, 0.0, 1.0);
+  let tail_progress = clamp((clamp(in.progress, 0.0, 1.0) - fade_at) / (1.0 - fade_at), 0.0, 1.0);
+  let tail_fade     = tail_progress * tail_progress * tail_progress * tail_progress * tail_progress;
+  let final_rgb     = mix(base_rgb, in.out_color.rgb, tail_fade);
 
   let alpha = mix(in.in_color.a, in.out_color.a, progress_along) * cover;
   return vec4(final_rgb, alpha);
 }
 
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-  let radius_norm = length(in.local_pos);
-  let pixel_width = fwidth(radius_norm);
+  let radius_norm   = length(in.local_pos);
+  let pixel_width   = fwidth(radius_norm);
+
+  let fragment_angle = atan2(in.local_pos.y, in.local_pos.x);
+  let relative_angle = pos_mod(fragment_angle - in.start_angle, 2.0 * PI);
+  let angular_aa_width = fwidth(relative_angle) * locals.aa;
 
   switch (in.mode) {
-    case 0u: { return fs_fill(in, radius_norm, pixel_width); }
+    case 0u: { return fs_fill(in,   radius_norm, pixel_width); }
     case 1u: { return fs_stroke(in, radius_norm, pixel_width); }
-    case 2u: { return fs_loadbar(in, radius_norm, pixel_width); }
+    case 2u: { return fs_loadbar(in, radius_norm, pixel_width, relative_angle, angular_aa_width); }
     default: { return vec4(0.0); }
   }
 }
