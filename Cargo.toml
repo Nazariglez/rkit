@@ -43,7 +43,7 @@ raw-window-handle = "0.6.2"
 atomic_refcell = "0.1.13"
 serde = { version = "1.0", features = ["serde_derive"] }
 rkyv = "0.8.10"
-heapless = "0.8.0"
+heapless = "0.9.1"
 arrayvec = "0.7.6"
 nohash-hasher = "0.2.0"
 smol_str = "0.3.2"
@@ -143,7 +143,6 @@ default = [
   "logs",
   "ui",
   "ecs",
-  "egui",
   "postfx",
   "particles",
 ]

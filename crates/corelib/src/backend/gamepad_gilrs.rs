@@ -1,7 +1,7 @@
 use crate::input::{GamepadAxis, GamepadButton, GamepadState};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use gilrs::{Axis, Button, Event, EventType, GamepadId, Gilrs};
-use heapless::FnvIndexMap;
+use heapless::index_map::FnvIndexMap;
 
 use crate::input::GAMEPADS_CONNECTED_POT2;
 

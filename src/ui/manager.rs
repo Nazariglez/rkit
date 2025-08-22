@@ -4,7 +4,7 @@ use corelib::input::{
 };
 use corelib::math::{Mat3, Mat4, Rect, Vec2};
 use draw::{BaseCam2D, Draw2D, Transform2D};
-use heapless::FnvIndexSet;
+use heapless::index_set::FnvIndexSet;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use scene_graph::NodeIndex;
 use smallvec::SmallVec;

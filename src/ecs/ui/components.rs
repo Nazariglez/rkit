@@ -4,7 +4,8 @@ use crate::math::{Mat3, Rect, Vec2};
 use crate::utils::next_pot2;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::ReadOnlyQueryData;
-use heapless::{FnvIndexMap, FnvIndexSet};
+use heapless::index_map::FnvIndexMap;
+use heapless::index_set::FnvIndexSet;
 use strum::{EnumCount, IntoEnumIterator};
 use taffy::prelude::*;
 
