@@ -1017,6 +1017,7 @@ dependencies = [
  "pollster",
  "raw-window-handle",
  "rustc-hash 2.1.1",
+ "serde",
  "smallvec 2.0.0-alpha.11",
  "smol_str 0.3.2",
  "spin_sleep",

@@ -4,6 +4,7 @@ use std::ops::{Add, Div, Mul, Sub};
 
 /// Represents a color in the sRGB space (alpha is linear)
 #[derive(Debug, Clone, Copy, PartialEq, ShaderType, Pod, Zeroable)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C, align(16))]
 pub struct Color {
     /// Red value

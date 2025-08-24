@@ -8,6 +8,8 @@ build = "build.rs"
 utils.workspace = true
 
 # external common deps
+serde = { workspace = true, optional = true }
+
 log.workspace = true
 nohash-hasher.workspace = true
 heapless.workspace = true
@@ -19,7 +21,6 @@ smallvec.workspace = true
 once_cell.workspace = true
 rustc-hash.workspace = true
 encase.workspace = true
-
 # app/windowing
 winit = { version = "0.30.9" }
 raw-window-handle = "0.6.2"
@@ -128,6 +129,8 @@ logs = [
     "dep:console_log",
     "dep:console_error_panic_hook",
 ]
+# enable serialization/deserialization of some types
+serde = ["dep:serde"]
 
 [dev-dependencies]
 # Hackish, to add environment variables for test builds
