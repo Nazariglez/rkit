@@ -32,7 +32,7 @@ pub fn create_weighted_vec<T: Clone>(weights: &[(T, f32)], amount: usize) -> Vec
             let count = exact.floor() as usize;
             // add the whole-number part
             result.extend(std::iter::repeat_n(item.clone(), count));
-            remaining -= count;
+            remaining = remaining.saturating_sub(count);
             // keep the leftover fraction for later
             remainders.push((item.clone(), exact - count as f32));
         }
