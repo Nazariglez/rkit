@@ -523,6 +523,9 @@ pub struct TextList {
 
 impl TextList {
     pub fn insert(&mut self, txt: &str) {
+        if self.list.is_full() {
+            return;
+        }
         self.list.push(SmolStr::new(txt))
     }
 
