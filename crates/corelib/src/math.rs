@@ -13,6 +13,20 @@ impl Rect {
     }
 
     #[inline]
+    pub fn from_center(center: Vec2, size: Vec2) -> Self {
+        let origin = center - size * 0.5;
+        Self { origin, size }
+    }
+
+    #[inline]
+    pub fn from_min_max(min: Vec2, max: Vec2) -> Self {
+        Self {
+            origin: min,
+            size: max - min,
+        }
+    }
+
+    #[inline]
     pub fn min(&self) -> Vec2 {
         self.origin
     }
