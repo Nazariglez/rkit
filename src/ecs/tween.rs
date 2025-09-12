@@ -40,6 +40,72 @@ where
 
 pub trait TweenableComponent<C: Component>: Send + Sync + 'static {
     fn tick(&mut self, target: &mut C, progress: f32);
+    fn to_component(self, time: f32) -> ToComponentTweenBuilder<C, Self>
+    where
+        Self: Sized,
+    {
+        ToComponentTweenBuilder {
+            _c: std::marker::PhantomData,
+            id: None,
+            tweenable: self,
+            tween: Tween::new(0.0, 1.0, time),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ToComponentTweenBuilder<C: Component, T: TweenableComponent<C>> {
+    _c: std::marker::PhantomData<C>,
+    id: Option<String>,
+    tweenable: T,
+    tween: Tween<f32>,
+}
+
+impl<C, T> ToComponentTweenBuilder<C, T>
+where
+    C: Component,
+    T: TweenableComponent<C>,
+{
+    #[inline]
+    pub fn easing(mut self, easing: EaseFn) -> Self {
+        self.tween = self.tween.with_easing(easing);
+        self
+    }
+
+    #[inline]
+    pub fn repeat(mut self, times: u32) -> Self {
+        self.tween = self.tween.with_repeat(times);
+        self
+    }
+
+    #[inline]
+    pub fn infinite(mut self, infinite: bool) -> Self {
+        self.tween = self.tween.with_loop(infinite);
+        self
+    }
+
+    #[inline]
+    pub fn yoyo(mut self, yoyo: bool) -> Self {
+        self.tween = self.tween.with_yoyo(yoyo);
+        self
+    }
+
+    #[inline]
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
+    }
+
+    #[inline]
+    pub fn build(self) -> ComponentTween<C, T> {
+        let Self {
+            id,
+            tweenable,
+            tween,
+            ..
+        } = self;
+        ComponentTween::from_raw(id, tween.start(), tweenable)
+    }
 }
 
 #[derive(Event)]
