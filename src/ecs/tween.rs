@@ -40,7 +40,7 @@ where
 
 pub trait TweenableComponent<C: Component>: Send + Sync + 'static {
     fn tick(&mut self, target: &mut C, progress: f32);
-    fn to_component(self, time: f32) -> ToComponentTweenBuilder<C, Self>
+    fn create_component(self, time: f32) -> ToComponentTweenBuilder<C, Self>
     where
         Self: Sized,
     {
