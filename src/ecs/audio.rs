@@ -3,7 +3,7 @@ use crate::ecs::app::App;
 use bevy_ecs::prelude::*;
 
 use super::{plugin::Plugin, prelude::OnEnginePostFrame};
-pub use crate::audio::{AsSoundInstance, Sound, SoundInstance};
+pub use crate::audio::{AsSoundInstance, Sound, SoundId, SoundInstance};
 
 #[derive(Default)]
 pub struct AudioPlugin;
@@ -115,6 +115,16 @@ impl Audio {
     #[inline]
     pub fn global_volume(&mut self) -> f32 {
         self.manager.volume()
+    }
+
+    #[inline]
+    pub fn mute(&mut self, mute: bool) {
+        self.manager.mute(mute);
+    }
+
+    #[inline]
+    pub fn is_muted(&self) -> bool {
+        self.manager.is_muted()
     }
 }
 

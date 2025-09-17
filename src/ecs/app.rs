@@ -12,7 +12,11 @@ use crate::{
         screen::Screen,
     },
 };
-use bevy_ecs::{event::EventRegistry, schedule::ScheduleLabel, system::SystemId};
+use bevy_ecs::{
+    event::EventRegistry,
+    schedule::ScheduleLabel,
+    system::{IntoObserverSystem, SystemId},
+};
 use bevy_tasks::{ComputeTaskPool, TaskPool};
 
 pub(crate) type AppBuilder = corelib::AppBuilder<World>;
@@ -84,6 +88,15 @@ impl App {
     #[inline]
     pub fn add_plugin(&mut self, config: impl Plugin) -> &mut Self {
         config.apply(self);
+        self
+    }
+
+    #[inline]
+    pub fn add_observer<E: Event, B: Bundle, M>(
+        &mut self,
+        system: impl IntoObserverSystem<E, B, M>,
+    ) -> &mut Self {
+        self.world.add_observer(system);
         self
     }
 

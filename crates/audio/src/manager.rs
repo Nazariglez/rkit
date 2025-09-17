@@ -39,6 +39,7 @@ pub struct Manager {
     manager: AudioManager,
     instances: FxHashMap<SoundId, SmallVec<InstanceData, 10>>,
     pub(crate) volume: f32,
+    pub(crate) muted: bool,
 }
 
 impl Default for Manager {
@@ -52,15 +53,18 @@ impl Default for Manager {
             manager,
             instances: FxHashMap::with_capacity_and_hasher(10, FxBuildHasher),
             volume: 1.0,
+            muted: false,
         }
     }
 }
 
 impl Manager {
+    #[inline]
     pub fn create_sound(&mut self, bytes: &[u8]) -> Result<Sound, String> {
         create_sound_from_bytes(self.next_id(), bytes)
     }
 
+    #[inline]
     pub fn create_sound_instance(&mut self, snd: &Sound) -> SoundInstance {
         let id = InstanceId::Local(self.next_id());
         SoundInstance {
@@ -183,17 +187,38 @@ impl Manager {
         }
     }
 
+    #[inline]
     pub fn set_volume(&mut self, volume: f32) {
         self.volume = volume.clamp(0.0, 1.0);
+        if self.muted {
+            return;
+        }
+
         self.manager
             .main_track()
             .set_volume(decibels_from_volume(self.volume), Tween::default());
     }
 
+    #[inline]
     pub fn volume(&self) -> f32 {
         self.volume
     }
 
+    #[inline]
+    pub fn is_muted(&self) -> bool {
+        self.muted
+    }
+
+    #[inline]
+    pub fn mute(&mut self, mute: bool) {
+        self.muted = mute;
+        let vol = if self.muted { 0.0 } else { self.volume };
+        self.manager
+            .main_track()
+            .set_volume(decibels_from_volume(vol), Tween::default());
+    }
+
+    #[inline]
     pub fn is_playing(&self, instance: SoundInstance) -> Option<bool> {
         self.instances.get(&instance.snd.id)?.iter().find_map(|d| {
             let check = match instance.id {
@@ -205,6 +230,7 @@ impl Manager {
         })
     }
 
+    #[inline]
     pub fn is_paused(&self, instance: SoundInstance) -> Option<bool> {
         self.instances.get(&instance.snd.id)?.iter().find_map(|d| {
             let check = match instance.id {
@@ -343,6 +369,7 @@ impl Manager {
         id
     }
 
+    #[inline]
     pub fn clean(&mut self) {
         self.instances.retain(|_, v| {
             v.retain(|d| !d.is_stopped());
