@@ -336,12 +336,16 @@ impl Element2D for Text2D<'_> {
                     block.size
                 };
 
-                let (matrix, pos, anchor) =
+                let (mut matrix, pos, anchor) =
                     self.transform
                         .map_or((Mat3::IDENTITY, Vec2::ZERO, Vec2::ZERO), |mut t| {
                             t.set_size(block_size);
                             (t.updated_mat3(), t.position(), t.anchor())
                         });
+
+                if self.res > 1.0 {
+                    matrix *= Mat3::from_scale(Vec2::splat(1.0 / self.res));
+                }
 
                 draw.add_to_batch(DrawingInfo {
                     pipeline: self.pip,

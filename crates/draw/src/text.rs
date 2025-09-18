@@ -92,7 +92,7 @@ pub struct TextInfo<'a> {
     pub h_align: HAlign,
 }
 
-pub fn text_metrics(text: &str) -> TextMetricsBuilder {
+pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
     TextMetricsBuilder {
         info: TextInfo {
             pos: Default::default(),
@@ -321,7 +321,7 @@ impl TextSystem {
         &mut self,
         text: &TextInfo,
         only_measure: bool,
-    ) -> Result<BlockInfo, String> {
+    ) -> Result<BlockInfo<'_>, String> {
         // clean the keys before we process a new text
         self.process_data.clear();
 
@@ -447,9 +447,9 @@ impl TextSystem {
         }
 
         let size = vec2(
-            width, // TODO multiply by resolution??
-            total_lines as f32 * self.buffer.metrics().line_height,
-        ) * resolution;
+            width / resolution,
+            total_lines as f32 * (self.buffer.metrics().line_height / resolution),
+        );
         Ok((size, total_lines))
     }
 
