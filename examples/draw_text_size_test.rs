@@ -1,5 +1,5 @@
 use rkit::{
-    app::window_size,
+    app::{window_dpi_scale, window_size},
     draw::{self, Font, create_draw_2d},
     gfx::{self, Color},
     math::{Vec2, vec2},
@@ -30,64 +30,61 @@ fn update(s: &mut State) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
+    let init = 4.0;
     let yy_multi = 0.05;
-    let count = 15;
+    let count = 18;
     let gap = 25.0;
     let pos1 = window_size() * vec2(0.2, yy_multi);
     let offset = vec2(0.0, 30.0);
     for i in 0..count {
-        let size = 8.0 + (i * 2) as f32;
+        let size = init + (i * 2) as f32;
         let pos = (pos1 + offset * i as f32 + (vec2(0.0, gap) * i as f32)).floor();
         draw.text(&format!("{size} font."))
             .h_align_center()
             .translate(pos)
             .color(Color::YELLOW)
             .size(size)
-            .resolution(2.0)
             .origin(Vec2::splat(0.5));
 
         let bounds = draw.last_text_bounds();
         draw.rect(bounds.min(), bounds.size)
-            .stroke_color(Color::RED)
+            .stroke_color(Color::RED.with_alpha(0.5))
             .stroke(1.0);
     }
 
     let pos2 = window_size() * vec2(0.5, yy_multi);
     for i in 0..count {
-        let size = 8.0 + (i * 2) as f32;
+        let size = init + (i * 2) as f32;
         let pos = (pos2 + offset * i as f32 + (vec2(0.0, gap) * i as f32)).floor();
         draw.text(&format!("{size} font."))
-            .font(&s.font2)
+            .font(&s.font1)
+            .color(Color::YELLOW)
             .h_align_center()
             .translate(pos)
-            .color(Color::YELLOW)
             .size(size)
-            .resolution(2.0)
             .origin(Vec2::splat(0.5));
 
         let bounds = draw.last_text_bounds();
         draw.rect(bounds.min(), bounds.size)
-            .stroke_color(Color::RED)
+            .stroke_color(Color::RED.with_alpha(0.5))
             .stroke(1.0);
     }
 
     let pos3 = window_size() * vec2(0.80, yy_multi);
     for i in 0..count {
-        let size = 8.0 + (i * 2) as f32;
+        let size = init + (i * 2) as f32;
         let pos = (pos3 + offset * i as f32 + (vec2(0.0, gap) * i as f32)).floor();
         draw.text(&format!("{size} font."))
-            .font(&s.font1)
+            .font(&s.font2)
             .h_align_right()
             .translate(pos)
             .color(Color::YELLOW)
-            .scale(Vec2::splat(2.0))
             .size(size)
-            .resolution(6.0)
             .origin(Vec2::splat(0.5));
 
         let bounds = draw.last_text_bounds();
         draw.rect(bounds.min(), bounds.size)
-            .stroke_color(Color::RED)
+            .stroke_color(Color::RED.with_alpha(0.5))
             .stroke(1.0);
     }
 
