@@ -334,20 +334,21 @@ impl Element2D for Text2D<'_> {
                         temp_indices.extend_from_slice(indices.as_slice());
                     });
 
-                    println!("block lines={:?}", block.lines);
                     block.size
                 };
 
-                let (mut matrix, pos, anchor) =
-                    self.transform
-                        .map_or((Mat3::IDENTITY, Vec2::ZERO, Vec2::ZERO), |mut t| {
-                            t.set_size(block_size);
-                            (t.updated_mat3(), t.position(), t.anchor())
-                        });
+                let t = self.transform.map_or(Transform2D::default(), |mut t| {
+                    t.set_size(block_size);
+                    t.update();
+                    t
+                });
+                let pos = t.position();
+                let anchor = t.anchor();
+                let scaled_size = t.size() * t.scale();
+                let matrix = t.as_mat3();
 
-                if self.res > 1.0 {
-                    matrix *= Mat3::from_scale(Vec2::splat(1.0 / self.res));
-                }
+                let origin = self.position + pos - anchor * scaled_size;
+                draw.last_text_bounds = Rect::new(origin, scaled_size);
 
                 draw.add_to_batch(DrawingInfo {
                     pipeline: self.pip,
@@ -356,9 +357,6 @@ impl Element2D for Text2D<'_> {
                     transform: matrix,
                     sprite: None,
                 });
-
-                let origin = self.position + pos - anchor * block_size;
-                draw.last_text_bounds = Rect::new(origin, block_size);
             });
         });
     }

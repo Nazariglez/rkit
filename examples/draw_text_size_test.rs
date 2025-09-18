@@ -1,7 +1,9 @@
-use rkit::app::window_size;
-use rkit::draw::{self, Font, create_draw_2d};
-use rkit::gfx::{self, Color};
-use rkit::math::{Vec2, vec2};
+use rkit::{
+    app::window_size,
+    draw::{self, Font, create_draw_2d},
+    gfx::{self, Color},
+    math::{Vec2, vec2},
+};
 
 struct State {
     font1: Font,
@@ -41,7 +43,7 @@ fn update(s: &mut State) {
             .translate(pos)
             .color(Color::YELLOW)
             .size(size)
-            // .resolution(8.0)
+            .resolution(2.0)
             .origin(Vec2::splat(0.5));
 
         let bounds = draw.last_text_bounds();
@@ -60,7 +62,7 @@ fn update(s: &mut State) {
             .translate(pos)
             .color(Color::YELLOW)
             .size(size)
-            // .resolution(8.0)
+            .resolution(2.0)
             .origin(Vec2::splat(0.5));
 
         let bounds = draw.last_text_bounds();
@@ -75,11 +77,12 @@ fn update(s: &mut State) {
         let pos = (pos3 + offset * i as f32 + (vec2(0.0, gap) * i as f32)).floor();
         draw.text(&format!("{size} font."))
             .font(&s.font1)
-            .h_align_center()
+            .h_align_right()
             .translate(pos)
             .color(Color::YELLOW)
+            .scale(Vec2::splat(2.0))
             .size(size)
-            // .resolution(8.0)
+            .resolution(6.0)
             .origin(Vec2::splat(0.5));
 
         let bounds = draw.last_text_bounds();

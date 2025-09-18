@@ -320,7 +320,6 @@ impl TextSystem {
         let lead = metrics.leading;
         let line_height_per_em = (asc + desc + lead) / metrics.units_per_em as f32;
 
-        println!("nearest = {nearest:?} metrics {metrics:?} - {res_ppem:?} - {px_per_em}");
         let face = self
             .font_system
             .db()
@@ -364,10 +363,6 @@ impl TextSystem {
 
         let font_size = text.font_size * ppem;
         let line_height = text.line_height.unwrap_or(font_size * nlh);
-        println!(
-            "lh={line_height} tlh={:?} fs={font_size} tfs={} nlh={nlh}",
-            text.line_height, text.font_size
-        );
         let metrics = Metrics::new(font_size, line_height);
         self.buffer.set_metrics(&mut self.font_system, metrics);
         self.buffer
@@ -379,7 +374,7 @@ impl TextSystem {
 
         // do not mess with textures when we only want the size of the block
         if only_measure {
-            let (size, lines) = self.measure()?;
+            let (size, lines) = self.measure(text.resolution)?;
             return Ok(BlockInfo {
                 size,
                 lines,
@@ -387,7 +382,7 @@ impl TextSystem {
             });
         }
 
-        match self.process()? {
+        match self.process(text.resolution)? {
             PostAction::Restore => {
                 self.restore();
                 self.prepare_text(text, false)
@@ -420,15 +415,16 @@ impl TextSystem {
                         vec2(ww, 0.0)
                     };
 
-                    let pos = text.pos + data.pos + info.pos.as_vec2();
+                    let atlas_size = info.size.as_vec2();
+                    let screen_size = atlas_size / text.resolution;
+                    let pos = text.pos + data.pos + (info.pos.as_vec2() / text.resolution);
                     let xy = pos - offset + vec2(0.0, data.line_y);
-                    let glyph_size = info.size.as_vec2();
 
                     Some(GlyphData {
                         xy,
-                        size: glyph_size,
+                        size: screen_size,
                         uvs1: info.atlas_pos / tex_size,
-                        uvs2: (info.atlas_pos + glyph_size) / tex_size,
+                        uvs2: (info.atlas_pos + atlas_size) / tex_size,
                         typ: info.typ,
                         pixelated,
                     })
@@ -467,7 +463,7 @@ impl TextSystem {
         self.bind_group = None;
     }
 
-    fn measure(&mut self) -> Result<(Vec2, usize), String> {
+    fn measure(&mut self, resolution: f32) -> Result<(Vec2, usize), String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -478,12 +474,12 @@ impl TextSystem {
 
         let size = vec2(
             width,
-            total_lines as f32 * self.buffer.metrics().line_height,
+            total_lines as f32 * (self.buffer.metrics().line_height),
         );
         Ok((size, total_lines))
     }
 
-    fn process(&mut self) -> Result<PostAction, String> {
+    fn process(&mut self, resolution: f32) -> Result<PostAction, String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -492,13 +488,12 @@ impl TextSystem {
             total_lines += 1;
 
             for layout in run.glyphs {
-                let resolution = 1.0; // FIXME: remove me
                 let glyph = layout.physical((0.0, 0.0), resolution);
 
                 // store to get rendering data later
                 self.process_data.push(ProcessData {
                     key: glyph.cache_key,
-                    pos: vec2(glyph.x as _, glyph.y as _),
+                    pos: vec2(glyph.x as _, glyph.y as _) / resolution,
                     line_w: run.line_w,
                     line_y: run.line_y,
                 });
