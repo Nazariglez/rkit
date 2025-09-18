@@ -108,10 +108,11 @@ const SELECT_TEXTURE_SAMPLER_NEAREST: &str = r#"
     }
 "#;
 
-// IMPORTANT NOTE: WebGL shader translation does not support multiple shader per texture
+//  NOTE: WebGL shader translation does not support multiple shader per texture
 // to make this work, webgpu targets will select the sampler based on the font but
 // webgl will select only one sampler based on the window "pixelated" flag. This means that
 // if the window is defined as pixelated all font will use a NEAREST sampler while targeting WebGL
+// FIXME: not only webgl but if using opengl we should do the same
 fn select_texture_sampler() -> &'static str {
     #[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
     {
