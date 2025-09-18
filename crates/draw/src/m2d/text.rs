@@ -334,6 +334,7 @@ impl Element2D for Text2D<'_> {
                         temp_indices.extend_from_slice(indices.as_slice());
                     });
 
+                    println!("block lines={:?}", block.lines);
                     block.size
                 };
 

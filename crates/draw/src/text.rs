@@ -42,8 +42,8 @@ pub struct Font {
     nearest: bool,
     // designed ppem
     res_ppem: f32,
-    // ppem calculated per font
-    ppem: f32,
+    px_per_em: f32,
+    line_height_per_em: f32,
     family: Arc<String>,
     weight: Weight,
     style: Style,
@@ -313,9 +313,14 @@ impl TextSystem {
         let font_ref = font.as_swash();
         let metrics = font_ref.metrics(&[]);
         let res_ppem = if nearest { 8.0 } else { 16.0 };
-        let ppem = metrics.units_per_em as f32 / metrics.cap_height;
+        let px_per_em = metrics.units_per_em as f32 / metrics.cap_height;
 
-        println!("nearest = {nearest:?} metrics {metrics:?} - {res_ppem:?} - {ppem}");
+        let asc = metrics.ascent;
+        let desc = -metrics.descent;
+        let lead = metrics.leading;
+        let line_height_per_em = (asc + desc + lead) / metrics.units_per_em as f32;
+
+        println!("nearest = {nearest:?} metrics {metrics:?} - {res_ppem:?} - {px_per_em}");
         let face = self
             .font_system
             .db()
@@ -326,7 +331,8 @@ impl TextSystem {
             // raw: raw_id,
             nearest,
             res_ppem,
-            ppem,
+            px_per_em,
+            line_height_per_em,
             family: Arc::new(face.families[0].0.to_string()),
             weight: face.weight,
             style: face.style,
@@ -344,9 +350,9 @@ impl TextSystem {
 
         // start processing the new text with the data provided by the user
         let font = text.font.or(self.default_font.as_ref());
-        let (pixelated, ppem) = font
-            .map(|f| (f.is_pixelated(), f.ppem))
-            .unwrap_or((false, 1.0));
+        let (pixelated, ppem, nlh) = font
+            .map(|f| (f.is_pixelated(), f.px_per_em, f.line_height_per_em))
+            .unwrap_or((false, 1.0, 1.0));
         let attrs = match font {
             Some(f) => Attrs::new()
                 .family(Family::Name(&f.family))
@@ -356,8 +362,13 @@ impl TextSystem {
             None => Attrs::new(),
         };
 
-        let line_height = text.line_height.unwrap_or(text.font_size * 1.2) * ppem;
-        let metrics = Metrics::new(text.font_size, line_height);
+        let font_size = text.font_size * ppem;
+        let line_height = text.line_height.unwrap_or(font_size * nlh);
+        println!(
+            "lh={line_height} tlh={:?} fs={font_size} tfs={} nlh={nlh}",
+            text.line_height, text.font_size
+        );
+        let metrics = Metrics::new(font_size, line_height);
         self.buffer.set_metrics(&mut self.font_system, metrics);
         self.buffer
             .set_size(&mut self.font_system, text.wrap_width, None);
@@ -368,7 +379,7 @@ impl TextSystem {
 
         // do not mess with textures when we only want the size of the block
         if only_measure {
-            let (size, lines) = self.measure(text.resolution * ppem)?;
+            let (size, lines) = self.measure()?;
             return Ok(BlockInfo {
                 size,
                 lines,
@@ -376,7 +387,7 @@ impl TextSystem {
             });
         }
 
-        match self.process(text.resolution * ppem)? {
+        match self.process()? {
             PostAction::Restore => {
                 self.restore();
                 self.prepare_text(text, false)
@@ -456,7 +467,7 @@ impl TextSystem {
         self.bind_group = None;
     }
 
-    fn measure(&mut self, resolution: f32) -> Result<(Vec2, usize), String> {
+    fn measure(&mut self) -> Result<(Vec2, usize), String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -466,13 +477,13 @@ impl TextSystem {
         }
 
         let size = vec2(
-            width / resolution,
-            total_lines as f32 * (self.buffer.metrics().line_height / resolution),
+            width,
+            total_lines as f32 * self.buffer.metrics().line_height,
         );
         Ok((size, total_lines))
     }
 
-    fn process(&mut self, resolution: f32) -> Result<PostAction, String> {
+    fn process(&mut self) -> Result<PostAction, String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -481,6 +492,7 @@ impl TextSystem {
             total_lines += 1;
 
             for layout in run.glyphs {
+                let resolution = 1.0; // FIXME: remove me
                 let glyph = layout.physical((0.0, 0.0), resolution);
 
                 // store to get rendering data later
