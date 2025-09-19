@@ -435,22 +435,32 @@ impl<'a> RenderTextureBuilder<'a> {
         Self::default()
     }
 
+    #[inline]
     pub fn with_label(mut self, label: &'a str) -> Self {
         self.desc.label = Some(label);
         self
     }
 
+    #[inline]
     pub fn with_depth(mut self, enabled: bool) -> Self {
         self.desc.depth = enabled;
         self
     }
 
+    #[inline]
     pub fn with_size(mut self, width: u32, height: u32) -> Self {
         self.desc.width = width;
         self.desc.height = height;
         self
     }
 
+    #[inline]
+    pub fn with_format(mut self, format: TextureFormat) -> Self {
+        self.desc.format = Some(format);
+        self
+    }
+
+    #[inline]
     pub fn build(self) -> Result<RenderTexture, String> {
         let Self { desc } = self;
 

@@ -21,13 +21,34 @@ pub const fn next_pot2(x: usize) -> usize {
 }
 
 #[inline(always)]
-pub const fn next_multiply_of(num: usize, base: usize) -> usize {
-    assert!(base > 0, "base must be > 0");
-    let units = if num == 0 { 1 } else { num.div_ceil(base) };
-    match units.checked_next_power_of_two() {
-        Some(p2) => p2.saturating_mul(base),
+pub const fn next_multiple_of(num: usize, base: usize) -> usize {
+    debug_assert!(base > 0, "base must be > 0");
+    match num.checked_next_multiple_of(base) {
+        Some(v) => v,
         None => usize::MAX,
     }
+}
+
+#[inline(always)]
+pub const fn closest_multiple_of(num: usize, base: usize) -> usize {
+    debug_assert!(base > 0, "base must be > 0");
+
+    let rem = num % base;
+    if rem == 0 {
+        return num;
+    }
+
+    let down = num - rem;
+    let up = match down.checked_add(base) {
+        Some(v) => v,
+        None => return down,
+    };
+
+    if rem >= base - rem {
+        return up;
+    }
+
+    down
 }
 
 #[cfg(test)]
@@ -48,30 +69,68 @@ mod test {
     }
 
     #[test]
-    fn next_multiply() {
-        assert_eq!(next_multiply_of(7, 8), 8);
-        assert_eq!(next_multiply_of(8, 8), 8);
-        assert_eq!(next_multiply_of(9, 8), 16);
-        assert_eq!(next_multiply_of(15, 8), 16);
-        assert_eq!(next_multiply_of(16, 8), 16);
-        assert_eq!(next_multiply_of(17, 8), 32);
+    fn test_next_multiply() {
+        assert_eq!(next_multiple_of(144, 2), 146);
 
-        assert_eq!(next_multiply_of(0, 10), 10);
-        assert_eq!(next_multiply_of(9, 10), 10);
-        assert_eq!(next_multiply_of(10, 10), 10);
-        assert_eq!(next_multiply_of(13, 10), 20);
-        assert_eq!(next_multiply_of(21, 10), 40);
+        assert_eq!(next_multiple_of(7, 8), 8);
+        assert_eq!(next_multiple_of(8, 8), 8);
+        assert_eq!(next_multiple_of(9, 8), 16);
+        assert_eq!(next_multiple_of(15, 8), 16);
+        assert_eq!(next_multiple_of(16, 8), 16);
+        assert_eq!(next_multiple_of(17, 8), 24);
 
-        assert_eq!(next_multiply_of(8, 9), 9);
-        assert_eq!(next_multiply_of(9, 9), 9);
-        assert_eq!(next_multiply_of(10, 9), 18);
-        assert_eq!(next_multiply_of(17, 9), 18);
-        assert_eq!(next_multiply_of(19, 9), 36);
+        assert_eq!(next_multiple_of(0, 10), 10);
+        assert_eq!(next_multiple_of(9, 10), 10);
+        assert_eq!(next_multiple_of(10, 10), 10);
+        assert_eq!(next_multiple_of(13, 10), 20);
+        assert_eq!(next_multiple_of(21, 10), 40);
+
+        assert_eq!(next_multiple_of(8, 9), 9);
+        assert_eq!(next_multiple_of(9, 9), 9);
+        assert_eq!(next_multiple_of(10, 9), 18);
+        assert_eq!(next_multiple_of(17, 9), 18);
+        assert_eq!(next_multiple_of(19, 9), 36);
     }
 
     #[test]
     fn test_multiply_overflow_to_max() {
-        let out = next_multiply_of(usize::MAX - 1, 2);
+        let out = next_multiple_of(usize::MAX - 1, 3);
         assert_eq!(out, usize::MAX);
+    }
+
+    #[test]
+    fn test_closest_multiply() {
+        assert_eq!(closest_multiple_of(7, 8), 8);
+        assert_eq!(closest_multiple_of(8, 8), 8);
+        assert_eq!(closest_multiple_of(9, 8), 8);
+        assert_eq!(closest_multiple_of(11, 8), 8);
+        assert_eq!(closest_multiple_of(12, 8), 16);
+        assert_eq!(closest_multiple_of(13, 8), 16);
+        assert_eq!(closest_multiple_of(15, 8), 16);
+        assert_eq!(closest_multiple_of(16, 8), 16);
+        assert_eq!(closest_multiple_of(17, 8), 16);
+
+        assert_eq!(closest_multiple_of(0, 10), 0);
+        assert_eq!(closest_multiple_of(4, 10), 0);
+        assert_eq!(closest_multiple_of(5, 10), 10);
+        assert_eq!(closest_multiple_of(9, 10), 10);
+        assert_eq!(closest_multiple_of(10, 10), 10);
+        assert_eq!(closest_multiple_of(13, 10), 10);
+        assert_eq!(closest_multiple_of(15, 10), 20);
+        assert_eq!(closest_multiple_of(21, 10), 20);
+
+        assert_eq!(closest_multiple_of(8, 9), 9);
+        assert_eq!(closest_multiple_of(9, 9), 9);
+        assert_eq!(closest_multiple_of(10, 9), 9);
+        assert_eq!(closest_multiple_of(13, 9), 9);
+        assert_eq!(closest_multiple_of(14, 9), 18);
+        assert_eq!(closest_multiple_of(17, 9), 18);
+        assert_eq!(closest_multiple_of(19, 9), 18);
+    }
+
+    #[test]
+    fn test_closest_multiply_overflow() {
+        let out = closest_multiple_of(usize::MAX - 1, 2);
+        assert_eq!(out, usize::MAX - 1);
     }
 }

@@ -12,7 +12,7 @@ use etagere::{BucketedAtlasAllocator, size2};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
-use utils::helpers::next_multiply_of;
+use utils::helpers::closest_multiple_of;
 
 pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
     Lazy::new(|| AtomicRefCell::new(TextSystem::new().unwrap()));
@@ -164,8 +164,8 @@ struct ProcessData {
 }
 
 pub struct TextSystem {
-    mask: AtlasData,
-    color: AtlasData,
+    pub(crate) mask: AtlasData,
+    pub(crate) color: AtlasData,
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
     cache: FxHashMap<CacheKey, GlyphInfo>,
@@ -379,7 +379,7 @@ impl TextSystem {
 
         let font_size = text.font_size * ppem;
         let resolution = if pixelated {
-            let next_fs = next_multiply_of(font_size as _, res_ppem as _) as f32;
+            let next_fs = closest_multiple_of(font_size as _, res_ppem as _) as f32;
             let scale = next_fs / font_size;
             text.resolution * scale
         } else {
@@ -388,7 +388,7 @@ impl TextSystem {
             text.resolution
         };
 
-        let line_height = text.line_height.unwrap_or(font_size * lh_pem);
+        let line_height = text.line_height.unwrap_or(font_size * lh_pem * 1.2);
         let metrics = Metrics::new(font_size, line_height);
         self.buffer.set_metrics(&mut self.font_system, metrics);
         self.buffer
@@ -624,9 +624,9 @@ pub(crate) enum AtlasType {
     Color,
 }
 
-struct AtlasData {
+pub(crate) struct AtlasData {
+    pub(crate) texture: Texture,
     allocator: BucketedAtlasAllocator,
-    texture: Texture,
     max_texture_size: u32,
     current_size: u32,
 }

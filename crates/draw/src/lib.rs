@@ -13,7 +13,7 @@ pub use sprite::*;
 
 pub use text::*;
 
-use corelib::app::window_size;
+use corelib::{app::window_size, gfx::Texture};
 
 // -- Draw API
 #[inline]
@@ -83,11 +83,21 @@ impl<'a> FontBuilder<'a> {
 }
 
 #[inline]
-pub fn create_font(data: &[u8]) -> FontBuilder {
+pub fn create_font(data: &[u8]) -> FontBuilder<'_> {
     FontBuilder::new(data)
 }
 
 #[inline]
 pub fn set_default_font(font: &Font) {
     get_mut_text_system().set_default_font(font);
+}
+
+#[inline]
+pub fn text_mask_atlas() -> Texture {
+    get_text_system().mask.texture.clone()
+}
+
+#[inline]
+pub fn text_color_atlas() -> Texture {
+    get_text_system().color.texture.clone()
 }

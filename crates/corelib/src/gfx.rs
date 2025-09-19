@@ -41,22 +41,22 @@ where
 }
 
 #[inline]
-pub fn create_render_pipeline(shader: &str) -> RenderPipelineBuilder {
+pub fn create_render_pipeline(shader: &str) -> RenderPipelineBuilder<'_> {
     RenderPipelineBuilder::new(shader)
 }
 
 #[inline]
-pub fn create_vertex_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder {
+pub fn create_vertex_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> {
     BufferBuilder::new(BufferUsage::Vertex, data)
 }
 
 #[inline]
-pub fn create_index_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder {
+pub fn create_index_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> {
     BufferBuilder::new(BufferUsage::Index, data)
 }
 
 #[inline]
-pub fn create_uniform_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder {
+pub fn create_uniform_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> {
     BufferBuilder::new(BufferUsage::Uniform, data)
 }
 
@@ -66,12 +66,12 @@ pub fn create_bind_group<'a>() -> BindGroupBuilder<'a> {
 }
 
 #[inline]
-pub fn write_buffer(buffer: &Buffer) -> BufferWriteBuilder {
+pub fn write_buffer(buffer: &Buffer) -> BufferWriteBuilder<'_> {
     BufferWriteBuilder::new(buffer)
 }
 
 #[inline]
-pub fn write_texture(tex: &Texture) -> TextureWriteBuilder {
+pub fn write_texture(tex: &Texture) -> TextureWriteBuilder<'_> {
     TextureWriteBuilder::new(tex)
 }
 
