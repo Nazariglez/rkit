@@ -1,18 +1,15 @@
-use crate::create_sprite;
+use crate::{SpriteBuilder, create_sprite};
 
 use super::sprite::Sprite;
 use corelib::{
-    gfx::{RenderTexture, Sampler, create_render_texture},
+    gfx::{
+        RenderTexture, RenderTextureBuilder, Sampler, TextureFilter, TextureFormat, TextureWrap,
+        create_render_texture,
+    },
     math::UVec2,
 };
 use std::num::NonZeroUsize;
 use utils::fast_cache::FastCache;
-
-#[derive(Clone)]
-pub struct RenderSprite {
-    pub sprite: Sprite,
-    pub render_texture: RenderTexture,
-}
 
 pub struct RenderSpriteCache {
     pub sampler: Sampler,
@@ -51,5 +48,112 @@ impl RenderSpriteCache {
 
     pub fn clear(&mut self) {
         self.textures.clear();
+    }
+}
+
+#[derive(Clone)]
+pub struct RenderSprite {
+    pub sprite: Sprite,
+    pub render_texture: RenderTexture,
+}
+
+#[derive(Default)]
+pub struct RenderSpriteBuilder<'a> {
+    rt_builder: RenderTextureBuilder<'a>,
+    sprite_builder: SpriteBuilder<'a>,
+}
+
+impl<'a> RenderSpriteBuilder<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[inline]
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.rt_builder = self.rt_builder.with_label(label);
+        self.sprite_builder = self.sprite_builder.with_label(label);
+        self
+    }
+
+    #[inline]
+    pub fn with_depth(mut self, enabled: bool) -> Self {
+        self.rt_builder = self.rt_builder.with_depth(enabled);
+        self
+    }
+
+    #[inline]
+    pub fn with_size(mut self, width: u32, height: u32) -> Self {
+        self.rt_builder = self.rt_builder.with_size(width, height);
+        self
+    }
+
+    #[inline]
+    pub fn with_sampler(mut self, sampler: &Sampler) -> Self {
+        self.sprite_builder = self.sprite_builder.with_sampler(sampler);
+        self
+    }
+
+    #[inline]
+    pub fn with_format(mut self, format: TextureFormat) -> Self {
+        self.rt_builder = self.rt_builder.with_format(format);
+        self
+    }
+
+    #[inline]
+    pub fn with_write_flag(mut self, writable: bool) -> Self {
+        self.sprite_builder = self.sprite_builder.with_write_flag(writable);
+        self
+    }
+
+    #[inline]
+    pub fn with_wrap_x(mut self, wrap: TextureWrap) -> Self {
+        self.sprite_builder = self.sprite_builder.with_wrap_x(wrap);
+        self
+    }
+
+    #[inline]
+    pub fn with_wrap_y(mut self, wrap: TextureWrap) -> Self {
+        self.sprite_builder = self.sprite_builder.with_wrap_y(wrap);
+        self
+    }
+
+    #[inline]
+    pub fn with_wrap_z(mut self, wrap: TextureWrap) -> Self {
+        self.sprite_builder = self.sprite_builder.with_wrap_z(wrap);
+        self
+    }
+
+    #[inline]
+    pub fn with_min_filter(mut self, filter: TextureFilter) -> Self {
+        self.sprite_builder = self.sprite_builder.with_min_filter(filter);
+        self
+    }
+
+    #[inline]
+    pub fn with_mag_filter(mut self, filter: TextureFilter) -> Self {
+        self.sprite_builder = self.sprite_builder.with_mag_filter(filter);
+        self
+    }
+
+    #[inline]
+    pub fn with_mipmap_filter(mut self, filter: TextureFilter) -> Self {
+        self.sprite_builder = self.sprite_builder.with_mipmap_filter(filter);
+        self
+    }
+
+    #[inline]
+    pub fn build(self) -> Result<RenderSprite, String> {
+        let Self {
+            rt_builder,
+            sprite_builder,
+        } = self;
+        let render_texture = rt_builder.build()?;
+        let sprite = sprite_builder
+            .from_texture(render_texture.texture())
+            .build()?;
+        Ok(RenderSprite {
+            sprite,
+            render_texture,
+        })
     }
 }

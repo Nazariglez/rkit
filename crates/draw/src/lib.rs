@@ -22,6 +22,11 @@ pub fn create_sprite<'a>() -> SpriteBuilder<'a> {
 }
 
 #[inline]
+pub fn create_render_sprite<'a>() -> RenderSpriteBuilder<'a> {
+    RenderSpriteBuilder::new()
+}
+
+#[inline]
 pub fn add_pipeline_2d<F: FnOnce(PipelineResources<'_>) -> PipelineContext>(
     cb: F,
 ) -> DrawPipelineId {
