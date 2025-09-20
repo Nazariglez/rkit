@@ -224,41 +224,56 @@ impl<'a> SamplerBuilder<'a> {
         Self::default()
     }
 
+    #[inline]
     pub fn with_label(mut self, label: &'a str) -> Self {
         self.desc.label = Some(label);
         self
     }
 
+    #[inline]
     pub fn with_wrap_x(mut self, wrap: TextureWrap) -> Self {
         self.desc.wrap_x = wrap;
         self
     }
 
+    #[inline]
     pub fn with_wrap_y(mut self, wrap: TextureWrap) -> Self {
         self.desc.wrap_y = wrap;
         self
     }
 
+    #[inline]
     pub fn with_wrap_z(mut self, wrap: TextureWrap) -> Self {
         self.desc.wrap_z = wrap;
         self
     }
 
+    #[inline]
+    pub fn with_filter(mut self, filter: TextureFilter) -> Self {
+        self.desc.min_filter = filter;
+        self.desc.mag_filter = filter;
+        self
+    }
+
+    #[inline]
     pub fn with_min_filter(mut self, filter: TextureFilter) -> Self {
         self.desc.min_filter = filter;
         self
     }
 
+    #[inline]
     pub fn with_mag_filter(mut self, filter: TextureFilter) -> Self {
         self.desc.mag_filter = filter;
         self
     }
 
+    #[inline]
     pub fn with_mipmap_filter(mut self, filter: TextureFilter) -> Self {
         self.desc.mipmap_filter = Some(filter);
         self
     }
 
+    #[inline]
     pub fn build(self) -> Result<Sampler, String> {
         let Self { desc } = self;
         get_mut_backend().gfx().create_sampler(desc)

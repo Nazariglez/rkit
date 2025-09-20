@@ -124,6 +124,13 @@ impl<'a> RenderSpriteBuilder<'a> {
     }
 
     #[inline]
+    pub fn with_filter(mut self, filter: TextureFilter) -> Self {
+        self = self.with_min_filter(filter);
+        self = self.with_mag_filter(filter);
+        self
+    }
+
+    #[inline]
     pub fn with_min_filter(mut self, filter: TextureFilter) -> Self {
         self.sprite_builder = self.sprite_builder.with_min_filter(filter);
         self

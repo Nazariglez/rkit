@@ -109,67 +109,86 @@ impl<'a> SpriteBuilder<'a> {
         Self::default()
     }
 
+    #[inline]
     pub fn with_label(mut self, label: &'a str) -> Self {
         self.texture_builder = self.texture_builder.with_label(label);
         self.sampler_builder = self.sampler_builder.with_label(label);
         self
     }
 
+    #[inline]
     pub fn from_texture(mut self, tex: &Texture) -> Self {
         self.texture = Some(tex.clone());
         self
     }
 
+    #[inline]
     pub fn from_image(mut self, image: &'a [u8]) -> Self {
         self.texture_builder = self.texture_builder.from_image(image);
         self
     }
 
+    #[inline]
     pub fn from_bytes(mut self, bytes: &'a [u8], width: u32, height: u32) -> Self {
         self.texture_builder = self.texture_builder.from_bytes(bytes, width, height);
         self
     }
 
+    #[inline]
     pub fn with_sampler(mut self, sampler: &Sampler) -> Self {
         self.sampler = Some(sampler.clone());
         self
     }
 
+    #[inline]
     pub fn with_format(mut self, format: TextureFormat) -> Self {
         self.texture_builder = self.texture_builder.with_format(format);
         self
     }
 
+    #[inline]
     pub fn with_write_flag(mut self, writable: bool) -> Self {
         self.texture_builder = self.texture_builder.with_write_flag(writable);
         self
     }
 
+    #[inline]
     pub fn with_wrap_x(mut self, wrap: TextureWrap) -> Self {
         self.sampler_builder = self.sampler_builder.with_wrap_x(wrap);
         self
     }
 
+    #[inline]
     pub fn with_wrap_y(mut self, wrap: TextureWrap) -> Self {
         self.sampler_builder = self.sampler_builder.with_wrap_y(wrap);
         self
     }
 
+    #[inline]
     pub fn with_wrap_z(mut self, wrap: TextureWrap) -> Self {
         self.sampler_builder = self.sampler_builder.with_wrap_z(wrap);
         self
     }
 
+    #[inline]
+    pub fn with_filter(mut self, filter: TextureFilter) -> Self {
+        self.sampler_builder = self.sampler_builder.with_filter(filter);
+        self
+    }
+
+    #[inline]
     pub fn with_min_filter(mut self, filter: TextureFilter) -> Self {
         self.sampler_builder = self.sampler_builder.with_min_filter(filter);
         self
     }
 
+    #[inline]
     pub fn with_mag_filter(mut self, filter: TextureFilter) -> Self {
         self.sampler_builder = self.sampler_builder.with_mag_filter(filter);
         self
     }
 
+    #[inline]
     pub fn with_mipmap_filter(mut self, filter: TextureFilter) -> Self {
         self.sampler_builder = self.sampler_builder.with_mipmap_filter(filter);
         self

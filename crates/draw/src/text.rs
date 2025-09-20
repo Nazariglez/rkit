@@ -11,6 +11,7 @@ use cosmic_text::{
 use etagere::{BucketedAtlasAllocator, size2};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
+use std::borrow::Cow;
 use std::sync::Arc;
 use utils::helpers::closest_multiple_of;
 
@@ -180,6 +181,9 @@ pub struct TextSystem {
     // used to calculate rendering data
     process_data: Vec<ProcessData>,
     temp_data: Vec<GlyphData>,
+
+    // reusable string to avoid allocations
+    temp_hack_string: String,
 }
 
 impl TextSystem {
@@ -259,6 +263,7 @@ impl TextSystem {
 
             process_data: vec![],
             temp_data: vec![],
+            temp_hack_string: String::new(),
         };
 
         #[cfg(feature = "default-font")]
@@ -388,13 +393,26 @@ impl TextSystem {
             text.resolution
         };
 
-        let line_height = text.line_height.unwrap_or(font_size * lh_pem * 1.2);
+        let line_height = text.line_height.unwrap_or(font_size * lh_pem * 1.4);
         let metrics = Metrics::new(font_size, line_height);
         self.buffer.set_metrics(&mut self.font_system, metrics);
         self.buffer
             .set_size(&mut self.font_system, text.wrap_width, None);
-        self.buffer
-            .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
+
+        if text.wrap_width.is_some() {
+            // TODO: remove it when comisc-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
+            let fix_wrap_text = add_zwsp_hints(&mut self.temp_hack_string, text.text);
+            self.buffer.set_text(
+                &mut self.font_system,
+                &fix_wrap_text,
+                attrs,
+                Shaping::Advanced,
+            );
+        } else {
+            self.buffer
+                .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
+        }
+
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
         // do not mess with textures when we only want the size of the block
@@ -702,6 +720,38 @@ impl AtlasData {
 
         Ok(())
     }
+}
+
+/// Comisc text have an issue when a wrap ends up on a whitespace
+/// https://github.com/pop-os/cosmic-text/issues/251
+/// this is a hackish way of avoid this for now
+/// it's kind of expensive because we need to process the string
+/// each time we renderer it, although I am not allocating a new
+/// string each time but reusing it.
+fn add_zwsp_hints<'a>(temp_hack_string: &mut String, s: &'a str) -> Cow<'a, str> {
+    if !s.as_bytes().contains(&b' ') {
+        return Cow::Borrowed(s);
+    }
+
+    let mut need = false;
+    for w in s.as_bytes().windows(2) {
+        if w[0] == b' ' {
+            need = true;
+            break;
+        }
+    }
+    if !need {
+        return Cow::Borrowed(s);
+    }
+
+    temp_hack_string.clear();
+    for ch in s.chars() {
+        temp_hack_string.push(ch);
+        if ch == ' ' {
+            temp_hack_string.push('\u{200B}');
+        }
+    }
+    Cow::Owned(std::mem::take(temp_hack_string))
 }
 
 #[derive(Copy, Clone, Debug)]
