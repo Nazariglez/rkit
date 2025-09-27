@@ -159,6 +159,146 @@ impl App {
 
     #[inline]
     #[track_caller]
+    pub fn on_setup<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnSetup, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_update<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnUpdate, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_pre_frame<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPreFrame, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_post_frame<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPostFrame, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_pre_update<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPreUpdate, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_post_update<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPostUpdate, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_render<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnRender, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_pre_fixed_update<M>(
+        &mut self,
+        fps: u8,
+        systems: impl IntoSystemConfigs<M>,
+    ) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPreFixedUpdate(fps), |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_post_fixed_update<M>(
+        &mut self,
+        fps: u8,
+        systems: impl IntoSystemConfigs<M>,
+    ) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPostFixedUpdate(fps), |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_fixed_update<M>(&mut self, fps: u8, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnFixedUpdate(fps), |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_pre_render<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPreRender, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_post_render<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+        self.world
+            .try_schedule_scope(OnPostRender, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
     pub fn configure_sets(
         &mut self,
         label: impl ScheduleLabel,
@@ -201,7 +341,7 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn add_non_send_resource<R: 'static>(&mut self, value: R) -> &mut Self {
+    pub fn insert_non_send_resource<R: 'static>(&mut self, value: R) -> &mut Self {
         self.world.insert_non_send_resource(value);
         self
     }

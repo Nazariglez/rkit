@@ -7,7 +7,7 @@ use rkit::{
 
 fn main() -> Result<(), String> {
     App::new()
-        .add_non_send_resource(DemoWindows::default())
+        .insert_non_send_resource(DemoWindows::default())
         .add_plugin(MainPlugins::default())
         .add_plugin(EguiPlugin::default())
         .add_systems(OnRender, draw_system)

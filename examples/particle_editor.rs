@@ -58,7 +58,7 @@ impl Default for State {
 
 fn main() -> Result<(), String> {
     App::new()
-        .add_non_send_resource(FileCmdRes(None))
+        .insert_non_send_resource(FileCmdRes(None))
         .add_plugin(MainPlugins::default())
         .add_plugin(EguiPlugin::default())
         .add_plugin(ParticlesPlugin)
