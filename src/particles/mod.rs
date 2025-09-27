@@ -38,12 +38,12 @@ pub struct ParticlesPlugin;
 impl Plugin for ParticlesPlugin {
     fn apply(&self, app: &mut App) {
         app.add_event::<ParticleEndEvent>()
-            .add_resource(Particles::default())
-            .add_systems(
+            .insert_resource(Particles::default())
+            .on_schedule(
                 OnSetup,
                 load_default_particles_system.in_set(ParticlesSysSet),
             )
-            .add_systems(OnUpdate, update_system.in_set(ParticlesSysSet))
+            .on_schedule(OnUpdate, update_system.in_set(ParticlesSysSet))
             .configure_sets(OnUpdate, ParticlesSysSet);
     }
 }

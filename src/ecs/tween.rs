@@ -34,7 +34,7 @@ where
 {
     fn apply(&self, app: &mut App) {
         app.add_event::<TweenDone<T>>()
-            .add_systems(OnUpdate, tween_system::<C, T>.in_set(TweenSysSet));
+            .on_schedule(OnUpdate, tween_system::<C, T>.in_set(TweenSysSet));
     }
 }
 

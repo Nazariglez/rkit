@@ -18,9 +18,9 @@ pub use corelib::input::{KeyCode, KeyCodeList, MouseButton, MouseButtonList, Tex
 pub struct MousePlugin;
 impl Plugin for MousePlugin {
     fn apply(&self, app: &mut App) {
-        app.add_systems(OnEngineSetup, init_mouse_system)
-            .add_systems(OnEnginePreFrame, populate_mouse_system)
-            .add_systems(OnEnginePostFrame, sync_mouse_system);
+        app.on_schedule(OnEngineSetup, init_mouse_system)
+            .on_schedule(OnEnginePreFrame, populate_mouse_system)
+            .on_schedule(OnEnginePostFrame, sync_mouse_system);
     }
 }
 
@@ -239,8 +239,8 @@ fn sync_mouse_system(mut mouse: ResMut<Mouse>) {
 pub struct KeyboardPlugin;
 impl Plugin for KeyboardPlugin {
     fn apply(&self, app: &mut App) {
-        app.add_systems(OnEngineSetup, init_keyboard_system)
-            .add_systems(OnEnginePreFrame, populate_keyboard_system);
+        app.on_schedule(OnEngineSetup, init_keyboard_system)
+            .on_schedule(OnEnginePreFrame, populate_keyboard_system);
     }
 }
 

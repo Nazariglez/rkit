@@ -46,15 +46,15 @@ where
     T: Component,
 {
     fn apply(&self, app: &mut App) {
-        app.add_resource(UILayout::<T>::default())
+        app.insert_resource(UILayout::<T>::default())
             .add_event::<UILayoutUpdateEvent<T>>()
-            .add_systems(
+            .on_schedule(
                 OnPreUpdate,
                 pointer_interactivity_system::<T>
                     .run_if(is_layout_present::<T>)
                     .in_set(UILayoutSysSet),
             )
-            .add_systems(
+            .on_schedule(
                 OnPostUpdate,
                 (
                     remove_system::<T>,

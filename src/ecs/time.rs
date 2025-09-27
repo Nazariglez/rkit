@@ -7,8 +7,8 @@ use web_time::{Duration, Instant};
 pub struct TimePlugin;
 impl Plugin for TimePlugin {
     fn apply(&self, app: &mut App) {
-        app.add_systems(OnEngineSetup, init_time_system)
-            .add_systems(OnEnginePreFrame, update_time_system);
+        app.on_schedule(OnEngineSetup, init_time_system)
+            .on_schedule(OnEnginePreFrame, update_time_system);
     }
 }
 

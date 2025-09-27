@@ -56,7 +56,7 @@ impl App {
         ComputeTaskPool::get_or_init(TaskPool::default);
         app.add_plugin(BaseSchedules)
             .add_event::<AppExitEvt>()
-            .add_systems(OnEnginePreFrame, bevy_ecs::event::event_update_system);
+            .on_schedule(OnEnginePreFrame, bevy_ecs::event::event_update_system);
 
         app
     }
@@ -75,12 +75,12 @@ impl App {
 
     #[inline]
     pub fn with_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
-        self.add_event::<ChangeScreenEvt<S>>().add_systems(
+        self.add_event::<ChangeScreenEvt<S>>().on_schedule(
             OnEnginePreFrame,
             change_screen_event_system::<S>.after(bevy_ecs::event::event_update_system),
         );
 
-        S::add_schedules(self).add_systems(OnEngineSetup, move |mut cmds: Commands| {
+        S::add_schedules(self).on_schedule(OnEngineSetup, move |mut cmds: Commands| {
             cmds.queue(ChangeScreen(screen.clone()))
         })
     }
@@ -102,7 +102,7 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn add_screen_systems<SL: ScheduleLabel + Eq + Clone + std::hash::Hash, S: Screen, M>(
+    pub fn on_screen_schedule<SL: ScheduleLabel + Eq + Clone + std::hash::Hash, S: Screen, M>(
         &mut self,
         screen: S,
         label: SL,
@@ -139,12 +139,12 @@ impl App {
             });
         }
 
-        self.add_systems(schedule_id, systems)
+        self.on_schedule(schedule_id, systems)
     }
 
     #[inline]
     #[track_caller]
-    pub fn add_systems<M>(
+    pub fn on_schedule<M>(
         &mut self,
         label: impl ScheduleLabel,
         systems: impl IntoSystemConfigs<M>,
@@ -194,7 +194,7 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn add_resource<R: Resource>(&mut self, value: R) -> &mut Self {
+    pub fn insert_resource<R: Resource>(&mut self, value: R) -> &mut Self {
         self.world.insert_resource(value);
         self
     }

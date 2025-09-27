@@ -29,8 +29,8 @@ impl Plugin for EguiPlugin {
             clear_color: None,
         };
 
-        app.add_resource(ctx)
-            .add_systems(OnPreUpdate, read_input_system);
+        app.insert_resource(ctx)
+            .on_schedule(OnPreUpdate, read_input_system);
     }
 }
 
