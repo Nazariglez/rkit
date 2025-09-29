@@ -9,6 +9,7 @@ pub trait BaseCam2D {
     fn local_to_screen(&self, point: Vec2) -> Vec2;
     fn screen_to_local(&self, point: Vec2) -> Vec2;
     fn bounds(&self) -> Rect;
+    fn is_pixel_perfect(&self) -> bool;
 
     fn is_point_visible(&self, pos: Vec2) -> bool {
         self.bounds().contains(pos)
@@ -141,6 +142,11 @@ impl BaseCam2D for Camera2D {
             "You must call camera.update first to get an updated inverse_transform"
         );
         self.inverse_transform
+    }
+
+    #[inline]
+    fn is_pixel_perfect(&self) -> bool {
+        self.pixel_perfect
     }
 
     #[inline]

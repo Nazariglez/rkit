@@ -30,6 +30,7 @@ pub(super) struct UICameraInfo {
     pub inverse_projection: Mat4,
     pub transform: Mat3,
     pub inverse_transform: Mat3,
+    pub pixel_perfect: bool,
 }
 
 impl UICameraInfo {
@@ -44,6 +45,7 @@ impl UICameraInfo {
             inverse_projection: cam.inverse_projection(),
             transform: cam.transform(),
             inverse_transform: cam.inverse_transform(),
+            pixel_perfect: cam.is_pixel_perfect(),
         }
     }
 
@@ -127,6 +129,7 @@ where
                 inverse_projection: Mat4::IDENTITY,
                 transform: Mat3::IDENTITY,
                 inverse_transform: Mat3::IDENTITY,
+                pixel_perfect: false,
             },
 
             root,
@@ -367,8 +370,15 @@ where
     /// Updates a node's size and position based on the computed layout
     pub(super) fn set_node_layout(&self, node: &mut UINode) {
         let l = self.tree.layout(node.node_id).unwrap();
-        node.size = vec2(l.size.width, l.size.height);
-        node.position = vec2(l.location.x, l.location.y) + vec2(l.margin.left, l.margin.top);
+        let size = vec2(l.size.width, l.size.height);
+        let position = vec2(l.location.x, l.location.y) + vec2(l.margin.left, l.margin.top);
+        if self.cam_info.pixel_perfect {
+            node.size = size.round();
+            node.position = position.round();
+        } else {
+            node.size = size;
+            node.position = position;
+        }
     }
 }
 
@@ -451,11 +461,11 @@ where
                     }
 
                     // stop rendering if we reached the end of the node's children
-                    if let Some(e) = from {
-                        if &e == entity {
-                            // rendering = false;
-                            break;
-                        }
+                    if let Some(e) = from
+                        && &e == entity
+                    {
+                        // rendering = false;
+                        break;
                     }
                 }
             }

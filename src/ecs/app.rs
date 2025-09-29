@@ -92,7 +92,7 @@ impl App {
     }
 
     #[inline]
-    pub fn add_observer<E: Event, B: Bundle, M>(
+    pub fn on_event<E: Event, B: Bundle, M>(
         &mut self,
         system: impl IntoObserverSystem<E, B, M>,
     ) -> &mut Self {
