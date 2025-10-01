@@ -14,7 +14,7 @@ use bevy_ecs::prelude::*;
 use indexmap::IndexMap;
 use strum::IntoEnumIterator;
 
-#[derive(Debug, Event, Clone, Copy)]
+#[derive(Debug, Message, Clone, Copy)]
 pub struct UILayoutUpdateEvent<T>(std::marker::PhantomData<T>)
 where
     T: Component;
@@ -47,7 +47,7 @@ where
 {
     fn apply(&self, app: &mut App) {
         app.insert_resource(UILayout::<T>::default())
-            .add_event::<UILayoutUpdateEvent<T>>()
+            .add_message::<UILayoutUpdateEvent<T>>()
             .on_schedule(
                 OnPreUpdate,
                 pointer_interactivity_system::<T>
@@ -78,13 +78,13 @@ fn is_layout_present<T: Component>(layout: Option<Res<UILayout<T>>>) -> bool {
 
 pub(super) fn update_layout_system<T: Component>(
     mut layout: ResMut<UILayout<T>>,
-    mut evt: EventWriter<UILayoutUpdateEvent<T>>,
+    mut evt: MessageWriter<UILayoutUpdateEvent<T>>,
     images: Query<&UIImage, With<T>>,
     texts: Query<&UIText, With<T>>,
 ) {
     let updated = layout.update(images, texts);
     if updated {
-        evt.send(UILayoutUpdateEvent::<T>::default());
+        evt.write(UILayoutUpdateEvent::<T>::default());
     }
 }
 
@@ -92,7 +92,7 @@ pub(super) fn update_layout_system<T: Component>(
 fn update_nodes_system<T: Component>(
     mut node_query: Query<(&mut UINode, &UIStyle, &UITransform), With<T>>,
     layout: ResMut<UILayout<T>>,
-    mut evt: EventReader<UILayoutUpdateEvent<T>>,
+    mut evt: MessageReader<UILayoutUpdateEvent<T>>,
 ) {
     #[derive(Clone, Copy, Hash, PartialEq, Eq)]
     enum EntityId {
@@ -143,7 +143,7 @@ fn update_nodes_system<T: Component>(
 fn update_pointer_transform_system<T: Component>(
     mut pointer_query: Query<(&UINode, &mut UIPointer), With<T>>,
     layout: Res<UILayout<T>>,
-    mut evt: EventReader<UILayoutUpdateEvent<T>>,
+    mut evt: MessageReader<UILayoutUpdateEvent<T>>,
 ) {
     for _ in evt.read() {
         // after update nodes, update transform on pointers

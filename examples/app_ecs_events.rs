@@ -1,7 +1,6 @@
-use rkit::ecs::prelude::*;
-use rkit::random;
+use rkit::{prelude::*, random};
 
-#[derive(Event)]
+#[derive(Message)]
 struct MyCustomEvent {
     msg: String,
 }
@@ -14,7 +13,7 @@ fn main() -> Result<(), String> {
         .run()
 }
 
-fn send_event_system(mut writer: EventWriter<MyCustomEvent>) {
+fn send_event_system(mut writer: MessageWriter<MyCustomEvent>) {
     let rng = random::r#gen::<f32>();
     if rng <= 0.95 {
         return;
@@ -25,7 +24,7 @@ fn send_event_system(mut writer: EventWriter<MyCustomEvent>) {
     });
 }
 
-fn receive_event_system(mut reader: EventReader<MyCustomEvent>) {
+fn receive_event_system(mut reader: MessageReader<MyCustomEvent>) {
     for evt in reader.read() {
         println!("{}", evt.msg);
     }

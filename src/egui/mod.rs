@@ -136,7 +136,7 @@ fn read_input_system(
     keyboard: Res<Keyboard>,
     time: Res<Time>,
     window: Res<RWindow>,
-    resize_evt: EventReader<WindowResizeEvent>,
+    resize_evt: MessageReader<WindowResizeEvent>,
 ) {
     // strore zoom factor so we can calculate things later on
     let zoom_factor = ectx.ctx.zoom_factor();

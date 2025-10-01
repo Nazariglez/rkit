@@ -1,10 +1,10 @@
 use crate::app::close_window;
 use bevy_ecs::prelude::*;
 
-#[derive(Debug, Clone, Copy, Event)]
+#[derive(Debug, Clone, Copy, Message)]
 pub(super) struct AppExitEvt;
 
-pub(super) fn app_exit_system(evt: EventReader<AppExitEvt>) {
+pub(super) fn app_exit_system(evt: MessageReader<AppExitEvt>) {
     if !evt.is_empty() {
         log::info!("Closing app...");
         close_window();

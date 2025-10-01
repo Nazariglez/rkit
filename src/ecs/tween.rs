@@ -1,3 +1,4 @@
+use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::*;
 
 use crate::tween::*;
@@ -29,11 +30,11 @@ where
 
 impl<C, T> Plugin for TweenPlugin<C, T>
 where
-    C: Component,
+    C: Component<Mutability = Mutable>,
     T: TweenableComponent<C>,
 {
     fn apply(&self, app: &mut App) {
-        app.add_event::<TweenDone<T>>()
+        app.add_message::<TweenDone<T>>()
             .on_schedule(OnUpdate, tween_system::<C, T>.in_set(TweenSysSet));
     }
 }
@@ -108,7 +109,7 @@ where
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct TweenDone<T> {
     _m: std::marker::PhantomData<T>,
     pub id: Option<String>,
@@ -139,11 +140,11 @@ where
     }
 }
 
-fn tween_system<C: Component, T: TweenableComponent<C>>(
+fn tween_system<C: Component<Mutability = Mutable>, T: TweenableComponent<C>>(
     mut cmds: Commands,
     mut query: Query<(Entity, &mut C, &mut ComponentTween<C, T>)>,
     time: Res<Time>,
-    mut evt: EventWriter<TweenDone<T>>,
+    mut evt: MessageWriter<TweenDone<T>>,
 ) {
     let dt = time.delta_f32();
     query
@@ -156,7 +157,7 @@ fn tween_system<C: Component, T: TweenableComponent<C>>(
 
             if tween.tween.is_ended() {
                 cmds.entity(entity).remove::<ComponentTween<C, T>>();
-                evt.send(TweenDone {
+                evt.write(TweenDone {
                     _m: std::marker::PhantomData::<T>,
                     id: tween.id.take(),
                     entity,

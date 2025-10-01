@@ -1,5 +1,4 @@
-use crate::ecs::app::App;
-use crate::ecs::prelude::*;
+use crate::ecs::{app::App, prelude::*};
 use bevy_ecs::schedule::ScheduleLabel;
 
 pub trait Screen:
@@ -10,7 +9,7 @@ pub trait Screen:
     }
 }
 
-#[derive(Event, Debug, Clone, Copy)]
+#[derive(Message, Debug, Clone, Copy)]
 pub(crate) struct ChangeScreenEvt<S: Screen>(pub S);
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -37,12 +36,12 @@ pub struct ChangeScreen<S: Screen>(pub S);
 
 impl<S: Screen> Command for ChangeScreen<S> {
     fn apply(self, world: &mut World) {
-        world.send_event(ChangeScreenEvt(self.0.clone()));
+        world.write_message(ChangeScreenEvt(self.0.clone()));
     }
 }
 
 pub(crate) fn change_screen_event_system<S: Screen>(world: &mut World) {
-    world.resource_scope(|world, evt: Mut<Events<ChangeScreenEvt<S>>>| {
+    world.resource_scope(|world, evt: Mut<Messages<ChangeScreenEvt<S>>>| {
         let mut cursor = evt.get_cursor();
         for evt in cursor.read(&evt) {
             let screen = evt.0.clone();

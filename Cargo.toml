@@ -107,10 +107,11 @@ fluent = { version = "0.17", optional = true }
 unic-langid = { version = "0.9.6", optional = true }
 
 # ecs deps
-bevy_ecs = { version = "0.15", default-features = false, features = [
+bevy_ecs = { version = "0.17", default-features = false, features = [
+  "std",
   "multi_threaded",
 ], optional = true }
-bevy_tasks = { version = "0.15", default-features = false, features = [
+bevy_tasks = { version = "0.17", default-features = false, features = [
   "multi_threaded",
 ], optional = true }
 web-time = { workspace = true, optional = true }

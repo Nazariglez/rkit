@@ -8,7 +8,7 @@ use bevy_ecs::prelude::*;
 
 // -- Container
 #[derive(Component, Debug, Clone, Copy)]
-#[require(UIStyle, UIRender(container_render_component))]
+#[require(UIStyle, UIRender = container_render_component())]
 pub struct UIContainer {
     pub bg_color: Option<Color>,
     pub border_color: Option<Color>,
@@ -45,7 +45,7 @@ fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode
 
 // -- Image
 #[derive(Component, Debug, Clone)]
-#[require(UIStyle, UIRender(image_render_component), UINodeType(|| UINodeType::Image))]
+#[require(UIStyle, UIRender = image_render_component(), UINodeType::Image)]
 pub struct UIImage {
     pub sprite: Sprite,
 }
@@ -65,7 +65,7 @@ fn render_image(draw: &mut Draw2D, (image, node): (&UIImage, &UINode)) {
 
 // -- Text
 #[derive(Component, Debug, Clone)]
-#[require(UIStyle, UIRender(text_renderer), UINodeType(|| UINodeType::Text))]
+#[require(UIStyle, UIRender = text_renderer(), UINodeType::Text)]
 pub struct UIText {
     pub font: Option<Font>,
     pub text: String,

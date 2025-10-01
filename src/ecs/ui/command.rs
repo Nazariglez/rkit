@@ -170,7 +170,7 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
     {
         let mut builder = SpawnUICommandBuilder {
             cmds: self,
-            current_entity: Entity::from_raw(0),
+            current_entity: Entity::from_raw_u32(0).unwrap(),
             stack: vec![],
             bundles: Some(vec![]),
             layout,

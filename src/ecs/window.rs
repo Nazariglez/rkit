@@ -7,7 +7,7 @@ use corelib::{
 };
 use macros::Deref;
 
-#[derive(Event, Debug, Clone, Copy)]
+#[derive(Message, Debug, Clone, Copy)]
 pub struct WindowResizeEvent {
     pub size: Vec2,
 }
@@ -17,13 +17,13 @@ pub struct WindowPlugin;
 
 impl Plugin for WindowPlugin {
     fn apply(&self, app: &mut App) {
-        app.add_event::<WindowResizeEvent>()
+        app.add_message::<WindowResizeEvent>()
             .on_schedule(OnEngineSetup, init_window_system)
             .on_schedule(OnEnginePreFrame, populate_window_system)
             .on_schedule(OnEnginePostFrame, sync_window_system)
             .extend_with(|builder| {
                 builder.resize(|world: &mut World| {
-                    world.send_event(WindowResizeEvent {
+                    world.write_message(WindowResizeEvent {
                         size: window_size(),
                     });
                 })
@@ -310,7 +310,7 @@ fn init_window_system(mut cmds: Commands) {
     });
 }
 
-fn populate_window_system(mut win: ResMut<Window>, mut evt: EventWriter<WindowResizeEvent>) {
+fn populate_window_system(mut win: ResMut<Window>, mut evt: MessageWriter<WindowResizeEvent>) {
     // sometimes the user can do changess on the "setup" callback
     // that will be override by this, so if the window is dirty skip
     // the population, this will be normalized later on the sync event
@@ -326,7 +326,7 @@ fn populate_window_system(mut win: ResMut<Window>, mut evt: EventWriter<WindowRe
         // mode the is_window_fullscreen will still return true for a few iterations
         // re-sending the resize event we make sure that there is at least one
         // event to listen when the states doesn't matches between windows and system
-        evt.send(WindowResizeEvent { size: win.size() });
+        evt.write(WindowResizeEvent { size: win.size() });
     }
     win.focused = is_window_focused();
     win.dpi_scale = window_dpi_scale();

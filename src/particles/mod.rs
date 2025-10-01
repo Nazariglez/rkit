@@ -27,7 +27,7 @@ use crate::{
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ParticlesSysSet;
 
-#[derive(Event, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Message, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ParticleEndEvent {
     pub entity: Entity,
 }
@@ -37,7 +37,7 @@ pub struct ParticlesPlugin;
 
 impl Plugin for ParticlesPlugin {
     fn apply(&self, app: &mut App) {
-        app.add_event::<ParticleEndEvent>()
+        app.add_message::<ParticleEndEvent>()
             .insert_resource(Particles::default())
             .on_schedule(
                 OnSetup,
@@ -749,7 +749,7 @@ fn load_default_particles_system(mut config: ResMut<Particles>) {
 fn update_system(
     mut particles: Query<(Entity, &mut ParticleFx)>,
     time: Res<Time>,
-    mut evt: EventWriter<ParticleEndEvent>,
+    mut evt: MessageWriter<ParticleEndEvent>,
 ) {
     let dt = time.delta_f32();
     particles
@@ -930,7 +930,7 @@ fn update_system(
             if all_done {
                 p.spawning = false;
                 p.ended = true;
-                evt.send(ParticleEndEvent { entity });
+                evt.write(ParticleEndEvent { entity });
             }
         });
 }

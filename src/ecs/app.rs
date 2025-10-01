@@ -13,9 +13,9 @@ use crate::{
     },
 };
 use bevy_ecs::{
-    event::EventRegistry,
-    schedule::ScheduleLabel,
-    system::{IntoObserverSystem, SystemId},
+    message::MessageRegistry,
+    schedule::{InternedSystemSet, ScheduleLabel},
+    system::{IntoObserverSystem, ScheduleSystem, SystemId},
 };
 use bevy_tasks::{ComputeTaskPool, TaskPool};
 
@@ -55,8 +55,8 @@ impl App {
 
         ComputeTaskPool::get_or_init(TaskPool::default);
         app.add_plugin(BaseSchedules)
-            .add_event::<AppExitEvt>()
-            .on_schedule(OnEnginePreFrame, bevy_ecs::event::event_update_system);
+            .add_message::<AppExitEvt>()
+            .on_schedule(OnEnginePreFrame, bevy_ecs::message::message_update_system);
 
         app
     }
@@ -75,9 +75,9 @@ impl App {
 
     #[inline]
     pub fn with_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
-        self.add_event::<ChangeScreenEvt<S>>().on_schedule(
+        self.add_message::<ChangeScreenEvt<S>>().on_schedule(
             OnEnginePreFrame,
-            change_screen_event_system::<S>.after(bevy_ecs::event::event_update_system),
+            change_screen_event_system::<S>.after(bevy_ecs::message::message_update_system),
         );
 
         S::add_schedules(self).on_schedule(OnEngineSetup, move |mut cmds: Commands| {
@@ -106,7 +106,7 @@ impl App {
         &mut self,
         screen: S,
         label: SL,
-        systems: impl IntoSystemConfigs<M>,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
         let schedule_id = ScreenSchedule(label.clone(), screen.clone());
 
@@ -147,7 +147,7 @@ impl App {
     pub fn on_schedule<M>(
         &mut self,
         label: impl ScheduleLabel,
-        systems: impl IntoSystemConfigs<M>,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
         self.world
             .try_schedule_scope(label, |_world, schedule| {
@@ -159,7 +159,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_setup<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_setup<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnSetup, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -170,7 +173,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_update<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_update<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnUpdate, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -181,7 +187,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_pre_frame<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_pre_frame<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPreFrame, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -192,7 +201,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_post_frame<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_post_frame<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPostFrame, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -203,7 +215,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_pre_update<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_pre_update<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPreUpdate, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -214,7 +229,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_post_update<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_post_update<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPostUpdate, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -225,7 +243,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_render<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_render<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnRender, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -239,7 +260,7 @@ impl App {
     pub fn on_pre_fixed_update<M>(
         &mut self,
         fps: u8,
-        systems: impl IntoSystemConfigs<M>,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPreFixedUpdate(fps), |_world, schedule| {
@@ -254,7 +275,7 @@ impl App {
     pub fn on_post_fixed_update<M>(
         &mut self,
         fps: u8,
-        systems: impl IntoSystemConfigs<M>,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPostFixedUpdate(fps), |_world, schedule| {
@@ -266,7 +287,11 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_fixed_update<M>(&mut self, fps: u8, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_fixed_update<M>(
+        &mut self,
+        fps: u8,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnFixedUpdate(fps), |_world, schedule| {
                 schedule.add_systems(systems);
@@ -277,7 +302,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_pre_render<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_pre_render<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPreRender, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -288,7 +316,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_post_render<M>(&mut self, systems: impl IntoSystemConfigs<M>) -> &mut Self {
+    pub fn on_post_render<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
         self.world
             .try_schedule_scope(OnPostRender, |_world, schedule| {
                 schedule.add_systems(systems);
@@ -299,10 +330,10 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn configure_sets(
+    pub fn configure_sets<M>(
         &mut self,
         label: impl ScheduleLabel,
-        sets: impl IntoSystemSetConfigs,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
     ) -> &mut Self {
         self.world
             .try_schedule_scope(label, move |_world, schedule| {
@@ -314,20 +345,20 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn configure_screen_sets(
+    pub fn configure_screen_sets<M>(
         &mut self,
         screen: impl Screen,
         label: impl ScheduleLabel + Clone + Eq + std::hash::Hash,
-        sets: impl IntoSystemSetConfigs,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
     ) -> &mut Self {
         self.configure_sets(ScreenSchedule(label, screen), sets)
     }
 
     #[inline]
     #[track_caller]
-    pub fn add_event<E: Event>(&mut self) -> &mut Self {
-        if !self.world.contains_resource::<Events<E>>() {
-            EventRegistry::register_event::<E>(&mut self.world);
+    pub fn add_message<M: Message>(&mut self) -> &mut Self {
+        if !self.world.contains_resource::<Messages<M>>() {
+            MessageRegistry::register_message::<M>(&mut self.world);
         }
         self
     }

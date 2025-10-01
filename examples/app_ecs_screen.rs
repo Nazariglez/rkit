@@ -17,9 +17,9 @@ struct InitScenes;
 impl Plugin for InitScenes {
     fn apply(&self, app: &mut App) {
         app.with_screen(Scene::Menu)
-            .add_screen_systems(Scene::Menu, OnRender, draw_menu_system)
-            .add_screen_systems(Scene::Game, OnRender, draw_game_system)
-            .add_systems(OnUpdate, change_screen_system.run_if(is_change_requested));
+            .on_screen_schedule(Scene::Menu, OnRender, draw_menu_system)
+            .on_screen_schedule(Scene::Game, OnRender, draw_game_system)
+            .on_update(change_screen_system.run_if(is_change_requested));
     }
 }
 fn main() -> Result<(), String> {

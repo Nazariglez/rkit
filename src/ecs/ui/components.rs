@@ -3,7 +3,7 @@ use crate::input::MouseButton;
 use crate::math::{Mat3, Rect, Vec2};
 use crate::utils::next_pot2;
 use bevy_ecs::prelude::*;
-use bevy_ecs::query::ReadOnlyQueryData;
+use bevy_ecs::query::{ReadOnlyQueryData, ReleaseStateQueryData};
 use heapless::index_map::FnvIndexMap;
 use heapless::index_set::FnvIndexSet;
 use strum::{EnumCount, IntoEnumIterator};
@@ -88,8 +88,8 @@ pub struct UIRender {
 impl UIRender {
     pub fn run<Q, F>(cb: F) -> Self
     where
-        Q: ReadOnlyQueryData + 'static,
-        F: Fn(&mut Draw2D, Q::Item<'_>) + Send + Sync + 'static,
+        Q: ReadOnlyQueryData + ReleaseStateQueryData + 'static,
+        F: Fn(&mut Draw2D, Q::Item<'_, '_>) + Send + Sync + 'static,
     {
         let wrapped = Box::new(move |draw: &mut Draw2D, world: &World, entity: Entity| {
             cb(draw, world.entity(entity).components::<Q>());
