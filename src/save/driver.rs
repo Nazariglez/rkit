@@ -1,13 +1,13 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(super) trait SaveDriverImpl {
-    fn ensure_dir(dir: &PathBuf) -> Result<(), String>;
-    fn write_bytes(path: &PathBuf, bytes: &[u8]) -> Result<(), String>;
-    fn read_bytes(path: &PathBuf) -> Result<Vec<u8>, String>;
-    fn exists(path: &PathBuf) -> Result<bool, String>;
-    fn rename(src: &PathBuf, dst: &PathBuf) -> Result<(), String>;
-    fn read_dir(dir: &PathBuf) -> Result<Vec<PathBuf>, String>;
-    fn remove_file(path: &PathBuf) -> Result<(), String>;
+    fn ensure_dir(dir: &Path) -> Result<(), String>;
+    fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String>;
+    fn read_bytes(path: &Path) -> Result<Vec<u8>, String>;
+    fn exists(path: &Path) -> Result<bool, String>;
+    fn rename(src: &Path, dst: &Path) -> Result<(), String>;
+    fn read_dir(dir: &Path) -> Result<Vec<PathBuf>, String>;
+    fn remove_file(path: &Path) -> Result<(), String>;
 }
 
 #[cfg(target_arch = "wasm32")]

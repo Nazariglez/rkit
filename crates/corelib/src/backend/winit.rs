@@ -953,7 +953,7 @@ fn get_native_os_monitor_fps(
 #[inline(always)]
 fn get_native_os_monitor_fps(
     _monitor: &MonitorHandle,
-    fullscreen: Option<Fullscreen>,
+    _fullscreen: Option<Fullscreen>,
 ) -> Option<f64> {
     None
 }

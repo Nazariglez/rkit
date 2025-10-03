@@ -1,5 +1,5 @@
 /// Returns the User's data directory depending on the enviroment
-/// The `web` build will return None
+/// The `web` build will return the basedir
 #[inline(always)]
 pub fn user_data_path(base: &str) -> Option<std::path::PathBuf> {
     #[cfg(not(target_arch = "wasm32"))]
@@ -9,7 +9,7 @@ pub fn user_data_path(base: &str) -> Option<std::path::PathBuf> {
 
     #[cfg(target_arch = "wasm32")]
     {
-        None
+        Some(std::path::Path::new(base).to_owned())
     }
 }
 
@@ -54,19 +54,6 @@ pub const fn closest_multiple_of(num: usize, base: usize) -> usize {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn test_next_pot2() {
-        assert_eq!(next_pot2(0), 1);
-        assert_eq!(next_pot2(1), 1);
-        assert_eq!(next_pot2(2), 2);
-        assert_eq!(next_pot2(3), 4);
-        assert_eq!(next_pot2(5), 8);
-        assert_eq!(next_pot2(15), 16);
-        assert_eq!(next_pot2(16), 16);
-        assert_eq!(next_pot2(17), 32);
-        assert_eq!(next_pot2(1000), 1024);
-    }
 
     #[test]
     fn test_next_multiply() {

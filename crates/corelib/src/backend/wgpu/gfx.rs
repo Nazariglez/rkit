@@ -1125,25 +1125,23 @@ fn create_texture(
         view_formats: &[],
     });
 
-    if !is_depth_texture {
-        if let Some(d) = data {
-            // TODO, get the bytes_per_row/channles from the TextureFormat instead?
+    if !is_depth_texture && let Some(d) = data {
+        // TODO, get the bytes_per_row/channles from the TextureFormat instead?
 
-            let total = d.width * d.height;
-            debug_assert!(total != 0, "Depth texture width or height cannot be zero.");
-            let channels = d.bytes.len() as u32 / total;
-            if !d.bytes.is_empty() {
-                queue.write_texture(
-                    raw.as_image_copy(),
-                    d.bytes,
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(d.width * channels),
-                        rows_per_image: Some(d.height),
-                    },
-                    size,
-                );
-            }
+        let total = d.width * d.height;
+        debug_assert!(total != 0, "Depth texture width or height cannot be zero.");
+        let channels = d.bytes.len() as u32 / total;
+        if !d.bytes.is_empty() {
+            queue.write_texture(
+                raw.as_image_copy(),
+                d.bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(d.width * channels),
+                    rows_per_image: Some(d.height),
+                },
+                size,
+            );
         }
     }
 

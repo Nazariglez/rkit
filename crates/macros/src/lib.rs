@@ -18,16 +18,16 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
     let mut pipeline_opt = None;
 
     // Find the fields with the #[transform_2d] and #[pipeline_id] attributes
-    if let Data::Struct(data_struct) = &input.data {
-        if let Fields::Named(fields_named) = &data_struct.fields {
-            for field in &fields_named.named {
-                for attr in &field.attrs {
-                    if attr.path().is_ident("transform_2d") {
-                        transform_opt = Some(field.ident.clone().unwrap());
-                    }
-                    if attr.path().is_ident("pipeline_id") {
-                        pipeline_opt = Some(field.ident.clone().unwrap());
-                    }
+    if let Data::Struct(data_struct) = &input.data
+        && let Fields::Named(fields_named) = &data_struct.fields
+    {
+        for field in &fields_named.named {
+            for attr in &field.attrs {
+                if attr.path().is_ident("transform_2d") {
+                    transform_opt = Some(field.ident.clone().unwrap());
+                }
+                if attr.path().is_ident("pipeline_id") {
+                    pipeline_opt = Some(field.ident.clone().unwrap());
                 }
             }
         }

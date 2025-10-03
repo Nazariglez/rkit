@@ -3,7 +3,7 @@ use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Tra
 use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use corelib::math::{Mat3, Rect, Vec2, bvec2};
+use corelib::math::{Rect, Vec2, bvec2};
 use macros::Drawable2D;
 use std::cell::RefCell;
 

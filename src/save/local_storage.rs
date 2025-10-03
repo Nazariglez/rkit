@@ -1,7 +1,7 @@
 #![cfg(target_arch = "wasm32")]
 
 use std::collections::HashMap;
-use std::path::{Component, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use super::driver::SaveDriverImpl;
 use web_sys::Storage;
@@ -9,11 +9,12 @@ use web_sys::Storage;
 pub struct LocalStorageSaveDriver;
 
 impl SaveDriverImpl for LocalStorageSaveDriver {
-    fn ensure_dir(_dir: &PathBuf) -> Result<(), String> {
+    fn ensure_dir(_dir: &Path) -> Result<(), String> {
         Ok(())
     }
 
-    fn write_bytes(path: &PathBuf, bytes: &[u8]) -> Result<(), String> {
+    fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
+        log::info!("write bytes");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let val = base64::encode(bytes);
@@ -23,7 +24,8 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
         storage_set_map(&s, &root, &map)
     }
 
-    fn read_bytes(path: &PathBuf) -> Result<Vec<u8>, String> {
+    fn read_bytes(path: &Path) -> Result<Vec<u8>, String> {
+        log::info!("read bytes");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let s = local_storage()?;
@@ -32,7 +34,8 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
         base64::decode(v).map_err(|e| format!("Decode error: {e}"))
     }
 
-    fn exists(path: &PathBuf) -> Result<bool, String> {
+    fn exists(path: &Path) -> Result<bool, String> {
+        log::info!("exists");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let s = local_storage()?;
@@ -40,7 +43,8 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
         Ok(map.contains_key(&key))
     }
 
-    fn rename(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
+    fn rename(src: &Path, dst: &Path) -> Result<(), String> {
+        log::info!("rename");
         let s = local_storage()?;
         let src_root = root_key_of(src)?;
         let dst_root = root_key_of(dst)?;
@@ -63,7 +67,8 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
         storage_set_map(&s, &dst_root, &dst_map)
     }
 
-    fn read_dir(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
+    fn read_dir(dir: &Path) -> Result<Vec<PathBuf>, String> {
+        log::info!("read_dir");
         let s = local_storage()?;
         let root = root_key_of(dir)?;
         let map = storage_get_map(&s, &root)?;
@@ -77,7 +82,8 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
         Ok(out)
     }
 
-    fn remove_file(path: &PathBuf) -> Result<(), String> {
+    fn remove_file(path: &Path) -> Result<(), String> {
+        log::info!("remove_file");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let s = local_storage()?;
@@ -91,7 +97,7 @@ fn local_storage() -> Result<Storage, String> {
     web_sys::window()
         .ok_or_else(|| "No windows".to_string())?
         .local_storage()
-        .map_err(|e| format!("Cannot access LocalStorage: {e}"))?
+        .map_err(|_| format!("Cannot access LocalStorage"))?
         .ok_or_else(|| "LocalStorage unavailable".to_string())
 }
 
@@ -100,7 +106,7 @@ fn storage_get_map(s: &Storage, root: &str) -> Result<HashMap<String, String>, S
         .get_item(root)
         .map_err(|_| "LocalStorage get_item failed".to_string())?
     {
-        Some(text) => serde_json::from_str(text).map_err(|_| "Invalid namespace data".to_string()),
+        Some(text) => serde_json::from_str(&text).map_err(|_| "Invalid namespace data".to_string()),
         None => Ok(HashMap::new()),
     }
 }
@@ -111,18 +117,18 @@ fn storage_set_map(s: &Storage, root: &str, map: &HashMap<String, String>) -> Re
         .map_err(|_| "LocalStorage set_item failed".to_string())
 }
 
-fn root_key_of(path: &PathBuf) -> Result<String, String> {
+fn root_key_of(path: &Path) -> Result<String, String> {
     match path.components().next() {
         Some(Component::Normal(os)) => Ok(os.to_string_lossy().to_string()),
         _ => Err("Invalid save namespace".to_string()),
     }
 }
 
-fn key_of(path: &PathBuf) -> String {
+fn key_of(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
 
-fn prefix_of(dir: &PathBuf) -> String {
+fn prefix_of(dir: &Path) -> String {
     let mut p = dir.to_string_lossy().to_string();
     if !p.ends_with('/') {
         p.push('/');

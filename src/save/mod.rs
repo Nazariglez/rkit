@@ -6,9 +6,15 @@ use brotli::{CompressorWriter, Decompressor};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
+    path::{Path, PathBuf},
 };
+
+#[cfg(target_arch = "wasm32")]
+use web_time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use utils::helpers::user_data_path;
 
 use driver::*;
@@ -161,7 +167,7 @@ where
     Ok(final_filepath.to_string_lossy().into_owned())
 }
 
-fn read_metadata(file_path: &PathBuf) -> Result<SaveMetadata, String> {
+fn read_metadata(file_path: &Path) -> Result<SaveMetadata, String> {
     let raw = SaveDriver::read_bytes(file_path).map_err(|e| e.to_string())?;
 
     if raw.len() < HEADER_LEN {
@@ -194,7 +200,7 @@ fn read_metadata(file_path: &PathBuf) -> Result<SaveMetadata, String> {
         .map(u16::from_le_bytes)?;
 
     Ok(SaveMetadata {
-        path: file_path.clone(),
+        path: file_path.to_path_buf(),
         checksum,
         timestamp,
         sys_flags,
@@ -224,7 +230,7 @@ impl SaveList {
     }
 }
 
-fn list_saves(dir: &PathBuf, slot: &str) -> Result<SaveList, String> {
+fn list_saves(dir: &Path, slot: &str) -> Result<SaveList, String> {
     let entries = SaveDriver::read_dir(dir).map_err(|e| e.to_string())?;
 
     let mut main = None;
@@ -383,12 +389,11 @@ pub fn clean_backups(base_dir: &str, slot: &str, keep: usize) -> Result<usize, S
 
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
             // Expecting "slot.timestamp"
-            if let Some((name, ts_str)) = stem.rsplit_once('.') {
-                if name == slot {
-                    if let Ok(ts) = ts_str.parse::<u64>() {
-                        backups.push((ts, path));
-                    }
-                }
+            if let Some((name, ts_str)) = stem.rsplit_once('.')
+                && name == slot
+                && let Ok(ts) = ts_str.parse::<u64>()
+            {
+                backups.push((ts, path));
             }
         }
     }
@@ -398,7 +403,7 @@ pub fn clean_backups(base_dir: &str, slot: &str, keep: usize) -> Result<usize, S
 
     // Delete any backups beyond the first `keep`
     let mut deleted = 0;
-    for &(_, ref path) in backups.iter().skip(keep) {
+    for (_, path) in backups.iter().skip(keep) {
         SaveDriver::remove_file(path)
             .map_err(|e| format!("Failed to delete '{}': {e}", path.display()))?;
         deleted += 1;
@@ -687,7 +692,7 @@ mod tests {
         const KEEP: usize = 5;
         const N: usize = 8;
         // Create save files with backups
-        for i in 0..N {
+        for _ in 0..N {
             // ensure unique timestamp
             std::thread::sleep(std::time::Duration::from_secs_f32(1.0));
             let _ = save_data_to_file(

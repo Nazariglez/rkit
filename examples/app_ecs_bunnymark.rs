@@ -1,18 +1,19 @@
-use corelib::input::{MouseButton, is_mouse_btn_down};
-use rkit::draw::{Sprite, create_draw_2d};
-use rkit::ecs::prelude::*;
-use rkit::gfx::Color;
-use rkit::math::{Vec2, vec2};
-use rkit::random::Rng;
-use rkit::{gfx, random};
+use rkit::{
+    draw::{Sprite, create_draw_2d},
+    ecs::prelude::*,
+    gfx::{self, Color},
+    input::{MouseButton, is_mouse_btn_down},
+    math::{Vec2, vec2},
+    random::{self, Rng},
+};
 
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
         .add_plugin(WindowConfigPlugin::default().title("BunnyMark"))
-        .add_systems(OnSetup, setup_system)
-        .add_systems(OnUpdate, (update_system, add_bunnies_system))
-        .add_systems(OnRender, draw_system)
+        .on_setup(setup_system)
+        .on_update((update_system, add_bunnies_system))
+        .on_render(draw_system)
         .run()
 }
 
@@ -91,7 +92,7 @@ fn draw_system(
 
     draw.text(&format!("Bunnies: {}\nFPS: {:.2}", counter.0, time.fps()))
         .size(10.0)
-        .position(vec2(10.0, 10.0));
+        .translate(vec2(10.0, 10.0));
 
     gfx::render_to_frame(&draw).unwrap();
 }
