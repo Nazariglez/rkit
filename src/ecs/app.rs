@@ -62,19 +62,19 @@ impl App {
     }
 
     #[inline]
-    pub(crate) fn with_window(&mut self, config: WindowConfig) -> &mut Self {
+    pub(crate) fn add_window(&mut self, config: WindowConfig) -> &mut Self {
         self.window_config = config;
         self
     }
 
     #[inline]
-    pub(crate) fn with_log(&mut self, config: LogConfig) -> &mut Self {
+    pub(crate) fn add_log(&mut self, config: LogConfig) -> &mut Self {
         self.log_config = config;
         self
     }
 
     #[inline]
-    pub fn with_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
+    pub fn add_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
         self.add_message::<ChangeScreenEvt<S>>().on_schedule(
             OnEnginePreFrame,
             change_screen_event_system::<S>.after(bevy_ecs::message::message_update_system),
@@ -92,11 +92,50 @@ impl App {
     }
 
     #[inline]
+    #[track_caller]
+    pub fn add_message<M: Message>(&mut self) -> &mut Self {
+        if !self.world.contains_resource::<Messages<M>>() {
+            MessageRegistry::register_message::<M>(&mut self.world);
+        }
+        self
+    }
+
+    #[inline]
     pub fn on_event<E: Event, B: Bundle, M>(
         &mut self,
         system: impl IntoObserverSystem<E, B, M>,
     ) -> &mut Self {
         self.world.add_observer(system);
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn on_schedule<M>(
+        &mut self,
+        label: impl ScheduleLabel,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
+        self.world
+            .try_schedule_scope(label, |_world, schedule| {
+                schedule.add_systems(systems);
+            })
+            .unwrap();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn configure_sets<M>(
+        &mut self,
+        label: impl ScheduleLabel,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.world
+            .try_schedule_scope(label, move |_world, schedule| {
+                schedule.configure_sets(sets);
+            })
+            .unwrap();
         self
     }
 
@@ -144,19 +183,94 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn on_schedule<M>(
+    pub fn configure_screen_sets<M>(
         &mut self,
-        label: impl ScheduleLabel,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+        screen: impl Screen,
+        label: impl ScheduleLabel + Clone + Eq + std::hash::Hash,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(label, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
+        self.configure_sets(ScreenSchedule(label, screen), sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn insert_resource<R: Resource>(&mut self, value: R) -> &mut Self {
+        self.world.insert_resource(value);
         self
     }
 
+    #[inline]
+    #[track_caller]
+    pub fn insert_non_send_resource<R: 'static>(&mut self, value: R) -> &mut Self {
+        self.world.insert_non_send_resource(value);
+        self
+    }
+
+    pub(crate) fn extend_with<F>(&mut self, cb: F) -> &mut Self
+    where
+        F: FnOnce(AppBuilder) -> AppBuilder + 'static,
+    {
+        self.extensions.push(Box::new(cb));
+        self
+    }
+
+    pub fn run(&mut self) -> Result<(), String> {
+        let mut world = std::mem::take(&mut self.world);
+        let exit_sys = self.exit_sys;
+        let window_config = self.window_config.clone();
+        let log_config = self.log_config.clone();
+        let extensions = std::mem::take(&mut self.extensions);
+
+        let mut builder = crate::init_with(|| {
+            world.run_schedule(OnEngineSetup);
+            world.run_schedule(OnSetup);
+            world
+        });
+
+        builder = builder.with_window(window_config).with_logs(log_config);
+
+        builder = builder.pre_update(|world: &mut World| {
+            world.run_schedule(OnEnginePreFrame);
+            world.run_schedule(OnPreFrame);
+        });
+
+        for fps in self.fixed_updates.iter().cloned() {
+            builder = builder.fixed_update(1.0 / (fps as f32), move |world: &mut World| {
+                world.run_schedule(OnPreFixedUpdate(fps));
+                world.run_schedule(OnFixedUpdate(fps));
+                world.run_schedule(OnPostFixedUpdate(fps));
+            });
+        }
+
+        builder = builder.update(move |world: &mut World| {
+            world.run_schedule(OnPreUpdate);
+            world.run_schedule(OnUpdate);
+            world.run_schedule(OnPostUpdate);
+
+            world.run_schedule(OnPreRender);
+            world.run_schedule(OnRender);
+            world.run_schedule(OnPostRender);
+
+            world.run_schedule(OnPostFrame);
+            world.run_schedule(OnEnginePostFrame);
+
+            world.clear_trackers();
+
+            world.run_system(exit_sys).unwrap();
+        });
+
+        builder = builder.cleanup(|world: &mut World| world.run_schedule(OnCleanup));
+
+        for ext in extensions {
+            builder = ext(builder);
+        }
+
+        builder.run()
+    }
+}
+
+// Schedule management methods
+impl App {
     #[inline]
     #[track_caller]
     pub fn on_setup<M>(
@@ -326,116 +440,5 @@ impl App {
             })
             .unwrap();
         self
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn configure_sets<M>(
-        &mut self,
-        label: impl ScheduleLabel,
-        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
-    ) -> &mut Self {
-        self.world
-            .try_schedule_scope(label, move |_world, schedule| {
-                schedule.configure_sets(sets);
-            })
-            .unwrap();
-        self
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn configure_screen_sets<M>(
-        &mut self,
-        screen: impl Screen,
-        label: impl ScheduleLabel + Clone + Eq + std::hash::Hash,
-        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
-    ) -> &mut Self {
-        self.configure_sets(ScreenSchedule(label, screen), sets)
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn add_message<M: Message>(&mut self) -> &mut Self {
-        if !self.world.contains_resource::<Messages<M>>() {
-            MessageRegistry::register_message::<M>(&mut self.world);
-        }
-        self
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn insert_resource<R: Resource>(&mut self, value: R) -> &mut Self {
-        self.world.insert_resource(value);
-        self
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn insert_non_send_resource<R: 'static>(&mut self, value: R) -> &mut Self {
-        self.world.insert_non_send_resource(value);
-        self
-    }
-
-    pub(crate) fn extend_with<F>(&mut self, cb: F) -> &mut Self
-    where
-        F: FnOnce(AppBuilder) -> AppBuilder + 'static,
-    {
-        self.extensions.push(Box::new(cb));
-        self
-    }
-
-    pub fn run(&mut self) -> Result<(), String> {
-        let mut world = std::mem::take(&mut self.world);
-        let exit_sys = self.exit_sys;
-        let window_config = self.window_config.clone();
-        let log_config = self.log_config.clone();
-        let extensions = std::mem::take(&mut self.extensions);
-
-        let mut builder = crate::init_with(|| {
-            world.run_schedule(OnEngineSetup);
-            world.run_schedule(OnSetup);
-            world
-        });
-
-        builder = builder.with_window(window_config).with_logs(log_config);
-
-        builder = builder.pre_update(|world: &mut World| {
-            world.run_schedule(OnEnginePreFrame);
-            world.run_schedule(OnPreFrame);
-        });
-
-        for fps in self.fixed_updates.iter().cloned() {
-            builder = builder.fixed_update(1.0 / (fps as f32), move |world: &mut World| {
-                world.run_schedule(OnPreFixedUpdate(fps));
-                world.run_schedule(OnFixedUpdate(fps));
-                world.run_schedule(OnPostFixedUpdate(fps));
-            });
-        }
-
-        builder = builder.update(move |world: &mut World| {
-            world.run_schedule(OnPreUpdate);
-            world.run_schedule(OnUpdate);
-            world.run_schedule(OnPostUpdate);
-
-            world.run_schedule(OnPreRender);
-            world.run_schedule(OnRender);
-            world.run_schedule(OnPostRender);
-
-            world.run_schedule(OnPostFrame);
-            world.run_schedule(OnEnginePostFrame);
-
-            world.clear_trackers();
-
-            world.run_system(exit_sys).unwrap();
-        });
-
-        builder = builder.cleanup(|world: &mut World| world.run_schedule(OnCleanup));
-
-        for ext in extensions {
-            builder = ext(builder);
-        }
-
-        builder.run()
     }
 }

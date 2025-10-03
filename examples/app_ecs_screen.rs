@@ -16,7 +16,7 @@ enum Scene {
 struct InitScenes;
 impl Plugin for InitScenes {
     fn apply(&self, app: &mut App) {
-        app.with_screen(Scene::Menu)
+        app.add_screen(Scene::Menu)
             .on_screen_schedule(Scene::Menu, OnRender, draw_menu_system)
             .on_screen_schedule(Scene::Game, OnRender, draw_game_system)
             .on_update(change_screen_system.run_if(is_change_requested));

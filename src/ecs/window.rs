@@ -36,7 +36,7 @@ pub struct WindowConfigPlugin(WindowConfig);
 
 impl Plugin for WindowConfigPlugin {
     fn apply(&self, app: &mut App) {
-        app.with_window(self.0.clone());
+        app.add_window(self.0.clone());
     }
 }
 

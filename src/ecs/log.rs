@@ -9,7 +9,7 @@ pub struct LogPlugin(LogConfig);
 
 impl Plugin for LogPlugin {
     fn apply(&self, app: &mut App) {
-        app.with_log(self.0.clone());
+        app.add_log(self.0.clone());
     }
 }
 
