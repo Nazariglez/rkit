@@ -1,12 +1,17 @@
+mod driver;
+mod file_sys;
+mod local_storage;
+
 use brotli::{CompressorWriter, Decompressor};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
     io::{Read, Write},
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 use utils::helpers::user_data_path;
+
+use driver::*;
 
 /// header len is [checksum:u32][timestamp:u64][sys_flags:u16][user_flags:u16]
 const HEADER_LEN: usize = 4 + 8 + 2 + 2;
@@ -84,7 +89,7 @@ where
     let dir = data_dir(base_dir)?;
 
     // create the game directory if needed
-    fs::create_dir_all(&dir).map_err(|e| format!("Cannot create save directory: {e}"))?;
+    SaveDriver::ensure_dir(&dir).map_err(|e| format!("Cannot create save directory: {e}"))?;
 
     // build filename with timestamp + flags
     let ts = SystemTime::now()
@@ -121,35 +126,35 @@ where
     let temp_filename = format!("{slot}.{ts}.{TEMP_EXT}");
     let tmp_filepath = dir.join(&temp_filename);
     {
-        let mut f =
-            fs::File::create(&tmp_filepath).map_err(|e| format!("File create error: {e}"))?;
+        let mut buf = Vec::with_capacity(HEADER_LEN + raw.len());
 
         // we append to the compressed data the checksum as a u32 in little endian so we can read
         // later the checksum and check if the file was altered, detecting corruptions or manual
         // changes in the data
         // the final format is [checksum][timestamp][sys_flags][user_flags][data]
-        f.write_all(&checksum.to_le_bytes())
-            .and_then(|_| f.write_all(&ts.to_le_bytes()))
-            .and_then(|_| f.write_all(&sys_flags.bits().to_le_bytes()))
-            .and_then(|_| f.write_all(&user_flags.to_le_bytes()))
-            .and_then(|_| f.write_all(&raw))
-            .and_then(|_| f.sync_all())
-            .map_err(|e| format!("Write error: {e}"))?;
+        buf.extend_from_slice(&checksum.to_le_bytes());
+        buf.extend_from_slice(&ts.to_le_bytes());
+        buf.extend_from_slice(&sys_flags.bits().to_le_bytes());
+        buf.extend_from_slice(&user_flags.to_le_bytes());
+        buf.extend_from_slice(&raw);
+
+        SaveDriver::write_bytes(&tmp_filepath, &buf).map_err(|e| format!("Write error: {e}"))?;
     }
 
     let final_filepath = dir.join(slot).with_extension(SAVE_EXT);
 
     // rename the "old" main file as a new backup file
-    let final_exists = fs::exists(&final_filepath).map_err(|e| e.to_string())?;
+    let final_exists = SaveDriver::exists(&final_filepath).map_err(|e| e.to_string())?;
     if final_exists {
         let backup_filepath = dir.join(&temp_filename).with_extension(BACKUP_EXT);
-        fs::rename(&final_filepath, &backup_filepath)
+        SaveDriver::rename(&final_filepath, &backup_filepath)
             .map_err(|e| format!("Rename main save file to backup file: {e}"))?;
         log::debug!("New backup file created '{backup_filepath:?}'");
     }
 
     // rename the temp file to the final file
-    fs::rename(&tmp_filepath, &final_filepath).map_err(|e| format!("Rename file error: {e}"))?;
+    SaveDriver::rename(&tmp_filepath, &final_filepath)
+        .map_err(|e| format!("Rename file error: {e}"))?;
 
     log::debug!("Save file created '{final_filepath:?}'");
 
@@ -157,31 +162,33 @@ where
 }
 
 fn read_metadata(file_path: &PathBuf) -> Result<SaveMetadata, String> {
-    let mut f = fs::File::open(file_path).map_err(|e| e.to_string())?;
-    let mut header = [0u8; HEADER_LEN];
-    f.read_exact(&mut header).map_err(|e| e.to_string())?;
+    let raw = SaveDriver::read_bytes(file_path).map_err(|e| e.to_string())?;
 
-    // get the checksum
-    let checksum = header[0..4]
+    if raw.len() < HEADER_LEN {
+        return Err(format!(
+            "File too small: {} bytes (need at least {HEADER_LEN})",
+            raw.len(),
+        ));
+    }
+
+    let checksum = raw[0..4]
         .try_into()
         .map_err(|_| "Corrupt header: checksum slice has wrong length".to_string())
         .map(u32::from_le_bytes)?;
 
-    // get the timestamp
-    let timestamp = header[4..12]
+    let timestamp = raw[4..12]
         .try_into()
         .map_err(|_| "Corrupt header: timestamp slice has wrong length".to_string())
         .map(u64::from_le_bytes)?;
 
-    // get the flags
-    let sys_flags_bits = header[12..14]
+    let sys_flags_bits = raw[12..14]
         .try_into()
         .map_err(|_| "Corrupt header: sys flags slice has wrong length".to_string())
         .map(u16::from_le_bytes)?;
     let sys_flags = SaveFlags::from_bits(sys_flags_bits)
         .ok_or_else(|| format!("Unknown flags: {sys_flags_bits}"))?;
 
-    let user_flags = header[14..16]
+    let user_flags = raw[14..16]
         .try_into()
         .map_err(|_| "Corrupt header: user flags slice has wrong length".to_string())
         .map(u16::from_le_bytes)?;
@@ -218,18 +225,17 @@ impl SaveList {
 }
 
 fn list_saves(dir: &PathBuf, slot: &str) -> Result<SaveList, String> {
-    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
+    let entries = SaveDriver::read_dir(dir).map_err(|e| e.to_string())?;
 
     let mut main = None;
     let mut backups = entries
-        .filter_map(|entry| {
-            let path = entry.ok()?.path();
+        .into_iter()
+        .filter_map(|path| {
             let ext = path.extension()?.to_str()?;
 
             let is_main = ext == SAVE_EXT;
             let is_backup = ext == BACKUP_EXT;
-            let is_valid_ext = is_main || is_backup;
-            if !is_valid_ext {
+            if !is_main && !is_backup {
                 return None;
             }
 
@@ -241,13 +247,12 @@ fn list_saves(dir: &PathBuf, slot: &str) -> Result<SaveList, String> {
 
             match read_metadata(&path) {
                 Ok(data) => {
-                    // set this save as the main one and do not store it in the backup list
                     if is_main {
                         main = Some(data);
-                        return None;
+                        None
+                    } else {
+                        Some(data)
                     }
-
-                    Some(data)
                 }
                 Err(e) => {
                     log::warn!("Parsing save file '{path:?}': {e}");
@@ -268,7 +273,7 @@ fn parse_save_file<D>(meta: SaveMetadata) -> Result<SaveData<D>, String>
 where
     D: for<'de> Deserialize<'de>,
 {
-    let raw = fs::read(&meta.path).map_err(|e| format!("File read error: {e}"))?;
+    let raw = SaveDriver::read_bytes(&meta.path).map_err(|e| format!("File read error: {e}"))?;
 
     // return early if the file is too small even for the header
     if raw.len() < HEADER_LEN {
@@ -367,10 +372,7 @@ pub fn clean_backups(base_dir: &str, slot: &str, keep: usize) -> Result<usize, S
     let mut backups = Vec::new();
 
     // find all backup files matching "slot.timestamp.bak"
-    for entry in fs::read_dir(&dir).map_err(|e| format!("Read save directory error: {e}"))? {
-        let path = entry
-            .map_err(|e| format!("Directory entry error: {e}"))?
-            .path();
+    for path in SaveDriver::read_dir(&dir).map_err(|e| format!("Read save directory error: {e}"))? {
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             if ext != BACKUP_EXT {
                 continue;
@@ -397,7 +399,8 @@ pub fn clean_backups(base_dir: &str, slot: &str, keep: usize) -> Result<usize, S
     // Delete any backups beyond the first `keep`
     let mut deleted = 0;
     for &(_, ref path) in backups.iter().skip(keep) {
-        fs::remove_file(path).map_err(|e| format!("Failed to delete '{}': {e}", path.display()))?;
+        SaveDriver::remove_file(path)
+            .map_err(|e| format!("Failed to delete '{}': {e}", path.display()))?;
         deleted += 1;
     }
 
@@ -410,11 +413,7 @@ pub fn clear_save_files(base_dir: &str, slots: Option<&[&str]>) -> Result<usize,
     let dir = data_dir(base_dir)?;
 
     let mut deleted = 0;
-    for entry in fs::read_dir(&dir).map_err(|e| format!("Read save directory error: {e}"))? {
-        let path = entry
-            .map_err(|e| format!("Directory entry error: {e}"))?
-            .path();
-
+    for path in SaveDriver::read_dir(&dir).map_err(|e| format!("Read save directory error: {e}"))? {
         let fname = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) => n,
             // skip weird names
@@ -447,7 +446,7 @@ pub fn clear_save_files(base_dir: &str, slots: Option<&[&str]>) -> Result<usize,
 
         // at this point means we can delete the file because either it matches the name or there
         // were no names provided
-        fs::remove_file(&path)
+        SaveDriver::remove_file(&path)
             .map_err(|e| format!("Failed to delete '{}': {e}", path.display()))?;
         deleted += 1;
     }
@@ -474,7 +473,7 @@ where
 mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
-    use std::{fs::OpenOptions, path::PathBuf};
+    use std::{fs, fs::OpenOptions, path::PathBuf};
     use tempfile::TempDir;
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]

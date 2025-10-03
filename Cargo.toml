@@ -26,7 +26,7 @@ opt-level = 3
 all-features = true
 
 [workspace]
-members = ["crates/*"]
+members = [".", "crates/*"]
 
 [workspace.dependencies]
 # gamekit packages
@@ -123,6 +123,11 @@ bytemuck = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { workspace = true, optional = true, features = ["js"] }
+web-sys = { workspace = true, optional = true, features = [
+  "Window",
+  "Storage",
+] }
+base64 = { version = "0.22.1", optional = true }
 
 [dev-dependencies]
 log.workspace = true
@@ -191,6 +196,8 @@ save = [
   "dep:bincode",
   "dep:brotli",
   "dep:crc32fast",
+  "dep:web-sys",
+  "dep:base64",
 ]
 # enable locale method
 locale = ["dep:fluent", "dep:unic-langid"]

@@ -3921,6 +3921,7 @@ dependencies = [
  "assets",
  "atomic_refcell",
  "audio",
+ "base64",
  "bevy_ecs",
  "bevy_tasks",
  "bincode",
@@ -3956,6 +3957,7 @@ dependencies = [
  "tempfile",
  "unic-langid",
  "utils",
+ "web-sys",
  "web-time",
 ]
 
