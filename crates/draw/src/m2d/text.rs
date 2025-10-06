@@ -337,15 +337,12 @@ impl Element2D for Text2D<'_> {
                     block.size
                 };
 
-                let t = self.transform.map_or(Transform2D::default(), |mut t| {
-                    t.set_size(block_size);
-                    t.update();
-                    t
-                });
+                let mut t = self.transform.unwrap_or_default();
+                t.set_size(block_size);
                 let pos = t.position();
                 let anchor = t.anchor();
                 let scaled_size = t.size() * t.scale();
-                let matrix = t.as_mat3();
+                let matrix = t.updated_mat3();
 
                 let origin = self.position + pos - anchor * scaled_size;
                 draw.last_text_bounds = Rect::new(origin, scaled_size);

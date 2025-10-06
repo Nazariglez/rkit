@@ -74,6 +74,7 @@ fn setup(mut cmds: Commands) {
 }
 
 fn render(state: Res<State>) {
+    let px = 8.0;
     let word = "test hola";
     let mut rt_draw = Draw2D::new(state.rt.render_texture.size());
     rt_draw.clear(Color::TRANSPARENT);
@@ -81,8 +82,8 @@ fn render(state: Res<State>) {
     rt_draw.image(&state.tex);
     rt_draw
         .text(&format!("1.{word}"))
-        .translate(vec2(46.0, 2.0))
-        .size(4.0);
+        .translate(vec2(36.0, 2.0))
+        .size(px);
     gfx::render_to_texture(&state.rt.render_texture, &rt_draw).unwrap();
 
     let mut rrt_draw = Draw2D::new(state.rrt.render_texture.size());
@@ -91,8 +92,8 @@ fn render(state: Res<State>) {
     rrt_draw.image(&state.rtex);
     rrt_draw
         .text(&format!("2.{word}"))
-        .translate(vec2(46.0, 2.0))
-        .size(4.0);
+        .translate(vec2(36.0, 2.0))
+        .size(px);
     gfx::render_to_texture(&state.rrt.render_texture, &rrt_draw).unwrap();
 
     let mut draw = create_draw_2d();
@@ -106,15 +107,15 @@ fn render(state: Res<State>) {
     );
     draw.image(&state.tex).translate(vec2(2.0, 10.0));
     draw.text(&format!("3.{word}"))
-        .translate(vec2(48.0, 12.0))
-        .size(4.0);
+        .translate(vec2(38.0, 12.0))
+        .size(px);
     draw.image(&state.rt.sprite)
         .translate(vec2(100.0, 10.0))
         .scale(Vec2::splat(1.0 / RES));
     draw.image(&state.rtex).translate(vec2(2.0, 48.0));
     draw.text(&format!("4.{word}"))
-        .translate(vec2(48.0, 50.0))
-        .size(4.0);
+        .translate(vec2(38.0, 50.0))
+        .size(px);
     draw.image(&state.rrt.sprite)
         .translate(vec2(100.0, 48.0))
         .scale(Vec2::splat(1.0 / RES));
