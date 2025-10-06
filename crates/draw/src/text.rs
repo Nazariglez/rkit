@@ -484,9 +484,9 @@ impl TextSystem {
     }
 
     fn restore(&mut self) {
-        log::info!("Restoring TextAtlas glyphs.",);
+        log::debug!("Restoring TextAtlas glyphs.",);
 
-        // TODO eventually add gfx::copy_texture_to_texture should be more efficient
+        // TODO: eventually add gfx::copy_texture_to_texture should be more efficient
         for (key, glyph) in self.cache.iter() {
             let atlas = match glyph.typ {
                 AtlasType::Mask => &mut self.mask,
@@ -498,7 +498,7 @@ impl TextSystem {
                 continue;
             };
 
-            let offset = uvec2(glyph.atlas_pos.x as _, glyph.atlas_pos.y as _);
+            let offset = glyph.atlas_pos.as_uvec2();
             let size = uvec2(glyph.size.x as _, glyph.size.y as _);
             atlas.upload(size, offset, &image.data).unwrap();
         }
@@ -684,11 +684,11 @@ impl AtlasData {
     fn grow(&mut self) -> Result<bool, String> {
         let next_size = self.current_size * 2;
         if next_size > self.max_texture_size {
-            log::info!("Max text atlas size reached.");
+            log::debug!("Max text atlas size reached.");
             return Ok(false);
         }
 
-        log::info!(
+        log::debug!(
             "Growing text atlas from {} to {}",
             self.current_size,
             next_size
