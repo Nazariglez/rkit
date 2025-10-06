@@ -52,53 +52,64 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl #generics #name #generics #where_clause {
             // - Transform
-            pub fn translate(&mut self, pos: Vec2) -> &mut Self {
+
+            #[inline]
+            pub fn translate(&mut self, pos: impl Into<Vec2>) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_translation(pos);
                 self
             }
 
-            pub fn anchor(&mut self, point: Vec2) -> &mut Self {
+            #[inline]
+            pub fn anchor(&mut self, point: impl Into<Vec2>) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_anchor(point);
                 self
             }
 
-            pub fn pivot(&mut self, point: Vec2) -> &mut Self {
+            #[inline]
+            pub fn pivot(&mut self, point: impl Into<Vec2>) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_pivot(point);
                 self
             }
 
-            pub fn origin(&mut self, point: Vec2) -> &mut Self {
-                self.anchor(point)
-                    .pivot(point)
+            #[inline]
+            pub fn origin(&mut self, point: impl Into<Vec2>) -> &mut Self {
+                let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
+                t.set_origin(point);
+                self
             }
 
+            #[inline]
             pub fn flip_x(&mut self, flip: bool) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_flip(bvec2(flip, t.flip().y));
                 self
             }
 
+            #[inline]
             pub fn flip_y(&mut self, flip: bool) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_flip(bvec2(t.flip().x, flip));
                 self
             }
 
-            pub fn skew(&mut self, skew: Vec2) -> &mut Self {
+            #[inline]
+            pub fn skew(&mut self, skew: impl Into<Vec2>) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_skew(skew);
                 self
             }
 
-            pub fn scale(&mut self, scale: Vec2) -> &mut Self {
+            #[inline]
+            pub fn scale(&mut self, scale: impl Into<Vec2>) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_scale(scale);
                 self
             }
 
+            #[inline]
             pub fn rotation(&mut self, rot: f32) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_rotation(rot);

@@ -339,7 +339,7 @@ impl Element2D for Text2D<'_> {
 
                 let mut t = self.transform.unwrap_or_default();
                 t.set_size(block_size);
-                let pos = t.position();
+                let pos = t.translation();
                 let anchor = t.anchor();
                 let scaled_size = t.size() * t.scale();
                 let matrix = t.updated_mat3();

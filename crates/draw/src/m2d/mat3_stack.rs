@@ -73,6 +73,7 @@ impl Default for Transform2D {
 }
 
 impl Transform2D {
+    #[inline]
     pub fn builder() -> Transform2DBuilder {
         Transform2DBuilder::default()
     }
@@ -94,10 +95,12 @@ impl Transform2D {
         }
     }
 
+    #[inline]
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
 
+    #[inline]
     pub fn update(&mut self) {
         if self.dirty {
             self.mat3 = update_transform(self);
@@ -105,46 +108,66 @@ impl Transform2D {
         }
     }
 
+    #[inline]
     pub fn updated_mat3(&mut self) -> Mat3 {
         self.update();
         self.mat3
     }
 
+    #[inline]
     pub fn as_mat3(&self) -> Mat3 {
         debug_assert!(!self.is_dirty(), "Transformation is dirty.");
         self.mat3
     }
 
-    pub fn position(&self) -> Vec2 {
+    #[inline]
+    pub fn translation(&self) -> Vec2 {
         self.translation
     }
+
+    #[inline]
     pub fn rotation(&self) -> f32 {
         self.rotation
     }
+
+    #[inline]
     pub fn skew(&self) -> Vec2 {
         self.skew
     }
+
+    #[inline]
     pub fn anchor(&self) -> Vec2 {
         self.anchor
     }
+
+    #[inline]
     pub fn pivot(&self) -> Vec2 {
         self.pivot
     }
+
+    #[inline]
     pub fn size(&self) -> Vec2 {
         self.size
     }
+
+    #[inline]
     pub fn scale(&self) -> Vec2 {
         self.scale
     }
+
+    #[inline]
     pub fn flip(&self) -> BVec2 {
         self.flip
     }
 
-    pub fn set_translation(&mut self, position: Vec2) -> &mut Self {
-        self.translation = position;
+    #[inline]
+    pub fn set_translation(&mut self, position: impl Into<Vec2>) -> &mut Self {
+        self.translation = position.into();
         self.dirty = true;
         self
     }
+
+    #[inline]
     pub fn set_rotation(&mut self, rotation: f32) -> &mut Self {
         self.rotation = rotation;
         self.skew_cache_col_0 = None;
@@ -152,38 +175,53 @@ impl Transform2D {
         self.dirty = true;
         self
     }
-    pub fn set_skew(&mut self, skew: Vec2) -> &mut Self {
-        self.skew = skew;
+
+    #[inline]
+    pub fn set_skew(&mut self, skew: impl Into<Vec2>) -> &mut Self {
+        self.skew = skew.into();
         self.skew_cache_col_0 = None;
         self.skew_cache_col_1 = None;
         self.dirty = true;
         self
     }
-    pub fn set_anchor(&mut self, anchor: Vec2) -> &mut Self {
-        self.anchor = anchor;
+
+    #[inline]
+    pub fn set_anchor(&mut self, anchor: impl Into<Vec2>) -> &mut Self {
+        self.anchor = anchor.into();
         self.dirty = true;
         self
     }
-    pub fn set_pivot(&mut self, pivot: Vec2) -> &mut Self {
-        self.pivot = pivot;
+
+    #[inline]
+    pub fn set_pivot(&mut self, pivot: impl Into<Vec2>) -> &mut Self {
+        self.pivot = pivot.into();
         self.dirty = true;
         self
     }
-    pub fn set_origin(&mut self, origin: Vec2) -> &mut Self {
+
+    #[inline]
+    pub fn set_origin(&mut self, origin: impl Into<Vec2>) -> &mut Self {
+        let origin: Vec2 = origin.into();
         self.set_anchor(origin).set_pivot(origin)
     }
-    pub fn set_flip(&mut self, flip: BVec2) -> &mut Self {
-        self.flip = flip;
+
+    #[inline]
+    pub fn set_flip(&mut self, flip: impl Into<BVec2>) -> &mut Self {
+        self.flip = flip.into();
         self.dirty = true;
         self
     }
-    pub fn set_size(&mut self, size: Vec2) -> &mut Self {
-        self.size = size;
+
+    #[inline]
+    pub fn set_size(&mut self, size: impl Into<Vec2>) -> &mut Self {
+        self.size = size.into();
         self.dirty = true;
         self
     }
-    pub fn set_scale(&mut self, scale: Vec2) -> &mut Self {
-        self.scale = scale;
+
+    #[inline]
+    pub fn set_scale(&mut self, scale: impl Into<Vec2>) -> &mut Self {
+        self.scale = scale.into();
         self.dirty = true;
         self
     }
@@ -195,50 +233,61 @@ pub struct Transform2DBuilder {
 }
 
 impl Transform2DBuilder {
-    pub fn set_translation(mut self, position: Vec2) -> Self {
+    #[inline]
+    pub fn set_translation(mut self, position: impl Into<Vec2>) -> Self {
         self.transform.set_translation(position);
         self
     }
 
+    #[inline]
     pub fn set_rotation(mut self, rotation: f32) -> Self {
         self.transform.set_rotation(rotation);
         self
     }
 
-    pub fn set_scale(mut self, scale: Vec2) -> Self {
+    #[inline]
+    pub fn set_scale(mut self, scale: impl Into<Vec2>) -> Self {
         self.transform.set_scale(scale);
         self
     }
 
-    pub fn set_size(mut self, size: Vec2) -> Self {
+    #[inline]
+    pub fn set_size(mut self, size: impl Into<Vec2>) -> Self {
         self.transform.set_size(size);
         self
     }
 
-    pub fn set_anchor(mut self, anchor: Vec2) -> Self {
+    #[inline]
+    pub fn set_anchor(mut self, anchor: impl Into<Vec2>) -> Self {
         self.transform.set_anchor(anchor);
         self
     }
 
-    pub fn set_pivot(mut self, pivot: Vec2) -> Self {
+    #[inline]
+    pub fn set_pivot(mut self, pivot: impl Into<Vec2>) -> Self {
         self.transform.set_pivot(pivot);
         self
     }
 
-    pub fn set_origin(self, origin: Vec2) -> Self {
-        self.set_pivot(origin).set_anchor(origin)
+    #[inline]
+    pub fn set_origin(mut self, origin: impl Into<Vec2>) -> Self {
+        self.transform.set_origin(origin);
+        self
     }
 
-    pub fn set_flip(mut self, flip: BVec2) -> Self {
+    #[inline]
+    pub fn set_flip(mut self, flip: impl Into<BVec2>) -> Self {
         self.transform.set_flip(flip);
         self
     }
 
-    pub fn set_skew(mut self, skew: Vec2) -> Self {
+    #[inline]
+    pub fn set_skew(mut self, skew: impl Into<Vec2>) -> Self {
         self.transform.set_skew(skew);
         self
     }
 
+    #[inline]
     pub fn build(mut self) -> Transform2D {
         self.transform.update();
         self.transform

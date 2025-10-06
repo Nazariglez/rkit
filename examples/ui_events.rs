@@ -117,11 +117,11 @@ impl<S> UIElement<S> for Element {
             return;
         }
 
-        let pos = self.transform.position();
+        let pos = self.transform.translation();
         let offset = pos.x.lerp(self.target, time::delta_f32() * 4.0);
         self.transform.set_translation(vec2(offset, pos.y));
 
-        let distance = (self.transform.position().x - self.target).abs();
+        let distance = (self.transform.translation().x - self.target).abs();
         if distance < 1.0 {
             events.send(Stop);
         }

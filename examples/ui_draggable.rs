@@ -84,7 +84,7 @@ impl<S> UIElement<S> for DraggableNode {
                 self.dragging = true;
             }
             UIInput::Dragging { frame_delta, .. } => {
-                let node_pos = self.transform.position();
+                let node_pos = self.transform.translation();
                 self.transform.set_translation(node_pos + frame_delta);
             }
             UIInput::DragEnd { .. } => {
