@@ -1,5 +1,6 @@
 use crate::gfx::{SamplerId, TextureFilter, TextureFormat, TextureId, TextureWrap};
 use crate::math::Vec2;
+use arrayvec::ArrayVec;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use wgpu::{
@@ -66,6 +67,18 @@ impl Debug for Texture {
 }
 
 impl TextureFormat {
+    pub(crate) fn view_formats(&self) -> ArrayVec<WTextureFormat, 1> {
+        let mut v = ArrayVec::default();
+        match self {
+            TextureFormat::Rgba8UNorm => v.push(WTextureFormat::Rgba8UnormSrgb),
+            TextureFormat::Rgba8UNormSrgb => v.push(WTextureFormat::Rgba8Unorm),
+            TextureFormat::Bgra8UNorm => v.push(WTextureFormat::Bgra8UnormSrgb),
+            TextureFormat::Bgra8UNormSrgb => v.push(WTextureFormat::Bgra8Unorm),
+            _ => {}
+        }
+        v
+    }
+
     pub(crate) fn as_wgpu(&self) -> WTextureFormat {
         match self {
             TextureFormat::R8UNorm => WTextureFormat::R8Unorm,

@@ -1122,7 +1122,7 @@ fn create_texture(
         dimension: TextureDimension::D2,
         format: desc.format.as_wgpu(),
         usage,
-        view_formats: &[],
+        view_formats: &desc.format.view_formats(),
     });
 
     if !is_depth_texture && let Some(d) = data {
