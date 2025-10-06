@@ -3939,6 +3939,7 @@ dependencies = [
  "fluent",
  "futures",
  "heapless 0.9.1",
+ "image",
  "indexmap",
  "log",
  "macros",

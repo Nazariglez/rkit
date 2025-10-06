@@ -130,6 +130,13 @@ web-sys = { workspace = true, optional = true, features = [
 base64 = { version = "0.22.1", optional = true }
 
 [dev-dependencies]
+# Process images
+image = { version = "0.25.5", default-features = false, features = [
+  "png",
+  "jpeg",
+  "webp",
+  "rayon",
+] }
 log.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 shipyard = "0.7.6"
