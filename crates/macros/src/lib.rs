@@ -54,28 +54,28 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
             // - Transform
 
             #[inline]
-            pub fn translate(&mut self, pos: impl Into<Vec2>) -> &mut Self {
+            pub fn translate(&mut self, pos: impl IntoVec2) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_translation(pos);
                 self
             }
 
             #[inline]
-            pub fn anchor(&mut self, point: impl Into<Vec2>) -> &mut Self {
+            pub fn anchor(&mut self, point: impl IntoVec2) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_anchor(point);
                 self
             }
 
             #[inline]
-            pub fn pivot(&mut self, point: impl Into<Vec2>) -> &mut Self {
+            pub fn pivot(&mut self, point: impl IntoVec2) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_pivot(point);
                 self
             }
 
             #[inline]
-            pub fn origin(&mut self, point: impl Into<Vec2>) -> &mut Self {
+            pub fn origin(&mut self, point: impl IntoVec2) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_origin(point);
                 self
@@ -96,14 +96,14 @@ pub fn ui_element_derive(input: TokenStream) -> TokenStream {
             }
 
             #[inline]
-            pub fn skew(&mut self, skew: impl Into<Vec2>) -> &mut Self {
+            pub fn skew(&mut self, skew: impl IntoVec2) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_skew(skew);
                 self
             }
 
             #[inline]
-            pub fn scale(&mut self, scale: impl Into<Vec2>) -> &mut Self {
+            pub fn scale(&mut self, scale: impl IntoVec2) -> &mut Self {
                 let t = self.#transform_field.get_or_insert_with(|| Transform2D::default());
                 t.set_scale(scale);
                 self

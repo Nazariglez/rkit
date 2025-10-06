@@ -87,6 +87,35 @@ impl Rect {
     }
 }
 
+pub trait IntoVec2 {
+    fn into_vec2(self) -> Vec2;
+}
+
+impl IntoVec2 for Vec2 {
+    #[inline(always)]
+    fn into_vec2(self) -> Vec2 {
+        self
+    }
+}
+impl IntoVec2 for (f32, f32) {
+    #[inline(always)]
+    fn into_vec2(self) -> Vec2 {
+        self.into()
+    }
+}
+impl IntoVec2 for [f32; 2] {
+    #[inline(always)]
+    fn into_vec2(self) -> Vec2 {
+        self.into()
+    }
+}
+impl IntoVec2 for f32 {
+    #[inline(always)]
+    fn into_vec2(self) -> Vec2 {
+        Vec2::splat(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +148,29 @@ mod tests {
         assert!(rect1.intersects(&rect2));
         assert!(!rect1.intersects(&rect3));
         assert!(rect1.intersects(&rect4));
+    }
+
+    #[test]
+    fn test_into_vec2_from_vec2() {
+        let v = Vec2::new(1.0, 2.0);
+        assert_eq!(v.into_vec2(), Vec2::new(1.0, 2.0));
+    }
+
+    #[test]
+    fn test_into_vec2_from_tuple() {
+        let v = (3.0, 4.0).into_vec2();
+        assert_eq!(v, Vec2::new(3.0, 4.0));
+    }
+
+    #[test]
+    fn test_into_vec2_from_array() {
+        let v = [5.0, 6.0].into_vec2();
+        assert_eq!(v, Vec2::new(5.0, 6.0));
+    }
+
+    #[test]
+    fn test_into_vec2_from_f32() {
+        let v = 7.0_f32.into_vec2();
+        assert_eq!(v, Vec2::new(7.0, 7.0));
     }
 }

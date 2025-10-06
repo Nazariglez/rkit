@@ -1,7 +1,7 @@
 use crate::shapes::TessMode;
 use crate::{Draw2D, DrawPipelineId, Drawing, Element2D, Path2D, Transform2D};
 use corelib::gfx::Color;
-use corelib::math::{Vec2, bvec2, vec2};
+use corelib::math::{IntoVec2, Vec2, bvec2, vec2};
 use macros::Drawable2D;
 use std::f32::consts::PI;
 

@@ -5,7 +5,7 @@ use crate::{
 };
 use corelib::{
     gfx::Color,
-    math::{Mat3, Vec2, bvec2},
+    math::{IntoVec2, Mat3, Vec2, bvec2},
 };
 use macros::Drawable2D;
 

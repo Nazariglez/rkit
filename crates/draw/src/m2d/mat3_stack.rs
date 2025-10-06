@@ -1,4 +1,4 @@
-use corelib::math::{BVec2, Mat3, Vec2, vec2};
+use corelib::math::{BVec2, IntoVec2, Mat3, Vec2, vec2};
 use num::Zero;
 use smallvec::SmallVec;
 
@@ -161,8 +161,8 @@ impl Transform2D {
     }
 
     #[inline]
-    pub fn set_translation(&mut self, position: impl Into<Vec2>) -> &mut Self {
-        self.translation = position.into();
+    pub fn set_translation(&mut self, position: impl IntoVec2) -> &mut Self {
+        self.translation = position.into_vec2();
         self.dirty = true;
         self
     }
@@ -177,8 +177,8 @@ impl Transform2D {
     }
 
     #[inline]
-    pub fn set_skew(&mut self, skew: impl Into<Vec2>) -> &mut Self {
-        self.skew = skew.into();
+    pub fn set_skew(&mut self, skew: impl IntoVec2) -> &mut Self {
+        self.skew = skew.into_vec2();
         self.skew_cache_col_0 = None;
         self.skew_cache_col_1 = None;
         self.dirty = true;
@@ -186,22 +186,22 @@ impl Transform2D {
     }
 
     #[inline]
-    pub fn set_anchor(&mut self, anchor: impl Into<Vec2>) -> &mut Self {
-        self.anchor = anchor.into();
+    pub fn set_anchor(&mut self, anchor: impl IntoVec2) -> &mut Self {
+        self.anchor = anchor.into_vec2();
         self.dirty = true;
         self
     }
 
     #[inline]
-    pub fn set_pivot(&mut self, pivot: impl Into<Vec2>) -> &mut Self {
-        self.pivot = pivot.into();
+    pub fn set_pivot(&mut self, pivot: impl IntoVec2) -> &mut Self {
+        self.pivot = pivot.into_vec2();
         self.dirty = true;
         self
     }
 
     #[inline]
-    pub fn set_origin(&mut self, origin: impl Into<Vec2>) -> &mut Self {
-        let origin: Vec2 = origin.into();
+    pub fn set_origin(&mut self, origin: impl IntoVec2) -> &mut Self {
+        let origin: Vec2 = origin.into_vec2();
         self.set_anchor(origin).set_pivot(origin)
     }
 
@@ -213,15 +213,15 @@ impl Transform2D {
     }
 
     #[inline]
-    pub fn set_size(&mut self, size: impl Into<Vec2>) -> &mut Self {
-        self.size = size.into();
+    pub fn set_size(&mut self, size: impl IntoVec2) -> &mut Self {
+        self.size = size.into_vec2();
         self.dirty = true;
         self
     }
 
     #[inline]
-    pub fn set_scale(&mut self, scale: impl Into<Vec2>) -> &mut Self {
-        self.scale = scale.into();
+    pub fn set_scale(&mut self, scale: impl IntoVec2) -> &mut Self {
+        self.scale = scale.into_vec2();
         self.dirty = true;
         self
     }
@@ -234,7 +234,7 @@ pub struct Transform2DBuilder {
 
 impl Transform2DBuilder {
     #[inline]
-    pub fn set_translation(mut self, position: impl Into<Vec2>) -> Self {
+    pub fn set_translation(mut self, position: impl IntoVec2) -> Self {
         self.transform.set_translation(position);
         self
     }
@@ -246,31 +246,31 @@ impl Transform2DBuilder {
     }
 
     #[inline]
-    pub fn set_scale(mut self, scale: impl Into<Vec2>) -> Self {
+    pub fn set_scale(mut self, scale: impl IntoVec2) -> Self {
         self.transform.set_scale(scale);
         self
     }
 
     #[inline]
-    pub fn set_size(mut self, size: impl Into<Vec2>) -> Self {
+    pub fn set_size(mut self, size: impl IntoVec2) -> Self {
         self.transform.set_size(size);
         self
     }
 
     #[inline]
-    pub fn set_anchor(mut self, anchor: impl Into<Vec2>) -> Self {
+    pub fn set_anchor(mut self, anchor: impl IntoVec2) -> Self {
         self.transform.set_anchor(anchor);
         self
     }
 
     #[inline]
-    pub fn set_pivot(mut self, pivot: impl Into<Vec2>) -> Self {
+    pub fn set_pivot(mut self, pivot: impl IntoVec2) -> Self {
         self.transform.set_pivot(pivot);
         self
     }
 
     #[inline]
-    pub fn set_origin(mut self, origin: impl Into<Vec2>) -> Self {
+    pub fn set_origin(mut self, origin: impl IntoVec2) -> Self {
         self.transform.set_origin(origin);
         self
     }
@@ -282,7 +282,7 @@ impl Transform2DBuilder {
     }
 
     #[inline]
-    pub fn set_skew(mut self, skew: impl Into<Vec2>) -> Self {
+    pub fn set_skew(mut self, skew: impl IntoVec2) -> Self {
         self.transform.set_skew(skew);
         self
     }
