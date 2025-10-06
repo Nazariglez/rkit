@@ -428,14 +428,25 @@ impl<'a> TextureBuilder<'a> {
                 bytes,
                 width,
                 height,
-            } => get_mut_backend().gfx().create_texture(
-                desc,
-                Some(TextureData {
-                    bytes,
-                    width,
-                    height,
-                }),
-            ),
+            } => {
+                let req_bytes = (width * height) as usize * desc.format.channels() as usize;
+                if bytes.len() != req_bytes {
+                    return Err(format!(
+                        "Texture with label '{}' requires {req_bytes} bytes but got {}",
+                        desc.label.map_or("", |s| s),
+                        bytes.len()
+                    ));
+                }
+
+                get_mut_backend().gfx().create_texture(
+                    desc,
+                    Some(TextureData {
+                        bytes,
+                        width,
+                        height,
+                    }),
+                )
+            }
         }
     }
 }

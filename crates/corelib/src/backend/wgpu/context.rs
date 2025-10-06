@@ -77,6 +77,10 @@ async fn generate_wgpu_ctx(
     device.on_uncaptured_error(Box::new(|e| {
         eprintln!("WGPU Error: {e}");
         log::error!("WGPU Error: {e}");
+
+        if cfg!(debug_assertions) {
+            panic!("WGPU Error: {e}");
+        }
     }));
     log::debug!("WGPU Features {:?}", device.features());
 
