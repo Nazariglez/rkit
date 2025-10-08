@@ -257,7 +257,7 @@ where
                 .iter()
                 .filter(|e| **e != parent)
                 .for_each(|e| {
-                    let _ = world.despawn(*e);
+                    let _ = world.try_despawn(*e);
                 });
         }
 
@@ -277,10 +277,10 @@ where
             entity,
         } = self;
         {
-            let _ = world.despawn(entity);
+            let _ = world.try_despawn(entity);
             let layout = world.get_resource::<UILayout<T>>().unwrap();
             layout.tree_from_node(entity).iter().for_each(|e| {
-                let _ = world.despawn(*e);
+                let _ = world.try_despawn(*e);
             });
         }
 
