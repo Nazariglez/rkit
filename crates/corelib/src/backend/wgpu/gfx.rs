@@ -28,8 +28,8 @@ use std::{borrow::Cow, sync::Arc};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Extent3d, GlBackendOptions,
     GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags,
-    NoopBackendOptions, Origin3d, Queue, StoreOp, Surface as RawSurface, TexelCopyBufferLayout,
-    TextureDimension,
+    MemoryBudgetThresholds, NoopBackendOptions, Origin3d, Queue, StoreOp, Surface as RawSurface,
+    TexelCopyBufferLayout, TextureDimension,
     rwh::HasWindowHandle,
     util::{BufferInitDescriptor, DeviceExt},
 };
@@ -179,6 +179,7 @@ impl GfxBackendImpl for GfxBackend {
                             load: wgpu::LoadOp::Load,
                             store: StoreOp::Store,
                         },
+                        depth_slice: None,
                     },
                     |_color| wgpu::RenderPassColorAttachment {
                         view: &texture.texture.view,
@@ -189,6 +190,7 @@ impl GfxBackendImpl for GfxBackend {
                             }),
                             store: StoreOp::Store,
                         },
+                        depth_slice: None,
                     },
                 ));
 
@@ -836,6 +838,7 @@ impl GfxBackend {
                     dx12: Default::default(),
                     noop: NoopBackendOptions::default(),
                 },
+                memory_budget_thresholds: MemoryBudgetThresholds::default(),
             })
         } else {
             Instance::new(&InstanceDescriptor::from_env_or_default())
@@ -928,6 +931,7 @@ impl GfxBackend {
                             load: wgpu::LoadOp::Load,
                             store: StoreOp::Store,
                         },
+                        depth_slice: None,
                     },
                     |_color| wgpu::RenderPassColorAttachment {
                         view: &frame.view,
@@ -938,6 +942,7 @@ impl GfxBackend {
                             }),
                             store: StoreOp::Store,
                         },
+                        depth_slice: None,
                     },
                 ));
 
