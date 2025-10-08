@@ -194,6 +194,8 @@ ui = [
 ]
 # enable ecs/app
 ecs = ["dep:bevy_ecs", "dep:bevy_tasks", "macros/ecs", "dep:web-time"]
+# debug bevy ecs
+ecs_debug = ["bevy_ecs/trace", "bevy_ecs/track_location"]
 # enable serialization/deserialization of some internal types
 serde = ["dep:serde", "corelib/serde"]
 # enable save methods
