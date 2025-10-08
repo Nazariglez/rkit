@@ -22,11 +22,11 @@ once_cell.workspace = true
 rustc-hash.workspace = true
 encase.workspace = true
 # app/windowing
-winit = { version = "0.30.9" }
+winit = { version = "0.30.12" }
 raw-window-handle = "0.6.2"
 
 # math
-glam = { version = "0.30.0", features = [
+glam = { version = "0.30.8", features = [
     "bytemuck",
     "debug-glam-assert",
     "serde",
@@ -44,7 +44,7 @@ gilrs = { version = "0.11", optional = true }
 web-time.workspace = true
 
 # Process images
-image = { version = "0.25.5", default-features = false, features = [
+image = { version = "0.25.8", default-features = false, features = [
     "png",
     "jpeg",
     "webp",
@@ -61,7 +61,7 @@ chrono = { version = "0.4.41", optional = true }
 fern = { version = "0.7.1", optional = true, features = ["colored"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-time = { version = "0.3.37", optional = true, features = [
+time = { version = "0.3.44", optional = true, features = [
     "formatting",
     "local-offset",
 ] }
@@ -72,7 +72,7 @@ spin_sleep_util = "0.1.1"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen.workspace = true
 js-sys.workspace = true
-wasm-bindgen-futures = "0.4.50"
+wasm-bindgen-futures = "0.4.54"
 
 console_error_panic_hook = { version = "0.1.7", optional = true }
 console_log = { version = "1.0.0", optional = true }
