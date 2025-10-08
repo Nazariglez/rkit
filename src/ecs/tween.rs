@@ -156,7 +156,7 @@ fn tween_system<C: Component<Mutability = Mutable>, T: TweenableComponent<C>>(
             tween.tweenable.tick(&mut component, progress);
 
             if tween.tween.is_ended() {
-                cmds.entity(entity).remove::<ComponentTween<C, T>>();
+                cmds.entity(entity).try_remove::<ComponentTween<C, T>>();
                 evt.write(TweenDone {
                     _m: std::marker::PhantomData::<T>,
                     id: tween.id.take(),
