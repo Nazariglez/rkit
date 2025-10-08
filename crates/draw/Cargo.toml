@@ -19,7 +19,7 @@ serde_json.workspace = true
 bytemuck.workspace = true
 encase.workspace = true
 
-lyon = "1.0.1"
+lyon = "1.0.16"
 
 etagere = "0.2.15"
 cosmic-text = "0.12.1"
