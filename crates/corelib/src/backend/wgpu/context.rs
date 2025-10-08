@@ -1,4 +1,8 @@
-use wgpu::{Adapter, Device, Instance, PowerPreference, Queue, Surface as RawSurface};
+use std::sync::Arc;
+
+use wgpu::{
+    Adapter, Device, ExperimentalFeatures, Instance, PowerPreference, Queue, Surface as RawSurface,
+};
 
 pub(crate) struct Context {
     pub instance: Instance,
@@ -68,11 +72,12 @@ async fn generate_wgpu_ctx(
             required_limits: limits,
             memory_hints: Default::default(),
             trace: wgpu::Trace::Off,
+            experimental_features: ExperimentalFeatures::default(),
         })
         .await
         .map_err(|err| err.to_string())?;
 
-    device.on_uncaptured_error(Box::new(|e| {
+    device.on_uncaptured_error(Arc::new(|e| {
         eprintln!("WGPU Error: {e}");
         log::error!("WGPU Error: {e}");
 
