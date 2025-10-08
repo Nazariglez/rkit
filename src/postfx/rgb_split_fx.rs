@@ -53,7 +53,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 pub struct RgbSplitParams {
     pub red: Vec2,
     pub green: Vec2,
-    #[align(16)]
+    #[shader(align(16))]
     pub blue: Vec2,
 }
 

@@ -4,7 +4,6 @@ use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
 use strum_macros::EnumIter;
-use utils::helpers::next_pot2;
 
 #[derive(
     Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, strum_macros::EnumCount, EnumIter,
@@ -21,7 +20,7 @@ pub enum MouseButton {
     Unknown,
 }
 
-const MOUSE_BUTTON_COUNT_POT2: usize = next_pot2(MouseButton::COUNT);
+const MOUSE_BUTTON_COUNT_POT2: usize = MouseButton::COUNT.next_power_of_two();
 
 #[derive(Default, Clone)]
 pub struct MouseButtonList {

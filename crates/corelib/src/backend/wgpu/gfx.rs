@@ -25,7 +25,6 @@ use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
 use glam::uvec2;
 use std::{borrow::Cow, sync::Arc};
-use utils::helpers::next_pot2;
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Extent3d, GlBackendOptions,
     Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp,
@@ -1172,5 +1171,5 @@ impl Color {
 }
 
 fn next_buffer_size(current: usize, required: usize) -> usize {
-    next_pot2(current.max(required))
+    current.max(required).next_power_of_two()
 }

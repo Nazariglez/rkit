@@ -33,7 +33,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 #[derive(Copy, Clone, Debug, PartialEq, ShaderType)]
 pub struct PixelateParams {
-    #[align(16)]
+    #[shader(align(16))]
     pub size: Vec2,
 }
 

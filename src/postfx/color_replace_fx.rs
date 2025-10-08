@@ -36,7 +36,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 pub struct ColorReplaceParams {
     pub in_color: Color,
     pub out_color: Color,
-    #[align(16)]
+    #[shader(align(16))]
     pub tolerance: f32,
 }
 

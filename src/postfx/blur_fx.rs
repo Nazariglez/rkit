@@ -95,7 +95,7 @@ impl KernelSize {
 
 #[derive(Copy, Clone, Debug, PartialEq, ShaderType)]
 struct InnerBlurParams {
-    #[align(16)]
+    #[shader(align(16))]
     strength: f32,
 }
 

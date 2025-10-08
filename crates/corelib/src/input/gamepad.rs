@@ -14,16 +14,15 @@ use nohash_hasher::IsEnabled;
 use std::hash::Hasher;
 use strum::EnumCount;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
-use utils::helpers::next_pot2;
 
-const GAMEPAD_BUTTON_COUNT_POT2: usize = next_pot2(GamepadButton::COUNT);
+const GAMEPAD_BUTTON_COUNT_POT2: usize = GamepadButton::COUNT.next_power_of_two();
 
 // Passing this env variable we can control the size of the hashset to reduce memory consume.
 // 16 gamepads at once seems more than enough, most games have a max of 4-8, and other libs as
 // SDL seems to allow a max of 16. still, we can pass as var in the build.rs a higher value
 // if the game will require more gamepads
 const MAX_GAMEPADS_CONNECTED: usize = option_usize_env!("GK_MAX_GAMEPADS_CONNECTED", 16);
-pub(crate) const GAMEPADS_CONNECTED_POT2: usize = next_pot2(MAX_GAMEPADS_CONNECTED);
+pub(crate) const GAMEPADS_CONNECTED_POT2: usize = MAX_GAMEPADS_CONNECTED.next_power_of_two();
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GamepadId(pub(crate) usize);

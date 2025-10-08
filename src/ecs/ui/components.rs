@@ -1,7 +1,6 @@
 use crate::draw::*;
 use crate::input::MouseButton;
 use crate::math::{Mat3, Rect, Vec2};
-use crate::utils::next_pot2;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{ReadOnlyQueryData, ReleaseStateQueryData};
 use heapless::index_map::FnvIndexMap;
@@ -114,8 +113,8 @@ pub enum UIDragEvent {
     End(Vec2),
 }
 
-type MouseButtonSet = FnvIndexSet<MouseButton, { next_pot2(MouseButton::COUNT) }>;
-type MouseButtonMap<T> = FnvIndexMap<MouseButton, T, { next_pot2(MouseButton::COUNT) }>;
+type MouseButtonSet = FnvIndexSet<MouseButton, { MouseButton::COUNT.next_power_of_two() }>;
+type MouseButtonMap<T> = FnvIndexMap<MouseButton, T, { MouseButton::COUNT.next_power_of_two() }>;
 
 /// Defines which pointer events should be consumed by the node
 #[derive(Component, Default, Clone, Debug)]

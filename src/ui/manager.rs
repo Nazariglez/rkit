@@ -8,16 +8,16 @@ use heapless::index_set::FnvIndexSet;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use scene_graph::NodeIndex;
 use smallvec::SmallVec;
-use std::any::TypeId;
-use std::marker::PhantomData;
+use std::{any::TypeId, marker::PhantomData};
 use strum::EnumCount;
 use strum_macros::EnumCount;
-use utils::helpers::next_pot2;
 
-use crate::ui::element::{UIElement, UIRoot};
-use crate::ui::events::{EventListener, ListenerType};
-use crate::ui::graph::{UIGraph, UIHandler, UINode};
-use crate::ui::{UIEvents, UIInput, UINodeMetadata};
+use crate::ui::{
+    UIEvents, UIInput, UINodeMetadata,
+    element::{UIElement, UIRoot},
+    events::{EventListener, ListenerType},
+    graph::{UIGraph, UIHandler, UINode},
+};
 
 /// Defines the actions to take after an input event is triggered.
 ///
@@ -937,7 +937,7 @@ impl ControlEvents {
         let mouse_count = MouseButton::COUNT;
         let variants_using_mouse = 8;
         let count = mouse_count * variants_using_mouse + base_count;
-        next_pot2(count)
+        count.next_power_of_two()
     }
 }
 
