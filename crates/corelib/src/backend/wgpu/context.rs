@@ -48,7 +48,7 @@ async fn generate_wgpu_ctx(
             ..Default::default()
         })
         .await
-        .ok_or_else(|| "Cannot create WGPU Adapter".to_string())?;
+        .map_err(|e| format!("Cannot create WGPU Adapter: {e}"))?;
 
     log::debug!("Wgpu Adapter: {:?}", adapter.get_info());
     log::info!(
@@ -62,15 +62,13 @@ async fn generate_wgpu_ctx(
     let limits = adapter.limits();
 
     let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::default(),
-                required_limits: limits,
-                memory_hints: Default::default(),
-            },
-            None,
-        )
+        .request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::default(),
+            required_limits: limits,
+            memory_hints: Default::default(),
+            trace: wgpu::Trace::Off,
+        })
         .await
         .map_err(|err| err.to_string())?;
 

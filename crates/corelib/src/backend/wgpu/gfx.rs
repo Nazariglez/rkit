@@ -27,8 +27,9 @@ use glam::uvec2;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Extent3d, GlBackendOptions,
-    Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp,
-    Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
+    GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags,
+    NoopBackendOptions, Origin3d, Queue, StoreOp, Surface as RawSurface, TexelCopyBufferLayout,
+    TextureDimension,
     rwh::HasWindowHandle,
     util::{BufferInitDescriptor, DeviceExt},
 };
@@ -830,8 +831,10 @@ impl GfxBackend {
                     gl: GlBackendOptions {
                         gles_minor_version: Gles3MinorVersion::from_env()
                             .unwrap_or(Gles3MinorVersion::Automatic),
+                        fence_behavior: GlFenceBehavior::default(),
                     },
                     dx12: Default::default(),
+                    noop: NoopBackendOptions::default(),
                 },
             })
         } else {
