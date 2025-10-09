@@ -4,7 +4,8 @@ use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{
-    Data, DataEnum, DeriveInput, Error, Fields, LitInt, Token, Type, Variant, parse_macro_input,
+    Data, DataEnum, DataStruct, DeriveInput, Error, Fields, LitInt, Token, Type, Variant,
+    parse_macro_input,
 };
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
@@ -371,10 +372,94 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
                 }
             }
         },
-        _ => panic!("Interpolable can only be derived for structs"),
+        _ => {
+            return Error::new_spanned(&name, "Interpolable can only be derived for structs")
+                .to_compile_error()
+                .into();
+        }
     };
 
     TokenStream::from(interpolate_impl)
+}
+
+#[proc_macro_derive(Screen2, attributes(screen))]
+pub fn derive_screen2(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+
+    // parse the 'name' attribute
+    let mut custom_name_expr: Option<syn::Expr> = None;
+    for attr in &input.attrs {
+        if attr.path().is_ident("screen") {
+            if let Err(e) = attr.parse_nested_meta(|nested| {
+                if nested.path.is_ident("name") {
+                    if custom_name_expr.is_some() {
+                        return Err(nested.error("'name' attribute specified more than once"));
+                    }
+                    let expr: syn::Expr = nested.value()?.parse()?;
+                    custom_name_expr = Some(expr);
+                    Ok(())
+                } else {
+                    Err(nested.error("unsupported key in #[screen(..)]; expected 'name = ...'"))
+                }
+            }) {
+                return e.to_compile_error().into();
+            }
+        }
+    }
+
+    let name_body = if let Some(expr) = custom_name_expr {
+        quote! { #expr }
+    } else {
+        quote! {{
+            let full = core::any::type_name::<Self>();
+            full.rsplit("::").next().unwrap()
+        }}
+    };
+
+    // Extract generics, lifetimes, and where clauses
+    let generics = input.generics.clone();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // check if the struct is marker struct
+    match &input.data {
+        Data::Struct(DataStruct {
+            fields: Fields::Unit,
+            ..
+        }) => {}
+        Data::Struct(_) => {
+            return Error::new_spanned(
+                &name,
+                &format!(
+                    "Screen can only be derived for unit structs (`struct {}`).",
+                    name
+                ),
+            )
+            .to_compile_error()
+            .into();
+        }
+        _ => {
+            return Error::new_spanned(
+                &name,
+                &format!(
+                    "Screen cannot be derived for enums or unions. Use a unit struct marker (`struct {}`).",
+                    name
+                ),
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
+
+    let expanded = quote! {
+        impl #impl_generics Screen2 for #name #ty_generics #where_clause {
+            fn name() -> &'static str {
+                #name_body
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
 }
 
 #[cfg(feature = "ecs")]

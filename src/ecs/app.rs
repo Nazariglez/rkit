@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use super::prelude::*;
 use crate::{
     app::{LogConfig, WindowConfig},
@@ -57,6 +59,11 @@ impl App {
         app.add_plugin(BaseSchedules)
             .add_message::<AppExitEvt>()
             .on_schedule(OnEnginePreFrame, bevy_ecs::message::message_update_system);
+
+        app.add_message::<ClearScreenMsg2>().on_schedule(
+            OnEnginePreFrame,
+            clear_screen2_event_system.after(bevy_ecs::message::message_update_system),
+        );
 
         app
     }
@@ -277,12 +284,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnSetup, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnSetup, systems)
     }
 
     #[inline]
@@ -291,12 +293,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnUpdate, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnUpdate, systems)
     }
 
     #[inline]
@@ -305,12 +302,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPreFrame, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPreFrame, systems)
     }
 
     #[inline]
@@ -319,12 +311,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPostFrame, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPostFrame, systems)
     }
 
     #[inline]
@@ -333,12 +320,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPreUpdate, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPreUpdate, systems)
     }
 
     #[inline]
@@ -347,12 +329,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPostUpdate, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPostUpdate, systems)
     }
 
     #[inline]
@@ -361,12 +338,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnRender, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnRender, systems)
     }
 
     #[inline]
@@ -376,12 +348,7 @@ impl App {
         fps: u8,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPreFixedUpdate(fps), |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPreFixedUpdate(fps), systems)
     }
 
     #[inline]
@@ -391,12 +358,7 @@ impl App {
         fps: u8,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPostFixedUpdate(fps), |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPostFixedUpdate(fps), systems)
     }
 
     #[inline]
@@ -406,12 +368,7 @@ impl App {
         fps: u8,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnFixedUpdate(fps), |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnFixedUpdate(fps), systems)
     }
 
     #[inline]
@@ -420,12 +377,7 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPreRender, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
-        self
+        self.on_schedule(OnPreRender, systems)
     }
 
     #[inline]
@@ -434,11 +386,147 @@ impl App {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.world
-            .try_schedule_scope(OnPostRender, |_world, schedule| {
-                schedule.add_systems(systems);
-            })
-            .unwrap();
+        self.on_schedule(OnPostRender, systems)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_setup_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnSetup, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_update_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnUpdate, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_pre_frame_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPreFrame, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_post_frame_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPostFrame, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_pre_update_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPreUpdate, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_post_update_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPostUpdate, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_render_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnRender, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_pre_fixed_update_sets<M>(
+        &mut self,
+        fps: u8,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPreFixedUpdate(fps), sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_post_fixed_update_sets<M>(
+        &mut self,
+        fps: u8,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPostFixedUpdate(fps), sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_fixed_update_sets<M>(
+        &mut self,
+        fps: u8,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnFixedUpdate(fps), sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_pre_render_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPreRender, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn config_post_render_sets<M>(
+        &mut self,
+        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
+    ) -> &mut Self {
+        self.configure_sets(OnPostRender, sets)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn add_screen2<S: Screen2>(&mut self, cb: impl FnOnce(&mut AppScreen<S>)) -> &mut Self {
+        let mut screens = self.world.remove_resource::<Screens>().unwrap_or_default();
+        let is_initiated = screens.contains::<S>();
+        if !is_initiated {
+            screens.add_screen::<S>();
+
+            let mut schedule = Schedule::new(OnEnter2::<S>::default());
+            schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+            self.world.add_schedule(schedule);
+
+            let mut schedule = Schedule::new(OnExit2::<S>::default());
+            schedule.set_executor_kind(ExecutorKind::SingleThreaded);
+            self.world.add_schedule(schedule);
+
+            self.add_message::<ChangeScreenMsg2<S>>().on_schedule(
+                OnEnginePreFrame,
+                change_screen2_event_system::<S>.after(bevy_ecs::message::message_update_system),
+            );
+        }
+        self.world.insert_resource(screens);
+
+        cb(&mut AppScreen {
+            world: &mut self.world,
+            screen: PhantomData,
+        });
         self
     }
 }
