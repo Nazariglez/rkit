@@ -4,7 +4,9 @@ use crate::{
     ecs::{app::App, prelude::*},
     prelude::PanicContext,
 };
-use bevy_ecs::{schedule::ScheduleLabel, system::ScheduleSystem};
+use bevy_ecs::{
+    bundle::NoBundleEffect, schedule::ScheduleLabel, system::ScheduleSystem, world::SpawnBatchIter,
+};
 use rustc_hash::FxHashMap;
 
 pub trait Screen2:
@@ -503,5 +505,84 @@ impl Screen2CmdExt for Commands<'_, '_> {
 
     fn clear_screen(&mut self) {
         self.queue(ClearScreen2);
+    }
+}
+
+pub struct Screen2World<'w, S: Screen2> {
+    world: &'w mut World,
+    _screen: PhantomData<S>,
+}
+
+impl<'w, S: Screen2> Screen2World<'w, S> {
+    #[inline]
+    #[track_caller]
+    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<'_> {
+        self.world.spawn((InScreen2::<S>::default(), bundle))
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn spawn_empty(&mut self) -> EntityWorldMut<'_> {
+        let mut e = self.world.spawn_empty();
+        e.insert(InScreen2::<S>::default());
+        e
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn spawn_batch<I>(&mut self, iter: I) -> impl Iterator<Item = Entity>
+    where
+        I: IntoIterator,
+        I::Item: Bundle<Effect: NoBundleEffect>,
+    {
+        let batch = iter.into_iter().map(|b| (InScreen2::<S>::default(), b));
+        self.world.spawn_batch(batch)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn get_entity(&mut self, entity: Entity) -> Option<EntityRef<'_>> {
+        let e = self.world.get_entity(entity).ok()?;
+        e.contains::<InScreen2<S>>().then_some(e)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn get_entity_mut(&mut self, entity: Entity) -> Option<EntityWorldMut<'_>> {
+        let e = self.world.get_entity_mut(entity).ok()?;
+        e.contains::<InScreen2<S>>().then_some(e)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn attach(&mut self, entity: Entity) {
+        let Some(mut e) = self.get_entity_mut(entity) else {
+            return;
+        };
+        e.insert_if_new(InScreen2::<S>::default());
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn detach(&mut self, entity: Entity) {
+        let Some(mut e) = self.get_entity_mut(entity) else {
+            return;
+        };
+        e.remove::<InScreen2<S>>();
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn despawn_all(&mut self) {
+        // TODO: I am not sure if we can avoid the allocation here
+        let entities = self
+            .world
+            .query_filtered::<Entity, With<InScreen2<S>>>()
+            .iter(self.world)
+            .collect::<Vec<_>>();
+
+        for e in entities {
+            let _ = self.world.try_despawn(e);
+        }
     }
 }
