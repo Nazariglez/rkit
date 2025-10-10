@@ -25,15 +25,12 @@ fn screen_plugin(app: &mut App) {
             .on_enter_from::<MenuScreen, _>(|| println!("game from menu"))
             .on_exit_to::<MenuScreen, _>(|| println!("game to menu"));
     })
-    .on_setup(|mut cmds: Commands| {
-        log::debug!("setup");
-        cmds.set_screen::<MenuScreen>();
-    })
     .on_render(
         draw_system
             .after(MenuScreen::sys_set())
             .after(GameScreen::sys_set()),
     )
+    .as_default_screen::<MenuScreen>()
     .on_update(change_screen_system);
 }
 

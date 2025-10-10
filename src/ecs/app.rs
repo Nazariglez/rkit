@@ -504,28 +504,28 @@ impl App {
     #[track_caller]
     pub fn add_screen2<S: Screen2>(&mut self, cb: impl FnOnce(&mut AppScreen<S>)) -> &mut Self {
         let mut screens = self.world.remove_resource::<Screens>().unwrap_or_default();
-        let is_initiated = screens.contains::<S>();
-        if !is_initiated {
-            screens.add_screen::<S>();
+        let needs_initialization = screens.add_screen::<S>(&mut self.world);
+        self.world.insert_resource(screens);
 
-            let mut schedule = Schedule::new(OnEnter2::<S>::default());
-            schedule.set_executor_kind(ExecutorKind::SingleThreaded);
-            self.world.add_schedule(schedule);
-
-            let mut schedule = Schedule::new(OnExit2::<S>::default());
-            schedule.set_executor_kind(ExecutorKind::SingleThreaded);
-            self.world.add_schedule(schedule);
-
+        if needs_initialization {
             self.add_message::<ChangeScreenMsg2<S>>().on_schedule(
                 OnEnginePreFrame,
                 change_screen2_event_system::<S>.after(bevy_ecs::message::message_update_system),
             );
         }
-        self.world.insert_resource(screens);
 
         cb(&mut AppScreen {
             world: &mut self.world,
             screen: PhantomData,
+        });
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn as_default_screen<S: Screen2>(&mut self) -> &mut Self {
+        self.on_setup(|mut cmds: Commands| {
+            cmds.set_screen::<S>();
         });
         self
     }

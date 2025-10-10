@@ -4,9 +4,7 @@ use crate::{
     ecs::{app::App, prelude::*},
     prelude::PanicContext,
 };
-use bevy_ecs::{
-    bundle::NoBundleEffect, schedule::ScheduleLabel, system::ScheduleSystem, world::SpawnBatchIter,
-};
+use bevy_ecs::{bundle::NoBundleEffect, schedule::ScheduleLabel, system::ScheduleSystem};
 use rustc_hash::FxHashMap;
 
 pub trait Screen2:
@@ -118,7 +116,14 @@ impl Screens {
     }
 
     #[inline]
-    pub(crate) fn add_screen<S: Screen2>(&mut self) {
+    pub(crate) fn add_screen<S: Screen2>(&mut self, world: &mut World) -> bool {
+        if self.ids.contains_key(&TypeId::of::<S>()) {
+            return false;
+        }
+
+        init_schedule_if_necessary(world, OnEnter2::<S>::default());
+        init_schedule_if_necessary(world, OnExit2::<S>::default());
+
         self.ids.insert(
             TypeId::of::<S>(),
             Screen2Data {
@@ -141,6 +146,8 @@ impl Screens {
                 }),
             },
         );
+
+        true
     }
 
     #[inline]
@@ -222,15 +229,6 @@ impl<'w, S: Screen2> AppScreen<'w, S> {
         };
         init_schedule_if_necessary(self.world, schedule);
         self.on_schedule(schedule, systems)
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn on_setup<M>(
-        &mut self,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
-    ) -> &mut Self {
-        self.on_schedule(OnSetup, systems)
     }
 
     #[inline]
@@ -414,24 +412,24 @@ pub(crate) fn change_screen2_event_system<S: Screen2>(world: &mut World) {
         }
 
         let to_id = TypeId::of::<S>();
-        let (from_id, from_actions, to_actions) = {
-            let screens = world
-                .get_resource::<Screens>()
-                .or_panic("Screens resource not found");
-
-            let from_id = screens.current;
-            let from_actions = from_id.and_then(|id| screens.ids.get(&id)).cloned();
-            let to_actions = screens
-                .ids
-                .get(&to_id)
-                .or_panic("Target screen not registered")
-                .clone();
-
-            (from_id, from_actions, to_actions)
-        };
-
         let mut cursor = evt.get_cursor();
         for _ in cursor.read(&evt) {
+            let (from_id, from_actions, to_actions) = {
+                let screens = world
+                    .get_resource::<Screens>()
+                    .or_panic("Screens resource not found");
+
+                let from_id = screens.current;
+                let from_actions = from_id.and_then(|id| screens.ids.get(&id)).cloned();
+                let to_actions = screens
+                    .ids
+                    .get(&to_id)
+                    .or_panic("Target screen not registered")
+                    .clone();
+
+                (from_id, from_actions, to_actions)
+            };
+
             if let Some(fa) = &from_actions {
                 (fa.on_exit_to)(world, to_id);
                 (fa.on_exit)(world);
@@ -493,18 +491,26 @@ impl Command for ClearScreen2 {
     }
 }
 
-pub trait Screen2CmdExt {
-    fn set_screen<S: Screen2>(&mut self);
-    fn clear_screen(&mut self);
+pub trait Screen2CmdExt<'c, 'w, 's> {
+    fn set_screen<S: Screen2>(&'c mut self);
+    fn clear_screen(&'c mut self);
+    fn screen<S: Screen2>(&'c mut self) -> Screen2Commands<'c, 'w, 's, S>;
 }
 
-impl Screen2CmdExt for Commands<'_, '_> {
-    fn set_screen<S: Screen2>(&mut self) {
+impl<'c, 'w, 's> Screen2CmdExt<'c, 'w, 's> for Commands<'w, 's> {
+    fn set_screen<S: Screen2>(&'c mut self) {
         self.queue(ChangeScreen2(PhantomData::<S>));
     }
 
-    fn clear_screen(&mut self) {
+    fn clear_screen(&'c mut self) {
         self.queue(ClearScreen2);
+    }
+
+    fn screen<S: Screen2>(&'c mut self) -> Screen2Commands<'c, 'w, 's, S> {
+        Screen2Commands {
+            cmds: self,
+            _screen: PhantomData,
+        }
     }
 }
 
@@ -514,12 +520,14 @@ pub struct Screen2World<'w, S: Screen2> {
 }
 
 impl<'w, S: Screen2> Screen2World<'w, S> {
+    /// Spawns a new entity with the given bundle and marks it as belonging to this screen.
     #[inline]
     #[track_caller]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<'_> {
         self.world.spawn((InScreen2::<S>::default(), bundle))
     }
 
+    /// Spawns a new empty entity and marks it as belonging to this screen.
     #[inline]
     #[track_caller]
     pub fn spawn_empty(&mut self) -> EntityWorldMut<'_> {
@@ -528,6 +536,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         e
     }
 
+    /// Spawns a batch of entities, each marked as belonging to this screen.
     #[inline]
     #[track_caller]
     pub fn spawn_batch<I>(&mut self, iter: I) -> impl Iterator<Item = Entity>
@@ -539,20 +548,14 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         self.world.spawn_batch(batch)
     }
 
+    /// Returns true if the given entity belongs to this screen.
     #[inline]
     #[track_caller]
-    pub fn get_entity(&mut self, entity: Entity) -> Option<EntityRef<'_>> {
-        let e = self.world.get_entity(entity).ok()?;
-        e.contains::<InScreen2<S>>().then_some(e)
+    pub fn contains_entity(&mut self, entity: Entity) -> bool {
+        self.get_entity(entity).is_some()
     }
 
-    #[inline]
-    #[track_caller]
-    pub fn get_entity_mut(&mut self, entity: Entity) -> Option<EntityWorldMut<'_>> {
-        let e = self.world.get_entity_mut(entity).ok()?;
-        e.contains::<InScreen2<S>>().then_some(e)
-    }
-
+    /// Attaches this screen's marker component to the given entity if it is not already attached.
     #[inline]
     #[track_caller]
     pub fn attach(&mut self, entity: Entity) {
@@ -562,6 +565,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         e.insert_if_new(InScreen2::<S>::default());
     }
 
+    /// Detaches this screen's marker component from the given entity.
     #[inline]
     #[track_caller]
     pub fn detach(&mut self, entity: Entity) {
@@ -571,6 +575,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         e.remove::<InScreen2<S>>();
     }
 
+    /// Despawns all entities belonging to this screen.
     #[inline]
     #[track_caller]
     pub fn despawn_all(&mut self) {
@@ -584,5 +589,87 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         for e in entities {
             let _ = self.world.try_despawn(e);
         }
+    }
+
+    #[inline]
+    #[track_caller]
+    fn get_entity(&mut self, entity: Entity) -> Option<EntityRef<'_>> {
+        let e = self.world.get_entity(entity).ok()?;
+        e.contains::<InScreen2<S>>().then_some(e)
+    }
+
+    #[inline]
+    #[track_caller]
+    fn get_entity_mut(&mut self, entity: Entity) -> Option<EntityWorldMut<'_>> {
+        let e = self.world.get_entity_mut(entity).ok()?;
+        e.contains::<InScreen2<S>>().then_some(e)
+    }
+}
+
+pub trait Screen2WorldExt {
+    fn screen<S: Screen2>(&mut self) -> Screen2World<'_, S>;
+}
+
+impl Screen2WorldExt for World {
+    fn screen<S: Screen2>(&mut self) -> Screen2World<'_, S> {
+        Screen2World {
+            world: self,
+            _screen: PhantomData,
+        }
+    }
+}
+
+pub struct Screen2Commands<'c, 'w, 's, S: Screen2> {
+    cmds: &'c mut Commands<'w, 's>,
+    _screen: PhantomData<S>,
+}
+
+impl<'c, 'w, 's, S: Screen2> Screen2Commands<'c, 'w, 's, S> {
+    /// Spawn a bundle belonging to this screen (deferred).
+    /// Returns the same type as `Commands::spawn` (usually `EntityCommands`).
+    #[inline]
+    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_> {
+        self.cmds.spawn((InScreen2::<S>::default(), bundle))
+    }
+
+    /// Spawn an empty entity belonging to this screen (deferred).
+    #[inline]
+    pub fn spawn_empty(&mut self) -> EntityCommands<'_> {
+        let mut ec = self.cmds.spawn_empty();
+        ec.insert(InScreen2::<S>::default());
+        ec
+    }
+
+    /// Spawn a batch of bundles belonging to this screen (deferred).
+    /// Mirrors `Commands::spawn_batch` return type.
+    #[inline]
+    pub fn spawn_batch<I>(&mut self, iter: I)
+    where
+        I: IntoIterator + Send + Sync + 'static,
+        I::Item: Bundle<Effect: NoBundleEffect>,
+    {
+        self.cmds.queue(move |world: &mut World| {
+            let _ = world.screen::<S>().spawn_batch(iter);
+        });
+    }
+
+    /// Ensure an entity is attached to this screen (deferred).
+    #[inline]
+    pub fn attach(&mut self, entity: Entity) {
+        self.cmds.entity(entity).insert(InScreen2::<S>::default());
+    }
+
+    /// Detach an entity from this screen (deferred).
+    #[inline]
+    pub fn detach(&mut self, entity: Entity) {
+        self.cmds.entity(entity).remove::<InScreen2<S>>();
+    }
+
+    /// Despawn all entities of this screen (deferred).
+    #[inline]
+    pub fn despawn_all(&mut self) {
+        self.cmds.queue(|world: &mut World| {
+            world.screen::<S>().despawn_all();
+        });
     }
 }
