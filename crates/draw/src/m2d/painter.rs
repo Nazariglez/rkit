@@ -146,7 +146,7 @@ impl Default for Painter2D {
 }
 
 impl Painter2D {
-    pub fn pip_resources(&self) -> PipelineResources {
+    pub fn pip_resources(&self) -> PipelineResources<'_> {
         PipelineResources {
             ubo: &self.ubo,
             vbo: &self.vbo,

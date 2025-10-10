@@ -1,8 +1,7 @@
 use crate::postfx::sys::{IOPostFxData, SYS};
-use corelib::gfx::{self, TextureFormat};
 use corelib::gfx::{
-    AsRenderer, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder, RenderTexture,
-    TextureFilter,
+    self, AsRenderer, BindGroupLayout, BindingType, RenderPipeline, RenderPipelineBuilder,
+    RenderTexture, TextureFilter,
 };
 
 pub trait PostFx {

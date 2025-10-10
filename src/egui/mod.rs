@@ -78,13 +78,13 @@ impl EguiContext {
             textures_delta,
             shapes,
             pixels_per_point,
-            viewport_output,
+            viewport_output: _,
         } = self.ctx.run(self.raw_input.take(), cb);
-        let needs_update_textures = !textures_delta.is_empty();
-        let needs_repaint = needs_update_textures
-            || viewport_output
-                .values()
-                .any(|out| out.repaint_delay.is_zero());
+        // let needs_update_textures = !textures_delta.is_empty();
+        // let needs_repaint = needs_update_textures
+        //     || viewport_output
+        //         .values()
+        //         .any(|out| out.repaint_delay.is_zero());
 
         let primitives = self.ctx.tessellate(shapes, pixels_per_point);
 
@@ -92,22 +92,16 @@ impl EguiContext {
 
         EguiDraw {
             clear: self.clear_color,
-            ctx: self.ctx.clone(),
             textures_delta,
             primitives,
-            needs_repaint,
-            pixels_per_point,
         }
     }
 }
 
 pub struct EguiDraw {
     clear: Option<Color>,
-    ctx: Context,
     textures_delta: TexturesDelta,
     primitives: Vec<ClippedPrimitive>,
-    needs_repaint: bool,
-    pixels_per_point: f32,
 }
 
 impl gfx::AsRenderer for EguiDraw {

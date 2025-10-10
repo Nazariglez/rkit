@@ -3,10 +3,7 @@ use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
-use syn::{
-    Data, DataEnum, DataStruct, DeriveInput, Error, Fields, LitInt, Token, Type, Variant,
-    parse_macro_input,
-};
+use syn::{Data, DataStruct, DeriveInput, Error, Fields, LitInt, Token, Type, parse_macro_input};
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
