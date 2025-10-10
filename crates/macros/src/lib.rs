@@ -390,8 +390,8 @@ pub fn derive_screen2(input: TokenStream) -> TokenStream {
     // parse the 'name' attribute
     let mut custom_name_expr: Option<syn::Expr> = None;
     for attr in &input.attrs {
-        if attr.path().is_ident("screen") {
-            if let Err(e) = attr.parse_nested_meta(|nested| {
+        if attr.path().is_ident("screen")
+            && let Err(e) = attr.parse_nested_meta(|nested| {
                 if nested.path.is_ident("name") {
                     if custom_name_expr.is_some() {
                         return Err(nested.error("'name' attribute specified more than once"));
@@ -402,9 +402,9 @@ pub fn derive_screen2(input: TokenStream) -> TokenStream {
                 } else {
                     Err(nested.error("unsupported key in #[screen(..)]; expected 'name = ...'"))
                 }
-            }) {
-                return e.to_compile_error().into();
-            }
+            })
+        {
+            return e.to_compile_error().into();
         }
     }
 
@@ -430,7 +430,7 @@ pub fn derive_screen2(input: TokenStream) -> TokenStream {
         Data::Struct(_) => {
             return Error::new_spanned(
                 &name,
-                &format!(
+                format!(
                     "Screen can only be derived for unit structs (`struct {}`).",
                     name
                 ),
@@ -441,7 +441,7 @@ pub fn derive_screen2(input: TokenStream) -> TokenStream {
         _ => {
             return Error::new_spanned(
                 &name,
-                &format!(
+                format!(
                     "Screen cannot be derived for enums or unions. Use a unit struct marker (`struct {}`).",
                     name
                 ),
