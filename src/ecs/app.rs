@@ -60,9 +60,10 @@ impl App {
             .add_message::<AppExitEvt>()
             .on_schedule(OnEnginePreFrame, bevy_ecs::message::message_update_system);
 
-        app.add_message::<ClearScreenMsg2>().on_schedule(
+        app.add_message::<ClearScreenMsg>().on_schedule(
             OnEnginePreFrame,
-            clear_screen2_event_system.after(bevy_ecs::message::message_update_system),
+            (set_default_screen_event_system, clear_screen_event_system)
+                .after(bevy_ecs::message::message_update_system),
         );
 
         app
@@ -78,18 +79,6 @@ impl App {
     pub(crate) fn add_log(&mut self, config: LogConfig) -> &mut Self {
         self.log_config = config;
         self
-    }
-
-    #[inline]
-    pub fn add_screen<S: Screen>(&mut self, screen: S) -> &mut Self {
-        self.add_message::<ChangeScreenEvt<S>>().on_schedule(
-            OnEnginePreFrame,
-            change_screen_event_system::<S>.after(bevy_ecs::message::message_update_system),
-        );
-
-        S::add_schedules(self).on_schedule(OnEngineSetup, move |mut cmds: Commands| {
-            cmds.queue(ChangeScreen(screen.clone()))
-        })
     }
 
     #[inline]
@@ -144,59 +133,6 @@ impl App {
             })
             .unwrap();
         self
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn on_screen_schedule<SL: ScheduleLabel + Eq + Clone + std::hash::Hash, S: Screen, M>(
-        &mut self,
-        screen: S,
-        label: SL,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
-    ) -> &mut Self {
-        let schedule_id = ScreenSchedule(label.clone(), screen.clone());
-
-        let needs_initialization = self
-            .world
-            .try_schedule_scope(schedule_id.clone(), |_world, _sch| {})
-            .is_err();
-
-        if needs_initialization {
-            let executor = self
-                .world
-                .schedule_scope(label.clone(), |_w, sch| sch.get_executor_kind());
-
-            let mut schedule = Schedule::new(schedule_id.clone());
-            schedule.set_executor_kind(executor);
-            self.world.add_schedule(schedule);
-
-            let sc_id_clone = schedule_id.clone();
-            self.world.schedule_scope(label, move |_world, sc| {
-                let sys = move |world: &mut World| {
-                    let is_in_screen = world
-                        .get_resource::<S>()
-                        .is_some_and(|s| *s == screen.clone());
-
-                    if is_in_screen {
-                        world.run_schedule(sc_id_clone.clone());
-                    }
-                };
-                sc.add_systems(sys);
-            });
-        }
-
-        self.on_schedule(schedule_id, systems)
-    }
-
-    #[inline]
-    #[track_caller]
-    pub fn configure_screen_sets<M>(
-        &mut self,
-        screen: impl Screen,
-        label: impl ScheduleLabel + Clone + Eq + std::hash::Hash,
-        sets: impl IntoScheduleConfigs<InternedSystemSet, M>,
-    ) -> &mut Self {
-        self.configure_sets(ScreenSchedule(label, screen), sets)
     }
 
     #[inline]
@@ -502,15 +438,15 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn add_screen2<S: Screen2>(&mut self, cb: impl FnOnce(&mut AppScreen<S>)) -> &mut Self {
+    pub fn add_screen<S: Screen>(&mut self, cb: impl FnOnce(&mut AppScreen<S>)) -> &mut Self {
         let mut screens = self.world.remove_resource::<Screens>().unwrap_or_default();
         let needs_initialization = screens.add_screen::<S>(&mut self.world);
         self.world.insert_resource(screens);
 
         if needs_initialization {
-            self.add_message::<ChangeScreenMsg2<S>>().on_schedule(
+            self.add_message::<ChangeScreenMsg<S>>().on_schedule(
                 OnEnginePreFrame,
-                change_screen2_event_system::<S>.after(bevy_ecs::message::message_update_system),
+                change_screen_event_system::<S>.after(bevy_ecs::message::message_update_system),
             );
         }
 
@@ -523,10 +459,12 @@ impl App {
 
     #[inline]
     #[track_caller]
-    pub fn as_default_screen<S: Screen2>(&mut self) -> &mut Self {
-        self.on_setup(|mut cmds: Commands| {
-            cmds.set_screen::<S>();
-        });
+    pub fn set_default_screen<S: Screen>(&mut self) -> &mut Self {
+        // init the screen in case is not initialized
+        self.add_screen::<S>(|_| {});
+
+        // set the screen as default, it will be initalized on "engine pre frame"
+        self.world.resource_mut::<Screens>().set_default::<S>();
         self
     }
 }

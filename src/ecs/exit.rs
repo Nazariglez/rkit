@@ -15,7 +15,7 @@ pub struct AppExitCommand;
 
 impl Command for AppExitCommand {
     fn apply(self, world: &mut World) {
-        world.send_event(AppExitEvt);
+        world.write_message(AppExitEvt);
     }
 }
 

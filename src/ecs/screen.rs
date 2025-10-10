@@ -1,13 +1,10 @@
 use std::{any::TypeId, marker::PhantomData, sync::Arc};
 
-use crate::{
-    ecs::{app::App, prelude::*},
-    prelude::PanicContext,
-};
+use crate::{ecs::prelude::*, prelude::PanicContext};
 use bevy_ecs::{bundle::NoBundleEffect, schedule::ScheduleLabel, system::ScheduleSystem};
 use rustc_hash::FxHashMap;
 
-pub trait Screen2:
+pub trait Screen:
     Copy + Clone + Send + Sync + Eq + std::fmt::Debug + std::hash::Hash + 'static
 {
     fn sys_set() -> ScreenSysSet<Self> {
@@ -18,49 +15,49 @@ pub trait Screen2:
 }
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct ScreenSysSet<T: Screen2>(PhantomData<T>);
+pub struct ScreenSysSet<T: Screen>(PhantomData<T>);
 
-impl<T: Screen2> Default for ScreenSysSet<T> {
+impl<T: Screen> Default for ScreenSysSet<T> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
 #[derive(Component, Clone, Copy)]
-pub struct InScreen2<S: Screen2>(PhantomData<S>);
+pub struct InScreen<S: Screen>(PhantomData<S>);
 
-impl<S: Screen2> Default for InScreen2<S> {
+impl<S: Screen> Default for InScreen<S> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnExit2<S: Screen2>(PhantomData<S>);
+pub(crate) struct OnExit<S: Screen>(PhantomData<S>);
 
-impl<S: Screen2> Default for OnExit2<S> {
+impl<S: Screen> Default for OnExit<S> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnEnter2<S: Screen2>(PhantomData<S>);
+pub(crate) struct OnEnter<S: Screen>(PhantomData<S>);
 
-impl<S: Screen2> Default for OnEnter2<S> {
+impl<S: Screen> Default for OnEnter<S> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnEnterFrom {
+pub(crate) struct OnEnterFrom {
     pub from: TypeId,
     pub to: TypeId,
 }
 
 #[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnExitTo {
+pub(crate) struct OnExitTo {
     pub from: TypeId,
     pub to: TypeId,
 }
@@ -78,11 +75,12 @@ fn init_schedule_if_necessary<S: ScheduleLabel + Clone>(world: &mut World, label
 }
 
 #[derive(Message, Debug, Clone, Copy)]
-pub(crate) struct ChangeScreenMsg2<S: Screen2>(PhantomData<S>);
+pub(crate) struct ChangeScreenMsg<S: Screen>(PhantomData<S>);
 
 #[derive(Clone)]
-struct Screen2Data {
+struct ScreenData {
     name: &'static str,
+    destroy_on_exit: bool,
     on_enter: Arc<dyn Fn(&mut World) + Send + Sync + 'static>,
     on_enter_from: Arc<dyn Fn(&mut World, TypeId) + Send + Sync + 'static>,
     on_exit: Arc<dyn Fn(&mut World) + Send + Sync + 'static>,
@@ -91,20 +89,21 @@ struct Screen2Data {
 
 #[derive(Resource, Default)]
 pub struct Screens {
-    ids: FxHashMap<TypeId, Screen2Data>,
+    ids: FxHashMap<TypeId, ScreenData>,
     current: Option<TypeId>,
+    default_to: Option<Box<dyn FnOnce(&mut World) + Send + Sync + 'static>>,
 }
 
 impl Screens {
     /// Returns true if the current screen is of type S
     #[inline]
-    pub fn is_current<S: Screen2>(&self) -> bool {
+    pub fn is_current<S: Screen>(&self) -> bool {
         self.current == Some(TypeId::of::<S>())
     }
 
     /// Returns true if the screen of type S is registered
     #[inline]
-    pub fn contains<S: Screen2>(&self) -> bool {
+    pub fn contains<S: Screen>(&self) -> bool {
         self.ids.contains_key(&TypeId::of::<S>())
     }
 
@@ -116,21 +115,22 @@ impl Screens {
     }
 
     #[inline]
-    pub(crate) fn add_screen<S: Screen2>(&mut self, world: &mut World) -> bool {
+    pub(crate) fn add_screen<S: Screen>(&mut self, world: &mut World) -> bool {
         if self.ids.contains_key(&TypeId::of::<S>()) {
             return false;
         }
 
-        init_schedule_if_necessary(world, OnEnter2::<S>::default());
-        init_schedule_if_necessary(world, OnExit2::<S>::default());
+        init_schedule_if_necessary(world, OnEnter::<S>::default());
+        init_schedule_if_necessary(world, OnExit::<S>::default());
 
         self.ids.insert(
             TypeId::of::<S>(),
-            Screen2Data {
+            ScreenData {
                 name: S::name(),
+                destroy_on_exit: false,
                 on_enter: Arc::new(move |world: &mut World| {
                     log::debug!("Screen: on enter {}", S::name());
-                    world.run_schedule(OnEnter2::<S>::default());
+                    world.run_schedule(OnEnter::<S>::default());
                 }),
                 on_enter_from: Arc::new(move |world: &mut World, from: TypeId| {
                     let to = TypeId::of::<S>();
@@ -138,7 +138,7 @@ impl Screens {
                 }),
                 on_exit: Arc::new(move |world: &mut World| {
                     log::debug!("Screen: on exit {}", S::name());
-                    world.run_schedule(OnExit2::<S>::default());
+                    world.run_schedule(OnExit::<S>::default());
                 }),
                 on_exit_to: Arc::new(move |world: &mut World, to: TypeId| {
                     let from = TypeId::of::<S>();
@@ -151,7 +151,7 @@ impl Screens {
     }
 
     #[inline]
-    pub(crate) fn set_current<S: Screen2>(&mut self) {
+    pub(crate) fn set_current<S: Screen>(&mut self) {
         log::debug!("Screen: set current {}", S::name());
         self.current = Some(TypeId::of::<S>());
     }
@@ -160,14 +160,22 @@ impl Screens {
     pub(crate) fn clear_current(&mut self) {
         self.current = None;
     }
+
+    #[inline]
+    pub(crate) fn set_default<S: Screen>(&mut self) {
+        self.default_to = Some(Box::new(|world| {
+            log::debug!("Screen: set default to {}", S::name());
+            world.screen::<S>().set_as_current();
+        }));
+    }
 }
 
-pub struct AppScreen<'w, S: Screen2> {
+pub struct AppScreen<'w, S: Screen> {
     pub world: &'w mut World,
     pub screen: PhantomData<S>,
 }
 
-impl<'w, S: Screen2> AppScreen<'w, S> {
+impl<'w, S: Screen> AppScreen<'w, S> {
     #[inline]
     #[track_caller]
     pub(crate) fn on_schedule<M>(
@@ -178,7 +186,7 @@ impl<'w, S: Screen2> AppScreen<'w, S> {
         self.world
             .try_schedule_scope(label.clone(), |_world, schedule| {
                 schedule.add_systems(systems.in_set(S::sys_set()));
-                schedule.configure_sets(S::sys_set().run_if(is_in_screen2::<S>));
+                schedule.configure_sets(S::sys_set().run_if(is_in_screen::<S>));
             })
             .or_panic_with(move || format!("Failed to add systems to schedule: {label:?}"));
 
@@ -191,13 +199,14 @@ impl<'w, S: Screen2> AppScreen<'w, S> {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.on_schedule(OnEnter2::<S>::default(), systems)
+        self.on_schedule(OnEnter::<S>::default(), systems)
     }
 
     #[inline]
     #[track_caller]
-    pub fn on_enter_from<FS: Screen2, M>(
+    pub fn on_enter_from<FS: Screen, M>(
         &mut self,
+        _from: FS,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
         let schedule = OnEnterFrom {
@@ -214,13 +223,14 @@ impl<'w, S: Screen2> AppScreen<'w, S> {
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
-        self.on_schedule(OnExit2::<S>::default(), systems)
+        self.on_schedule(OnExit::<S>::default(), systems)
     }
 
     #[inline]
     #[track_caller]
-    pub fn on_exit_to<TS: Screen2, M>(
+    pub fn on_exit_to<TS: Screen, M>(
         &mut self,
+        _to: TS,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self {
         let schedule = OnExitTo {
@@ -332,121 +342,54 @@ impl<'w, S: Screen2> AppScreen<'w, S> {
     ) -> &mut Self {
         self.on_schedule(OnPostRender, systems)
     }
+
+    // Despawn all entities belonging to this screen when the screen is exited.
+    #[inline]
+    pub fn destroy_on_exit(&mut self) -> &mut Self {
+        self.world
+            .resource_mut::<Screens>()
+            .ids
+            .get_mut(&TypeId::of::<S>())
+            .unwrap()
+            .destroy_on_exit = true;
+        self
+    }
 }
 
 #[inline(always)]
-pub fn is_in_screen2<S: Screen2>(screens: Option<Res<Screens>>) -> bool {
+pub fn is_in_screen<S: Screen>(screens: Option<Res<Screens>>) -> bool {
     screens.is_some_and(|screens| screens.is_current::<S>())
 }
 
 #[inline(always)]
-pub fn no_screen2_set(screens: Option<Res<Screens>>) -> bool {
+pub fn no_screen_set(screens: Option<Res<Screens>>) -> bool {
     screens.is_none_or(|screens| screens.current.is_none())
 }
 
-pub trait Screen:
-    Resource + std::fmt::Debug + std::hash::Hash + Clone + Eq + Send + 'static
-{
-    fn add_schedules(app: &mut App) -> &mut App {
-        app
-    }
-}
-
-#[derive(Message, Debug, Clone, Copy)]
-pub(crate) struct ChangeScreenEvt<S: Screen>(pub S);
-
-#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct ScreenSchedule<SL: ScheduleLabel, S: Screen>(pub SL, pub S);
-
-#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnExit<S: Screen>(pub S);
-
-#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnEnter<S: Screen>(pub S);
-
-#[derive(ScheduleLabel, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct OnChange<S: Screen> {
-    pub from: S,
-    pub to: S,
-}
-
-pub fn in_screen<S: Screen>(screen: S) -> impl FnMut(Option<Res<S>>) -> bool + Clone {
-    move |s: Option<Res<S>>| s.is_some_and(|current| *current == screen)
-}
-
-#[derive(Clone, Copy)]
-pub struct ChangeScreen<S: Screen>(pub S);
-
-impl<S: Screen> Command for ChangeScreen<S> {
-    fn apply(self, world: &mut World) {
-        world.write_message(ChangeScreenEvt(self.0.clone()));
-    }
-}
-
 pub(crate) fn change_screen_event_system<S: Screen>(world: &mut World) {
-    world.resource_scope(|world, evt: Mut<Messages<ChangeScreenEvt<S>>>| {
-        let mut cursor = evt.get_cursor();
-        for evt in cursor.read(&evt) {
-            let screen = evt.0.clone();
-            if let Some(last_screen) = world.remove_resource::<S>() {
-                log::debug!("Screen: OnExit({last_screen:?})");
-                world.run_schedule(OnExit(last_screen.clone()));
-                log::debug!("Screen: OnChange(from: {last_screen:?}, to: {screen:?})");
-                world.run_schedule(OnChange {
-                    from: last_screen,
-                    to: screen.clone(),
-                });
-            }
-
-            world.insert_resource(screen.clone());
-            log::debug!("Screen: OnEnter({screen:?})");
-            world.run_schedule(OnEnter(screen));
-        }
-    });
-}
-
-pub(crate) fn change_screen2_event_system<S: Screen2>(world: &mut World) {
-    world.resource_scope(|world, evt: Mut<Messages<ChangeScreenMsg2<S>>>| {
+    world.resource_scope(|world, evt: Mut<Messages<ChangeScreenMsg<S>>>| {
         if evt.is_empty() {
             return;
         }
 
-        let to_id = TypeId::of::<S>();
         let mut cursor = evt.get_cursor();
         for _ in cursor.read(&evt) {
-            let (from_id, from_actions, to_actions) = {
-                let screens = world
-                    .get_resource::<Screens>()
-                    .or_panic("Screens resource not found");
-
-                let from_id = screens.current;
-                let from_actions = from_id.and_then(|id| screens.ids.get(&id)).cloned();
-                let to_actions = screens
-                    .ids
-                    .get(&to_id)
-                    .or_panic("Target screen not registered")
-                    .clone();
-
-                (from_id, from_actions, to_actions)
-            };
-
-            if let Some(fa) = &from_actions {
-                (fa.on_exit_to)(world, to_id);
-                (fa.on_exit)(world);
-            }
-
-            world.resource_mut::<Screens>().set_current::<S>();
-
-            (to_actions.on_enter)(world);
-            if let Some(fid) = from_id {
-                (to_actions.on_enter_from)(world, fid);
-            }
+            world.screen::<S>().set_as_current();
         }
     });
 }
 
-pub(crate) fn clear_screen2_event_system(world: &mut World) {
-    world.resource_scope(|world, evt: Mut<Messages<ClearScreenMsg2>>| {
+pub(crate) fn set_default_screen_event_system(world: &mut World) {
+    if let Some(default_to) = world
+        .get_resource_mut::<Screens>()
+        .and_then(|mut screens| screens.default_to.take())
+    {
+        default_to(world);
+    }
+}
+
+pub(crate) fn clear_screen_event_system(world: &mut World) {
+    world.resource_scope(|world, evt: Mut<Messages<ClearScreenMsg>>| {
         if evt.is_empty() {
             return;
         }
@@ -471,60 +414,60 @@ pub(crate) fn clear_screen2_event_system(world: &mut World) {
 }
 
 #[derive(Message, Debug, Clone, Copy)]
-pub(crate) struct ClearScreenMsg2;
+pub(crate) struct ClearScreenMsg;
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct ChangeScreen2<S: Screen2>(pub PhantomData<S>);
+pub(crate) struct ChangeScreen<S: Screen>(pub PhantomData<S>);
 
-impl<S: Screen2> Command for ChangeScreen2<S> {
+impl<S: Screen> Command for ChangeScreen<S> {
     fn apply(self, world: &mut World) {
-        world.write_message(ChangeScreenMsg2::<S>(PhantomData));
+        world.write_message(ChangeScreenMsg::<S>(PhantomData));
     }
 }
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct ClearScreen2;
+pub(crate) struct ClearScreen;
 
-impl Command for ClearScreen2 {
+impl Command for ClearScreen {
     fn apply(self, world: &mut World) {
-        world.write_message(ClearScreenMsg2);
+        world.write_message(ClearScreenMsg);
     }
 }
 
-pub trait Screen2CmdExt<'c, 'w, 's> {
-    fn set_screen<S: Screen2>(&'c mut self);
+pub trait ScreenCmdExt<'c, 'w, 's> {
+    fn set_screen<S: Screen>(&'c mut self);
     fn clear_screen(&'c mut self);
-    fn screen<S: Screen2>(&'c mut self) -> Screen2Commands<'c, 'w, 's, S>;
+    fn screen<S: Screen>(&'c mut self) -> ScreenCommands<'c, 'w, 's, S>;
 }
 
-impl<'c, 'w, 's> Screen2CmdExt<'c, 'w, 's> for Commands<'w, 's> {
-    fn set_screen<S: Screen2>(&'c mut self) {
-        self.queue(ChangeScreen2(PhantomData::<S>));
+impl<'c, 'w, 's> ScreenCmdExt<'c, 'w, 's> for Commands<'w, 's> {
+    fn set_screen<S: Screen>(&'c mut self) {
+        self.queue(ChangeScreen(PhantomData::<S>));
     }
 
     fn clear_screen(&'c mut self) {
-        self.queue(ClearScreen2);
+        self.queue(ClearScreen);
     }
 
-    fn screen<S: Screen2>(&'c mut self) -> Screen2Commands<'c, 'w, 's, S> {
-        Screen2Commands {
+    fn screen<S: Screen>(&'c mut self) -> ScreenCommands<'c, 'w, 's, S> {
+        ScreenCommands {
             cmds: self,
             _screen: PhantomData,
         }
     }
 }
 
-pub struct Screen2World<'w, S: Screen2> {
+pub struct ScreenWorld<'w, S: Screen> {
     world: &'w mut World,
     _screen: PhantomData<S>,
 }
 
-impl<'w, S: Screen2> Screen2World<'w, S> {
+impl<'w, S: Screen> ScreenWorld<'w, S> {
     /// Spawns a new entity with the given bundle and marks it as belonging to this screen.
     #[inline]
     #[track_caller]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<'_> {
-        self.world.spawn((InScreen2::<S>::default(), bundle))
+        self.world.spawn((InScreen::<S>::default(), bundle))
     }
 
     /// Spawns a new empty entity and marks it as belonging to this screen.
@@ -532,7 +475,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
     #[track_caller]
     pub fn spawn_empty(&mut self) -> EntityWorldMut<'_> {
         let mut e = self.world.spawn_empty();
-        e.insert(InScreen2::<S>::default());
+        e.insert(InScreen::<S>::default());
         e
     }
 
@@ -544,7 +487,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         I: IntoIterator,
         I::Item: Bundle<Effect: NoBundleEffect>,
     {
-        let batch = iter.into_iter().map(|b| (InScreen2::<S>::default(), b));
+        let batch = iter.into_iter().map(|b| (InScreen::<S>::default(), b));
         self.world.spawn_batch(batch)
     }
 
@@ -562,7 +505,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         let Some(mut e) = self.get_entity_mut(entity) else {
             return;
         };
-        e.insert_if_new(InScreen2::<S>::default());
+        e.insert_if_new(InScreen::<S>::default());
     }
 
     /// Detaches this screen's marker component from the given entity.
@@ -572,7 +515,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         let Some(mut e) = self.get_entity_mut(entity) else {
             return;
         };
-        e.remove::<InScreen2<S>>();
+        e.remove::<InScreen<S>>();
     }
 
     /// Despawns all entities belonging to this screen.
@@ -582,7 +525,7 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
         // TODO: I am not sure if we can avoid the allocation here
         let entities = self
             .world
-            .query_filtered::<Entity, With<InScreen2<S>>>()
+            .query_filtered::<Entity, With<InScreen<S>>>()
             .iter(self.world)
             .collect::<Vec<_>>();
 
@@ -595,52 +538,86 @@ impl<'w, S: Screen2> Screen2World<'w, S> {
     #[track_caller]
     fn get_entity(&mut self, entity: Entity) -> Option<EntityRef<'_>> {
         let e = self.world.get_entity(entity).ok()?;
-        e.contains::<InScreen2<S>>().then_some(e)
+        e.contains::<InScreen<S>>().then_some(e)
     }
 
     #[inline]
     #[track_caller]
     fn get_entity_mut(&mut self, entity: Entity) -> Option<EntityWorldMut<'_>> {
         let e = self.world.get_entity_mut(entity).ok()?;
-        e.contains::<InScreen2<S>>().then_some(e)
+        e.contains::<InScreen<S>>().then_some(e)
+    }
+
+    fn set_as_current(&mut self) {
+        let to_id = TypeId::of::<S>();
+        let (from_id, from_actions, to_actions) = {
+            let screens = self
+                .world
+                .get_resource::<Screens>()
+                .or_panic("Screens resource not found");
+
+            let from_id = screens.current;
+            let from_actions = from_id.and_then(|id| screens.ids.get(&id)).cloned();
+            let to_actions = screens
+                .ids
+                .get(&to_id)
+                .or_panic("Target screen not registered")
+                .clone();
+
+            (from_id, from_actions, to_actions)
+        };
+
+        if let Some(fa) = &from_actions {
+            (fa.on_exit_to)(self.world, to_id);
+            (fa.on_exit)(self.world);
+            if fa.destroy_on_exit {
+                self.despawn_all();
+            }
+        }
+
+        self.world.resource_mut::<Screens>().set_current::<S>();
+
+        (to_actions.on_enter)(self.world);
+        if let Some(fid) = from_id {
+            (to_actions.on_enter_from)(self.world, fid);
+        }
     }
 }
 
-pub trait Screen2WorldExt {
-    fn screen<S: Screen2>(&mut self) -> Screen2World<'_, S>;
+pub trait ScreenWorldExt {
+    fn screen<S: Screen>(&mut self) -> ScreenWorld<'_, S>;
 }
 
-impl Screen2WorldExt for World {
-    fn screen<S: Screen2>(&mut self) -> Screen2World<'_, S> {
-        Screen2World {
+impl ScreenWorldExt for World {
+    fn screen<S: Screen>(&mut self) -> ScreenWorld<'_, S> {
+        ScreenWorld {
             world: self,
             _screen: PhantomData,
         }
     }
 }
 
-pub struct Screen2Commands<'c, 'w, 's, S: Screen2> {
+pub struct ScreenCommands<'c, 'w, 's, S: Screen> {
     cmds: &'c mut Commands<'w, 's>,
     _screen: PhantomData<S>,
 }
 
-impl<'c, 'w, 's, S: Screen2> Screen2Commands<'c, 'w, 's, S> {
-    /// Spawn a bundle belonging to this screen (deferred).
-    /// Returns the same type as `Commands::spawn` (usually `EntityCommands`).
+impl<'c, 'w, 's, S: Screen> ScreenCommands<'c, 'w, 's, S> {
+    /// Spawn a bundle belonging to this screen
     #[inline]
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityCommands<'_> {
-        self.cmds.spawn((InScreen2::<S>::default(), bundle))
+        self.cmds.spawn((InScreen::<S>::default(), bundle))
     }
 
-    /// Spawn an empty entity belonging to this screen (deferred).
+    /// Spawn an empty entity belonging to this screen
     #[inline]
     pub fn spawn_empty(&mut self) -> EntityCommands<'_> {
         let mut ec = self.cmds.spawn_empty();
-        ec.insert(InScreen2::<S>::default());
+        ec.insert(InScreen::<S>::default());
         ec
     }
 
-    /// Spawn a batch of bundles belonging to this screen (deferred).
+    /// Spawn a batch of bundles belonging to this screen
     /// Mirrors `Commands::spawn_batch` return type.
     #[inline]
     pub fn spawn_batch<I>(&mut self, iter: I)
@@ -653,19 +630,19 @@ impl<'c, 'w, 's, S: Screen2> Screen2Commands<'c, 'w, 's, S> {
         });
     }
 
-    /// Ensure an entity is attached to this screen (deferred).
+    /// Ensure an entity is attached to this screen
     #[inline]
     pub fn attach(&mut self, entity: Entity) {
-        self.cmds.entity(entity).insert(InScreen2::<S>::default());
+        self.cmds.entity(entity).insert(InScreen::<S>::default());
     }
 
-    /// Detach an entity from this screen (deferred).
+    /// Detach an entity from this screen
     #[inline]
     pub fn detach(&mut self, entity: Entity) {
-        self.cmds.entity(entity).remove::<InScreen2<S>>();
+        self.cmds.entity(entity).remove::<InScreen<S>>();
     }
 
-    /// Despawn all entities of this screen (deferred).
+    /// Despawn all entities of this screen
     #[inline]
     pub fn despawn_all(&mut self) {
         self.cmds.queue(|world: &mut World| {

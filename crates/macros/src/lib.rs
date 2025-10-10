@@ -382,8 +382,8 @@ pub fn derive_interpolable(input: TokenStream) -> TokenStream {
     TokenStream::from(interpolate_impl)
 }
 
-#[proc_macro_derive(Screen2, attributes(screen))]
-pub fn derive_screen2(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Screen, attributes(screen))]
+pub fn derive_screen(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
 
@@ -452,72 +452,11 @@ pub fn derive_screen2(input: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
-        impl #impl_generics Screen2 for #name #ty_generics #where_clause {
+        impl #impl_generics Screen for #name #ty_generics #where_clause {
             fn name() -> &'static str {
                 #name_body
             }
         }
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[cfg(feature = "ecs")]
-#[proc_macro_derive(Screen)]
-pub fn derive_iter_variants(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let enum_name = input.ident;
-
-    // Extract generics, lifetimes, and where clauses
-    let generics = input.generics.clone();
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    // Ensure the input is an enum
-    let variants = match input.data {
-        Data::Enum(DataEnum { variants, .. }) => variants,
-        _ => {
-            return syn::Error::new_spanned(
-                enum_name,
-                "Screen derive can only be derived for enums",
-            )
-            .to_compile_error()
-            .into();
-        }
-    };
-
-    // Collect variant names
-    let variant_names: Vec<_> = variants.iter().map(|Variant { ident, .. }| ident).collect();
-
-    // Generate the implementation for the Screen trait and Resource trait
-    let expanded = quote! {
-        impl #impl_generics Screen for #enum_name #ty_generics #where_clause {
-            fn add_schedules(mut app: &mut App) -> &mut App {
-                let variants = vec![
-                    #(Self::#variant_names),*
-                ];
-
-                variants.iter().for_each(|from_variant| {
-                    // TODO: multithread?
-                    let mut schedule = Schedule::new(OnEnter(from_variant.clone()));
-                    schedule.set_executor_kind(ExecutorKind::SingleThreaded);
-                    app.world.add_schedule(schedule);
-
-                    let mut schedule = Schedule::new(OnExit(from_variant.clone()));
-                    schedule.set_executor_kind(ExecutorKind::SingleThreaded);
-                    app.world.add_schedule(schedule);
-
-                    variants.iter().for_each(|to_variant| {
-                        let mut schedule = Schedule::new(OnChange{ from: from_variant.clone(), to: to_variant.clone() });
-                        schedule.set_executor_kind(ExecutorKind::SingleThreaded);
-                        app.world.add_schedule(schedule);
-                    });
-                });
-
-                app
-            }
-        }
-
-        impl #impl_generics Resource for #enum_name #ty_generics #where_clause {}
     };
 
     TokenStream::from(expanded)

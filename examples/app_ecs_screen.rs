@@ -1,36 +1,35 @@
 use rkit::{
     draw::create_draw_2d,
-    ecs::prelude::*,
     gfx::{self, Color},
     input::KeyCode,
-    macros::Screen2,
     math::{Vec2, vec2},
+    prelude::*,
 };
 
-#[derive(Screen2, Debug, Hash, Clone, PartialEq, Eq, Copy)]
+#[derive(Screen, Debug, Hash, Clone, PartialEq, Eq, Copy)]
 pub struct MenuScreen;
 
-#[derive(Screen2, Debug, Hash, Clone, PartialEq, Eq, Copy)]
+#[derive(Screen, Debug, Hash, Clone, PartialEq, Eq, Copy)]
 #[screen(name = "SuperDuperGameScreen")]
 pub struct GameScreen;
 
 fn screen_plugin(app: &mut App) {
-    app.add_screen2::<MenuScreen>(|app| {
+    app.add_screen::<MenuScreen>(|app| {
         app.on_render(draw_menu_system)
-            .on_enter_from::<GameScreen, _>(|| println!("menu from game"))
-            .on_exit_to::<GameScreen, _>(|| println!("menu to game"));
+            .on_enter_from(GameScreen, || println!("menu from game"))
+            .on_exit_to(GameScreen, || println!("menu to game"));
     })
-    .add_screen2::<GameScreen>(|app| {
+    .add_screen::<GameScreen>(|app| {
         app.on_render(draw_game_system)
-            .on_enter_from::<MenuScreen, _>(|| println!("game from menu"))
-            .on_exit_to::<MenuScreen, _>(|| println!("game to menu"));
+            .on_enter_from(MenuScreen, || println!("game from menu"))
+            .on_exit_to(MenuScreen, || println!("game to menu"));
     })
     .on_render(
         draw_system
             .after(MenuScreen::sys_set())
             .after(GameScreen::sys_set()),
     )
-    .as_default_screen::<MenuScreen>()
+    .set_default_screen::<MenuScreen>()
     .on_update(change_screen_system);
 }
 
