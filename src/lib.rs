@@ -1,3 +1,4 @@
+pub mod assets2;
 pub mod tween;
 pub mod utils;
 
