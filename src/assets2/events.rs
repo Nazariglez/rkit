@@ -2,7 +2,6 @@
 pub(crate) struct AssetLoad {
     pub(crate) id: String,
     pub(crate) state: LoadState,
-    pub(crate) list_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]

@@ -21,11 +21,31 @@ use crate::{
     prelude::{App, OnEnginePreFrame, PanicContext, Plugin},
 };
 
-pub struct AssetsPlugin;
+#[derive(Default)]
+pub struct AssetsPlugin {
+    loader: AssetLoader,
+}
+
+impl AssetsPlugin {
+    pub fn add_parser<T, Sys, Marker>(mut self, id: &str, parser: Sys) -> Self
+    where
+        T: Any + Send + Sync + 'static,
+        Sys: IntoSystem<In<AssetData>, Result<T, String>, Marker> + Send + Sync + 'static,
+        Sys::System: Send + 'static,
+    {
+        self.loader.add_parser(id, parser);
+        self
+    }
+}
 
 impl Plugin for AssetsPlugin {
     fn apply(&self, app: &mut App) {
-        app.insert_resource(AssetLoader::default()).on_schedule(
+        let loader = AssetLoader {
+            registers: self.loader.registers.clone(),
+            ..Default::default()
+        };
+
+        app.insert_resource(loader).on_schedule(
             OnEnginePreFrame,
             (load_assets_system, parse_assets_system).chain(),
         );
@@ -71,6 +91,7 @@ impl Default for AssetLoader {
 }
 
 impl AssetLoader {
+    /// Returns a reference to a loaded asset by its ID and type.
     pub fn get<T: Any + Send + Sync>(&self, id: &str) -> Option<&T> {
         let (tid, v) = self.loaded.get(id)?;
         if *tid == TypeId::of::<T>() {
@@ -80,6 +101,7 @@ impl AssetLoader {
         }
     }
 
+    /// Returns the loading progress of a list (0.0 to 1.0).
     pub fn list_progress(&self, list_id: &str) -> f32 {
         let Some(list) = self.lists.get(list_id) else {
             return 0.0;
@@ -90,16 +112,12 @@ impl AssetLoader {
         (done as f32) / (total as f32)
     }
 
+    /// Checks if an asset has been loaded and parsed.
     pub fn is_loaded(&self, id: &str) -> bool {
         self.loaded.contains_key(id)
     }
 
-    pub(crate) fn is_parsed<T: Any + Send + Sync>(&self, id: &str) -> bool {
-        self.loaded
-            .get(id)
-            .is_some_and(|(tid, _)| *tid == TypeId::of::<T>())
-    }
-
+    /// Removes and returns a loaded asset, transferring ownership to the caller.
     pub fn take<T: Any + Send + Sync>(&mut self, id: &str) -> Option<T> {
         let (tid, v) = self.loaded.remove(id)?;
         let same_type = tid == TypeId::of::<T>();
@@ -112,14 +130,7 @@ impl AssetLoader {
         Some(val)
     }
 
-    fn remove_from_lists(&mut self, id: &str) {
-        self.lists.iter_mut().for_each(|(_, list)| {
-            list.retain(|item| item != id);
-        });
-
-        self.lists.retain(|_, list| !list.is_empty());
-    }
-
+    /// Registers a custom parser for a specific file extension.
     pub fn add_parser<T, Sys, Marker>(&mut self, id: &str, parser: Sys)
     where
         T: Any + Send + Sync + 'static,
@@ -147,6 +158,7 @@ impl AssetLoader {
         );
     }
 
+    /// Loads multiple assets as a named list for tracking progress.
     pub fn load_list(&mut self, id: &str, list: impl Into<LoadList>) {
         let list_id = id.to_string();
         let LoadList { items } = list.into();
@@ -154,10 +166,10 @@ impl AssetLoader {
         for item in &items {
             match &item.typ {
                 LoadType::Path(p) => {
-                    self.inner_load(&p.to_string_lossy().to_string(), Some(list_id.clone()));
+                    self.load(&p.to_string_lossy().to_string());
                 }
                 LoadType::Bytes(b) => {
-                    self.inner_load_bytes(&item.id, b.clone(), Some(list_id.clone()));
+                    self.load_bytes(&item.id, b.clone());
                 }
             }
         }
@@ -166,30 +178,59 @@ impl AssetLoader {
             .insert(list_id, items.into_iter().map(|item| item.id).collect());
     }
 
-    fn process_parsers(&mut self, world: &mut World) {
-        if self.registers.is_empty() {
-            return;
-        }
-
-        let keys = self.registers.keys().cloned().collect::<Vec<_>>();
-        for key in keys {
-            if let Some(factory_cell) = self.registers.remove(&key) {
-                if let Some(factory) = factory_cell.lock().take() {
-                    let parser = factory(world);
-                    self.parsers.insert(key.clone(), parser);
-                    log::debug!(
-                        "Prepared parser for extension: {}",
-                        if key.is_empty() { "<default>" } else { &key }
-                    );
-                }
-            }
-        }
-    }
-
+    /// Checks if an asset is currently being loaded.
     pub fn is_loading(&self, id: &str) -> bool {
         self.states
             .get(id)
             .is_some_and(|s| matches!(s.state, LoadState::Loading))
+    }
+
+    /// Loads an asset from a file path.
+    pub fn load(&mut self, file_path: &str) {
+        if self.states.contains_key(file_path) || self.is_loaded(file_path) {
+            log::debug!("Skipping load '{}': already pending or loaded", file_path);
+            return;
+        }
+
+        log::debug!("Loading file '{file_path}'");
+        let fut = Box::pin(self.file_loader.load_file(file_path));
+        self.states.insert(
+            file_path.to_string(),
+            AssetLoad {
+                id: file_path.to_string(),
+                state: LoadState::Loading,
+            },
+        );
+        let wrapper = LoadWrapper::new(file_path, fut);
+        self.loading.push(wrapper);
+    }
+
+    /// Loads an asset from raw bytes with a custom ID.
+    pub fn load_bytes<S, B>(&mut self, id: S, bytes: B)
+    where
+        S: Into<String>,
+        B: Into<Vec<u8>>,
+    {
+        let id = id.into();
+
+        if self.states.contains_key(&id) || self.is_loaded(&id) {
+            log::debug!("Skipping load '{}': already pending or loaded", id);
+            return;
+        }
+
+        self.states.insert(
+            id.clone(),
+            AssetLoad {
+                id,
+                state: LoadState::Loaded(bytes.into()),
+            },
+        );
+    }
+
+    /// Clears all loaded assets.
+    pub fn clear(&mut self) {
+        self.loaded.clear();
+        self.lists.clear();
     }
 
     fn update(&mut self) {
@@ -207,63 +248,39 @@ impl AssetLoader {
         }
     }
 
-    fn inner_load(&mut self, file_path: &str, list_id: Option<String>) {
-        if self.states.contains_key(file_path) || self.is_loaded(file_path) {
-            log::debug!("Skipping load '{}': already pending or loaded", file_path);
+    fn process_parsers(&mut self, world: &mut World) {
+        if self.registers.is_empty() {
             return;
         }
 
-        log::debug!("Loading file '{file_path}'");
-        let fut = Box::pin(self.file_loader.load_file(file_path));
-        self.states.insert(
-            file_path.to_string(),
-            AssetLoad {
-                id: file_path.to_string(),
-                state: LoadState::Loading,
-                list_id,
-            },
-        );
-        let wrapper = LoadWrapper::new(file_path, fut);
-        self.loading.push(wrapper);
-    }
-
-    pub fn load(&mut self, file_path: &str) {
-        self.inner_load(file_path, None);
-    }
-
-    fn inner_load_bytes<S, B>(&mut self, id: S, bytes: B, list_id: Option<String>)
-    where
-        S: Into<String>,
-        B: Into<Vec<u8>>,
-    {
-        let id = id.into();
-
-        if self.states.contains_key(&id) || self.is_loaded(&id) {
-            log::debug!("Skipping load '{}': already pending or loaded", id);
-            return;
+        let keys = self.registers.keys().cloned().collect::<Vec<_>>();
+        for key in keys {
+            if let Some(factory_cell) = self.registers.remove(&key) {
+                if let Some(factory) = factory_cell.lock().take() {
+                    let parser = factory(world);
+                    self.parsers.insert(key.clone(), parser);
+                    log::debug!(
+                        "Parser for extension '{}' ready",
+                        if key.is_empty() { "<default>" } else { &key }
+                    );
+                }
+            }
         }
-
-        self.states.insert(
-            id.clone(),
-            AssetLoad {
-                id,
-                state: LoadState::Loaded(bytes.into()),
-                list_id,
-            },
-        );
     }
 
-    pub fn load_bytes<S, B>(&mut self, id: S, bytes: B)
-    where
-        S: Into<String>,
-        B: Into<Vec<u8>>,
-    {
-        self.inner_load_bytes(id, bytes, None);
+    fn remove_from_lists(&mut self, id: &str) {
+        self.lists.iter_mut().for_each(|(_, list)| {
+            list.retain(|item| item != id);
+        });
+
+        self.lists.retain(|_, list| !list.is_empty());
     }
 
-    pub fn clear(&mut self) {
-        self.loaded.clear();
-        self.lists.clear();
+    #[cfg(test)]
+    pub(crate) fn is_parsed<T: Any + Send + Sync>(&self, id: &str) -> bool {
+        self.loaded
+            .get(id)
+            .is_some_and(|(tid, _)| *tid == TypeId::of::<T>())
     }
 }
 

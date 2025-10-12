@@ -8,7 +8,7 @@ use rkit::{
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
-        .add_plugin(AssetsPlugin)
+        .add_plugin(AssetsPlugin::default())
         .on_setup(setup_system)
         .on_update(update_system)
         .on_render(draw_system)
