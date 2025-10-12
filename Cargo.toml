@@ -121,6 +121,12 @@ taffy = { version = "0.7.7", optional = true }
 egui = { version = "0.32", optional = true, features = ["bytemuck"] }
 bytemuck = { workspace = true, optional = true }
 
+# assets deps
+futures = "0.3.31"
+futures-util = { version = "0.3.31", default-features = false }
+thunderdome = "0.6.1"
+parking_lot.workspace = true
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 fastrand = { workspace = true, optional = true, features = ["js"] }
 web-sys = { workspace = true, optional = true, features = [

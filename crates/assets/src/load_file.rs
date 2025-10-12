@@ -16,7 +16,7 @@ use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{XmlHttpRequest, XmlHttpRequestResponseType};
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) struct FileLoader {
+pub struct FileLoader {
     thread_pool: ThreadPool,
 }
 
@@ -48,7 +48,7 @@ impl FileLoader {
 // The web logic to make the request is based on the crate 'platter' from Ryan Goldstein
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) struct FileLoader {}
+pub struct FileLoader {}
 
 #[cfg(target_arch = "wasm32")]
 impl FileLoader {

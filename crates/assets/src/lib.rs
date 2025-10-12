@@ -5,6 +5,7 @@ mod loader;
 mod waker;
 
 pub use crate::list::{AssetList, AssetMap};
+pub use crate::load_file::FileLoader;
 pub use crate::loader::AssetId;
 
 use crate::loader::ASSET_LOADER;
