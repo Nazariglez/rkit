@@ -1,8 +1,9 @@
-use rkit::assets2::*;
-use rkit::draw::*;
-use rkit::gfx;
-use rkit::gfx::Color;
-use rkit::prelude::*;
+use rkit::{
+    assets2::*,
+    draw::*,
+    gfx::{self, Color},
+    prelude::*,
+};
 
 fn main() -> Result<(), String> {
     App::new()
@@ -16,10 +17,7 @@ fn main() -> Result<(), String> {
 
 fn setup_system(mut loader: ResMut<AssetLoader>) {
     // let id =loader.load("./examples/assets/bunny.png");
-    loader.load_list(
-        "my_list",
-        &["./examples/assets/bunny.png", "./examples/assets/data.txt"],
-    );
+    loader.load_list("my_list", &["./examples/assets/bunny.png"]);
     loader.add_parser("txt", text_parser);
     loader.add_parser("png", sprite_parser);
 
@@ -30,7 +28,6 @@ fn setup_system(mut loader: ResMut<AssetLoader>) {
 
 fn update_system(mut cmds: Commands, mut loader: ResMut<AssetLoader>) {
     let is_loaded = loader.is_loaded("./examples/assets/data.txt");
-    println!("is_loaded: {is_loaded:?}");
     if is_loaded {
         let data = loader.take::<String>("./examples/assets/data.txt").unwrap();
         println!("data: {data:?}");

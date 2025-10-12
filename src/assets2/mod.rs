@@ -45,7 +45,7 @@ pub struct AssetLoader {
     loading: Vec<LoadWrapper>,
     loaded: FxHashMap<String, (TypeId, Box<dyn Any + Send + Sync>)>,
     states: FxHashMap<String, AssetLoad>,
-    lists: FxHashMap<String, LoadList>,
+    lists: FxHashMap<String, Vec<String>>,
     registers: FxHashMap<
         String,
         Arc<Mutex<Option<Box<dyn FnOnce(&mut World) -> Arc<ParserFn> + Send + Sync>>>>,
@@ -65,33 +65,15 @@ impl Default for AssetLoader {
             states: FxHashMap::default(),
         };
 
-        println!("add parser for empty extension");
         loader.add_parser("", bytes_parser);
         loader
     }
 }
 
 impl AssetLoader {
-    // Parsed and available to use
-    fn is_asset_parsed(&self, id: &str) -> bool {
-        self.loaded.contains_key(id)
-    }
-
-    // Consider an item "done" when it either parsed successfully OR ended in error.
-    // (If you want errors NOT to count toward progress, change the second branch.)
-    fn is_asset_done(&self, id: &str) -> bool {
-        if self.is_asset_parsed(id) {
-            return true;
-        }
-        self.states
-            .get(id)
-            .is_some_and(|s| matches!(s.state, LoadState::Err(_)))
-    }
-
     pub fn get<T: Any + Send + Sync>(&self, id: &str) -> Option<&T> {
         let (tid, v) = self.loaded.get(id)?;
         if *tid == TypeId::of::<T>() {
-            // &Box<dyn Any> -> &dyn Any -> &T
             v.downcast_ref::<T>()
         } else {
             None
@@ -102,52 +84,40 @@ impl AssetLoader {
         let Some(list) = self.lists.get(list_id) else {
             return 0.0;
         };
-        let total = list.items.len();
-        if total == 0 {
-            return 1.0;
-        }
-        let done = list
-            .items
-            .iter()
-            .filter(|item| self.is_asset_done(&item.id))
-            .count();
+
+        let total = list.len();
+        let done = list.iter().filter(|item| self.is_loaded(item)).count();
         (done as f32) / (total as f32)
     }
 
-    /// True only after the asset has been parsed & stored
     pub fn is_loaded(&self, id: &str) -> bool {
-        // If it's a plain asset id:
-        if self.is_asset_parsed(id) {
-            return true;
-        }
-
-        // If it's a list id, require ALL items done.
-        if let Some(list) = self.lists.get(id) {
-            let total = list.items.len();
-            if total == 0 {
-                return true;
-            }
-            return list.items.iter().all(|item| self.is_asset_done(&item.id));
-        }
-
-        false
+        self.loaded.contains_key(id)
     }
 
-    /// If you want type-specific readiness
-    pub fn is_parsed<T: Any + Send + Sync>(&self, id: &str) -> bool {
+    pub(crate) fn is_parsed<T: Any + Send + Sync>(&self, id: &str) -> bool {
         self.loaded
             .get(id)
             .is_some_and(|(tid, _)| *tid == TypeId::of::<T>())
     }
 
-    /// Optional: take ownership and remove from the store
     pub fn take<T: Any + Send + Sync>(&mut self, id: &str) -> Option<T> {
         let (tid, v) = self.loaded.remove(id)?;
-        if tid == TypeId::of::<T>() {
-            v.downcast::<T>().ok().map(|b| *b)
-        } else {
-            None
+        let same_type = tid == TypeId::of::<T>();
+        if !same_type {
+            return None;
         }
+
+        let val: T = v.downcast::<T>().ok().map(|b| *b)?;
+        self.remove_from_lists(id);
+        Some(val)
+    }
+
+    fn remove_from_lists(&mut self, id: &str) {
+        self.lists.iter_mut().for_each(|(_, list)| {
+            list.retain(|item| item != id);
+        });
+
+        self.lists.retain(|_, list| !list.is_empty());
     }
 
     pub fn add_parser<T, Sys, Marker>(&mut self, id: &str, parser: Sys)
@@ -160,14 +130,13 @@ impl AssetLoader {
             let sys_id = world.register_system(parser);
 
             Arc::new(move |world: &mut World, data: AssetData| {
-                // Run the system and box the output
-                let res: Result<T, String> = world
+                let res = world
                     .run_system_with(sys_id, data)
                     .map_err(|e| format!("parser system failed: {e}"))?;
 
                 res.map(|t| ParsedAny {
                     type_id: TypeId::of::<T>(),
-                    value: Box::new(t) as Box<dyn Any + Send + Sync>,
+                    value: Box::new(t),
                 })
             })
         };
@@ -179,18 +148,30 @@ impl AssetLoader {
     }
 
     pub fn load_list(&mut self, id: &str, list: impl Into<LoadList>) {
-        self.lists.insert(id.to_string(), list.into());
+        let list_id = id.to_string();
+        let LoadList { items } = list.into();
+
+        for item in &items {
+            match &item.typ {
+                LoadType::Path(p) => {
+                    self.inner_load(&p.to_string_lossy().to_string(), Some(list_id.clone()));
+                }
+                LoadType::Bytes(b) => {
+                    self.inner_load_bytes(&item.id, b.clone(), Some(list_id.clone()));
+                }
+            }
+        }
+
+        self.lists
+            .insert(list_id, items.into_iter().map(|item| item.id).collect());
     }
 
-    /// Materialize all pending parser factories into `parsers`.
-    /// Safe to call every frame; it only acts on entries that still exist in `registers`.
-    fn prepare_all_parsers(&mut self, world: &mut World) {
+    fn process_parsers(&mut self, world: &mut World) {
         if self.registers.is_empty() {
             return;
         }
 
-        // collect keys first to avoid borrowing issues
-        let keys: Vec<String> = self.registers.keys().cloned().collect();
+        let keys = self.registers.keys().cloned().collect::<Vec<_>>();
         for key in keys {
             if let Some(factory_cell) = self.registers.remove(&key) {
                 if let Some(factory) = factory_cell.lock().take() {
@@ -211,7 +192,7 @@ impl AssetLoader {
             .is_some_and(|s| matches!(s.state, LoadState::Loading))
     }
 
-    pub(crate) fn update(&mut self) {
+    fn update(&mut self) {
         let mut needs_clean = false;
         self.loading.iter_mut().for_each(|loader| {
             let asset_state = self.states.get_mut(&loader.id).unwrap();
@@ -226,8 +207,7 @@ impl AssetLoader {
         }
     }
 
-    pub fn load(&mut self, file_path: &str) {
-        // ⬇️ don't enqueue twice
+    fn inner_load(&mut self, file_path: &str, list_id: Option<String>) {
         if self.states.contains_key(file_path) || self.is_loaded(file_path) {
             log::debug!("Skipping load '{}': already pending or loaded", file_path);
             return;
@@ -240,21 +220,26 @@ impl AssetLoader {
             AssetLoad {
                 id: file_path.to_string(),
                 state: LoadState::Loading,
+                list_id,
             },
         );
         let wrapper = LoadWrapper::new(file_path, fut);
         self.loading.push(wrapper);
     }
 
-    pub fn load_bytes<S, B>(&mut self, id: S, bytes: B)
+    pub fn load(&mut self, file_path: &str) {
+        self.inner_load(file_path, None);
+    }
+
+    fn inner_load_bytes<S, B>(&mut self, id: S, bytes: B, list_id: Option<String>)
     where
         S: Into<String>,
         B: Into<Vec<u8>>,
     {
         let id = id.into();
 
-        // don't re-enqueue if it's already pending or parsed
         if self.states.contains_key(&id) || self.is_loaded(&id) {
+            log::debug!("Skipping load '{}': already pending or loaded", id);
             return;
         }
 
@@ -263,11 +248,20 @@ impl AssetLoader {
             AssetLoad {
                 id,
                 state: LoadState::Loaded(bytes.into()),
+                list_id,
             },
         );
     }
 
-    pub(crate) fn clear(&mut self) {
+    pub fn load_bytes<S, B>(&mut self, id: S, bytes: B)
+    where
+        S: Into<String>,
+        B: Into<Vec<u8>>,
+    {
+        self.inner_load_bytes(id, bytes, None);
+    }
+
+    pub fn clear(&mut self) {
         self.loaded.clear();
         self.lists.clear();
     }
@@ -276,7 +270,6 @@ impl AssetLoader {
 struct LoadItem {
     id: String,
     typ: LoadType,
-    parser_ext: Option<String>,
 }
 
 enum LoadType {
@@ -299,76 +292,31 @@ fn bytes_parser(data: In<AssetData>) -> Result<Vec<u8>, String> {
 
 fn load_assets_system(world: &mut World) {
     let _ = world.resource_scope(|_world: &mut World, mut loader: Mut<AssetLoader>| {
-        // ----- Phase 1: scan lists (immutable), collect what to start -----
-        enum ToStart {
-            Path(String), // own the String to avoid lifetimes
-            Bytes { id: String, bytes: Vec<u8> },
-        }
-
-        let mut to_start: Vec<ToStart> = Vec::new();
-
-        for list in loader.lists.values() {
-            for item in &list.items {
-                // ⬇️ add this second condition
-                if loader.states.contains_key(&item.id) || loader.is_loaded(&item.id) {
-                    continue;
-                }
-                match &item.typ {
-                    LoadType::Path(p) => {
-                        to_start.push(ToStart::Path(p.to_string_lossy().into_owned()))
-                    }
-                    LoadType::Bytes(b) => to_start.push(ToStart::Bytes {
-                        id: item.id.clone(),
-                        bytes: b.clone(),
-                    }),
-                }
-            }
-        }
-
-        // ----- Phase 2: mutate loader (kick off loads / insert ready bytes) -----
-        for action in to_start {
-            match action {
-                ToStart::Path(path) => {
-                    loader.load(&path);
-                }
-                ToStart::Bytes { id, bytes } => {
-                    loader.states.insert(
-                        id.clone(),
-                        AssetLoad {
-                            id,
-                            state: LoadState::Loaded(bytes),
-                        },
-                    );
-                }
-            }
-        }
-
-        // Poll I/O futures to move Loading -> Loaded/Err
         loader.update();
     });
 }
 
 fn parse_assets_system(world: &mut World) {
     world.resource_scope(|world: &mut World, mut loader: Mut<AssetLoader>| {
-        loader.prepare_all_parsers(world);
-        // -------- phase 1: collect parse jobs from states --------
-        struct Job {
+        loader.process_parsers(world);
+
+        // gather all the assets to parse
+        struct ToParse {
             id: String,
             ext: String,
             bytes: Vec<u8>,
         }
-        let mut jobs: Vec<Job> = Vec::new();
 
+        let mut to_parse = vec![];
         for (id, st) in loader.states.iter() {
             if let LoadState::Loaded(bytes) = &st.state {
-                // derive extension from the id/path
                 let ext = std::path::Path::new(id)
                     .extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or_default()
                     .to_string();
 
-                jobs.push(Job {
+                to_parse.push(ToParse {
                     id: id.clone(),
                     ext,
                     bytes: bytes.clone(),
@@ -376,14 +324,9 @@ fn parse_assets_system(world: &mut World) {
             }
         }
 
-        // -------- phase 2: ensure parser, parse, store, clean --------
+        // parse the assets
         let mut to_remove: Vec<String> = Vec::new();
-
-        for Job { id, ext, bytes } in jobs {
-            let parsers = loader.parsers.keys().collect::<Vec<_>>();
-            println!("parsers {parsers:?}");
-
-            // fall back to "" parser if needed
+        for ToParse { id, ext, bytes } in to_parse {
             let parser = loader
                 .parsers
                 .get(&ext)
@@ -402,7 +345,7 @@ fn parse_assets_system(world: &mut World) {
                         .loaded
                         .insert(id.clone(), (parsed.type_id, parsed.value));
 
-                    log::info!("Parsed and stored '{id}'");
+                    log::info!("Asset parsed '{id}'");
                     to_remove.push(id);
                 }
                 Err(e) => {
@@ -414,6 +357,7 @@ fn parse_assets_system(world: &mut World) {
             }
         }
 
+        // remove the assets that have been parsed
         for id in to_remove {
             loader.states.remove(&id);
         }
@@ -427,13 +371,9 @@ impl From<Vec<String>> for LoadList {
                 .into_iter()
                 .map(|item| {
                     let file_path = Path::new(&item);
-                    let ext = file_path
-                        .extension()
-                        .map(|ext| ext.to_string_lossy().to_string());
                     LoadItem {
                         id: item.clone(),
                         typ: LoadType::Path(file_path.to_path_buf()),
-                        parser_ext: ext,
                     }
                 })
                 .collect(),
@@ -448,13 +388,9 @@ impl<const N: usize> From<[&str; N]> for LoadList {
                 .iter()
                 .map(|&item| {
                     let file_path = Path::new(item);
-                    let ext = file_path
-                        .extension()
-                        .map(|ext| ext.to_string_lossy().to_string());
                     LoadItem {
                         id: item.to_string(),
                         typ: LoadType::Path(file_path.to_path_buf()),
-                        parser_ext: ext,
                     }
                 })
                 .collect(),
@@ -469,13 +405,9 @@ impl<const N: usize> From<[String; N]> for LoadList {
                 .iter()
                 .map(|item| {
                     let file_path = Path::new(&item);
-                    let ext = file_path
-                        .extension()
-                        .map(|ext| ext.to_string_lossy().to_string());
                     LoadItem {
                         id: item.clone(),
                         typ: LoadType::Path(file_path.to_path_buf()),
-                        parser_ext: ext,
                     }
                 })
                 .collect(),
@@ -490,13 +422,9 @@ impl From<Vec<&str>> for LoadList {
                 .into_iter()
                 .map(|item| {
                     let file_path = Path::new(item);
-                    let ext = file_path
-                        .extension()
-                        .map(|ext| ext.to_string_lossy().to_string());
                     LoadItem {
                         id: item.to_string(),
                         typ: LoadType::Path(file_path.to_path_buf()),
-                        parser_ext: ext,
                     }
                 })
                 .collect(),
@@ -511,13 +439,9 @@ impl<const N: usize> From<&[&str; N]> for LoadList {
                 .iter()
                 .map(|&item| {
                     let file_path = std::path::Path::new(item);
-                    let ext = file_path
-                        .extension()
-                        .map(|ext| ext.to_string_lossy().to_string());
                     LoadItem {
                         id: item.to_string(),
                         typ: LoadType::Path(file_path.to_path_buf()),
-                        parser_ext: ext,
                     }
                 })
                 .collect(),
@@ -532,13 +456,9 @@ impl<const N: usize> From<&[String; N]> for LoadList {
                 .iter()
                 .map(|item| {
                     let file_path = Path::new(&item);
-                    let ext = file_path
-                        .extension()
-                        .map(|ext| ext.to_string_lossy().to_string());
                     LoadItem {
                         id: item.clone(),
                         typ: LoadType::Path(file_path.to_path_buf()),
-                        parser_ext: ext,
                     }
                 })
                 .collect(),
@@ -591,5 +511,238 @@ impl LoadWrapper {
 
     pub fn is_loaded(&self) -> bool {
         self.loaded
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_ecs::world::World;
+
+    fn parser_string_from_utf8(asset_input: In<AssetData>) -> Result<String, String> {
+        String::from_utf8(asset_input.data.clone()).map_err(|utf8_error| utf8_error.to_string())
+    }
+
+    fn parser_always_error(_asset_input: In<AssetData>) -> Result<String, String> {
+        Err("error".to_string())
+    }
+
+    #[test]
+    fn test_load_bytes_defualt_parser() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.load_bytes("no_id", b"hello world");
+        }
+
+        parse_assets_system(&mut world);
+
+        let asset_loader = world.resource::<AssetLoader>();
+        assert!(asset_loader.is_parsed::<Vec<u8>>("no_id"));
+        let stored_bytes = asset_loader.get::<Vec<u8>>("no_id").unwrap();
+        assert_eq!(stored_bytes, &b"hello world".to_vec());
+    }
+
+    #[test]
+    fn test_load_bytes_ext_parser() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.add_parser("txt", parser_string_from_utf8);
+            asset_loader.load_bytes("text_file.txt", b"sample text");
+        }
+
+        parse_assets_system(&mut world);
+
+        let asset_loader = world.resource::<AssetLoader>();
+        assert!(asset_loader.is_parsed::<String>("text_file.txt"));
+        let stored_text = asset_loader.get::<String>("text_file.txt").unwrap();
+        assert_eq!(stored_text, "sample text");
+    }
+
+    #[test]
+    fn test_load_list_take() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        let list_identifier_string = "example_list_id".to_string();
+        let asset_identifier_string = "inline_data.txt".to_string();
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.add_parser("txt", parser_string_from_utf8);
+
+            let load_list = LoadList {
+                items: vec![LoadItem {
+                    id: asset_identifier_string.clone(),
+                    typ: LoadType::Bytes(b"bytes content".to_vec()),
+                }],
+            };
+
+            asset_loader.load_list(&list_identifier_string, load_list);
+        }
+
+        parse_assets_system(&mut world);
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            assert!(asset_loader.is_parsed::<String>(&asset_identifier_string));
+            let taken_value: String = asset_loader
+                .take::<String>(&asset_identifier_string)
+                .unwrap();
+            assert_eq!(taken_value, "bytes content");
+            assert!(!asset_loader.is_loaded(&asset_identifier_string));
+            assert!(asset_loader.lists.get(&list_identifier_string).is_none());
+        }
+    }
+
+    #[test]
+    fn test_load_list_progress() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        let list_identifier_string = "dual_list_progress".to_string();
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.add_parser("txt", parser_string_from_utf8);
+
+            let load_list = LoadList {
+                items: vec![
+                    LoadItem {
+                        id: "first_loaded.txt".to_string(),
+                        typ: LoadType::Bytes(b"alpha".to_vec()),
+                    },
+                    LoadItem {
+                        id: "path_not_parsed.yet".to_string(),
+                        typ: LoadType::Path(PathBuf::from("some/missing.file")),
+                    },
+                ],
+            };
+
+            asset_loader.load_list(&list_identifier_string, load_list);
+        }
+
+        parse_assets_system(&mut world);
+
+        let asset_loader = world.resource::<AssetLoader>();
+        let progress_value = asset_loader.list_progress(&list_identifier_string);
+        assert!((progress_value - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_load_bytes_error_state() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        let asset_identifier_string = "bad_asset.err".to_string();
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.add_parser("err", parser_always_error);
+            asset_loader.load_bytes(&asset_identifier_string, b"does not matter");
+        }
+
+        parse_assets_system(&mut world);
+
+        let asset_loader = world.resource::<AssetLoader>();
+        assert!(
+            asset_loader
+                .get::<String>(&asset_identifier_string)
+                .is_none()
+        );
+        let state_entry = asset_loader.states.get(&asset_identifier_string).unwrap();
+        match &state_entry.state {
+            LoadState::Err(error_message) => {
+                assert!(error_message.contains("error"));
+            }
+            _ => panic!("expected error state"),
+        }
+    }
+
+    #[test]
+    fn test_is_loading() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        let asset_identifier_string = "unavailable_path.asset".to_string();
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.load(&asset_identifier_string);
+            assert!(asset_loader.is_loading(&asset_identifier_string));
+        }
+    }
+
+    #[test]
+    fn test_load_bytes_clear() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.load_bytes("first_blob", b"one");
+            asset_loader.load_bytes("second_blob", b"two");
+        }
+
+        parse_assets_system(&mut world);
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.lists.insert(
+                "temporary_list".to_string(),
+                vec!["first_blob".to_string(), "second_blob".to_string()],
+            );
+            assert!(asset_loader.is_loaded("first_blob"));
+            assert!(asset_loader.is_loaded("second_blob"));
+            assert!(!asset_loader.lists.is_empty());
+            asset_loader.clear();
+            assert!(asset_loader.loaded.is_empty());
+            assert!(asset_loader.lists.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_load_bytes_type_specific_parsed() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.add_parser("txt", parser_string_from_utf8);
+            asset_loader.load_bytes("typ.txt", b"abc");
+        }
+
+        parse_assets_system(&mut world);
+
+        let asset_loader = world.resource::<AssetLoader>();
+        assert!(asset_loader.is_parsed::<String>("typ.txt"));
+        assert!(!asset_loader.is_parsed::<Vec<u8>>("typ.txt"));
+        assert!(asset_loader.get::<Vec<u8>>("typ.txt").is_none());
+    }
+
+    #[test]
+    fn test_load_bytes_skips_duplicates() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut asset_loader = world.resource_mut::<AssetLoader>();
+            asset_loader.load_bytes("dup_id.txt", b"first");
+            let states_count_before = asset_loader.states.len();
+            asset_loader.load_bytes("dup_id.txt", b"second");
+            let states_count_after = asset_loader.states.len();
+            assert_eq!(states_count_before, states_count_after);
+        }
+
+        {
+            parse_assets_system(&mut world);
+            let asset_loader = world.resource::<AssetLoader>();
+            assert!(asset_loader.is_loaded("dup_id.txt"));
+        }
     }
 }
