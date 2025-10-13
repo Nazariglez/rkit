@@ -8,7 +8,11 @@ use std::{
 use syn::{ExprArray, ItemMod, LitStr, Token, Type, parse::Parser, parse_macro_input};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use heck::{ToSnakeCase, ToUpperCamelCase};
 use ignore::WalkBuilder;
+use unicode_ident::{is_xid_continue, is_xid_start};
+
+use proc_macro_error::abort_call_site;
 
 const ROOT_ATTR: &str = "root";
 const SKIP_ATTR: &str = "skip";
@@ -18,7 +22,7 @@ const EMBED_ATTR: &str = "embed";
 const LIST_ID_ATTR: &str = "id";
 
 pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut root_rel = None;
+    let mut root_rel: Option<String> = None;
     let mut user_skip = Vec::new();
     let mut with_ext = false;
     let mut embed = false;
@@ -26,7 +30,6 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut parser_map: HashMap<String, Type> = HashMap::new();
 
     let parser = syn::meta::parser(|meta| {
-        // Parse #[assets(root = "path", skip = [...], types(...), etc)]
         if meta.path.is_ident(ROOT_ATTR) {
             let s: LitStr = meta.value()?.parse()?;
             root_rel = Some(s.value());
@@ -48,15 +51,16 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
             Ok(())
         } else if meta.path.is_ident(TYPES_ATTR) {
-            // types(png: Sprite, ogg: Sound) -> map extensions to rust types
             meta.parse_nested_meta(|entry| {
                 let ext_ident = entry
                     .path
                     .get_ident()
-                    .ok_or_else(|| entry.error("expected extension like `ogg`"))?
+                    .ok_or_else(|| entry.error("expected extension like 'ogg'"))?
                     .to_string()
                     .to_ascii_lowercase();
+
                 entry.input.parse::<Token![:]>()?;
+
                 let ty: Type = entry.input.parse()?;
                 parser_map.insert(ext_ident, ty);
                 Ok(())
@@ -74,9 +78,8 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
             list_id = Some(s.value());
             Ok(())
         } else {
-            Err(meta.error(format!(
-                "unknown attribute; use: root, skip, types(...), with_ext, embed, or id"
-            )))
+            Err(meta
+                .error("unknown attribute; use: root, skip, types(...), with_ext, embed, or id"))
         }
     });
 
@@ -88,28 +91,28 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let root_rel = match root_rel {
         Some(s) => s,
-        None => return compile_err("missing `root = \"...\"` in #[assets(...)]"),
+        None => abort_call_site!("missing `root = \"...\"` in #[assets(...)]"),
     };
 
     let items = match &mut module.content {
         Some((_brace, items)) => items,
-        None => return compile_err("requires inline module: `pub mod my_assets {}`"),
+        None => abort_call_site!("requires inline module: `pub mod my_assets {}`"),
     };
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let root_abs = PathBuf::from(&manifest_dir).join(&root_rel);
     if !root_abs.is_dir() {
-        return compile_err(&format!("directory not found: {}", root_abs.display()));
+        abort_call_site!("directory not found: {}", root_abs.display());
     }
 
     let skipset = match build_skipset(user_skip) {
         Ok(s) => s,
-        Err(e) => return compile_err(&e),
+        Err(e) => abort_call_site!("{}", e),
     };
 
     let files = match collect_files_with_gitignore(&root_abs, &skipset) {
         Ok(v) => v,
-        Err(e) => return compile_err(&e),
+        Err(e) => abort_call_site!("{}", e),
     };
 
     let tree = DirNode::from_files(&files);
@@ -117,7 +120,7 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut errs: Vec<String> = Vec::new();
     tree.collect_collisions(&mut errs, with_ext);
     if !errs.is_empty() {
-        return compile_err(&errs.join("\\n"));
+        abort_call_site!("{}", errs.join("\n"));
     }
 
     let root_struct_ident = pascal_from_ident(&module.ident);
@@ -134,10 +137,6 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     items.push(syn::Item::Verbatim(generated));
     TokenStream::from(quote! { #module })
-}
-
-fn compile_err(msg: &str) -> TokenStream {
-    TokenStream::from(quote! { compile_error!(#msg); })
 }
 
 fn build_skipset(user_skip: Vec<String>) -> Result<GlobSet, String> {
@@ -198,6 +197,92 @@ fn collect_files_with_gitignore(root_abs: &Path, skip: &GlobSet) -> Result<Vec<P
     Ok(files)
 }
 
+/// Converts to snake_case with extra splits at alpha/digit boundaries.
+/// Example: 'powerUp12' -> 'power_up_12', 'http2Server' -> 'http_2_server'.
+fn snake_with_digit_boundaries(s: &str) -> String {
+    let base = s.to_snake_case();
+    let mut out = String::with_capacity(base.len() + 4);
+    let mut prev: Option<char> = None;
+
+    for c in base.chars() {
+        if let Some(p) = prev {
+            let alpha_to_digit = p.is_ascii_alphabetic() && c.is_ascii_digit();
+            let digit_to_alpha = p.is_ascii_digit() && c.is_ascii_alphabetic();
+            if (alpha_to_digit || digit_to_alpha) && p != '_' && c != '_' {
+                out.push('_');
+            }
+        }
+        out.push(c);
+        prev = Some(c);
+    }
+
+    out
+}
+
+/// Detect Rust keywords and automatically use raw identifier (r#keyword) if needed.
+/// Uses a parse probe: if 'struct <ident>;' fails, it's a keyword.
+fn keyword_guard_ident(s: &str) -> syn::Ident {
+    let ident = format_ident!("{}", s, span = Span::call_site());
+    let probe: proc_macro2::TokenStream = quote! { struct #ident; };
+    if syn::parse2::<syn::ItemStruct>(probe).is_ok() {
+        ident
+    } else {
+        format_ident!("r#{}", s, span = Span::call_site())
+    }
+}
+
+fn make_snake_ident<S: AsRef<str>>(s: S) -> syn::Ident {
+    // 1) Convert to snake_case with digit-boundary splits
+    let out = snake_with_digit_boundaries(s.as_ref());
+
+    // 2) Sanitize to valid unicode identifier characters
+    let mut fixed = String::with_capacity(out.len() + 1);
+    for (i, ch) in out.chars().enumerate() {
+        let ok = if i == 0 {
+            is_xid_start(ch) || ch == '_' || ch.is_ascii_digit()
+        } else {
+            is_xid_continue(ch) || ch == '_'
+        };
+        fixed.push(if ok { ch } else { '_' });
+    }
+
+    if fixed.is_empty() {
+        fixed.push('_');
+    }
+
+    // 3) Prefix with '_' if starts with digit
+    if fixed.chars().next().unwrap().is_ascii_digit() {
+        fixed.insert(0, '_');
+    }
+
+    // 4) Handle keywords by using raw identifiers (r#type, etc.)
+    keyword_guard_ident(&fixed)
+}
+
+/// Generate PascalCase type name for a directory: Dir_Foo_BarBaz.
+fn make_pascal_dir_ident(rel_dir: &Path) -> syn::Ident {
+    let parts = rel_dir
+        .iter()
+        .map(|c| c.to_string_lossy().to_string().to_upper_camel_case())
+        .collect::<Vec<_>>()
+        .join("_");
+    let name = if parts.is_empty() {
+        "Dir_".to_string()
+    } else {
+        format!("Dir_{}", parts)
+    };
+    keyword_guard_ident(&name)
+}
+
+/// Generate PascalCase root struct name from the module identifier.
+fn pascal_from_ident(ident: &syn::Ident) -> syn::Ident {
+    let name = {
+        let n = ident.to_string().to_upper_camel_case();
+        if n.is_empty() { "Assets".into() } else { n }
+    };
+    keyword_guard_ident(&name)
+}
+
 #[derive(Debug)]
 struct DirNode {
     rel_dir: PathBuf,
@@ -218,6 +303,8 @@ impl DirNode {
         root.sort_files_recursive();
         root
     }
+
+    /// Walk down directory path, creating intermediate DirNodes as needed, then add file to leaf node.
     fn insert_file(&mut self, file_rel: &Path) {
         let mut node = self;
         let mut cur_rel = PathBuf::new();
@@ -234,6 +321,7 @@ impl DirNode {
         }
         node.files.push(file_rel.to_path_buf());
     }
+
     fn sort_files_recursive(&mut self) {
         self.files.sort();
         for child in self.dirs.values_mut() {
@@ -241,8 +329,8 @@ impl DirNode {
         }
     }
 
+    /// Detect naming collisions by simulating field name generation (critical for catching compile errors early).
     fn collect_collisions(&self, errs: &mut Vec<String>, with_ext: bool) {
-        // Check for name collisions: files with same stem or file/dir conflicts
         use std::collections::HashMap;
         let mut seen: HashMap<String, PathBuf> = HashMap::new();
 
@@ -258,10 +346,10 @@ impl DirNode {
             } else {
                 stem.to_string()
             };
-            let key = to_snake(&name);
+            let key = snake_with_digit_boundaries(&name);
             if let Some(prev) = seen.get(&key) {
                 errs.push(format!(
-                    "collision in `{}`: `{}` and `{}` → `{}`",
+                    "collision in '{}': '{}' and '{}' -> '{}'",
                     display_rel(&self.rel_dir),
                     prev.display(),
                     f.display(),
@@ -271,11 +359,12 @@ impl DirNode {
                 seen.insert(key, f.clone());
             }
         }
+
         for dir_name in self.dirs.keys() {
-            let key = to_snake(dir_name);
+            let key = snake_with_digit_boundaries(dir_name);
             if let Some(conf) = seen.get(&key) {
                 errs.push(format!(
-                    "collision in `{}`: dir `{}` and file `{}` → `{}`",
+                    "collision in '{}': dir '{}' and file '{}' -> '{}'",
                     display_rel(&self.rel_dir),
                     dir_name,
                     conf.display(),
@@ -283,6 +372,7 @@ impl DirNode {
                 ));
             }
         }
+
         for child in self.dirs.values() {
             child.collect_collisions(errs, with_ext);
         }
@@ -313,6 +403,7 @@ fn generate_structs(
         use super::*;
     });
 
+    // Build index mapping for PATHS/DATA array access
     let all_paths = gather_full_paths(root, root_rel);
     let path_to_idx: std::collections::BTreeMap<_, _> = all_paths
         .iter()
@@ -389,18 +480,18 @@ fn gen_dir_node(
     let ty_ident = if node.rel_dir.as_os_str().is_empty() {
         root_struct_ident.clone()
     } else {
-        type_ident_from_dir(&node.rel_dir)
+        make_pascal_dir_ident(&node.rel_dir)
     };
 
     let mut field_idents = Vec::new();
     let mut field_types = Vec::new();
 
     for (dir_name, child) in &node.dirs {
-        let field_ident = syn::Ident::new(&to_snake(dir_name), Span::call_site());
+        let field_ident = make_snake_ident(dir_name);
         let field_ty = if child.rel_dir.as_os_str().is_empty() {
             root_struct_ident.clone()
         } else {
-            type_ident_from_dir(&child.rel_dir)
+            make_pascal_dir_ident(&child.rel_dir)
         };
         field_idents.push(field_ident);
         field_types.push(quote!(#field_ty));
@@ -444,87 +535,9 @@ fn field_ident_from_filename(path_rel: &Path, with_ext: bool) -> syn::Ident {
     } else {
         stem.to_string()
     };
-    syn::Ident::new(&to_snake(&name), Span::call_site())
+    make_snake_ident(name)
 }
 
-// Convert dir path to PascalCase type name: 'foo/bar-baz' -> 'Dir_Foo_BarBaz'
-fn type_ident_from_dir(rel_dir: &Path) -> syn::Ident {
-    let mut parts: Vec<String> = Vec::new();
-    for comp in rel_dir.iter() {
-        let x = comp.to_string_lossy();
-        let mut part = String::new();
-        let mut up = true;
-        for ch in x.chars() {
-            if ch.is_ascii_alphanumeric() {
-                if up {
-                    part.push(ch.to_ascii_uppercase());
-                    up = false;
-                } else {
-                    part.push(ch);
-                }
-            } else {
-                up = true;
-            }
-        }
-        if part.is_empty() {
-            part.push_str("Dir");
-        }
-        parts.push(part);
-    }
-    let name = format!("Dir_{}", parts.join("_"));
-    format_ident!("{}", name)
-}
-
-fn pascal_from_ident(ident: &syn::Ident) -> syn::Ident {
-    let raw = ident.to_string();
-    let mut out = String::new();
-    let mut up = true;
-    for ch in raw.chars() {
-        if ch.is_ascii_alphanumeric() {
-            if up {
-                out.push(ch.to_ascii_uppercase());
-                up = false;
-            } else {
-                out.push(ch);
-            }
-        } else {
-            up = true;
-        }
-    }
-    if out.is_empty() {
-        out.push_str("Assets");
-    }
-    format_ident!("{}", out)
-}
-
-fn to_snake(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut prev_underscore = false;
-    for ch in s.chars() {
-        let c = if ch.is_ascii_alphanumeric() {
-            ch.to_ascii_lowercase()
-        } else {
-            '_'
-        };
-        if c == '_' {
-            // Collapse multiple underscores into one
-            if !prev_underscore {
-                out.push(c);
-                prev_underscore = true;
-            }
-        } else {
-            out.push(c);
-            prev_underscore = false;
-        }
-    }
-    // Ensure valid rust identifier
-    if out.is_empty() || out.chars().next().unwrap().is_ascii_digit() {
-        out.insert(0, '_');
-    }
-    out
-}
-
-// Path helpers: normalize separators and build consistent full paths
 fn normalize_path(base: &str) -> String {
     let mut normalized = base.replace('\\', "/");
     while normalized.ends_with('/') {
@@ -557,7 +570,7 @@ fn gather_full_paths(root: &DirNode, root_rel: &str) -> Vec<String> {
     out
 }
 
-// Generate code that loads assets from AssetLoader and builds the struct tree
+/// Generate code that extracts assets from loader and constructs the typed tree.
 fn gen_parse_expr(
     node: &DirNode,
     root_struct_ident: &syn::Ident,
@@ -570,14 +583,14 @@ fn gen_parse_expr(
     let this_ty = if node.rel_dir.as_os_str().is_empty() {
         root_struct_ident.clone()
     } else {
-        type_ident_from_dir(&node.rel_dir)
+        make_pascal_dir_ident(&node.rel_dir)
     };
 
     let mut pre_lets = Vec::new();
     let mut field_inits = Vec::new();
 
     for (dir_name, child) in &node.dirs {
-        let field_ident = syn::Ident::new(&to_snake(dir_name), Span::call_site());
+        let field_ident = make_snake_ident(dir_name);
         let child_expr = gen_parse_expr(
             child,
             root_struct_ident,
@@ -604,7 +617,6 @@ fn gen_parse_expr(
 
         let rel = f.to_string_lossy().replace('\\', "/");
         let full = build_full_path(root_rel, &rel);
-        // Look up index in PATHS/DATA array for this asset
         let idx = *path_to_idx
             .get(&full)
             .expect("path must exist in PATHS/DATA mapping");
@@ -633,4 +645,53 @@ fn gen_parse_expr(
         #(#pre_lets)*
         #this_ty { #( #field_inits, )* }
     }}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn snake_splits_digit_boundaries() {
+        assert_eq!(snake_with_digit_boundaries("powerUp12"), "power_up_12");
+        assert_eq!(snake_with_digit_boundaries("HTTP2Server"), "http_2_server");
+        assert_eq!(snake_with_digit_boundaries("foo12bar"), "foo_12_bar");
+        assert_eq!(
+            snake_with_digit_boundaries("foo_bar_99baz"),
+            "foo_bar_99_baz"
+        );
+    }
+
+    #[test]
+    fn make_snake_ident_handles_digits_and_keywords() {
+        assert_eq!(make_snake_ident("powerUp12").to_string(), "power_up_12");
+        // keyword becomes raw ident automatically
+        assert_eq!(make_snake_ident("type").to_string(), "r#type");
+        // leading digit gets prefixed
+        assert_eq!(make_snake_ident("2dTexture").to_string(), "_2_d_texture");
+    }
+
+    #[test]
+    fn field_ident_with_ext_suffix() {
+        use std::path::PathBuf;
+        let id = super::field_ident_from_filename(&PathBuf::from("powerUp12.ogg"), true);
+        assert_eq!(id.to_string(), "power_up_12_ogg");
+    }
+
+    #[test]
+    fn dir_and_root_pascal_names() {
+        let p = PathBuf::from("Snd/FX");
+        assert_eq!(make_pascal_dir_ident(&p).to_string(), "Dir_Snd_Fx");
+
+        let m = syn::Ident::new("raw_assets", Span::call_site());
+        assert_eq!(pascal_from_ident(&m).to_string(), "RawAssets");
+    }
+
+    #[test]
+    fn collision_keys_match_generation() {
+        // What we use in collision checks equals what we generate for fields
+        let key = snake_with_digit_boundaries("powerUp12_ogg");
+        assert_eq!(key, "power_up_12_ogg");
+        let field = make_snake_ident("powerUp12_ogg").to_string();
+        assert_eq!(field, "power_up_12_ogg");
+    }
 }

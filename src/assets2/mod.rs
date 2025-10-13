@@ -22,6 +22,8 @@ use crate::{
     prelude::{App, OnEnginePreFrame, PanicContext, Plugin},
 };
 
+pub use events::AutoLoadEvt;
+
 #[derive(Default)]
 pub struct AssetsPlugin {
     loader: AssetLoader,
@@ -120,6 +122,7 @@ impl AssetLoader {
                 match T::parse_list(loader) {
                     Ok(Some(t)) => {
                         world.insert_resource(t);
+                        world.trigger(AutoLoadEvt::<T>::default());
                         true
                     }
                     Err(e) => {
@@ -144,6 +147,10 @@ impl AssetLoader {
 
     /// Returns the loading progress of a list (0.0 to 1.0).
     pub fn list_progress(&self, list_id: &str) -> f32 {
+        if self.is_loaded(list_id) {
+            return 1.0;
+        }
+
         let Some(list) = self.lists.get(list_id) else {
             return 0.0;
         };
@@ -389,6 +396,7 @@ impl LoadList {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AssetData {
     pub id: String,
     pub data: Vec<u8>,
@@ -483,6 +491,8 @@ fn parse_assets_system(world: &mut World) {
         // clean and reinsert the callbacks
         auto_load_cbs.retain(|auto_load| !auto_load.done);
         loader.auto_load = auto_load_cbs;
+
+        // TODO: emit LoadListEvt once for the lists that have been loaded
     });
 }
 
@@ -1361,5 +1371,30 @@ mod tests {
 
         parse_assets_system(&mut world);
         assert!(!world.contains_resource::<E>());
+    }
+
+    #[test]
+    fn test_auto_load_emits_event() {
+        use bevy_ecs::prelude::*;
+
+        #[derive(Resource)]
+        struct Hit;
+
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+        world.add_observer(|_ev: On<AutoLoadEvt<R>>, mut cmds: Commands| {
+            cmds.insert_resource(Hit);
+        });
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.auto_load::<R>();
+        }
+
+        load_assets_system(&mut world);
+        parse_assets_system(&mut world);
+
+        world.flush();
+        assert!(world.contains_resource::<Hit>());
     }
 }
