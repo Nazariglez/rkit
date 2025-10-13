@@ -629,6 +629,30 @@ impl<'a> ToLoadItem for &'a PathBuf {
     }
 }
 
+impl<'a, 'b> ToLoadItem for &'a &'b str {
+    fn to_load_item(&self) -> LoadItem {
+        (*self).to_load_item()
+    }
+}
+
+impl<'a, 'b> ToLoadItem for &'a &'b String {
+    fn to_load_item(&self) -> LoadItem {
+        (*self).to_load_item()
+    }
+}
+
+impl<'a, 'b> ToLoadItem for &'a &'b Path {
+    fn to_load_item(&self) -> LoadItem {
+        (*self).to_load_item()
+    }
+}
+
+impl<'a, 'b> ToLoadItem for &'a &'b PathBuf {
+    fn to_load_item(&self) -> LoadItem {
+        (*self).to_load_item()
+    }
+}
+
 impl<I, N> From<I> for LoadList
 where
     I: IntoIterator<Item = N>,
@@ -653,16 +677,16 @@ where
 }
 
 pub trait AssetCmdExt {
-    pub fn load(&mut self, file_path: &str);
-    pub fn load_with_id(&mut self, id: &str, file_path: &str);
-    pub fn load_bytes<S, B>(&mut self, id: S, bytes: B)
+    fn load(&mut self, file_path: &str);
+    fn load_with_id(&mut self, id: &str, file_path: &str);
+    fn load_bytes<S, B>(&mut self, id: S, bytes: B)
     where
         S: Into<String>,
         B: Into<Vec<u8>>;
-    pub fn load_list(&mut self, id: &str, list: impl Into<LoadList>);
+    fn load_list(&mut self, id: &str, list: impl Into<LoadList>);
 }
 
-impl AssetCmdExt for Commands {
+impl AssetCmdExt for Commands<'_, '_> {
     fn load(&mut self, file_path: &str) {
         self.queue(AssetLoadCmd {
             id: file_path.to_string(),
@@ -710,7 +734,7 @@ impl Command for AssetLoadCmd {
 
         world
             .resource_mut::<AssetLoader>()
-            .load_with_id(self.id, self.file_path);
+            .load_with_id(&self.id, &self.file_path);
     }
 }
 
@@ -744,7 +768,7 @@ impl Command for AssetLoadListCmd {
         );
         world
             .resource_mut::<AssetLoader>()
-            .load_list(self.id, self.list);
+            .load_list(&self.id, self.list);
     }
 }
 
