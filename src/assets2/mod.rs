@@ -6,6 +6,7 @@ use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use std::{
     any::{Any, TypeId},
+    borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -52,6 +53,13 @@ impl Plugin for AssetsPlugin {
     }
 }
 
+pub trait AutoLoad {
+    fn load_list() -> LoadList;
+    fn parse_list(loader: &mut AssetLoader, list: &mut LoadList) -> Result<Option<Self>, String>
+    where
+        Self: Sized;
+}
+
 struct ParsedAny {
     type_id: TypeId,
     value: Box<dyn Any + Send + Sync>,
@@ -91,6 +99,8 @@ impl Default for AssetLoader {
 }
 
 impl AssetLoader {
+    pub fn auto_load<T: AutoLoad>(&mut self) {}
+
     /// Returns a reference to a loaded asset by its ID and type.
     pub fn get<T: Any + Send + Sync>(&self, id: &str) -> Option<&T> {
         let (tid, v) = self.loaded.get(id)?;
@@ -294,8 +304,38 @@ enum LoadType {
     Bytes(Vec<u8>),
 }
 
+#[derive(Default)]
 pub struct LoadList {
     items: Vec<LoadItem>,
+}
+
+impl LoadList {
+    #[inline]
+    pub fn add_from_path(&mut self, path: &str) -> &mut Self {
+        self.items.push(LoadItem {
+            id: path.to_string(),
+            typ: LoadType::Path(PathBuf::from(path)),
+        });
+        self
+    }
+
+    #[inline]
+    pub fn add_from_path_with_id(&mut self, id: &str, path: &str) -> &mut Self {
+        self.items.push(LoadItem {
+            id: id.to_string(),
+            typ: LoadType::Path(PathBuf::from(path)),
+        });
+        self
+    }
+
+    #[inline]
+    pub fn add_from_bytes(&mut self, id: &str, bytes: &[u8]) -> &mut Self {
+        self.items.push(LoadItem {
+            id: id.to_string(),
+            typ: LoadType::Bytes(bytes.to_vec()),
+        });
+        self
+    }
 }
 
 pub struct AssetData {
@@ -381,108 +421,6 @@ fn parse_assets_system(world: &mut World) {
     });
 }
 
-impl From<Vec<String>> for LoadList {
-    fn from(value: Vec<String>) -> Self {
-        Self {
-            items: value
-                .into_iter()
-                .map(|item| {
-                    let file_path = Path::new(&item);
-                    LoadItem {
-                        id: item.clone(),
-                        typ: LoadType::Path(file_path.to_path_buf()),
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
-impl<const N: usize> From<[&str; N]> for LoadList {
-    fn from(value: [&str; N]) -> Self {
-        Self {
-            items: value
-                .iter()
-                .map(|&item| {
-                    let file_path = Path::new(item);
-                    LoadItem {
-                        id: item.to_string(),
-                        typ: LoadType::Path(file_path.to_path_buf()),
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
-impl<const N: usize> From<[String; N]> for LoadList {
-    fn from(value: [String; N]) -> Self {
-        Self {
-            items: value
-                .iter()
-                .map(|item| {
-                    let file_path = Path::new(&item);
-                    LoadItem {
-                        id: item.clone(),
-                        typ: LoadType::Path(file_path.to_path_buf()),
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
-impl From<Vec<&str>> for LoadList {
-    fn from(value: Vec<&str>) -> Self {
-        Self {
-            items: value
-                .into_iter()
-                .map(|item| {
-                    let file_path = Path::new(item);
-                    LoadItem {
-                        id: item.to_string(),
-                        typ: LoadType::Path(file_path.to_path_buf()),
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
-impl<const N: usize> From<&[&str; N]> for LoadList {
-    fn from(value: &[&str; N]) -> Self {
-        Self {
-            items: value
-                .iter()
-                .map(|&item| {
-                    let file_path = std::path::Path::new(item);
-                    LoadItem {
-                        id: item.to_string(),
-                        typ: LoadType::Path(file_path.to_path_buf()),
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
-impl<const N: usize> From<&[String; N]> for LoadList {
-    fn from(value: &[String; N]) -> Self {
-        Self {
-            items: value
-                .iter()
-                .map(|item| {
-                    let file_path = Path::new(&item);
-                    LoadItem {
-                        id: item.clone(),
-                        typ: LoadType::Path(file_path.to_path_buf()),
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
 type InnerBoxFuture = BoxFuture<'static, Result<Vec<u8>, String>>;
 
 struct LoadWrapper {
@@ -528,6 +466,183 @@ impl LoadWrapper {
 
     pub fn is_loaded(&self) -> bool {
         self.loaded
+    }
+}
+
+trait ToLoadItem {
+    fn to_load_item(&self) -> LoadItem;
+}
+
+impl ToLoadItem for String {
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.clone(),
+            typ: LoadType::Path(PathBuf::from(self)),
+        }
+    }
+}
+
+impl ToLoadItem for PathBuf {
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.to_string_lossy().to_string(),
+            typ: LoadType::Path(self.clone()),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, Vec<u8>)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Bytes(self.1.clone()),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, &[u8])
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Bytes(self.1.to_vec()),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, Cow<'_, [u8]>)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Bytes(self.1.to_vec()),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, PathBuf)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Path(self.1.clone()),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, &Path)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Path(self.1.to_path_buf()),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, &str)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Path(PathBuf::from(self.1)),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, String)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Path(PathBuf::from(&self.1)),
+        }
+    }
+}
+
+impl<T> ToLoadItem for (T, &PathBuf)
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Path(self.1.clone()),
+        }
+    }
+}
+
+impl<'a> ToLoadItem for &'a str {
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: (*self).to_string(),
+            typ: LoadType::Path(PathBuf::from(*self)),
+        }
+    }
+}
+
+impl<'a> ToLoadItem for &'a String {
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: (*self).clone(),
+            typ: LoadType::Path(PathBuf::from(&**self)),
+        }
+    }
+}
+
+impl<'a> ToLoadItem for &'a Path {
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.to_string_lossy().to_string(),
+            typ: LoadType::Path(self.to_path_buf()),
+        }
+    }
+}
+
+impl<'a> ToLoadItem for &'a PathBuf {
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.to_string_lossy().to_string(),
+            typ: LoadType::Path((*self).clone()),
+        }
+    }
+}
+
+impl<I, N> From<I> for LoadList
+where
+    I: IntoIterator<Item = N>,
+    N: ToLoadItem,
+{
+    fn from(value: I) -> Self {
+        Self {
+            items: value.into_iter().map(|item| item.to_load_item()).collect(),
+        }
+    }
+}
+
+impl<N> FromIterator<N> for LoadList
+where
+    N: ToLoadItem,
+{
+    fn from_iter<I: IntoIterator<Item = N>>(iter: I) -> Self {
+        Self {
+            items: iter.into_iter().map(|n| n.to_load_item()).collect(),
+        }
     }
 }
 
