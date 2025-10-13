@@ -68,6 +68,11 @@ struct ParsedAny {
 
 type ParserFn = dyn Fn(&mut World, AssetData) -> Result<ParsedAny, String> + Send + Sync + 'static;
 
+struct AutoLoadState {
+    done: bool,
+    cb: Box<dyn Fn(&mut World, &mut AssetLoader) -> bool + Send + Sync + 'static>,
+}
+
 #[derive(Resource)]
 pub struct AssetLoader {
     file_loader: FileLoader,
@@ -80,6 +85,7 @@ pub struct AssetLoader {
         Arc<Mutex<Option<Box<dyn FnOnce(&mut World) -> Arc<ParserFn> + Send + Sync>>>>,
     >,
     parsers: FxHashMap<String, Arc<ParserFn>>,
+    auto_load: Vec<AutoLoadState>,
 }
 
 impl Default for AssetLoader {
@@ -92,6 +98,7 @@ impl Default for AssetLoader {
             file_loader: FileLoader::new().or_panic("Creating FileLoader"),
             loading: vec![],
             states: FxHashMap::default(),
+            auto_load: vec![],
         };
 
         loader.add_parser("", bytes_parser);
@@ -100,9 +107,29 @@ impl Default for AssetLoader {
 }
 
 impl AssetLoader {
-    pub fn auto_load<T: AutoLoad>(&mut self) {
+    pub fn auto_load<T: AutoLoad + Resource + 'static>(&mut self) {
         log::debug!("Auto loading list '{}'", T::list_id());
         self.load_list(type_name::<T>(), T::load_list());
+        self.auto_load.push(AutoLoadState {
+            done: false,
+            cb: Box::new(move |world: &mut World, loader: &mut AssetLoader| {
+                if !loader.is_loaded(T::list_id()) {
+                    return false;
+                }
+
+                match T::parse_list(loader) {
+                    Ok(Some(t)) => {
+                        world.insert_resource(t);
+                        true
+                    }
+                    Err(e) => {
+                        log::error!("Auto loading list '{}' failed: {}", T::list_id(), e);
+                        true
+                    }
+                    _ => false,
+                }
+            }),
+        });
     }
 
     /// Returns a reference to a loaded asset by its ID and type.
@@ -128,6 +155,12 @@ impl AssetLoader {
 
     /// Checks if an asset has been loaded and parsed.
     pub fn is_loaded(&self, id: &str) -> bool {
+        // check first if it's a list with this id
+        if let Some(list) = self.lists.get(id) {
+            return list.iter().all(|item_id| self.loaded.contains_key(item_id));
+        }
+
+        // fallback to assets oterwhise
         self.loaded.contains_key(id)
     }
 
@@ -194,11 +227,17 @@ impl AssetLoader {
             .insert(list_id, items.into_iter().map(|item| item.id).collect());
     }
 
-    /// Checks if an asset is currently being loaded.
     pub fn is_loading(&self, id: &str) -> bool {
+        if let Some(list) = self.lists.get(id) {
+            return list.iter().any(|item_id| self.is_asset_loading(item_id));
+        }
+        self.is_asset_loading(id)
+    }
+
+    fn is_asset_loading(&self, id: &str) -> bool {
         self.states
             .get(id)
-            .is_some_and(|s| matches!(s.state, LoadState::Loading))
+            .is_some_and(|s| matches!(s.state, LoadState::Loading | LoadState::Loaded(_)))
     }
 
     /// Loads an asset from a file path.
@@ -430,6 +469,20 @@ fn parse_assets_system(world: &mut World) {
         for id in to_remove {
             loader.states.remove(&id);
         }
+
+        // add autoload resources to the world
+        // this is a bit hacky because I need to mutate the loader while iterating over it
+        // so I take the callbacks replacing them with an empty vector (which I think should not alloc)
+        // and then I reinsert it when it's done
+        let mut auto_load_cbs = std::mem::take(&mut loader.auto_load);
+        for auto_load in &mut auto_load_cbs {
+            let done = (*auto_load.cb)(world, &mut loader);
+            auto_load.done = done;
+        }
+
+        // clean and reinsert the callbacks
+        auto_load_cbs.retain(|auto_load| !auto_load.done);
+        loader.auto_load = auto_load_cbs;
     });
 }
 
