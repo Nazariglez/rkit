@@ -197,17 +197,22 @@ impl AssetLoader {
 
     /// Loads an asset from a file path.
     pub fn load(&mut self, file_path: &str) {
-        if self.states.contains_key(file_path) || self.is_loaded(file_path) {
-            log::debug!("Skipping load '{}': already pending or loaded", file_path);
+        self.load_with_id(file_path, file_path);
+    }
+
+    /// Load an asset from a file path with a custom ID.
+    pub fn load_with_id(&mut self, id: &str, file_path: &str) {
+        if self.states.contains_key(id) || self.is_loaded(id) {
+            log::debug!("Skipping load '{}': already pending or loaded", id);
             return;
         }
 
-        log::debug!("Loading file '{file_path}'");
+        log::debug!("Loading asset file '{file_path}'");
         let fut = Box::pin(self.file_loader.load_file(file_path));
         self.states.insert(
-            file_path.to_string(),
+            id.to_string(),
             AssetLoad {
-                id: file_path.to_string(),
+                id: id.to_string(),
                 state: LoadState::Loading,
             },
         );
@@ -228,6 +233,7 @@ impl AssetLoader {
             return;
         }
 
+        log::debug!("Loading asset bytes '{id}'");
         self.states.insert(
             id.clone(),
             AssetLoad {
@@ -643,6 +649,102 @@ where
         Self {
             items: iter.into_iter().map(|n| n.to_load_item()).collect(),
         }
+    }
+}
+
+pub trait AssetCmdExt {
+    pub fn load(&mut self, file_path: &str);
+    pub fn load_with_id(&mut self, id: &str, file_path: &str);
+    pub fn load_bytes<S, B>(&mut self, id: S, bytes: B)
+    where
+        S: Into<String>,
+        B: Into<Vec<u8>>;
+    pub fn load_list(&mut self, id: &str, list: impl Into<LoadList>);
+}
+
+impl AssetCmdExt for Commands {
+    fn load(&mut self, file_path: &str) {
+        self.queue(AssetLoadCmd {
+            id: file_path.to_string(),
+            file_path: file_path.to_string(),
+        });
+    }
+
+    fn load_with_id(&mut self, id: &str, file_path: &str) {
+        self.queue(AssetLoadCmd {
+            id: id.to_string(),
+            file_path: file_path.to_string(),
+        });
+    }
+
+    fn load_bytes<S, B>(&mut self, id: S, bytes: B)
+    where
+        S: Into<String>,
+        B: Into<Vec<u8>>,
+    {
+        self.queue(AssetLoadBytesCmd {
+            id: id.into(),
+            bytes: bytes.into(),
+        });
+    }
+
+    fn load_list(&mut self, id: &str, list: impl Into<LoadList>) {
+        self.queue(AssetLoadListCmd {
+            id: id.to_string(),
+            list: list.into(),
+        });
+    }
+}
+
+struct AssetLoadCmd {
+    id: String,
+    file_path: String,
+}
+
+impl Command for AssetLoadCmd {
+    fn apply(self, world: &mut World) {
+        debug_assert!(
+            world.contains_resource::<AssetLoader>(),
+            "AssetLoader must be present"
+        );
+
+        world
+            .resource_mut::<AssetLoader>()
+            .load_with_id(self.id, self.file_path);
+    }
+}
+
+struct AssetLoadBytesCmd {
+    id: String,
+    bytes: Vec<u8>,
+}
+
+impl Command for AssetLoadBytesCmd {
+    fn apply(self, world: &mut World) {
+        debug_assert!(
+            world.contains_resource::<AssetLoader>(),
+            "AssetLoader must be present"
+        );
+        world
+            .resource_mut::<AssetLoader>()
+            .load_bytes(self.id, self.bytes);
+    }
+}
+
+struct AssetLoadListCmd {
+    id: String,
+    list: LoadList,
+}
+
+impl Command for AssetLoadListCmd {
+    fn apply(self, world: &mut World) {
+        debug_assert!(
+            world.contains_resource::<AssetLoader>(),
+            "AssetLoader must be present"
+        );
+        world
+            .resource_mut::<AssetLoader>()
+            .load_list(self.id, self.list);
     }
 }
 
