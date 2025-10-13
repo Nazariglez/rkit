@@ -5,7 +5,7 @@ use futures_util::future::BoxFuture;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use std::{
-    any::{Any, TypeId, type_name},
+    any::{Any, TypeId},
     borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
@@ -109,7 +109,7 @@ impl Default for AssetLoader {
 impl AssetLoader {
     pub fn auto_load<T: AutoLoad + Resource + 'static>(&mut self) {
         log::debug!("Auto loading list '{}'", T::list_id());
-        self.load_list(type_name::<T>(), T::load_list());
+        self.load_list(T::list_id(), T::load_list());
         self.auto_load.push(AutoLoadState {
             done: false,
             cb: Box::new(move |world: &mut World, loader: &mut AssetLoader| {
@@ -1204,5 +1204,162 @@ mod tests {
 
         let loader = world.resource::<AssetLoader>();
         assert!(loader.is_loaded("late"));
+    }
+
+    #[test]
+    fn test_load_with_id_skips_repath() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.load_with_id("x", "a.asset");
+            let n1 = l.states.len();
+            l.load_with_id("x", "b.asset");
+            let n2 = l.states.len();
+            assert_eq!(n1, n2);
+        }
+    }
+
+    #[test]
+    fn test_is_loading_list() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.add_parser("txt", parser_string);
+            l.load_list(
+                "lst",
+                [("a.txt", b"a".as_slice()), ("x.asset", b"x".as_slice())],
+            );
+        }
+
+        {
+            let l = world.resource::<AssetLoader>();
+            assert!(l.is_loading("lst"));
+        }
+    }
+
+    #[test]
+    fn test_take_keeps_list_with_remaining_items() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.add_parser("txt", parser_string);
+            l.load_list(
+                "lst",
+                [("a.txt", b"a".as_slice()), ("b.txt", b"b".as_slice())],
+            );
+        }
+
+        parse_assets_system(&mut world);
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            let _ = l.take::<String>("a.txt").unwrap();
+            let v = l.lists.get("lst").unwrap();
+            assert_eq!(v.len(), 1);
+            assert_eq!(v[0], "b.txt");
+            assert!(l.is_loaded("b.txt"));
+        }
+    }
+
+    #[test]
+    fn test_update_then_parse_from_future() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.states.insert(
+                "f.asset".to_string(),
+                AssetLoad {
+                    id: "f.asset".to_string(),
+                    state: LoadState::Loading,
+                },
+            );
+            let fut: BoxFuture<'static, Result<Vec<u8>, String>> =
+                Box::pin(async { Ok(b"z".to_vec()) });
+            l.loading.push(LoadWrapper::new("f.asset", fut));
+        }
+
+        load_assets_system(&mut world);
+        parse_assets_system(&mut world);
+
+        let l = world.resource::<AssetLoader>();
+        let b = l.get::<Vec<u8>>("f.asset").unwrap();
+        assert_eq!(b, &b"z".to_vec());
+    }
+
+    #[derive(Resource)]
+    struct R;
+
+    impl AutoLoad for R {
+        fn list_id() -> &'static str {
+            "r"
+        }
+        fn load_list() -> LoadList {
+            LoadList {
+                items: vec![LoadItem {
+                    id: "r.bin".to_string(),
+                    typ: LoadType::Bytes(b"x".to_vec()),
+                }],
+            }
+        }
+        fn parse_list(_l: &mut AssetLoader) -> Result<Option<Self>, String> {
+            Ok(Some(R))
+        }
+    }
+
+    #[test]
+    fn test_auto_load_inserts_resource() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.auto_load::<R>();
+        }
+
+        load_assets_system(&mut world);
+        parse_assets_system(&mut world);
+        assert!(world.contains_resource::<R>());
+    }
+
+    #[derive(Resource)]
+    struct E;
+
+    impl AutoLoad for E {
+        fn list_id() -> &'static str {
+            "e"
+        }
+        fn load_list() -> LoadList {
+            LoadList {
+                items: vec![LoadItem {
+                    id: "e.bin".to_string(),
+                    typ: LoadType::Bytes(b"q".to_vec()),
+                }],
+            }
+        }
+        fn parse_list(_l: &mut AssetLoader) -> Result<Option<Self>, String> {
+            Err("x".to_string())
+        }
+    }
+
+    #[test]
+    fn test_auto_load_error_does_not_insert() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut l = world.resource_mut::<AssetLoader>();
+            l.auto_load::<E>();
+        }
+
+        parse_assets_system(&mut world);
+        assert!(!world.contains_resource::<E>());
     }
 }
