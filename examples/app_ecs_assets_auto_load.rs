@@ -33,7 +33,7 @@ fn setup_system(mut loader: ResMut<AssetLoader>) {
     loader.auto_load::<assets::Assets>();
 }
 
-fn draw_system(loader: ResMut<AssetLoader>, win: Res<Window>, assets: Option<Res<assets::Assets>>) {
+fn draw_system(win: Res<Window>, assets: Option<Res<assets::Assets>>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
