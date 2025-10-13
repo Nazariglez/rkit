@@ -5,6 +5,8 @@ use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{Data, DataStruct, DeriveInput, Error, Fields, LitInt, Token, Type, parse_macro_input};
 
+mod assets;
+
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -583,4 +585,10 @@ pub fn derive_deref_macro(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[cfg(feature = "assets")]
+#[proc_macro_attribute]
+pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
+    assets::assets(attr, item)
 }

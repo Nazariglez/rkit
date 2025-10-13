@@ -5,7 +5,7 @@ use futures_util::future::BoxFuture;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use std::{
-    any::{Any, TypeId},
+    any::{Any, TypeId, type_name},
     borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
@@ -54,8 +54,9 @@ impl Plugin for AssetsPlugin {
 }
 
 pub trait AutoLoad {
+    fn list_id() -> &'static str;
     fn load_list() -> LoadList;
-    fn parse_list(loader: &mut AssetLoader, list: &mut LoadList) -> Result<Option<Self>, String>
+    fn parse_list(loader: &mut AssetLoader) -> Result<Option<Self>, String>
     where
         Self: Sized;
 }
@@ -99,7 +100,10 @@ impl Default for AssetLoader {
 }
 
 impl AssetLoader {
-    pub fn auto_load<T: AutoLoad>(&mut self) {}
+    pub fn auto_load<T: AutoLoad>(&mut self) {
+        log::debug!("Auto loading list '{}'", T::list_id());
+        self.load_list(type_name::<T>(), T::load_list());
+    }
 
     /// Returns a reference to a loaded asset by its ID and type.
     pub fn get<T: Any + Send + Sync>(&self, id: &str) -> Option<&T> {
@@ -132,6 +136,7 @@ impl AssetLoader {
         let (tid, v) = self.loaded.remove(id)?;
         let same_type = tid == TypeId::of::<T>();
         if !same_type {
+            self.loaded.insert(id.to_string(), (tid, v));
             return None;
         }
 
@@ -170,6 +175,7 @@ impl AssetLoader {
 
     /// Loads multiple assets as a named list for tracking progress.
     pub fn load_list(&mut self, id: &str, list: impl Into<LoadList>) {
+        log::debug!("Loading asset list '{}'", id);
         let list_id = id.to_string();
         let LoadList { items } = list.into();
 
@@ -653,6 +659,18 @@ impl<'a, 'b> ToLoadItem for &'a &'b PathBuf {
     }
 }
 
+impl<'a, 'b, T> ToLoadItem for &'a (T, &'b [u8])
+where
+    T: AsRef<str>,
+{
+    fn to_load_item(&self) -> LoadItem {
+        LoadItem {
+            id: self.0.as_ref().to_string(),
+            typ: LoadType::Bytes(self.1.to_vec()),
+        }
+    }
+}
+
 impl<I, N> From<I> for LoadList
 where
     I: IntoIterator<Item = N>,
@@ -777,7 +795,7 @@ mod tests {
     use super::*;
     use bevy_ecs::world::World;
 
-    fn parser_string_from_utf8(asset_input: In<AssetData>) -> Result<String, String> {
+    fn parser_string(asset_input: In<AssetData>) -> Result<String, String> {
         String::from_utf8(asset_input.data.clone()).map_err(|utf8_error| utf8_error.to_string())
     }
 
@@ -810,7 +828,7 @@ mod tests {
 
         {
             let mut asset_loader = world.resource_mut::<AssetLoader>();
-            asset_loader.add_parser("txt", parser_string_from_utf8);
+            asset_loader.add_parser("txt", parser_string);
             asset_loader.load_bytes("text_file.txt", b"sample text");
         }
 
@@ -832,7 +850,7 @@ mod tests {
 
         {
             let mut asset_loader = world.resource_mut::<AssetLoader>();
-            asset_loader.add_parser("txt", parser_string_from_utf8);
+            asset_loader.add_parser("txt", parser_string);
 
             let load_list = LoadList {
                 items: vec![LoadItem {
@@ -867,7 +885,7 @@ mod tests {
 
         {
             let mut asset_loader = world.resource_mut::<AssetLoader>();
-            asset_loader.add_parser("txt", parser_string_from_utf8);
+            asset_loader.add_parser("txt", parser_string);
 
             let load_list = LoadList {
                 items: vec![
@@ -971,7 +989,7 @@ mod tests {
 
         {
             let mut asset_loader = world.resource_mut::<AssetLoader>();
-            asset_loader.add_parser("txt", parser_string_from_utf8);
+            asset_loader.add_parser("txt", parser_string);
             asset_loader.load_bytes("typ.txt", b"abc");
         }
 
@@ -1002,5 +1020,136 @@ mod tests {
             let asset_loader = world.resource::<AssetLoader>();
             assert!(asset_loader.is_loaded("dup_id.txt"));
         }
+    }
+
+    #[test]
+    fn test_load_list_ref_slice_strs() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load_list("list", &["some/path.asset"]);
+            assert!(loader.is_loading("some/path.asset"));
+        }
+    }
+
+    #[test]
+    fn test_load_list_ref_slice_strings() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+        let v = vec!["str_path.asset".to_string()];
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load_list("list", &v[..]);
+            assert!(loader.is_loading("str_path.asset"));
+        }
+    }
+
+    #[test]
+    fn test_load_list_ref_slice_paths() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+        let p = std::path::Path::new("path_ref.asset");
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load_list("list", &[p]);
+            assert!(loader.is_loading("path_ref.asset"));
+        }
+    }
+
+    #[test]
+    fn test_load_list_ref_slice_pathbufs() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+        let pb = std::path::PathBuf::from("pb_ref.asset");
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load_list("list", &[&pb]);
+            assert!(loader.is_loading("pb_ref.asset"));
+        }
+    }
+
+    #[test]
+    fn test_load_paths_skips_duplicates() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load("dup.asset");
+            let before = loader.states.len();
+            loader.load("dup.asset");
+            let after = loader.states.len();
+            assert_eq!(before, after);
+        }
+    }
+
+    #[test]
+    fn test_list_progress_unknown() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        let loader = world.resource::<AssetLoader>();
+        assert_eq!(loader.list_progress("missing_list"), 0.0);
+    }
+
+    #[test]
+    fn test_list_progress_complete() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load_list(
+                "full",
+                [("a.txt", b"a".as_slice()), ("b.txt", b"b".as_slice())],
+            );
+        }
+
+        parse_assets_system(&mut world);
+
+        let loader = world.resource::<AssetLoader>();
+        assert!((loader.list_progress("full") - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_take_wrong_type() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.add_parser("txt", parser_string);
+            loader.load_bytes("t.txt", b"hello");
+        }
+
+        parse_assets_system(&mut world);
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            assert!(loader.take::<Vec<u8>>("t.txt").is_none());
+            assert!(loader.is_loaded("t.txt"));
+        }
+    }
+
+    #[test]
+    fn test_bytes_loaded_after_parse() {
+        let mut world = World::new();
+        world.insert_resource(AssetLoader::default());
+
+        {
+            let mut loader = world.resource_mut::<AssetLoader>();
+            loader.load_bytes("late", b"x");
+            assert!(!loader.is_loaded("late"));
+        }
+
+        parse_assets_system(&mut world);
+
+        let loader = world.resource::<AssetLoader>();
+        assert!(loader.is_loaded("late"));
     }
 }
