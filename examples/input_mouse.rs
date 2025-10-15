@@ -1,11 +1,7 @@
-use rkit::app::window_size;
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::input::{MouseButton, is_mouse_btn_pressed, mouse_position};
-use rkit::math::Vec2;
+use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::{MouseButton, is_mouse_btn_pressed, mouse_position}, math::Vec2};
 
-#[derive(Default)]
-struct State {
+#[derive(Resource, Default)]
+struct MouseState {
     pos: Vec2,
     left: Vec<Vec2>,
     middle: Vec<Vec2>,
@@ -13,11 +9,14 @@ struct State {
 }
 
 fn main() -> Result<(), String> {
-    rkit::init_with(State::default).update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_update(update_system)
+        .on_render(draw_system)
+        .run()
 }
 
-fn update(state: &mut State) {
-    // get mouse cursor position here
+fn update_system(mut state: ResMut<MouseState>) {
     let pos = mouse_position();
 
     if is_mouse_btn_pressed(MouseButton::Left) {
@@ -33,36 +32,29 @@ fn update(state: &mut State) {
     }
 
     state.pos = pos;
-
-    draw_ui(state);
 }
 
-fn draw_ui(state: &mut State) {
+fn draw_system(state: Res<MouseState>, window: Res<Window>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
-    // Draw cursor
     draw.circle(8.0).position(state.pos).color(Color::ORANGE);
 
-    // Draw left clicks
     state.left.iter().for_each(|pos| {
         draw.circle(4.0).position(*pos).color(Color::RED);
     });
 
-    // Draw middle clicks
     state.middle.iter().for_each(|pos| {
         draw.circle(4.0).position(*pos).color(Color::GREEN);
     });
 
-    // Draw right clicks
     state.right.iter().for_each(|pos| {
         draw.circle(4.0).position(*pos).color(Color::BLUE);
     });
 
-    // Draw position
     let text = format!("x: {:.0} - y: {:.0}", state.pos.x, state.pos.y);
     draw.text(&text)
-        .translate(window_size() * 0.5)
+        .position(window.size() * 0.5)
         .anchor(Vec2::splat(0.5))
         .size(20.0);
 

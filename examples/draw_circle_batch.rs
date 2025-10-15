@@ -11,8 +11,8 @@ struct Batcher(CircleBatcher);
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
-        .add_systems(OnSetup, setup)
-        .add_systems(OnUpdate, update)
+        .on_setup(setup)
+        .on_update(update)
         .run()
 }
 

@@ -10,9 +10,9 @@ fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
         .add_plugin(ParticlesPlugin)
-        .add_systems(OnSetup, setup_system)
-        .add_systems(OnUpdate, update_system.before(ParticlesSysSet))
-        .add_systems(OnRender, draw_system)
+        .on_setup(setup_system)
+        .on_update(update_system.before(ParticlesSysSet))
+        .on_render(draw_system)
         .run()
 }
 

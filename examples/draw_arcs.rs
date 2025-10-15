@@ -1,26 +1,24 @@
-use rkit::app::window_size;
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::math::{Vec2, vec2};
-use rkit::time;
+use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, math::{Vec2, vec2}};
 use std::ops::Rem;
 
 fn main() -> Result<(), String> {
-    rkit::init().update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_render(draw_system)
+        .run()
 }
 
-fn update() {
+fn draw_system(window: Res<Window>, time: Res<Time>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
     let radius = 150.0;
-    let angle = (time::elapsed_f32() * 45.0).rem(360.0).to_radians();
+    let angle = (time.elapsed_f32() * 45.0).rem(360.0).to_radians();
 
     draw.text(&format!("{:.0}º", angle.to_degrees()))
-        .anchor(window_size() * 0.5)
+        .position(window.size() * 0.5)
         .anchor(Vec2::splat(0.5));
 
-    // draw arc
     let center = vec2(200.0, 300.0);
     let start_point = center + radius * Vec2::X;
     draw.path()
@@ -29,7 +27,6 @@ fn update() {
         .stroke_color(Color::ORANGE)
         .stroke(6.0);
 
-    // fill semicircle
     let center = vec2(600.0, 300.0);
     draw.path()
         .move_to(center)

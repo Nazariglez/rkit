@@ -1,7 +1,5 @@
-use rkit::app::window_size;
+use rkit::prelude::*;
 
 fn main() -> Result<(), String> {
-    rkit::init()
-        .resize(|| log::info!("Resize {:?}", window_size()))
-        .run()
+    App::new().add_plugin(MainPlugins::default()).run()
 }

@@ -1,12 +1,16 @@
-use rkit::time;
+use rkit::prelude::*;
 
 fn main() -> Result<(), String> {
-    rkit::init().fixed_update(1.0 / 2.0, fixed_update).run()
+    App::new()
+        .add_plugin(FixedUpdate(2))
+        .add_plugin(MainPlugins::default())
+        .on_fixed_update(2, fixed_update_system)
+        .run()
 }
 
-fn fixed_update() {
+fn fixed_update_system(time: Res<Time>) {
     println!(
         "Run each half second. (game_time: {:.3})",
-        time::elapsed_f32()
+        time.elapsed_f32()
     );
 }

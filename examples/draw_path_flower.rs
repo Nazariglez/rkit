@@ -1,11 +1,5 @@
-// This example is a port of javascript code made by Ibon Tolosona (@hyperandroid)
-// https://codepen.io/hyperandroid/full/yLyRQmw
-
 use draw::{Drawing, Path2D};
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::math::vec2;
-use rkit::time;
+use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, math::vec2};
 
 const CENTER_X: f32 = 400.0;
 const CENTER_Y: f32 = 300.0;
@@ -18,11 +12,14 @@ const PERIOD: f32 = 6.0;
 const PI: f32 = std::f32::consts::PI;
 
 fn main() -> Result<(), String> {
-    rkit::init().update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_render(draw_system)
+        .run()
 }
 
-fn update() {
-    let t = time::elapsed_f32() * 1000.0;
+fn draw_system(time: Res<Time>) {
+    let t = time.elapsed_f32() * 1000.0;
 
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);

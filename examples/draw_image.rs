@@ -1,33 +1,30 @@
-use rkit::app::window_size;
-use rkit::draw::{Sprite, create_draw_2d};
-use rkit::gfx::{self, Color};
+use rkit::{draw::{Sprite, create_draw_2d}, prelude::*, gfx::{self, Color}}};
 
-struct State {
-    sprite: Sprite,
-}
-
-impl State {
-    fn new() -> Result<Self, String> {
-        let sprite = draw::create_sprite()
-            .from_image(include_bytes!("assets/ferris.png"))
-            .build()?;
-
-        Ok(Self { sprite })
-    }
-}
+#[derive(Resource)]
+struct FerrisSprite(Sprite);
 
 fn main() -> Result<(), String> {
-    rkit::init_with(|| State::new().unwrap())
-        .update(update)
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_setup(setup_system)
+        .on_render(draw_system)
         .run()
 }
 
-fn update(s: &mut State) {
+fn setup_system(mut cmds: Commands) {
+    let sprite = draw::create_sprite()
+        .from_image(include_bytes!("assets/ferris.png"))
+        .build()
+        .unwrap();
+    cmds.insert_resource(FerrisSprite(sprite));
+}
+
+fn draw_system(sprite: Res<FerrisSprite>, window: Res<Window>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::rgb(0.1, 0.2, 0.3));
 
-    draw.image(&s.sprite)
-        .position(window_size() * 0.5 - s.sprite.size() * 0.5);
+    draw.image(&sprite.0)
+        .position(window.size() * 0.5 - sprite.0.size() * 0.5);
 
     gfx::render_to_frame(&draw).unwrap();
 }

@@ -1,7 +1,5 @@
 use draw::create_draw_2d;
-use rkit::ecs::prelude::*;
-use rkit::gfx;
-use rkit::gfx::Color;
+use rkit::{prelude::*, gfx::{self, Color}};
 
 #[derive(Resource)]
 struct MySounds {
@@ -12,9 +10,9 @@ fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
         .add_plugin(AudioPlugin::default())
-        .add_systems(OnSetup, setup_system)
-        .add_systems(OnUpdate, update_system)
-        .add_systems(OnRender, draw_system)
+        .on_setup(setup_system)
+        .on_update(update_system)
+        .on_render(draw_system)
         .run()
 }
 

@@ -1,6 +1,6 @@
 use rkit::{
     draw::create_draw_2d,
-    ecs::prelude::*,
+    prelude::*,
     gfx::{self, Color},
     input::MouseButton,
     math::{Mat3, Vec2, vec2},

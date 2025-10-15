@@ -1,43 +1,44 @@
 use draw::Transform2D;
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::input::mouse_position;
-use rkit::math::{Vec2, vec2};
-use rkit::time;
+use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::mouse_position, math::{Vec2, vec2}};
 
 const RECT_SIZE: Vec2 = Vec2::new(400.0, 300.0);
 
-#[derive(Default)]
-struct State {
-    rot: f32,
-}
+#[derive(Resource)]
+struct Rotation(f32);
 
 fn main() -> Result<(), String> {
-    rkit::init_with(State::default).update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_setup(setup_system)
+        .on_update(update_system)
+        .on_render(draw_system)
+        .run()
 }
 
-fn update(state: &mut State) {
-    state.rot += time::delta_f32();
+fn setup_system(mut cmds: Commands) {
+    cmds.insert_resource(Rotation(0.0));
+}
 
+fn update_system(mut rot: ResMut<Rotation>, time: Res<Time>) {
+    rot.0 += time.delta_f32();
+}
+
+fn draw_system(rot: Res<Rotation>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
-    // Matrix for a rotating rectangle
     draw.push_matrix(
         Transform2D::new()
             .set_size(RECT_SIZE)
             .set_translation(vec2(200.0, 150.0))
             .set_pivot(Vec2::splat(0.5))
-            .set_rotation(state.rot)
+            .set_rotation(rot.0)
             .updated_mat3(),
     );
 
-    // local position from mouse position
     let local_pos = draw.screen_to_local(mouse_position());
-    // assign the red color if the mouse is on top
     let color = rect_color(local_pos, RECT_SIZE);
 
-    // draw the rectangle
     draw.rect(Vec2::ZERO, RECT_SIZE).color(color);
 
     draw.pop_matrix();

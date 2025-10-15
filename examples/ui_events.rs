@@ -1,10 +1,4 @@
-use rkit::app::window_size;
-use rkit::draw::{Camera2D, Draw2D, Transform2D, create_draw_2d};
-use rkit::gfx::{self, Color};
-use rkit::input::MouseButton;
-use rkit::math::{FloatExt, Vec2, vec2};
-use rkit::time;
-use rkit::ui::{UIControl, UIElement, UIEvents, UIHandler, UIManager, UINodeMetadata};
+use rkit::{app::window_size, draw::{Camera2D, Draw2D, Transform2D, create_draw_2d}, gfx::{self, Color}, input::MouseButton, math::{FloatExt, Vec2, vec2}, time, ui::{UIControl, UIElement, UIEvents, UIHandler, UIManager, UINodeMetadata}};
 
 // events
 struct MoveTo(f32);

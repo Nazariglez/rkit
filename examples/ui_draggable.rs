@@ -1,8 +1,4 @@
-use rkit::app::window_size;
-use rkit::draw::{Camera2D, Draw2D, Transform2D, create_draw_2d};
-use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
-use rkit::ui::{UIControl, UIElement, UIEvents, UIInput, UIManager, UINodeMetadata};
+use rkit::{app::window_size, draw::{Camera2D, Draw2D, Transform2D, create_draw_2d}, gfx::{self, Color}, math::Vec2, ui::{UIControl, UIElement, UIEvents, UIInput, UIManager, UINodeMetadata}};
 
 struct State {
     cam: Camera2D,

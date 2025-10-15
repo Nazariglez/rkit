@@ -36,9 +36,9 @@ impl AppState {
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
-        .add_systems(OnSetup, on_setup)
-        .add_systems(OnUpdate, on_update)
-        .add_systems(OnRender, on_render)
+        .on_setup(on_setup)
+        .on_update(on_update)
+        .on_render(on_render)
         .run()
 }
 

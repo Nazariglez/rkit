@@ -1,31 +1,31 @@
-use rkit::app::window_size;
-use rkit::draw::{self, Font, create_draw_2d};
-use rkit::gfx::{self, Color};
-use rkit::math::vec2;
+use rkit::{draw::{self, Font, create_draw_2d}, prelude::*, gfx::{self, Color}, math::vec2};
 
-struct State {
-    font: Font,
-}
+#[derive(Resource)]
+struct CustomFont(Font);
 
 fn main() -> Result<(), String> {
-    rkit::init_with(init).update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_setup(setup_system)
+        .on_render(draw_system)
+        .run()
 }
 
-fn init() -> State {
+fn setup_system(mut cmds: Commands) {
     let font = draw::create_font(include_bytes!("./assets/Ubuntu-B.ttf"))
         .build()
         .unwrap();
-    State { font }
+    cmds.insert_resource(CustomFont(font));
 }
 
-fn update(s: &mut State) {
+fn draw_system(font: Res<CustomFont>, window: Res<Window>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
 
-    let pos = window_size() * 0.5;
+    let pos = window.size() * 0.5;
     let offset = vec2(0.0, 10.0);
-    draw.text("Using Ubunut-B font.")
-        .font(&s.font)
+    draw.text("Using Ubuntu-B font.")
+        .font(&font.0)
         .position(pos - offset)
         .color(Color::ORANGE)
         .size(48.0)

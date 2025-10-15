@@ -9,7 +9,7 @@ use futures::{future::BoxFuture, task::noop_waker_ref};
 use rfd::{AsyncFileDialog, FileHandle};
 use rkit::{
     draw::create_draw_2d,
-    ecs::prelude::*,
+    prelude::*,
     egui::{EguiContext, EguiPlugin, Layout},
     gfx::{self, Color, LinearColor},
     math::{Vec2, Vec3, vec3},
@@ -69,9 +69,9 @@ fn main() -> Result<(), String> {
                 .vsync(true),
         )
         .add_resource(State::default())
-        .add_systems(OnSetup, setup_system.after(ParticlesSysSet))
-        .add_systems(OnUpdate, (update_system.before(ParticlesSysSet),))
-        .add_systems(OnRender, draw_system)
+        .on_setup(setup_system.after(ParticlesSysSet))
+        .on_update(update_system.before(ParticlesSysSet))
+        .on_render(draw_system)
         .run()
 }
 

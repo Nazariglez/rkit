@@ -1,8 +1,5 @@
 use draw::create_draw_2d;
-use rkit::ecs::prelude::*;
-use rkit::gfx::Color;
-use rkit::math::{Vec2, vec2};
-use rkit::{gfx, time};
+use rkit::{prelude::*, gfx::{self, Color}, math::{Vec2, vec2}};
 
 fn main() -> Result<(), String> {
     App::new()
@@ -12,9 +9,9 @@ fn main() -> Result<(), String> {
             mouse: false,
             keyboard: false,
         })
-        .add_systems(OnSetup, setup_system)
-        .add_systems(OnUpdate, update_system)
-        .add_systems(OnRender, draw_system)
+        .on_setup(setup_system)
+        .on_update(update_system)
+        .on_render(draw_system)
         .run()
 }
 
@@ -28,8 +25,8 @@ fn setup_system(mut cmds: Commands) {
     cmds.spawn((Pos(vec2(400.0, 300.0)), Rect(Vec2::splat(200.0))));
 }
 
-fn update_system(mut query: Query<&mut Rect>) {
-    let elapsed = time::elapsed_f32() * 2.0;
+fn update_system(mut query: Query<&mut Rect>, time: Res<Time>) {
+    let elapsed = time.elapsed_f32() * 2.0;
     let anim = vec2(elapsed.sin(), elapsed.cos());
     query.par_iter_mut().for_each(|mut rect| {
         rect.0 = Vec2::splat(200.0) + anim * 50.0;

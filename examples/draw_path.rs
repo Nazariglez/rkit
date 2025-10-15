@@ -1,12 +1,18 @@
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::math::vec2;
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    math::vec2,
+    prelude::*,
+};
 
 fn main() -> Result<(), String> {
-    rkit::init().update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_render(draw_system)
+        .run()
 }
 
-fn update() {
+fn draw_system() {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.path()

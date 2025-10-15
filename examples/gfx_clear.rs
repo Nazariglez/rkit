@@ -1,12 +1,17 @@
-use rkit::gfx::{self, Color, Renderer};
-use rkit::time;
+use rkit::{
+    gfx::{self, Color, Renderer},
+    prelude::*,
+};
 
-fn main() {
-    rkit::init().update(update).run().unwrap()
+fn main() -> Result<(), String> {
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_render(render_system)
+        .run()
 }
 
-fn update() {
-    let t = time::elapsed_f32();
+fn render_system(time: Res<Time>) {
+    let t = time.elapsed_f32();
     let color = Color::rgb(t.cos(), t.sin(), 1.0);
 
     let mut renderer = Renderer::new();

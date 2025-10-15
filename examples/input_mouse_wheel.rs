@@ -1,43 +1,39 @@
-use rkit::app::window_size;
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::input::{is_mouse_scrolling, mouse_wheel_delta};
-use rkit::math::{Vec2, vec2};
+use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::{is_mouse_scrolling, mouse_wheel_delta}, math::{Vec2, vec2}};
 
-struct State {
-    pos: Vec2,
-}
-
-impl State {
-    fn new() -> Self {
-        Self {
-            pos: vec2(400.0, 300.0),
-        }
-    }
-}
+#[derive(Resource)]
+struct MousePos(Vec2);
 
 fn main() -> Result<(), String> {
-    rkit::init_with(State::new).update(update).run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_setup(setup_system)
+        .on_update(update_system)
+        .on_render(draw_system)
+        .run()
 }
 
-fn update(state: &mut State) {
-    let w_size = window_size();
+fn setup_system(mut cmds: Commands) {
+    cmds.insert_resource(MousePos(vec2(400.0, 300.0)));
+}
 
+fn update_system(mut pos: ResMut<MousePos>, window: Res<Window>) {
     if is_mouse_scrolling() {
         let delta = mouse_wheel_delta();
-        state.pos = (state.pos + delta).min(w_size).max(Vec2::ZERO);
+        pos.0 = (pos.0 + delta).min(window.size()).max(Vec2::ZERO);
     }
+}
 
+fn draw_system(pos: Res<MousePos>, window: Res<Window>) {
     let mut draw = create_draw_2d();
     draw.clear(Color::BLACK);
     draw.text("Scroll with your mouse's wheel or touchpad")
-        .translate(w_size * 0.5)
+        .position(window.size() * 0.5)
         .anchor(Vec2::splat(0.5));
 
     draw.circle(30.0)
-        .translate(state.pos)
-        .color(Color::RED)
-        .anchor(Vec2::splat(0.5));
+        .position(pos.0)
+        .anchor(Vec2::splat(0.5))
+        .color(Color::RED);
 
     gfx::render_to_frame(&draw).unwrap();
 }

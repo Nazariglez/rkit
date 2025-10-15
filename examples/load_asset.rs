@@ -1,23 +1,33 @@
 use assets::parse_asset;
 use draw::Sprite;
-use rkit::app::window_size;
-use rkit::assets::AssetId;
-use rkit::draw::create_draw_2d;
-use rkit::gfx::{self, Color};
-use rkit::math::Vec2;
+use rkit::{
+    assets::AssetId,
+    draw::create_draw_2d,
+    prelude::*,
+    gfx::{self, Color},
+    math::Vec2,
+};
 
-enum State {
+enum LoadingState {
     Loading { asset_id: AssetId },
     World { data: Sprite },
 }
 
+#[derive(Resource)]
+struct AppState(LoadingState);
+
 fn main() -> Result<(), String> {
-    rkit::init_with(|| {
-        let asset_id = assets::load_asset("./examples/assets/rust-logo-512x512.png");
-        State::Loading { asset_id }
-    })
-    .update(update)
-    .run()
+    App::new()
+        .add_plugin(MainPlugins::default())
+        .on_setup(setup_system)
+        .on_update(update_system)
+        .on_render(draw_system)
+        .run()
+}
+
+fn setup_system(mut cmds: Commands) {
+    let asset_id = assets::load_asset("./examples/assets/rust-logo-512x512.png");
+    cmds.insert_resource(AppState(LoadingState::Loading { asset_id }));
 }
 
 fn parse_sprite(id: &str, data: &[u8]) -> Result<Sprite, String> {
@@ -25,29 +35,26 @@ fn parse_sprite(id: &str, data: &[u8]) -> Result<Sprite, String> {
     draw::create_sprite().from_image(data).build()
 }
 
-fn update(s: &mut State) {
-    match s {
-        // Loading state, we get the data if loaded and we parse it as sprite
-        State::Loading { asset_id } => {
+fn update_system(mut state: ResMut<AppState>) {
+    match &mut state.0 {
+        LoadingState::Loading { asset_id } => {
             let data = parse_asset(asset_id, parse_sprite, false).unwrap();
-
             if let Some(sprite) = data {
-                *s = State::World { data: sprite };
+                state.0 = LoadingState::World { data: sprite };
             }
         }
-        // If the sprite is loaded we draw it
-        State::World { data } => {
-            draw_world(data);
-        }
+        LoadingState::World { .. } => {}
     }
 }
 
-fn draw_world(sprite: &Sprite) {
-    let mut draw = create_draw_2d();
-    draw.clear(Color::BLACK);
-    draw.image(sprite)
-        .translate(window_size() * 0.5)
-        .anchor(Vec2::splat(0.5));
+fn draw_system(state: Res<AppState>, window: Res<Window>) {
+    if let LoadingState::World { data } = &state.0 {
+        let mut draw = create_draw_2d();
+        draw.clear(Color::BLACK);
+        draw.image(data)
+            .position(window.size() * 0.5)
+            .anchor(Vec2::splat(0.5));
 
-    gfx::render_to_frame(&draw).unwrap();
+        gfx::render_to_frame(&draw).unwrap();
+    }
 }
