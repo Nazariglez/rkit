@@ -58,7 +58,7 @@ impl Plugin for AssetsPlugin {
 pub trait AutoLoad {
     fn list_id() -> &'static str;
     fn load_list() -> LoadList;
-    fn parse_list(loader: &mut AssetLoader) -> Result<Option<Self>, String>
+    fn parse_list(world: &mut World, loader: &mut AssetLoader) -> Result<Option<Self>, String>
     where
         Self: Sized;
 }
@@ -119,7 +119,7 @@ impl AssetLoader {
                     return false;
                 }
 
-                match T::parse_list(loader) {
+                match T::parse_list(world, loader) {
                     Ok(Some(t)) => {
                         world.insert_resource(t);
                         world.trigger(AutoLoadEvt::<T>::default());
@@ -1319,7 +1319,7 @@ mod tests {
                 }],
             }
         }
-        fn parse_list(_l: &mut AssetLoader) -> Result<Option<Self>, String> {
+        fn parse_list(_world: &mut World, _l: &mut AssetLoader) -> Result<Option<Self>, String> {
             Ok(Some(R))
         }
     }
@@ -1354,7 +1354,7 @@ mod tests {
                 }],
             }
         }
-        fn parse_list(_l: &mut AssetLoader) -> Result<Option<Self>, String> {
+        fn parse_list(_world: &mut World, _l: &mut AssetLoader) -> Result<Option<Self>, String> {
             Err("x".to_string())
         }
     }

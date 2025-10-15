@@ -20,14 +20,23 @@ const TYPES_ATTR: &str = "types";
 const WITH_EXT_ATTR: &str = "with_ext";
 const EMBED_ATTR: &str = "embed";
 const LIST_ID_ATTR: &str = "id";
+const CUSTOM_ATTR: &str = "custom";
+
+#[derive(Debug)]
+struct CustomField {
+    name: String,
+    ty: Type,
+    parser: syn::Path,
+}
 
 pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut root_rel: Option<String> = None;
-    let mut user_skip = Vec::new();
+    let mut user_skip = vec![];
     let mut with_ext = false;
     let mut embed = false;
     let mut list_id: Option<String> = None;
     let mut parser_map: HashMap<String, Type> = HashMap::new();
+    let mut custom_fields: Vec<CustomField> = vec![];
 
     let parser = syn::meta::parser(|meta| {
         if meta.path.is_ident(ROOT_ATTR) {
@@ -77,9 +86,29 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
             let s: LitStr = meta.value()?.parse()?;
             list_id = Some(s.value());
             Ok(())
+        } else if meta.path.is_ident(CUSTOM_ATTR) {
+            meta.parse_nested_meta(|entry| {
+                let field_name = entry
+                    .path
+                    .get_ident()
+                    .ok_or_else(|| entry.error("expected field name"))?
+                    .to_string();
+
+                entry.input.parse::<Token![:]>()?;
+                let field_ty: Type = entry.input.parse()?;
+                entry.input.parse::<Token![=]>()?;
+                let parser_path: syn::Path = entry.input.parse()?;
+
+                custom_fields.push(CustomField {
+                    name: field_name,
+                    ty: field_ty,
+                    parser: parser_path,
+                });
+                Ok(())
+            })
         } else {
             Err(meta
-                .error("unknown attribute; use: root, skip, types(...), with_ext, embed, or id"))
+                .error("unknown attribute; use: root, skip, types(...), with_ext, embed, id, or custom(...)"))
         }
     });
 
@@ -117,7 +146,7 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let tree = DirNode::from_files(&files);
 
-    let mut errs: Vec<String> = Vec::new();
+    let mut errs: Vec<String> = vec![];
     tree.collect_collisions(&mut errs, with_ext);
     if !errs.is_empty() {
         abort_call_site!("{}", errs.join("\n"));
@@ -133,6 +162,7 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
         list_id,
         with_ext,
         embed,
+        &custom_fields,
     );
 
     items.push(syn::Item::Verbatim(generated));
@@ -179,7 +209,7 @@ fn collect_files_with_gitignore(root_abs: &Path, skip: &GlobSet) -> Result<Vec<P
         .follow_links(false)
         .sort_by_file_name(|a, b| a.cmp(b));
 
-    let mut files = Vec::new();
+    let mut files = vec![];
     for entry in builder.build() {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
@@ -294,7 +324,7 @@ impl DirNode {
     fn from_files(files: &[PathBuf]) -> Self {
         let mut root = DirNode {
             rel_dir: PathBuf::new(),
-            files: Vec::new(),
+            files: vec![],
             dirs: BTreeMap::new(),
         };
         for f in files {
@@ -314,7 +344,7 @@ impl DirNode {
                 cur_rel.push(&name);
                 node = node.dirs.entry(name).or_insert_with(|| DirNode {
                     rel_dir: cur_rel.clone(),
-                    files: Vec::new(),
+                    files: vec![],
                     dirs: BTreeMap::new(),
                 });
             }
@@ -396,6 +426,7 @@ fn generate_structs(
     id: Option<String>,
     with_ext: bool,
     embed: bool,
+    custom_fields: &[CustomField],
 ) -> TokenStream2 {
     let mut defs = TokenStream2::new();
     defs.extend(quote! {
@@ -454,19 +485,27 @@ fn generate_structs(
         &path_to_idx,
         embed,
         parsers,
+        custom_fields,
     );
 
     defs.extend(quote! {
         impl AutoLoad for #root_struct_ident {
             fn list_id() -> &'static str { #list_id_expr }
             fn load_list() -> LoadList { Self::to_load_list() }
-            fn parse_list(loader: &mut AssetLoader) -> Result<Option<Self>, String> {
+            fn parse_list(world: &mut World, loader: &mut AssetLoader) -> Result<Option<Self>, String> {
                 Ok(Some(#build_expr))
             }
         }
     });
 
-    gen_dir_node(root, parsers, root_struct_ident, &mut defs, with_ext);
+    gen_dir_node(
+        root,
+        parsers,
+        root_struct_ident,
+        &mut defs,
+        with_ext,
+        custom_fields,
+    );
     defs
 }
 
@@ -476,6 +515,7 @@ fn gen_dir_node(
     root_struct_ident: &syn::Ident,
     defs: &mut TokenStream2,
     with_ext: bool,
+    custom_fields: &[CustomField],
 ) {
     let ty_ident = if node.rel_dir.as_os_str().is_empty() {
         root_struct_ident.clone()
@@ -483,8 +523,8 @@ fn gen_dir_node(
         make_pascal_dir_ident(&node.rel_dir)
     };
 
-    let mut field_idents = Vec::new();
-    let mut field_types = Vec::new();
+    let mut field_idents = vec![];
+    let mut field_types = vec![];
 
     for (dir_name, child) in &node.dirs {
         let field_ident = make_snake_ident(dir_name);
@@ -495,7 +535,14 @@ fn gen_dir_node(
         };
         field_idents.push(field_ident);
         field_types.push(quote!(#field_ty));
-        gen_dir_node(child, parsers, root_struct_ident, defs, with_ext);
+        gen_dir_node(
+            child,
+            parsers,
+            root_struct_ident,
+            defs,
+            with_ext,
+            custom_fields,
+        );
     }
 
     for f in &node.files {
@@ -510,6 +557,16 @@ fn gen_dir_node(
             .map_or_else(|| quote!(::std::vec::Vec<u8>), |ty| quote!(#ty));
         field_idents.push(field_ident);
         field_types.push(field_ty);
+    }
+
+    // Add custom fields if this is the root node
+    if node.rel_dir.as_os_str().is_empty() {
+        for custom_field in custom_fields {
+            let field_ident = make_snake_ident(&custom_field.name);
+            let field_ty = &custom_field.ty;
+            field_idents.push(field_ident);
+            field_types.push(quote!(#field_ty));
+        }
     }
 
     defs.extend(quote! {
@@ -565,7 +622,7 @@ fn gather_full_paths(root: &DirNode, root_rel: &str) -> Vec<String> {
             rec(child, acc, base);
         }
     }
-    let mut out = Vec::new();
+    let mut out = vec![];
     rec(root, &mut out, root_rel);
     out
 }
@@ -579,6 +636,7 @@ fn gen_parse_expr(
     path_to_idx: &std::collections::BTreeMap<String, usize>,
     embed: bool,
     parsers: &HashMap<String, Type>,
+    custom_fields: &[CustomField],
 ) -> TokenStream2 {
     let this_ty = if node.rel_dir.as_os_str().is_empty() {
         root_struct_ident.clone()
@@ -586,8 +644,8 @@ fn gen_parse_expr(
         make_pascal_dir_ident(&node.rel_dir)
     };
 
-    let mut pre_lets = Vec::new();
-    let mut field_inits = Vec::new();
+    let mut pre_lets = vec![];
+    let mut field_inits = vec![];
 
     for (dir_name, child) in &node.dirs {
         let field_ident = make_snake_ident(dir_name);
@@ -599,6 +657,7 @@ fn gen_parse_expr(
             path_to_idx,
             embed,
             parsers,
+            custom_fields,
         );
         pre_lets.push(quote! { let #field_ident = #child_expr; });
         field_inits.push(quote!(#field_ident: #field_ident));
@@ -639,6 +698,27 @@ fn gen_parse_expr(
             };
         });
         field_inits.push(quote!(#field_ident: #field_ident));
+    }
+
+    if node.rel_dir.as_os_str().is_empty() {
+        for custom_field in custom_fields {
+            let field_ident = make_snake_ident(&custom_field.name);
+            let field_ty = &custom_field.ty;
+            let parser_fn = &custom_field.parser;
+
+            pre_lets.push(quote! {
+                let #field_ident: #field_ty = match #parser_fn(world, loader) {
+                    Ok(Some(v)) => v,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return Err(::std::format!(
+                        "custom field '{}' parser failed: {}",
+                        stringify!(#field_ident),
+                        e
+                    )),
+                };
+            });
+            field_inits.push(quote!(#field_ident: #field_ident));
+        }
     }
 
     quote! {{
