@@ -4,6 +4,7 @@ use crate::{
     m2d::{
         images::Image2D,
         mat3_stack::Mat3Stack,
+        nine_slice::NineSlice2D,
         painter::DrawPipelineId,
         shapes::{Line2D, Path2D, Rectangle2D, Triangle2D},
         text::Text2D,
@@ -502,6 +503,12 @@ impl Draw2D {
     #[inline]
     pub fn image(&mut self, sprite: &Sprite) -> Drawing<'_, Image2D> {
         Drawing::new(self, Image2D::new(sprite))
+    }
+
+    // - nine slice
+    #[inline]
+    pub fn nine_slice(&mut self, sprite: &Sprite) -> Drawing<'_, NineSlice2D> {
+        Drawing::new(self, NineSlice2D::new(sprite))
     }
 
     // - text

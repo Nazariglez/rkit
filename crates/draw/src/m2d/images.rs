@@ -147,7 +147,10 @@ impl Image2D {
 
     pub fn crop(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
         self.crop = Some(Rect::new(origin, size));
-        self.size(size)
+        if self.size.is_none() {
+            self.size(size);
+        }
+        self
     }
 }
 
