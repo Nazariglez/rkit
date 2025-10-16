@@ -15,7 +15,12 @@ struct FixedUpdate<S> {
 
 impl<S> FixedUpdate<S> {
     fn tick(&mut self, state: &mut S) {
-        let dt = crate::time::delta_f32();
+        // limit the delta to 10 times the fixed update delta
+        // this is to prevent the accumulator from growing too large
+        // and causing the game to block if somehow the fps drop to 0 or close
+        let max_delta = self.delta * 10.0;
+        let dt = crate::time::delta_f32().min(max_delta);
+
         self.accumulator += dt;
 
         while self.accumulator >= self.delta {
@@ -37,6 +42,7 @@ where
     pub(crate) cleanup_cb: CleanupCb<S>,
 
     fixed_update_cb: Option<Vec<FixedUpdate<S>>>,
+    pub(crate) use_fixed_updates: bool,
 
     #[cfg(feature = "logs")]
     log_config: LogConfig,
@@ -54,6 +60,7 @@ where
         update_cb: Box::new(|_| ()),
         resize_cb: Box::new(|_| ()),
         fixed_update_cb: None,
+        use_fixed_updates: false,
         cleanup_cb: Box::new(|_| ()),
 
         #[cfg(feature = "logs")]
@@ -112,6 +119,7 @@ where
 
         let list = self.fixed_update_cb.get_or_insert_with(Vec::new);
         list.push(cb);
+        self.use_fixed_updates = true;
         self
     }
 

@@ -48,10 +48,52 @@ pub(crate) fn set_size_dpi(canvas: &HtmlCanvasElement, width: u32, height: u32) 
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FrameId {
+    Raf(i32),
+    Timeout(i32),
+}
+
+#[inline]
+pub(crate) fn request_next_frame(
+    win: &Window,
+    offscreen_dt: Option<f32>,
+    f: &Closure<dyn FnMut()>,
+) -> FrameId {
+    let use_timeout = !is_win_visible(win);
+    match offscreen_dt {
+        Some(dt) if use_timeout => FrameId::Timeout(set_timeout(win, dt * 1000.0, f)),
+        _ => FrameId::Raf(request_animation_frame(win, f)),
+    }
+}
+
+#[inline]
+pub(crate) fn cancel_frame(win: &Window, id: FrameId) {
+    match id {
+        FrameId::Raf(id) => {
+            let _ = win.cancel_animation_frame(id);
+        }
+        FrameId::Timeout(id) => {
+            win.clear_timeout_with_handle(id);
+        }
+    }
+}
+
+#[inline]
+pub(crate) fn is_win_visible(win: &Window) -> bool {
+    !win.document().unwrap().hidden()
+}
+
 #[inline]
 pub(crate) fn request_animation_frame(win: &Window, f: &Closure<dyn FnMut()>) -> i32 {
     win.request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK")
+}
+
+#[inline]
+pub(crate) fn set_timeout(win: &Window, dt: f32, f: &Closure<dyn FnMut()>) -> i32 {
+    win.set_timeout_with_callback_and_timeout_and_arguments_0(f.as_ref().unchecked_ref(), dt as _)
+        .expect("should register `setTimeout` OK")
 }
 
 pub(crate) fn canvas_add_event_listener<F, E>(

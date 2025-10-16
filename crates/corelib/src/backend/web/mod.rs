@@ -16,7 +16,6 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use glam::vec2;
 use once_cell::sync::Lazy;
 use std::{cell::RefCell, rc::Rc};
-use utils::request_animation_frame;
 use wasm_bindgen::closure::Closure;
 use window::WebWindow;
 
@@ -44,6 +43,7 @@ where
         update_cb,
         resize_cb,
         cleanup_cb: _, // TODO cleanup
+        use_fixed_updates,
         ..
     } = builder;
 
@@ -71,8 +71,32 @@ where
 
     CORE_EVENTS_MAP.borrow().trigger(CoreEvent::Init);
 
-    let inner_callback = callback.clone();
-    let win = web_sys::window().unwrap();
+    // if there is fixed updates, set the offscreen dt to 30fps
+    // thos is becayse physics game or idle games needs to keep running
+    // even when the window is not focused
+    let offscreen_dt = use_fixed_updates.then_some(1.0 / 30.0);
+
+    let frame_id = RefCell::new(None);
+
+    // reusable closure for scheduling the next frame
+    let schedule_next_frame = {
+        let frame_id = frame_id.clone();
+        let callback = callback.clone();
+        Rc::new(move || {
+            let win = web_sys::window().unwrap();
+            // cancel the current pending frame
+            if let Some(id) = frame_id.borrow_mut().take() {
+                utils::cancel_frame(&win, id);
+            }
+
+            // request a new frame
+            let new_id =
+                utils::request_next_frame(&win, offscreen_dt, callback.borrow().as_ref().unwrap());
+            *frame_id.borrow_mut() = Some(new_id);
+        })
+    };
+
+    let next_frame = schedule_next_frame.clone();
     *callback.borrow_mut() = Some(Closure::wrap(Box::new(move || {
         if *close_requested.borrow() {
             CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
@@ -80,13 +104,24 @@ where
         }
 
         runner.tick();
-        request_animation_frame(&win, inner_callback.borrow().as_ref().unwrap());
+        next_frame();
     }) as Box<dyn FnMut()>));
 
-    request_animation_frame(
-        &web_sys::window().unwrap(),
-        callback.borrow().as_ref().unwrap(),
-    );
+    // Schedule the initial frame
+    schedule_next_frame();
+
+    // if there is fixed update enabled we need to handle visibility change
+    // to cancel the current pending frame and request a new one with the appropriate method
+    if use_fixed_updates {
+        let next_frame = schedule_next_frame.clone();
+        let visibility_cb =
+            utils::document_add_event_listener("visibilitychange", move |_: web_sys::Event| {
+                next_frame();
+            })
+            .unwrap();
+
+        visibility_cb.forget();
+    }
 
     // TODO CoreEvent::Cleanup, and also stop request animation frame?
 }
