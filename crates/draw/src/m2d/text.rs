@@ -193,6 +193,8 @@ pub struct Text2D<'a> {
     max_width: Option<f32>,
     h_align: HAlign,
     res: f32,
+    shadow_color: Color,
+    shadow_offset: Option<Vec2>,
 
     #[pipeline_id]
     pip: DrawPipelineId,
@@ -214,6 +216,8 @@ impl<'a> Text2D<'a> {
             max_width: None,
             h_align: HAlign::default(),
             res: 1.0,
+            shadow_color: Color::BLACK,
+            shadow_offset: None,
 
             pip: DrawPipelineId::Text,
             transform: None,
@@ -274,47 +278,77 @@ impl<'a> Text2D<'a> {
         self.res = res;
         self
     }
+
+    pub fn shadow_color(&mut self, color: Color) -> &mut Self {
+        self.shadow_color = color;
+        self
+    }
+
+    pub fn shadow_offset(&mut self, offset: impl IntoVec2) -> &mut Self {
+        self.shadow_offset = Some(offset.into_vec2());
+        self
+    }
 }
 
 impl Element2D for Text2D<'_> {
     fn process(&self, draw: &mut Draw2D) {
-        let info = TextInfo {
-            pos: self.position,
-            font: self.font,
-            text: self.text,
-            wrap_width: self.max_width,
-            font_size: self.size,
-            line_height: self.line_height,
-            resolution: self.res,
-            h_align: self.h_align,
-        };
+        if self.shadow_offset.is_some() {
+            add_text_to_batch(self, true, draw);
+        }
 
-        let c = self.color.with_alpha(self.color.a * self.alpha);
+        add_text_to_batch(self, false, draw);
+    }
+}
 
-        TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
-            TEMP_INDICES.with_borrow_mut(|temp_indices| {
-                temp_vertices.clear();
-                temp_indices.clear();
+fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
+    let (offset, c) = match element.shadow_offset {
+        Some(offset) if is_shadow => (
+            offset,
+            element
+                .shadow_color
+                .with_alpha(element.shadow_color.a + element.alpha),
+        ),
+        _ => (
+            Vec2::ZERO,
+            element.color.with_alpha(element.color.a * element.alpha),
+        ),
+    };
 
-                let block_size = {
-                    let mut sys = get_mut_text_system();
-                    let block = sys.prepare_text(&info, false).unwrap();
-                    if block.data.is_empty() {
-                        return;
-                    }
+    let info = TextInfo {
+        pos: element.position + offset,
+        font: element.font,
+        text: element.text,
+        wrap_width: element.max_width,
+        font_size: element.size,
+        line_height: element.line_height,
+        resolution: element.res,
+        h_align: element.h_align,
+    };
 
-                    block.data.iter().enumerate().for_each(|(i, data)| {
-                        let Vec2 { x: x1, y: y1 } = data.xy;
-                        let Vec2 { x: x2, y: y2 } = data.xy + data.size;
-                        let Vec2 { x: u1, y: v1 } = data.uvs1;
-                        let Vec2 { x: u2, y: v2 } = data.uvs2;
-                        let t = match data.typ {
-                            AtlasType::Mask if data.pixelated => 1.0,
-                            AtlasType::Mask => 0.0,
-                            _ => 2.0,
-                        };
+    TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
+        TEMP_INDICES.with_borrow_mut(|temp_indices| {
+            temp_vertices.clear();
+            temp_indices.clear();
 
-                        #[rustfmt::skip]
+            let block_size = {
+                let mut sys = get_mut_text_system();
+                let block = sys.prepare_text(&info, false).unwrap();
+                if block.data.is_empty() {
+                    return;
+                }
+
+                block.data.iter().enumerate().for_each(|(i, data)| {
+                    let Vec2 { x: x1, y: y1 } = data.xy;
+                    let Vec2 { x: x2, y: y2 } = data.xy + data.size;
+                    let Vec2 { x: u1, y: v1 } = data.uvs1;
+                    let Vec2 { x: u2, y: v2 } = data.uvs2;
+                    let t = match data.typ {
+                        AtlasType::Mask if data.pixelated => 1.0,
+                        AtlasType::Mask => 0.0,
+                        _ => 2.0,
+                    };
+
+                    #[rustfmt::skip]
                         let vertices = [
                             x1, y1, u1, v1, t, c.r, c.g, c.b, c.a,
                             x2, y1, u2, v1, t, c.r, c.g, c.b, c.a,
@@ -322,39 +356,38 @@ impl Element2D for Text2D<'_> {
                             x2, y2, u2, v2, t, c.r, c.g, c.b, c.a,
                         ];
 
-                        let n = (i * 4) as u32;
+                    let n = (i * 4) as u32;
 
-                        #[rustfmt::skip]
+                    #[rustfmt::skip]
                         let indices = [
                             n,     n + 1,   n + 2,
                             n + 2, n + 1,   n + 3
                         ];
 
-                        temp_vertices.extend_from_slice(vertices.as_slice());
-                        temp_indices.extend_from_slice(indices.as_slice());
-                    });
-
-                    block.size
-                };
-
-                let mut t = self.transform.unwrap_or_default();
-                t.set_size(block_size);
-                let pos = t.translation();
-                let anchor = t.anchor();
-                let scaled_size = t.size() * t.scale();
-                let matrix = t.updated_mat3();
-
-                let origin = self.position + pos - anchor * scaled_size;
-                draw.last_text_bounds = Rect::new(origin, scaled_size);
-
-                draw.add_to_batch(DrawingInfo {
-                    pipeline: self.pip,
-                    vertices: temp_vertices,
-                    indices: temp_indices,
-                    transform: matrix,
-                    sprite: None,
+                    temp_vertices.extend_from_slice(vertices.as_slice());
+                    temp_indices.extend_from_slice(indices.as_slice());
                 });
+
+                block.size
+            };
+
+            let mut t = element.transform.unwrap_or_default();
+            t.set_size(block_size);
+            let pos = t.translation();
+            let anchor = t.anchor();
+            let scaled_size = t.size() * t.scale();
+            let matrix = t.updated_mat3();
+
+            let origin = element.position + pos - anchor * scaled_size;
+            draw.last_text_bounds = Rect::new(origin, scaled_size);
+
+            draw.add_to_batch(DrawingInfo {
+                pipeline: element.pip,
+                vertices: temp_vertices,
+                indices: temp_indices,
+                transform: matrix,
+                sprite: None,
             });
         });
-    }
+    });
 }
