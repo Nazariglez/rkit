@@ -327,6 +327,15 @@ impl App {
 
     #[inline]
     #[track_caller]
+    pub fn on_cleanup<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
+        self.on_schedule(OnCleanup, systems)
+    }
+
+    #[inline]
+    #[track_caller]
     pub fn config_setup_sets<M>(
         &mut self,
         sets: impl IntoScheduleConfigs<InternedSystemSet, M>,

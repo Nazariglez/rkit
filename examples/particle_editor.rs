@@ -9,11 +9,11 @@ use futures::{future::BoxFuture, task::noop_waker_ref};
 use rfd::{AsyncFileDialog, FileHandle};
 use rkit::{
     draw::create_draw_2d,
-    prelude::*,
     egui::{EguiContext, EguiPlugin, Layout},
     gfx::{self, Color, LinearColor},
     math::{Vec2, Vec3, vec3},
     particles::*,
+    prelude::*,
 };
 use rustc_hash::FxHashMap;
 use strum::IntoEnumIterator;
@@ -68,7 +68,7 @@ fn main() -> Result<(), String> {
                 .max_fps(120)
                 .vsync(true),
         )
-        .add_resource(State::default())
+        .insert_resource(State::default())
         .on_setup(setup_system.after(ParticlesSysSet))
         .on_update(update_system.before(ParticlesSysSet))
         .on_render(draw_system)
@@ -1571,7 +1571,7 @@ impl Command for LoadParticleConfigCmd {
         let win_size = world.resource::<Window>().size();
         if let Ok(fx_e) = world
             .query_filtered::<Entity, With<ParticleFx>>()
-            .get_single(world)
+            .single(world)
         {
             world.despawn(fx_e);
         }

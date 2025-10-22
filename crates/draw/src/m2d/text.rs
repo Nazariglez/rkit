@@ -306,7 +306,7 @@ fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
             offset,
             element
                 .shadow_color
-                .with_alpha(element.shadow_color.a + element.alpha),
+                .with_alpha(element.shadow_color.a * element.alpha),
         ),
         _ => (
             Vec2::ZERO,
