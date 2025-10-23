@@ -18,6 +18,10 @@ thunderdome = "0.6.1"
 rayon.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-web-sys = { workspace = true, features = ["XmlHttpRequest", "XmlHttpRequestEventTarget", "XmlHttpRequestResponseType"] }
+web-sys = { workspace = true, features = [
+    "XmlHttpRequest",
+    "XmlHttpRequestEventTarget",
+    "XmlHttpRequestResponseType",
+] }
 js-sys.workspace = true
 wasm-bindgen.workspace = true

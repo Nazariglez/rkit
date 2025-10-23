@@ -26,10 +26,10 @@ use atomic_refcell::AtomicRefCell;
 use glam::uvec2;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{
-    BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Extent3d, GlBackendOptions,
-    GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags,
-    MemoryBudgetThresholds, NoopBackendOptions, Origin3d, Queue, StoreOp, Surface as RawSurface,
-    TexelCopyBufferLayout, TextureDimension,
+    BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Dx12BackendOptions, Extent3d,
+    GlBackendOptions, GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor,
+    InstanceFlags, MemoryBudgetThresholds, NoopBackendOptions, Origin3d, Queue, StoreOp,
+    Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
     rwh::HasWindowHandle,
     util::{BufferInitDescriptor, DeviceExt},
 };
@@ -828,20 +828,27 @@ impl GfxBackend {
         let instance = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
             Instance::new(&InstanceDescriptor {
                 backends: Backends::GL,
-                flags: InstanceFlags::default().with_env(),
                 backend_options: BackendOptions {
                     gl: GlBackendOptions {
                         gles_minor_version: Gles3MinorVersion::from_env()
                             .unwrap_or(Gles3MinorVersion::Automatic),
                         fence_behavior: GlFenceBehavior::default(),
                     },
-                    dx12: Default::default(),
-                    noop: NoopBackendOptions::default(),
+                    ..BackendOptions::from_env_or_default()
                 },
-                memory_budget_thresholds: MemoryBudgetThresholds::default(),
+                ..InstanceDescriptor::from_env_or_default()
             })
         } else {
-            Instance::new(&InstanceDescriptor::from_env_or_default())
+            Instance::new(&InstanceDescriptor {
+                backend_options: BackendOptions {
+                    dx12: Dx12BackendOptions {
+                        shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                        ..Dx12BackendOptions::from_env_or_default()
+                    },
+                    ..BackendOptions::from_env_or_default()
+                },
+                ..InstanceDescriptor::from_env_or_default()
+            })
         };
 
         let (ctx, surface) = {

@@ -35,7 +35,10 @@ glam = { version = "0.30.8", features = [
 
 # gfx
 pollster = "0.4"
-wgpu = { version = "27.0.1", features = ["fragile-send-sync-non-atomic-wasm"] }
+wgpu = { version = "27.0.1", features = [
+    "fragile-send-sync-non-atomic-wasm",
+    "static-dxc",
+] }
 
 # gamepad
 gilrs = { version = "0.11", optional = true }
