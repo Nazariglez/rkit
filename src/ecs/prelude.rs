@@ -15,5 +15,8 @@ pub use crate::macros::{Deref, Screen};
 #[cfg(feature = "locale")]
 pub use super::locale::*;
 
+#[cfg(feature = "gamepad")]
+pub use super::gamepad::*;
+
 pub use bevy_ecs;
 pub use bevy_ecs::prelude::*;

@@ -11,18 +11,18 @@ fn init_gilrs() -> Receiver<Event> {
     let (tx, rx): (Sender<Event>, Receiver<Event>) = unbounded();
 
     // TODO This will panic in wasm32, we have two options, full wasm32 backend or add a new code for wasm32 platform using gilrs
-    std::thread::spawn(move || {
-        let mut gilrs = Gilrs::new().expect("Failed to initialize gilrs");
-        loop {
-            while let Some(event) = gilrs.next_event_blocking(None) {
-                let res = tx.send(event);
-                if let Err(err) = res {
-                    log::error!("Error sending GilRS event: '{}'", err.to_string());
-                }
-            }
-            gilrs.inc();
-        }
-    });
+    // std::thread::spawn(move || {
+    //     let mut gilrs = Gilrs::new().expect("Failed to initialize gilrs");
+    //     loop {
+    //         while let Some(event) = gilrs.next_event_blocking(None) {
+    //             let res = tx.send(event);
+    //             if let Err(err) = res {
+    //                 log::error!("Error sending GilRS event: '{}'", err.to_string());
+    //             }
+    //         }
+    //         gilrs.inc();
+    //     }
+    // });
     rx
 }
 
@@ -31,6 +31,7 @@ pub(crate) struct GilrsBackend {
 
     pub(crate) state: GamepadState,
 
+    slots: [Option<GamepadId>; GAMEPADS_CONNECTED_POT2],
     ids: FnvIndexMap<GamepadId, usize, GAMEPADS_CONNECTED_POT2>,
     id_count: usize,
 }
@@ -42,6 +43,7 @@ impl Default for GilrsBackend {
         Self {
             rx,
             state: Default::default(),
+            slots: Default::default(),
             ids: Default::default(),
             id_count: 0,
         }
@@ -94,12 +96,22 @@ impl GilrsBackend {
                 }
                 EventType::Connected => {
                     // Reuse ID if exists or assign a new one if not
-                    let current_id = self.ids.get(&id).cloned().unwrap_or_else(|| {
+                    let current_id = self.ids.get(&id).copied().or_else(|| {
                         let next_id = self.id_count;
                         self.id_count += 1;
-                        next_id
+                        match self.ids.insert(id, next_id) {
+                            Err(e) => {
+                                log::error!("Error inserting gamepad '{}': '{:?}'", id, e);
+                                None
+                            }
+                            Ok(_) => Some(next_id),
+                        }
                     });
-                    self.state.add(current_id);
+
+                    if let Some(id) = current_id {
+                        self.state.add(id);
+                        log::debug!("Gamepad '{}' connected", id);
+                    }
                 }
                 EventType::Disconnected => {
                     debug_assert!(
@@ -107,8 +119,10 @@ impl GilrsBackend {
                         "Gamepad '{}' not registered?",
                         id
                     );
-                    if let Some(&id) = self.ids.get(&id) {
-                        self.state.remove(id);
+                    if let Some(&raw_id) = self.ids.get(&id) {
+                        log::debug!("Gamepad '{}' disconnected", raw_id);
+                        self.state.remove(raw_id);
+                        let _ = self.ids.remove(&id);
                     }
                 }
                 EventType::Dropped => {}

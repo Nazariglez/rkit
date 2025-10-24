@@ -1,6 +1,7 @@
 pub mod app;
 pub mod audio;
 pub mod exit;
+pub mod gamepad;
 pub mod input;
 pub mod log;
 pub mod plugin;

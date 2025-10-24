@@ -4046,6 +4046,7 @@ dependencies = [
  "fluent",
  "futures",
  "futures-util",
+ "gilrs",
  "heapless 0.9.1",
  "image",
  "indexmap",
@@ -4067,6 +4068,7 @@ dependencies = [
  "tempfile",
  "unic-langid",
  "utils",
+ "uuid",
  "web-sys",
  "web-time",
 ]
