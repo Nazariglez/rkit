@@ -143,11 +143,9 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         let is_not_fullscreen = !self.is_fullscreen();
         if let Some(win) = &mut self.window {
             let mode = is_not_fullscreen.then(|| {
-                if cfg!(not(target_os = "macos")) {
-                    // on windows or linux we try to find the best video mode
-                    // for a exclusive fullscreen mode.
-                    // The borderless mode doesn't work quite well on my machine on windows
-                    // this could be a "mine" thing but I am fine using the exclusive mode
+                let hint_mode = option_env!("GK_FULLSCREEN");
+                let is_exclusive = hint_mode.is_some_and(|v| v == "exclusive");
+                if is_exclusive {
                     win.current_monitor()
                         .and_then(|monitor| {
                             monitor.video_modes().max_by_key(|vm| {
@@ -158,8 +156,6 @@ impl BackendImpl<GfxBackend> for WinitBackend {
                         .map(Fullscreen::Exclusive)
                         .unwrap_or_else(|| Fullscreen::Borderless(win.current_monitor()))
                 } else {
-                    // let's use on macos the borderless it works similar to exclusive allowing to
-                    // to control manually when go out
                     Fullscreen::Borderless(win.current_monitor())
                 }
             });

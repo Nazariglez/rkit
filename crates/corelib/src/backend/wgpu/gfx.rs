@@ -27,9 +27,8 @@ use glam::uvec2;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Dx12BackendOptions, Extent3d,
-    GlBackendOptions, GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor,
-    InstanceFlags, MemoryBudgetThresholds, NoopBackendOptions, Origin3d, Queue, StoreOp,
-    Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
+    GlBackendOptions, GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor, Origin3d,
+    Queue, StoreOp, Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
     rwh::HasWindowHandle,
     util::{BufferInitDescriptor, DeviceExt},
 };
