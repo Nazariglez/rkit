@@ -142,23 +142,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         debug_assert!(self.window.is_some(), "Window must be present");
         let is_not_fullscreen = !self.is_fullscreen();
         if let Some(win) = &mut self.window {
-            let mode = is_not_fullscreen.then(|| {
-                let hint_mode = option_env!("GK_FULLSCREEN");
-                let is_exclusive = hint_mode.is_some_and(|v| v == "exclusive");
-                if is_exclusive {
-                    win.current_monitor()
-                        .and_then(|monitor| {
-                            monitor.video_modes().max_by_key(|vm| {
-                                let s = vm.size();
-                                (s.width, s.height, vm.refresh_rate_millihertz())
-                            })
-                        })
-                        .map(Fullscreen::Exclusive)
-                        .unwrap_or_else(|| Fullscreen::Borderless(win.current_monitor()))
-                } else {
-                    Fullscreen::Borderless(win.current_monitor())
-                }
-            });
+            let mode = is_not_fullscreen.then(|| fullscreen_mode(win.current_monitor()));
             log::debug!(
                 "Changing fullscreen mode to '{}'",
                 match &mode {
@@ -304,6 +288,25 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     fn gfx(&mut self) -> &mut GfxBackend {
         self.gfx.as_mut().unwrap()
     }
+}
+
+fn fullscreen_mode(current_monitor: Option<MonitorHandle>) -> Fullscreen {
+    let hint_mode = option_env!("GK_FULLSCREEN");
+    let is_exclusive = hint_mode.is_some_and(|v| v == "exclusive");
+    if is_exclusive {
+        return current_monitor
+            .as_ref()
+            .and_then(|monitor| {
+                monitor.video_modes().max_by_key(|vm| {
+                    let s = vm.size();
+                    (s.width, s.height, vm.refresh_rate_millihertz())
+                })
+            })
+            .map(Fullscreen::Exclusive)
+            .unwrap_or_else(|| Fullscreen::Borderless(current_monitor));
+    }
+
+    Fullscreen::Borderless(current_monitor)
 }
 
 struct Runner<S> {
@@ -599,6 +602,7 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         max_fps: _,
         pixelated: _,
         cursor: _,
+        fullscreen,
     } = config;
 
     let mut attrs = WindowAttributes::default()
@@ -613,6 +617,10 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
 
     if let Some(ms) = max_size {
         attrs = attrs.with_max_inner_size(LogicalSize::new(ms.x, ms.y));
+    }
+
+    if fullscreen {
+        attrs = attrs.with_fullscreen(Some(fullscreen_mode(None)));
     }
 
     attrs

@@ -42,30 +42,35 @@ impl Plugin for WindowConfigPlugin {
 
 impl WindowConfigPlugin {
     /// Set the window's title
+    #[inline]
     pub fn title(mut self, title: &str) -> Self {
         self.title = title.to_string();
         self
     }
 
     /// Set the window's size
+    #[inline]
     pub fn size(mut self, width: u32, height: u32) -> Self {
         self.size = uvec2(width, height);
         self
     }
 
     /// Set the window's maximum size
+    #[inline]
     pub fn max_size(mut self, width: u32, height: u32) -> Self {
         self.max_size = Some(uvec2(width, height));
         self
     }
 
     /// Set the window's minimum size
+    #[inline]
     pub fn min_size(mut self, width: u32, height: u32) -> Self {
         self.min_size = Some(uvec2(width, height));
         self
     }
 
     /// Allow the window to be resizable
+    #[inline]
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
         self
@@ -73,32 +78,44 @@ impl WindowConfigPlugin {
 
     /// Open the window maximized
     /// `Web`: Will use the parent's size
+    #[inline]
     pub fn maximized(mut self, maximized: bool) -> Self {
         self.maximized = maximized;
         self
     }
 
     /// Enables Vertical Synchronization
+    #[inline]
     pub fn vsync(mut self, vsync: bool) -> Self {
         self.vsync = vsync;
         self
     }
 
     /// Limits the maximum fps
+    #[inline]
     pub fn max_fps(mut self, fps: u8) -> Self {
         self.max_fps = Some(fps);
         self
     }
 
     /// Use Nearest filter for the offscreen texture
+    #[inline]
     pub fn pixelated(mut self, pixelated: bool) -> Self {
         self.pixelated = pixelated;
         self
     }
 
     /// Hide or show the cursor
+    #[inline]
     pub fn cursor(mut self, visible: bool) -> Self {
         self.cursor = visible;
+        self
+    }
+
+    /// Set the window to fullscreen mode
+    #[inline]
+    pub fn fullscreen(mut self, fullscreen: bool) -> Self {
+        self.fullscreen = fullscreen;
         self
     }
 }
