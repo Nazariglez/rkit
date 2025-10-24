@@ -10,6 +10,7 @@ use uuid::Uuid;
 // SDL seems to allow a max of 16.
 const MAX_GAMEPADS: usize = 16;
 
+/// A slot identifier for a gamepad
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GamepadSlot(u8);
 
@@ -25,6 +26,7 @@ impl From<GamepadSlot> for u8 {
     }
 }
 
+/// Manages all connected gamepads and their states
 #[derive(Default, Resource)]
 pub struct Gamepads {
     slots: [Option<GamepadInfo>; MAX_GAMEPADS],
@@ -32,12 +34,14 @@ pub struct Gamepads {
 }
 
 impl Gamepads {
+    /// Check if a gamepad is connected in the given slot
     #[inline]
     pub fn is_connected(&self, slot: impl Into<GamepadSlot>) -> bool {
         let slot: GamepadSlot = slot.into();
         self.slots[slot.0 as usize].is_some()
     }
 
+    /// Iterate over all gamepad slots (connected and empty)
     #[inline]
     pub fn iter_slots(&self) -> GamepadsIter<'_> {
         GamepadsIter {
@@ -45,7 +49,7 @@ impl Gamepads {
         }
     }
 
-    /// Iterate only connected pads.
+    /// Iterate over only connected gamepads
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = GamepadState<'_>> {
         self.slots.iter().enumerate().filter_map(|(i, opt)| {
@@ -56,7 +60,7 @@ impl Gamepads {
         })
     }
 
-    /// Get a single slot view.
+    /// Get gamepad state for a specific slot
     #[inline]
     pub fn get(&self, slot: impl Into<GamepadSlot>) -> GamepadState<'_> {
         let s = slot.into();
@@ -249,6 +253,7 @@ pub(super) fn sync_gilrs_events_system(
     raw.0.inc();
 }
 
+/// Represents the state of a single gamepad
 #[derive(Clone, Copy)]
 pub struct GamepadState<'a> {
     slot: GamepadSlot,
@@ -256,63 +261,79 @@ pub struct GamepadState<'a> {
 }
 
 impl<'a> GamepadState<'a> {
+    /// Check if this gamepad is connected
     #[inline]
     pub fn is_connected(&self) -> bool {
         self.info.is_some()
     }
+    /// Get the slot number for this gamepad
     #[inline]
     pub fn slot(&self) -> GamepadSlot {
         self.slot
     }
+    /// Get the gamepad's device name
     #[inline]
     pub fn name(&self) -> Option<&'a str> {
         self.info.map(|i| i.name.as_str())
     }
+    /// Get the gamepad's unique identifier
     #[inline]
     pub fn uuid(&self) -> Option<&'a Uuid> {
         self.info.map(|i| &i.uuid)
     }
+    /// Get the gamepad's vendor (Xbox, PlayStation, etc.)
     #[inline]
     pub fn vendor(&self) -> Option<GamepadVendor> {
         self.info.map(|i| i.vendor)
     }
+    /// Check if a button was just pressed this frame
     #[inline]
     pub fn just_pressed(&self, btn: GamepadButton) -> bool {
         self.info.map(|i| i.is_pressed(btn)).unwrap_or(false)
     }
+    /// Check if a button was just released this frame
     #[inline]
     pub fn just_released(&self, btn: GamepadButton) -> bool {
         self.info.map(|i| i.is_released(btn)).unwrap_or(false)
     }
+    /// Check if a button is currently held down
     #[inline]
     pub fn is_down(&self, btn: GamepadButton) -> bool {
         self.info.map(|i| i.is_down(btn)).unwrap_or(false)
     }
+    /// Get the current value of an axis (-1.0 to 1.0)
+    /// Left/Right trigger goes from 0.0 to 1.0
     #[inline]
     pub fn axis_movement(&self, axis: GamepadAxis) -> f32 {
         self.info.map(|i| i.axis_strength(axis)).unwrap_or(0.0)
     }
+    /// Get all buttons currently held down
     #[inline]
     pub fn down_buttons(&self) -> GamepadButtonList {
         self.info.map(|i| i.down.clone()).unwrap_or_default()
     }
+    /// Get all buttons pressed this frame
     #[inline]
     pub fn pressed_buttons(&self) -> GamepadButtonList {
         self.info.map(|i| i.pressed.clone()).unwrap_or_default()
     }
+    /// Get all buttons released this frame
     #[inline]
     pub fn released_buttons(&self) -> GamepadButtonList {
         self.info.map(|i| i.released.clone()).unwrap_or_default()
     }
+    /// Get the current state of all axes
     #[inline]
     pub fn axis_states(&self) -> GamepadAxisList {
         self.info.map(|i| i.axis.clone()).unwrap_or_default()
     }
+    /// Get the vendor-specific name for a button
     #[inline]
     pub fn button_name(&self, btn: GamepadButton) -> &str {
         let vendor = self.vendor().unwrap_or(GamepadVendor::Unknown);
         btn.vendor_name(vendor)
     }
+    /// Get the vendor-specific name for an axis
     #[inline]
     pub fn axis_name(&self, axis: GamepadAxis) -> &str {
         let vendor = self.vendor().unwrap_or(GamepadVendor::Unknown);
@@ -320,6 +341,7 @@ impl<'a> GamepadState<'a> {
     }
 }
 
+/// Iterator over all gamepad slots
 pub struct GamepadsIter<'a> {
     enumerated: core::iter::Enumerate<slice::Iter<'a, Option<GamepadInfo>>>,
 }
@@ -374,5 +396,137 @@ fn axis_cast(axis: Axis) -> GamepadAxis {
         Axis::RightStickY => GamepadAxis::RightY,
         Axis::RightZ => GamepadAxis::RightTrigger,
         _ => GamepadAxis::Unknown,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_gamepads_default_empty() {
+        let gamepads = Gamepads::default();
+        assert!(!gamepads.is_connected(0u8));
+        assert!(!gamepads.is_connected(GamepadSlot(0)));
+    }
+
+    #[test]
+    fn test_gamepads_is_connected_empty() {
+        let gamepads = Gamepads::default();
+        for i in 0..16 {
+            assert!(!gamepads.is_connected(i));
+        }
+    }
+
+    #[test]
+    fn test_gamepads_iter_slots_empty() {
+        let gamepads = Gamepads::default();
+        let slots: Vec<_> = gamepads.iter_slots().collect();
+        assert_eq!(slots.len(), 16);
+
+        for slot_state in slots {
+            assert!(!slot_state.is_connected());
+        }
+    }
+
+    #[test]
+    fn test_gamepads_get_empty_slot() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert!(!state.is_connected());
+        assert_eq!(state.slot().0, 0);
+        assert_eq!(state.name(), None);
+        assert_eq!(state.uuid(), None);
+        assert_eq!(state.vendor(), None);
+    }
+
+    #[test]
+    fn test_gamepads_iter_empty() {
+        let gamepads = Gamepads::default();
+        let connected: Vec<_> = gamepads.iter().collect();
+        assert_eq!(connected.len(), 0);
+    }
+
+    #[test]
+    fn test_gamepads_into_iter() {
+        let gamepads = Gamepads::default();
+        let slots: Vec<_> = gamepads.into_iter().collect();
+        assert_eq!(slots.len(), 16);
+    }
+
+    #[test]
+    fn test_gamepad_state_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert!(!state.is_connected());
+        assert_eq!(state.slot().0, 0);
+    }
+
+    #[test]
+    fn test_gamepad_state_slot() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(7u8);
+        assert_eq!(state.slot().0, 7);
+    }
+
+    #[test]
+    fn test_gamepad_state_button_states_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert!(!state.just_pressed(GamepadButton::North));
+        assert!(!state.just_released(GamepadButton::South));
+        assert!(!state.is_down(GamepadButton::West));
+    }
+
+    #[test]
+    fn test_gamepad_state_axis_movement_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert_eq!(state.axis_movement(GamepadAxis::LeftX), 0.0);
+        assert_eq!(state.axis_movement(GamepadAxis::RightY), 0.0);
+        assert_eq!(state.axis_movement(GamepadAxis::LeftTrigger), 0.0);
+    }
+
+    #[test]
+    fn test_gamepad_state_button_lists_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert!(state.down_buttons().is_empty());
+        assert!(state.pressed_buttons().is_empty());
+        assert!(state.released_buttons().is_empty());
+    }
+
+    #[test]
+    fn test_gamepad_state_axis_states_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert_eq!(state.axis_states().strength(GamepadAxis::LeftX), 0.0);
+        assert_eq!(state.axis_states().strength(GamepadAxis::RightY), 0.0);
+    }
+
+    #[test]
+    fn test_gamepad_state_button_name_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert_eq!(state.button_name(GamepadButton::North), "Y");
+        assert_eq!(state.button_name(GamepadButton::South), "A");
+        assert_eq!(state.button_name(GamepadButton::Start), "Menu");
+    }
+
+    #[test]
+    fn test_gamepad_state_axis_name_disconnected() {
+        let gamepads = Gamepads::default();
+        let state = gamepads.get(0u8);
+
+        assert_eq!(state.axis_name(GamepadAxis::LeftX), "Left Stick X");
+        assert_eq!(state.axis_name(GamepadAxis::RightY), "Right Stick Y");
+        assert_eq!(state.axis_name(GamepadAxis::LeftTrigger), "LT");
     }
 }

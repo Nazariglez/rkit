@@ -11,9 +11,6 @@ use crate::{
     input::{KeyboardState, MouseState},
 };
 
-#[cfg(feature = "gamepad")]
-use crate::input::GamepadState;
-
 pub(crate) static BACKEND: Lazy<AtomicRefCell<HeadlessBackend>> =
     Lazy::new(|| AtomicRefCell::new(HeadlessBackend::default()));
 
@@ -139,7 +136,6 @@ pub(crate) struct HeadlessBackend {
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
-    gamepad_state: GamepadState,
     gfx: HeadlessGfx,
 }
 
@@ -238,12 +234,6 @@ impl BackendImpl<HeadlessGfx> for HeadlessBackend {
 
     fn gfx(&mut self) -> &mut HeadlessGfx {
         &mut self.gfx
-    }
-
-    #[cfg(feature = "gamepad")]
-    #[inline]
-    fn gamepad_state(&self) -> &GamepadState {
-        &self.gamepad_state
     }
 }
 

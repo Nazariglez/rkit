@@ -19,9 +19,6 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::closure::Closure;
 use window::WebWindow;
 
-#[cfg(feature = "gamepad")]
-use crate::input::GamepadState;
-
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WebBackend>> =
     Lazy::new(|| AtomicRefCell::new(WebBackend::default()));
 
@@ -356,11 +353,6 @@ impl BackendImpl<GfxBackend> for WebBackend {
     }
     fn keyboard_state(&self) -> &KeyboardState {
         &self.keyboard_state
-    }
-
-    #[cfg(feature = "gamepad")]
-    fn gamepad_state(&self) -> &GamepadState {
-        todo!()
     }
 
     // gfx

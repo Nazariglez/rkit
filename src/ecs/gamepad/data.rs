@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 const GAMEPAD_BUTTON_COUNT_POT2: usize = GamepadButton::COUNT.next_power_of_two();
 
+/// Standard gamepad button layout (North=Y/Triangle, South=A/Cross, etc.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount)]
 #[repr(u8)]
 pub enum GamepadButton {
@@ -36,6 +37,7 @@ pub enum GamepadButton {
 }
 
 impl GamepadButton {
+    /// Get the vendor-specific name for this button
     pub fn vendor_name(self, vendor: GamepadVendor) -> &'static str {
         use GamepadButton as B;
         match vendor {
@@ -120,6 +122,7 @@ impl GamepadButton {
     }
 }
 
+/// Collection of gamepad buttons
 #[derive(Default, Clone)]
 pub struct GamepadButtonList {
     set: heapless::index_set::IndexSet<
@@ -134,26 +137,32 @@ impl GamepadButtonList {
         self.set.insert(UniqueGamepadButton(v)).unwrap_or_default()
     }
 
+    /// Check if a button is in this list
     pub fn contains(&self, btn: GamepadButton) -> bool {
         self.set.contains(&UniqueGamepadButton(btn))
     }
 
+    /// Iterate over all buttons in this list
     pub fn iter(&self) -> impl Iterator<Item = GamepadButton> + '_ {
         self.set.iter().map(|unique_btn| unique_btn.0)
     }
 
+    /// Get the number of buttons in this list
     pub fn len(&self) -> usize {
         self.set.len()
     }
 
+    /// Check if this list is empty
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
 
+    /// Remove a button from this list
     pub fn remove(&mut self, btn: GamepadButton) -> bool {
         self.set.remove(&UniqueGamepadButton(btn))
     }
 
+    /// Clear all buttons from this list
     pub fn clear(&mut self) {
         self.set.clear()
     }
@@ -175,6 +184,7 @@ impl std::fmt::Debug for GamepadButtonList {
     }
 }
 
+/// Standard gamepad axis layout (sticks and triggers)
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumCount, FromRepr, EnumIter,
 )]
@@ -192,6 +202,7 @@ pub enum GamepadAxis {
 }
 
 impl GamepadAxis {
+    /// Get the vendor-specific name for this axis
     pub fn vendor_name(self, vendor: GamepadVendor) -> &'static str {
         use GamepadAxis as A;
         match vendor {
@@ -228,6 +239,7 @@ impl GamepadAxis {
     }
 }
 
+/// Collection of gamepad axis
 #[derive(Default, Clone)]
 pub struct GamepadAxisList {
     list: [f32; GamepadAxis::COUNT],
@@ -238,10 +250,12 @@ impl GamepadAxisList {
         self.list[axis as usize] = force;
     }
 
+    /// Get the current value of an axis (-1.0 to 1.0)
     pub fn strength(&self, axis: GamepadAxis) -> f32 {
         self.list[axis as usize]
     }
 
+    /// Iterate over all axis values
     pub fn iter(&self) -> impl Iterator<Item = (GamepadAxis, f32)> + '_ {
         self.list
             .iter()
@@ -249,14 +263,17 @@ impl GamepadAxisList {
             .map(|(i, &f)| (GamepadAxis::from_repr(i as _).unwrap(), f))
     }
 
+    /// Get the number of axes
     pub fn len(&self) -> usize {
         self.list.len()
     }
 
+    /// Empty if all axes are at neutral position
     pub fn is_empty(&self) -> bool {
         self.list.is_empty()
     }
 
+    /// Reset all axes to default values
     pub fn clear(&mut self) {
         self.list = Default::default();
     }
@@ -268,6 +285,7 @@ impl std::fmt::Debug for GamepadAxisList {
     }
 }
 
+/// Gamepad vendor names
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum GamepadVendor {
     #[default]
@@ -373,5 +391,118 @@ impl GamepadInfo {
     pub fn tick(&mut self) {
         self.pressed.clear();
         self.released.clear();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_button_list_insert_contains() {
+        let mut list = GamepadButtonList::default();
+        assert!(!list.contains(GamepadButton::North));
+
+        list.insert(GamepadButton::North);
+        assert!(list.contains(GamepadButton::North));
+    }
+
+    #[test]
+    fn test_button_list_remove() {
+        let mut list = GamepadButtonList::default();
+        list.insert(GamepadButton::South);
+        assert!(list.contains(GamepadButton::South));
+
+        list.remove(GamepadButton::South);
+        assert!(!list.contains(GamepadButton::South));
+    }
+
+    #[test]
+    fn test_button_list_len_and_empty() {
+        let mut list = GamepadButtonList::default();
+        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
+
+        list.insert(GamepadButton::West);
+        assert!(!list.is_empty());
+        assert_eq!(list.len(), 1);
+
+        list.insert(GamepadButton::East);
+        assert_eq!(list.len(), 2);
+
+        list.remove(GamepadButton::West);
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn test_button_list_iter() {
+        let mut list = GamepadButtonList::default();
+        list.insert(GamepadButton::LeftShoulder);
+        list.insert(GamepadButton::RightShoulder);
+
+        let buttons: Vec<_> = list.iter().collect();
+        assert_eq!(buttons.len(), 2);
+        assert!(buttons.contains(&GamepadButton::LeftShoulder));
+        assert!(buttons.contains(&GamepadButton::RightShoulder));
+    }
+
+    #[test]
+    fn test_button_list_clear() {
+        let mut list = GamepadButtonList::default();
+        list.insert(GamepadButton::Start);
+        list.insert(GamepadButton::Select);
+        assert_eq!(list.len(), 2);
+
+        list.clear();
+        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_axis_list_strength() {
+        let mut list = GamepadAxisList::default();
+        list.set_strength(GamepadAxis::LeftX, 1.0);
+        assert_eq!(list.strength(GamepadAxis::LeftX), 1.0);
+
+        list.set_strength(GamepadAxis::LeftY, -0.5);
+        assert_eq!(list.strength(GamepadAxis::LeftY), -0.5);
+
+        list.set_strength(GamepadAxis::RightX, 0.25);
+        assert_eq!(list.strength(GamepadAxis::RightX), 0.25);
+    }
+
+    #[test]
+    fn test_axis_list_iter() {
+        let mut list = GamepadAxisList::default();
+        list.set_strength(GamepadAxis::LeftX, 1.0);
+        list.set_strength(GamepadAxis::RightY, -0.5);
+
+        let axes: Vec<_> = list.iter().collect();
+        assert_eq!(axes.len(), GamepadAxis::COUNT);
+
+        let left_x = axes
+            .iter()
+            .find(|(axis, _)| *axis == GamepadAxis::LeftX)
+            .unwrap();
+        assert_eq!(left_x.1, 1.0);
+
+        let right_y = axes
+            .iter()
+            .find(|(axis, _)| *axis == GamepadAxis::RightY)
+            .unwrap();
+        assert_eq!(right_y.1, -0.5);
+    }
+
+    #[test]
+    fn test_axis_list_clear() {
+        let mut list = GamepadAxisList::default();
+        list.set_strength(GamepadAxis::LeftX, 1.0);
+        list.set_strength(GamepadAxis::RightY, -0.5);
+        assert_eq!(list.strength(GamepadAxis::LeftX), 1.0);
+        assert_eq!(list.strength(GamepadAxis::RightY), -0.5);
+
+        list.clear();
+        assert_eq!(list.strength(GamepadAxis::LeftX), 0.0);
+        assert_eq!(list.strength(GamepadAxis::RightY), 0.0);
     }
 }
