@@ -1,7 +1,6 @@
 pub mod app;
 pub mod audio;
 pub mod exit;
-pub mod gamepad;
 pub mod input;
 pub mod log;
 pub mod plugin;
@@ -15,6 +14,9 @@ pub mod window;
 
 #[cfg(feature = "locale")]
 pub mod locale;
+
+#[cfg(feature = "gamepad")]
+pub mod gamepad;
 
 // re-export bevy ecs
 pub use bevy_ecs;

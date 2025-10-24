@@ -13,19 +13,44 @@ fn main() -> Result<(), String> {
         .run()
 }
 
-fn update_system(keyboard: Res<Keyboard>, gamepads: Res<Gamepads>) {
-    let check_pads = keyboard.just_pressed(KeyCode::Space);
-    if check_pads {
-        gamepads.iter_connected().for_each(|gamepad| {
-            println!(
-                "Gamepad connected? {:?} - slot: {:?} name: '{:?}' uuid: '{:?}'",
-                gamepad.is_connected(),
+fn update_system(gamepads: Res<Gamepads>) {
+    gamepads.iter().for_each(|gamepad| {
+        let pressed = gamepad.pressed_buttons();
+        pressed.iter().for_each(|btn| {
+            log::info!(
+                "Gamepad: {:?} - pressed: {:?}",
                 gamepad.slot(),
-                gamepad.name(),
-                gamepad.uuid()
+                gamepad.button_name(btn)
             );
         });
-    }
+        let released = gamepad.released_buttons();
+        released.iter().for_each(|btn| {
+            log::info!(
+                "Gamepad: {:?} - released: {:?}",
+                gamepad.slot(),
+                gamepad.button_name(btn)
+            );
+        });
+        let down = gamepad.down_buttons();
+        down.iter().for_each(|btn| {
+            log::info!(
+                "Gamepad: {:?} - down: {:?}",
+                gamepad.slot(),
+                gamepad.button_name(btn)
+            );
+        });
+        let axis = gamepad.axis_states();
+        axis.iter()
+            .filter(|(_axis, strength)| *strength != 0.0)
+            .for_each(|(axis, strength)| {
+                log::info!(
+                    "Gamepad: {:?} - axis: {:?} - movement: {:?}",
+                    gamepad.slot(),
+                    gamepad.axis_name(axis),
+                    strength
+                );
+            });
+    });
 }
 
 fn draw_system() {

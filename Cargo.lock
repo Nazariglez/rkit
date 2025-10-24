@@ -4052,6 +4052,7 @@ dependencies = [
  "indexmap",
  "log",
  "macros",
+ "nohash-hasher",
  "once_cell",
  "parking_lot",
  "rfd",
