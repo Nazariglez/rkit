@@ -9,9 +9,6 @@ use crate::{
 };
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-#[cfg(feature = "gamepad")]
-use crate::input::GamepadState;
-
 pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     // Window
     fn set_title(&mut self, title: &str);
@@ -40,9 +37,6 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     fn is_cursor_visible(&self) -> bool;
 
     fn keyboard_state(&self) -> &KeyboardState;
-
-    #[cfg(feature = "gamepad")]
-    fn gamepad_state(&self) -> &GamepadState;
 
     // gfx
     fn gfx(&mut self) -> &mut G;

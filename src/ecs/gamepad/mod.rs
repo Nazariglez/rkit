@@ -6,7 +6,7 @@ mod gamepads;
 pub use data::*;
 pub use gamepads::*;
 
-use super::{app::App, bevy_ecs::prelude::*, plugin::Plugin, schedules::OnEnginePreFrame};
+use super::{app::App, plugin::Plugin, schedules::OnEnginePreFrame};
 
 #[derive(Default)]
 pub struct GamepadPlugin;

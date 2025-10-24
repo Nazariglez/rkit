@@ -176,7 +176,6 @@ headless = ["corelib/headless"]
 logs = ["corelib/logs"]
 # enables gamepad api
 gamepad = [
-  "corelib/gamepad",
   "dep:gilrs",
   "dep:heapless",
   "dep:uuid",

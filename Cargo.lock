@@ -1082,7 +1082,6 @@ dependencies = [
  "crossbeam-channel",
  "encase",
  "fern",
- "gilrs",
  "glam",
  "heapless 0.9.1",
  "image",

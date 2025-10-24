@@ -30,11 +30,6 @@ use crate::{
 };
 // TODO, screen_size, positions etc... must be logical or physical pixels?
 
-#[cfg(feature = "gamepad")]
-use crate::backend::gamepad_gilrs::GilrsBackend;
-#[cfg(feature = "gamepad")]
-use crate::input::GamepadState;
-
 pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));
 
@@ -49,8 +44,6 @@ pub(crate) struct WinitBackend {
     cursor_locked: bool,
     cursor_visible: bool,
 
-    #[cfg(feature = "gamepad")]
-    gilrs: GilrsBackend,
     gfx: Option<GfxBackend>,
 }
 
@@ -64,8 +57,6 @@ impl Default for WinitBackend {
             pixelated: Default::default(),
             cursor_locked: Default::default(),
             cursor_visible: true,
-            #[cfg(feature = "gamepad")]
-            gilrs: Default::default(),
             gfx: Default::default(),
         }
     }
@@ -278,12 +269,6 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         &self.keyboard_state
     }
 
-    #[cfg(feature = "gamepad")]
-    #[inline]
-    fn gamepad_state(&self) -> &GamepadState {
-        &self.gilrs.state
-    }
-
     #[inline]
     fn gfx(&mut self) -> &mut GfxBackend {
         self.gfx.as_mut().unwrap()
@@ -485,12 +470,6 @@ impl<S> ApplicationHandler for Runner<S> {
             }
             WindowEvent::RedrawRequested => {
                 time::tick();
-
-                #[cfg(feature = "gamepad")]
-                {
-                    // gamepad must be updated before the update cb
-                    get_mut_backend().gilrs.tick();
-                }
 
                 // app's update cb
                 CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);

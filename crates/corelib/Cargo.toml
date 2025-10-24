@@ -40,9 +40,6 @@ wgpu = { version = "27.0.1", features = [
     "static-dxc",
 ] }
 
-# gamepad
-gilrs = { version = "0.11", optional = true }
-
 # Instant compatible with wasm
 web-time.workspace = true
 
@@ -123,8 +120,6 @@ headless = []
 test-env = []
 # WebGL instead of WebGPU on WASM
 webgl = ["wgpu/webgl"]
-# Enable Gamepad API
-gamepad = ["dep:gilrs"]
 # Logging
 logs = [
     "dep:time",

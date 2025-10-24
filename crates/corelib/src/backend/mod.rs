@@ -1,5 +1,3 @@
-#[cfg(feature = "gamepad")]
-mod gamepad_gilrs;
 mod traits;
 #[cfg(target_arch = "wasm32")]
 mod web;
