@@ -3,10 +3,11 @@
 mod data;
 mod gamepads;
 
+use bevy_ecs::schedule::IntoScheduleConfigs;
 pub use data::*;
 pub use gamepads::*;
 
-use super::{app::App, plugin::Plugin, schedules::OnEnginePreFrame};
+use super::{app::App, input::InputSysSet, plugin::Plugin, schedules::OnEnginePreFrame};
 
 #[derive(Default)]
 pub struct GamepadPlugin;
@@ -23,6 +24,10 @@ impl Plugin for GamepadPlugin {
 
         app.insert_non_send_resource(raw)
             .insert_resource(Gamepads::default())
-            .on_schedule(OnEnginePreFrame, sync_gilrs_events_system);
+            .on_schedule(
+                OnEnginePreFrame,
+                sync_gilrs_events_system.in_set(InputSysSet),
+            )
+            .configure_sets(OnEnginePreFrame, InputSysSet);
     }
 }

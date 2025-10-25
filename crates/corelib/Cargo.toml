@@ -54,7 +54,6 @@ image = { version = "0.25.8", default-features = false, features = [
 ## deps only for this crate
 strum.workspace = true
 strum_macros.workspace = true
-crossbeam-channel = "0.5.15"
 
 # logging
 chrono = { version = "0.4.42", optional = true }

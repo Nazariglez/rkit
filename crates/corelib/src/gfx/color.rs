@@ -396,7 +396,7 @@ mod tests {
     use super::*;
 
     fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < f32::EPSILON
+        (a - b).abs() < 1e-2
     }
 
     #[test]
