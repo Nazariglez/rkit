@@ -120,6 +120,11 @@ impl Gamepads {
             .copied()
             .and_then(|slot| self.slots[slot.0 as usize].as_mut())
     }
+
+    #[inline(always)]
+    fn contains_raw(&self, id: GilrsGamepadId) -> bool {
+        self.ids.contains_key(&id)
+    }
 }
 
 pub(super) struct RawGilrs(Gilrs);
@@ -128,6 +133,48 @@ impl RawGilrs {
     pub fn new() -> Result<Self, String> {
         let gilrs = Gilrs::new().map_err(|e| e.to_string())?;
         Ok(Self(gilrs))
+    }
+}
+
+#[inline(always)]
+fn register_gamepad_if_necessary(gamepads: &mut Gamepads, raw: &mut RawGilrs, id: GilrsGamepadId) {
+    if gamepads.contains_raw(id) {
+        return;
+    }
+
+    let info = raw.0.gamepad(id);
+    let uuid = Uuid::from_bytes(info.uuid());
+    let vendor = detect_vendor(&info);
+    let slot = gamepads.add_gamepad(GamepadInfo {
+        id,
+        name: info.name().to_string(),
+        uuid,
+        vendor,
+        pressed: Default::default(),
+        down: Default::default(),
+        released: Default::default(),
+        axis: Default::default(),
+    });
+    match slot {
+        Some(slot) => {
+            log::debug!(
+                "Gamepad connected '{:?}': raw_id={:?}, name={}, uuid={}, vendor={:?}",
+                slot,
+                id,
+                info.name(),
+                uuid,
+                vendor,
+            );
+        }
+        None => {
+            log::warn!(
+                "Gamepad connection ignored, not enoguh slots. raw_id='{:?}', name='{}', uuid='{:?}', vendor='{:?}'",
+                info.id(),
+                info.name(),
+                uuid,
+                vendor,
+            );
+        }
     }
 }
 
@@ -145,6 +192,7 @@ pub(super) fn sync_gilrs_events_system(
 
         match event {
             EventType::ButtonPressed(btn, _) => {
+                register_gamepad_if_necessary(&mut gamepads, &mut raw, id);
                 let info = gamepads.slot_mut(id);
                 debug_assert!(info.is_some(), "Gamepad '{}' not registered?", id);
                 if let Some(info) = info {
@@ -153,6 +201,7 @@ pub(super) fn sync_gilrs_events_system(
             }
             EventType::ButtonRepeated(..) => {}
             EventType::ButtonReleased(btn, _) => {
+                register_gamepad_if_necessary(&mut gamepads, &mut raw, id);
                 let info = gamepads.slot_mut(id);
                 debug_assert!(info.is_some(), "Gamepad '{}' not registered?", id);
                 if let Some(info) = info {
@@ -161,6 +210,7 @@ pub(super) fn sync_gilrs_events_system(
             }
             EventType::ButtonChanged(btn, strength, _) => {
                 let mut cast_to_axis = |axis: GamepadAxis| {
+                    register_gamepad_if_necessary(&mut gamepads, &mut raw, id);
                     let info = gamepads.slot_mut(id);
                     debug_assert!(info.is_some(), "Gamepad '{}' not registered?", id);
                     if let Some(info) = info {
@@ -178,6 +228,7 @@ pub(super) fn sync_gilrs_events_system(
                 }
             }
             EventType::AxisChanged(axis, strength, _) => {
+                register_gamepad_if_necessary(&mut gamepads, &mut raw, id);
                 let info = gamepads.slot_mut(id);
                 debug_assert!(info.is_some(), "Gamepad '{}' not registered?", id);
                 if let Some(info) = info {
@@ -185,40 +236,7 @@ pub(super) fn sync_gilrs_events_system(
                 }
             }
             EventType::Connected => {
-                let info = raw.0.gamepad(id);
-                let uuid = Uuid::from_bytes(info.uuid());
-                let vendor = detect_vendor(&info);
-                let slot = gamepads.add_gamepad(GamepadInfo {
-                    id,
-                    name: info.name().to_string(),
-                    uuid,
-                    vendor,
-                    pressed: Default::default(),
-                    down: Default::default(),
-                    released: Default::default(),
-                    axis: Default::default(),
-                });
-                match slot {
-                    Some(slot) => {
-                        log::debug!(
-                            "Gamepad connected '{:?}': raw_id={:?}, name={}, uuid={}, vendor={:?}",
-                            slot,
-                            id,
-                            info.name(),
-                            uuid,
-                            vendor,
-                        );
-                    }
-                    None => {
-                        log::warn!(
-                            "Gamepad connection ignored, not enoguh slots. raw_id='{:?}', name='{}', uuid='{:?}', vendor='{:?}'",
-                            info.id(),
-                            info.name(),
-                            uuid,
-                            vendor,
-                        );
-                    }
-                }
+                register_gamepad_if_necessary(&mut gamepads, &mut raw, id);
             }
             EventType::Disconnected => {
                 let info = gamepads.remove_gamepad(id);

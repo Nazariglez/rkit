@@ -2007,7 +2007,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "winapi",
- "windows 0.54.0",
 ]
 
 [[package]]

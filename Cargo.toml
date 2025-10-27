@@ -184,7 +184,7 @@ gamepad = [
   "dep:strum",
   "dep:strum_macros",
 ]
-gamepad-wgi = ["gamepad", "gilrs/wgi"]
+# gamepad-wgi = ["gamepad", "gilrs/wgi"]
 gamepad-xinput = ["gamepad", "gilrs/xinput"]
 # force webgl
 webgl = ["corelib/webgl", "draw/webgl"]
