@@ -170,6 +170,13 @@ impl GfxBackendImpl for GfxBackend {
                     .pipeline
                     .map_or((false, false), |pip| (pip.uses_depth, pip.uses_stencil));
 
+                let needs_depth_stencil = uses_depth || uses_stencil;
+                if needs_depth_stencil && texture.depth_texture.is_none() {
+                    return Err(
+                        "Depth texture is required for depth or stencil testing".to_string()
+                    );
+                }
+
                 let color = Some(rp.clear_options.color.map_or_else(
                     || wgpu::RenderPassColorAttachment {
                         view: &texture.texture.view,

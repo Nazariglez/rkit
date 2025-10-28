@@ -87,9 +87,13 @@ pub(crate) struct OffscreenSurfaceData {
 
 impl OffscreenSurfaceData {
     pub fn new(gfx: &mut GfxBackend, pixelated: bool) -> Result<Self, String> {
+        // let's assume we always a depth tex so we can use stencil without add anything extra
+        let use_depth = true;
+
+        // the offscreen texture
         let texture = gfx.create_render_texture(RenderTextureDescriptor {
             label: Some("Offscreen Surface"),
-            depth: false,
+            depth: use_depth,
             width: gfx.surface.config.width,
             height: gfx.surface.config.height,
             format: None,
@@ -205,7 +209,7 @@ impl OffscreenSurfaceData {
 
         let texture = gfx.create_render_texture(RenderTextureDescriptor {
             label: Some("Offscreen Surface"),
-            depth: false,
+            depth: self.texture.depth_texture.is_some(),
             width: gfx.surface.config.width,
             height: gfx.surface.config.height,
             format: None,
