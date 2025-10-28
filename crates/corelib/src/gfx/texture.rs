@@ -64,7 +64,7 @@ pub enum TextureFilter {
 
 /// Enum representing texture formats supported by WebGL2
 /// which is the min compatibility layer we aim for
-#[derive(Debug, Copy, Clone, EnumCount)]
+#[derive(Debug, Copy, Clone, EnumCount, PartialEq)]
 pub enum TextureFormat {
     // Single channel 8-bit textures
     R8UNorm, // WebGL2: GL_R8

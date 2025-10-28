@@ -76,20 +76,6 @@ impl<'a> RenderPass<'a> {
         self
     }
 
-    // pub fn buffer_offsets<S: RangeBounds<u32>>(&mut self, offsets: &[S]) -> &mut Self {
-    //     offsets
-    //         .iter()
-    //         .map(|r| {
-    //             let start = match r.start_bound() {
-    //                 Bound::Included(_) => {}
-    //                 Bound::Excluded(_) => {}
-    //                 Bound::Unbounded => {}
-    //             };
-    //             self.buffer_offsets.push(r.clone())
-    //         });
-    //     self
-    // }
-
     pub fn buffers_with_offset<S: RangeBounds<u64>>(
         &mut self,
         buffers: &[(&'a Buffer, S)],

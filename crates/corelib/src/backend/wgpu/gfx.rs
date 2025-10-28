@@ -757,7 +757,7 @@ impl GfxBackendImpl for GfxBackend {
                             "RenderTexture (label={:?}) inner depth texture",
                             desc.label
                         )),
-                        format: TextureFormat::Depth32Float,
+                        format: SURFACE_DEFAULT_DEPTH_FORMAT,
                         write: true,
                     },
                     Some(TextureData {
@@ -1121,7 +1121,7 @@ fn create_texture(
         depth_or_array_layers: 1,
     });
 
-    let is_depth_texture = matches!(desc.format, TextureFormat::Depth32Float);
+    let is_depth_texture = matches!(desc.format, SURFACE_DEFAULT_DEPTH_FORMAT);
     let mut usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
     if is_depth_texture || desc.write {
         usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;

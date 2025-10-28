@@ -41,6 +41,7 @@ struct State {
 impl State {
     fn new() -> Result<Self, String> {
         let mask_pip = gfx::create_render_pipeline(SHADER)
+            .with_label("Mask Pipeline")
             .with_vertex_layout(
                 VertexLayout::new()
                     .with_attr(0, VertexFormat::Float32x2)
@@ -58,6 +59,7 @@ impl State {
             .build()?;
 
         let pip = gfx::create_render_pipeline(SHADER)
+            .with_label("Main Pipeline")
             .with_vertex_layout(
                 VertexLayout::new()
                     .with_attr(0, VertexFormat::Float32x2)

@@ -14,7 +14,6 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
     }
 
     fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
-        log::info!("write bytes");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let val = base64::encode(bytes);
@@ -25,7 +24,6 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
     }
 
     fn read_bytes(path: &Path) -> Result<Vec<u8>, String> {
-        log::info!("read bytes");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let s = local_storage()?;
@@ -35,7 +33,6 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
     }
 
     fn exists(path: &Path) -> Result<bool, String> {
-        log::info!("exists");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let s = local_storage()?;
@@ -44,7 +41,6 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
     }
 
     fn rename(src: &Path, dst: &Path) -> Result<(), String> {
-        log::info!("rename");
         let s = local_storage()?;
         let src_root = root_key_of(src)?;
         let dst_root = root_key_of(dst)?;
@@ -68,7 +64,6 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
     }
 
     fn read_dir(dir: &Path) -> Result<Vec<PathBuf>, String> {
-        log::info!("read_dir");
         let s = local_storage()?;
         let root = root_key_of(dir)?;
         let map = storage_get_map(&s, &root)?;
@@ -83,7 +78,6 @@ impl SaveDriverImpl for LocalStorageSaveDriver {
     }
 
     fn remove_file(path: &Path) -> Result<(), String> {
-        log::info!("remove_file");
         let root = root_key_of(path)?;
         let key = key_of(path);
         let s = local_storage()?;
