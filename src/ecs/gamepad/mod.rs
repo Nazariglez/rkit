@@ -3,7 +3,7 @@
 mod data;
 mod gamepads;
 
-use bevy_ecs::schedule::IntoScheduleConfigs;
+use bevy_ecs::{prelude::*, schedule::IntoScheduleConfigs};
 pub use data::*;
 pub use gamepads::*;
 
@@ -14,6 +14,16 @@ pub struct GamepadPlugin;
 
 impl Plugin for GamepadPlugin {
     fn apply(&self, app: &mut App) {
+            app.on_setup(setup_system)
+            .on_schedule(
+                OnEnginePreFrame,
+                sync_gilrs_events_system.in_set(InputSysSet),
+            )
+            .configure_sets(OnEnginePreFrame, InputSysSet);
+    }
+}
+
+fn setup_system(world: &mut World) {
         let raw = match RawGilrs::new() {
             Ok(raw) => raw,
             Err(e) => {
@@ -21,13 +31,7 @@ impl Plugin for GamepadPlugin {
                 return;
             }
         };
-
-        app.insert_non_send_resource(raw)
-            .insert_resource(Gamepads::default())
-            .on_schedule(
-                OnEnginePreFrame,
-                sync_gilrs_events_system.in_set(InputSysSet),
-            )
-            .configure_sets(OnEnginePreFrame, InputSysSet);
-    }
+        
+        world.insert_non_send_resource(raw);
+            world.insert_resource(Gamepads::default());
 }
