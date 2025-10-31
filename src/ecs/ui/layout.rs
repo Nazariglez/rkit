@@ -1,6 +1,6 @@
 use crate::{
     draw::{BaseCam2D, Camera2D, Draw2D},
-    math::{Mat3, Mat4, Vec2, Vec3Swizzles, vec2, vec3},
+    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, vec2, vec3},
 };
 use bevy_ecs::prelude::*;
 use corelib::math::vec4;
@@ -161,6 +161,7 @@ where
     }
 
     /// Returns the parent entity of the given entity in the UI tree
+    #[inline]
     pub fn parent(&self, entity: Entity) -> Option<Entity> {
         self.relations
             .get(&entity)
@@ -170,6 +171,7 @@ where
     }
 
     /// Returns how many immediate children this entity has in the UI-tree.
+    #[inline]
     pub fn child_count(&self, entity: Entity) -> usize {
         if let Some(&node_id) = self.relations.get(&entity) {
             self.tree.child_ids(node_id).count()
@@ -179,6 +181,7 @@ where
     }
 
     /// Returns true if this entity has any children.
+    #[inline]
     pub fn has_children(&self, entity: Entity) -> bool {
         if let Some(&node_id) = self.relations.get(&entity) {
             self.tree.child_ids(node_id).next().is_some()
@@ -188,11 +191,13 @@ where
     }
 
     /// Returns true if this entity has no children.
+    #[inline]
     pub fn is_empty(&self, entity: Entity) -> bool {
         !self.has_children(entity)
     }
 
     /// Returns an iterator over the immediate children of `parent` in the UI tree.
+    #[inline]
     pub fn children(&self, parent: Entity) -> impl Iterator<Item = Entity> + '_ {
         self.relations
             .get(&parent)
@@ -211,6 +216,7 @@ where
     }
 
     /// Converts node-local coordinates to screen coordinates
+    #[inline]
     pub fn node_to_screen(&self, point: Vec2, node: &UINode) -> Vec2 {
         let transform = self.cam_info.transform * node.global_transform();
         let half = self.cam_info.cam_size * 0.5;
@@ -232,6 +238,7 @@ where
     }
 
     /// Sets the layout size and updates the root node if necessary
+    #[inline]
     pub fn set_size(&mut self, size: Vec2) {
         let updated = self.cam_info.update_size(size);
         if updated {
@@ -241,6 +248,7 @@ where
     }
 
     /// Updates the camera info from a Camera2D and marks layout as dirty if needed
+    #[inline]
     pub fn set_camera(&mut self, cam: &Camera2D) {
         let cam_size = cam.size();
         let can_set = cam_size.x > 0.0 && cam_size.y > 0.0;
@@ -258,6 +266,7 @@ where
 
     /// Updates the layout tree and graph if they're dirty
     /// Returns true if any computation was performed
+    #[inline]
     pub fn update(
         &mut self,
         images: Query<&UIImage, With<T>>,

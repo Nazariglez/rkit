@@ -195,7 +195,7 @@ impl PostProcessSys {
         }
 
         let io_tex = self.textures.get_or_insert_mut(size, || {
-            log::debug!(
+            log::trace!(
                 "Creating PostProcess IOTextures with size: ({}, {})",
                 size.x,
                 size.y
@@ -380,7 +380,7 @@ impl PostProcessSys {
 }
 
 fn create_frame_rt(size: UVec2) -> Result<RenderTexture, String> {
-    log::debug!(
+    log::trace!(
         "Created PostFX Frame RenderTexture size:{},{}",
         size.x,
         size.y

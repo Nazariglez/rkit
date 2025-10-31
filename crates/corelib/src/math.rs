@@ -13,6 +13,11 @@ impl Rect {
     }
 
     #[inline]
+    pub const fn size(&self) -> Vec2 {
+        self.size
+    }
+
+    #[inline]
     pub fn from_center(center: Vec2, size: Vec2) -> Self {
         let origin = center - size * 0.5;
         Self { origin, size }

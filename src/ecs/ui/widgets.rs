@@ -48,6 +48,13 @@ fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode
 #[require(UIStyle, UIRender = image_render_component(), UINodeType::Image)]
 pub struct UIImage {
     pub sprite: Sprite,
+    pub tint: Option<Color>,
+}
+
+impl UIImage {
+    pub fn new(sprite: Sprite) -> Self {
+        Self { sprite, tint: None }
+    }
 }
 
 fn image_render_component() -> UIRender {
@@ -60,6 +67,7 @@ fn render_image(draw: &mut Draw2D, (image, node): (&UIImage, &UINode)) {
     draw.image(&image.sprite)
         .scale(scale)
         .origin(Vec2::splat(0.5))
+        .color(image.tint.unwrap_or(Color::WHITE))
         .translate(node.size() * 0.5);
 }
 
