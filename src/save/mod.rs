@@ -78,6 +78,17 @@ fn hash_data(timestamp: u64, flags: SaveFlags, user_flags: u16, data: &[u8]) -> 
     hasher.finalize()
 }
 
+#[inline]
+fn is_valid_checksum(meta: &SaveMetadata, body: &[u8]) -> bool {
+    let body_checksum = hash_data(
+        meta.timestamp,
+        meta.sys_flags,
+        meta.user_flags.unwrap_or_default(),
+        body,
+    );
+    body_checksum == meta.checksum
+}
+
 pub fn save_data_to_file<D>(
     base_dir: &str,
     slot: &str,
@@ -294,13 +305,7 @@ where
 
     // check if the checksums are the same, otherwise means that the file could be
     // altered or corrupted
-    let body_checksum = hash_data(
-        meta.timestamp,
-        meta.sys_flags,
-        meta.user_flags.unwrap_or_default(),
-        body,
-    );
-    let is_valid_checksum = body_checksum == meta.checksum;
+    let is_valid_checksum = is_valid_checksum(&meta, body);
     if !is_valid_checksum {
         log::warn!("Save file '{meta:?}' altered or corrupted.");
 
@@ -457,6 +462,16 @@ pub fn clear_save_files(base_dir: &str, slots: Option<&[&str]>) -> Result<usize,
     }
 
     Ok(deleted)
+}
+
+#[inline]
+pub fn clear_all_save_files(base_dir: &str) -> Result<usize, String> {
+    clear_save_files(base_dir, None)
+}
+
+#[inline]
+pub fn exists_save_file(base_dir: &Path, slot: &str) -> Result<bool, String> {
+    list_saves(base_dir, slot).map(|list| !list.is_empty())
 }
 
 pub fn pick_latest_save<D>(base_dir: &str, slots: &[&str]) -> Option<SaveData<D>>

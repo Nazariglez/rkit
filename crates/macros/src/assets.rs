@@ -12,7 +12,7 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 use ignore::WalkBuilder;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
-use proc_macro_error::abort_call_site;
+use proc_macro_error2::abort_call_site;
 
 const ROOT_ATTR: &str = "root";
 const SKIP_ATTR: &str = "skip";
