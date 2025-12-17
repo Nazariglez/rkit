@@ -470,8 +470,13 @@ pub fn clear_all_save_files(base_dir: &str) -> Result<usize, String> {
 }
 
 #[inline]
-pub fn exists_save_file(base_dir: &Path, slot: &str) -> Result<bool, String> {
-    list_saves(base_dir, slot).map(|list| !list.is_empty())
+pub fn exists_save_file(base_dir: &str, slots: &[&str]) -> bool {
+    slots.iter().any(|slot| {
+        let dir = data_dir(base_dir).unwrap();
+        list_saves(&dir, slot)
+            .map(|list| !list.is_empty())
+            .unwrap_or(false)
+    })
 }
 
 pub fn pick_latest_save<D>(base_dir: &str, slots: &[&str]) -> Option<SaveData<D>>
