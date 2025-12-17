@@ -465,8 +465,9 @@ pub fn clear_save_files(base_dir: &str, slots: Option<&[&str]>) -> Result<usize,
 }
 
 #[inline]
-pub fn clear_all_save_files(base_dir: &str) -> Result<usize, String> {
-    clear_save_files(base_dir, None)
+pub fn clear_all_save_files(base_dir: &str) -> Result<(), String> {
+    clear_save_files(base_dir, None)?;
+    Ok(())
 }
 
 #[inline]
