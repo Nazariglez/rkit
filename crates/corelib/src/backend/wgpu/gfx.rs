@@ -30,7 +30,7 @@ use wgpu::{
     GlBackendOptions, GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor, Origin3d,
     Queue, StoreOp, Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
     rwh::HasWindowHandle,
-    util::{BufferInitDescriptor, DeviceExt},
+    util::{BufferInitDescriptor, DeviceExt, new_instance_with_webgpu_detection},
 };
 use winit::raw_window_handle::HasDisplayHandle;
 
@@ -70,7 +70,21 @@ impl GfxBackendImpl for GfxBackend {
         Self: Sized,
         W: HasDisplayHandle + HasWindowHandle,
     {
-        Self::new(window, vsync, win_size, pixelated).await
+        let res = Self::new(window, vsync, win_size, pixelated, false).await;
+        match res {
+            Ok(gfx) => Ok(gfx),
+            // allow fallback to webgl if webgpu is not supported
+            Err(e) if cfg!(all(target_arch = "wasm32", feature = "webgl")) => {
+                log::error!("Error initializing Gfx backend: {e}");
+                Self::new(window, vsync, win_size, pixelated, true)
+                    .await
+                    .map_err(|e| e)
+            }
+            Err(e) => {
+                log::error!("Error initializing Gfx backend: {e}");
+                Err(e)
+            }
+        }
     }
 
     async fn update_surface<W>(
@@ -831,6 +845,7 @@ impl GfxBackend {
         vsync: bool,
         win_size: UVec2,
         pixelated: bool,
+        force_webgl: bool,
     ) -> Result<Self, String>
     where
         W: HasWindowHandle + HasDisplayHandle,
@@ -838,31 +853,32 @@ impl GfxBackend {
         let depth_format = SURFACE_DEFAULT_DEPTH_FORMAT; // make it configurable?
         let mut next_resource_id = 0;
 
-        let instance = if cfg!(all(target_arch = "wasm32", feature = "webgl")) {
-            Instance::new(&InstanceDescriptor {
-                backends: Backends::GL,
-                backend_options: BackendOptions {
-                    gl: GlBackendOptions {
-                        gles_minor_version: Gles3MinorVersion::from_env()
-                            .unwrap_or(Gles3MinorVersion::Automatic),
-                        fence_behavior: GlFenceBehavior::default(),
-                    },
-                    ..BackendOptions::from_env_or_default()
-                },
-                ..InstanceDescriptor::from_env_or_default()
-            })
+        let backend = if force_webgl && cfg!(all(target_arch = "wasm32", feature = "webgl")) {
+            log::info!("Fallback to WebGL");
+            Backends::GL
         } else {
-            Instance::new(&InstanceDescriptor {
-                backend_options: BackendOptions {
-                    dx12: Dx12BackendOptions {
-                        shader_compiler: wgpu::Dx12Compiler::StaticDxc,
-                        ..Dx12BackendOptions::from_env_or_default()
-                    },
-                    ..BackendOptions::from_env_or_default()
-                },
-                ..InstanceDescriptor::from_env_or_default()
-            })
+            Backends::default()
         };
+
+        let descriptor = InstanceDescriptor {
+            backends: backend,
+            backend_options: BackendOptions {
+                gl: GlBackendOptions {
+                    gles_minor_version: Gles3MinorVersion::from_env()
+                        .unwrap_or(Gles3MinorVersion::Automatic),
+                    fence_behavior: GlFenceBehavior::default(),
+                },
+                dx12: Dx12BackendOptions {
+                    shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                    ..Dx12BackendOptions::from_env_or_default()
+                },
+                ..BackendOptions::from_env_or_default()
+            },
+            ..InstanceDescriptor::from_env_or_default()
+        };
+
+        // this will automatically fallback to webgl if webgpu is not supported
+        let instance = new_instance_with_webgpu_detection(&descriptor).await;
 
         let (ctx, surface) = {
             let raw = Surface::create_raw_surface(window, &instance)?;
