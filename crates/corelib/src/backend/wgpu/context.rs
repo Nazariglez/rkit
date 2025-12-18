@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use wgpu::{
-    Adapter, Device, ExperimentalFeatures, Instance, PowerPreference, Queue, Surface as RawSurface,
+    Adapter, Device, DownlevelFlags, ExperimentalFeatures, Instance, PowerPreference, Queue,
+    Surface as RawSurface,
 };
 
 pub(crate) struct Context {
@@ -9,6 +10,7 @@ pub(crate) struct Context {
     pub adapter: Adapter,
     pub device: Device,
     pub queue: Queue,
+    pub supports_view_formats: bool,
 }
 
 impl Context {
@@ -16,12 +18,14 @@ impl Context {
         instance: Instance,
         surface: Option<&RawSurface<'static>>,
     ) -> Result<Self, String> {
-        let (adapter, device, queue) = generate_wgpu_ctx(&instance, surface).await?;
+        let (adapter, device, queue, supports_view_formats) =
+            generate_wgpu_ctx(&instance, surface).await?;
         Ok(Self {
             instance,
             adapter,
             device,
             queue,
+            supports_view_formats,
         })
     }
 
@@ -33,10 +37,12 @@ impl Context {
         &mut self,
         surface: &RawSurface<'_>,
     ) -> Result<(), String> {
-        let (adapter, device, queue) = generate_wgpu_ctx(&self.instance, Some(surface)).await?;
+        let (adapter, device, queue, supports_view_formats) =
+            generate_wgpu_ctx(&self.instance, Some(surface)).await?;
         self.adapter = adapter;
         self.device = device;
         self.queue = queue;
+        self.supports_view_formats = supports_view_formats;
         Ok(())
     }
 }
@@ -44,7 +50,7 @@ impl Context {
 async fn generate_wgpu_ctx(
     instance: &Instance,
     surface: Option<&RawSurface<'_>>,
-) -> Result<(Adapter, Device, Queue), String> {
+) -> Result<(Adapter, Device, Queue, bool), String> {
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: PowerPreference::HighPerformance,
@@ -62,6 +68,11 @@ async fn generate_wgpu_ctx(
         adapter.get_info().driver,
         adapter.get_info().driver_info
     );
+
+    let supports_view_formats = adapter
+        .get_downlevel_capabilities()
+        .flags
+        .contains(DownlevelFlags::VIEW_FORMATS);
 
     let limits = adapter.limits();
 
@@ -87,5 +98,5 @@ async fn generate_wgpu_ctx(
     }));
     log::debug!("WGPU Features {:?}", device.features());
 
-    Ok((adapter, device, queue))
+    Ok((adapter, device, queue, supports_view_formats))
 }

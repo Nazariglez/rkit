@@ -692,7 +692,14 @@ impl GfxBackendImpl for GfxBackend {
     ) -> Result<Texture, String> {
         log::trace!("Creating Texture (label={:?})", desc.label);
         let id = resource_id(&mut self.next_resource_id);
-        create_texture(id, &self.ctx.device, &self.ctx.queue, desc, data)
+        create_texture(
+            id,
+            &self.ctx.device,
+            &self.ctx.queue,
+            self.ctx.supports_view_formats,
+            desc,
+            data,
+        )
     }
 
     fn write_texture(
@@ -1100,6 +1107,7 @@ async fn init_surface_from_raw(
         id,
         &ctx.device,
         &ctx.queue,
+        ctx.supports_view_formats,
         TextureDescriptor {
             label: Some("Depth Texture for Surface"),
             format: depth_format,
@@ -1119,6 +1127,7 @@ fn create_texture(
     id: TextureId,
     device: &wgpu::Device,
     queue: &Queue,
+    supports_view_formats: bool,
     desc: TextureDescriptor,
     data: Option<TextureData>,
 ) -> Result<Texture, String> {
@@ -1134,6 +1143,8 @@ fn create_texture(
         usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
     }
 
+    let view_formats = desc.format.view_formats();
+
     let raw = device.create_texture(&wgpu::TextureDescriptor {
         label: desc.label,
         size,
@@ -1142,7 +1153,11 @@ fn create_texture(
         dimension: TextureDimension::D2,
         format: desc.format.as_wgpu(),
         usage,
-        view_formats: &desc.format.view_formats(),
+        view_formats: if supports_view_formats {
+            &view_formats
+        } else {
+            &[]
+        },
     });
 
     if !is_depth_texture && let Some(d) = data {
