@@ -1,6 +1,6 @@
 use crate::{
     draw::{BaseCam2D, Camera2D, Draw2D},
-    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, vec2, vec3},
+    math::{Mat3, Mat4, Vec2, Vec3Swizzles, vec2, vec3},
 };
 use bevy_ecs::prelude::*;
 use corelib::math::vec4;

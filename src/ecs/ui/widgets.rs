@@ -13,6 +13,7 @@ pub struct UIContainer {
     pub bg_color: Option<Color>,
     pub border_color: Option<Color>,
     pub border_size: f32,
+    pub corner_radius: Option<f32>,
 }
 
 impl Default for UIContainer {
@@ -21,6 +22,7 @@ impl Default for UIContainer {
             bg_color: Default::default(),
             border_color: Default::default(),
             border_size: 2.0,
+            corner_radius: None,
         }
     }
 }
@@ -31,14 +33,21 @@ fn container_render_component() -> UIRender {
 
 fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode)) {
     if let Some(bg_color) = container.bg_color {
-        draw.rect(Vec2::ZERO, node.size).color(bg_color);
+        let mut rect = draw.rect(Vec2::ZERO, node.size);
+        if let Some(corner_radius) = container.corner_radius {
+            rect.corner_radius(corner_radius);
+        }
+        rect.color(bg_color);
     }
 
     if let Some(border_color) = container.border_color {
         let offset = (container.border_size * 0.5).max(1.0);
         let size = node.size - offset * 2.0;
-        draw.rect(Vec2::splat(offset), size)
-            .stroke_color(border_color)
+        let mut rect = draw.rect(Vec2::splat(offset), size);
+        if let Some(corner_radius) = container.corner_radius {
+            rect.corner_radius(corner_radius);
+        }
+        rect.stroke_color(border_color)
             .stroke(container.border_size);
     }
 }
