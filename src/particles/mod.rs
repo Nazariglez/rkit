@@ -759,7 +759,10 @@ fn update_system(
             let origin_position = if p.is_local { Vec2::ZERO } else { p.pos };
             let spawning = p.spawning;
             p.emitters.iter_mut().for_each(|emitter| {
-                let spawn_rate = emitter.def.particles_per_wave as f32 / emitter.def.wave_time;
+                debug_assert!(!emitter.def.wave_time.is_nan(), "wave_time is nan");
+                debug_assert!(emitter.def.wave_time > 0.0, "wave_time is not positive");
+                let wave_time = emitter.def.wave_time.max(0.0001); // prevent division by zero
+                let spawn_rate = emitter.def.particles_per_wave as f32 / wave_time;
                 emitter.spawn_accumulator += spawn_rate * dt;
                 let to_spawn = emitter.spawn_accumulator.floor() as usize;
                 emitter.spawn_accumulator -= to_spawn as f32;
