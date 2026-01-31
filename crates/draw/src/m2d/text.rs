@@ -318,6 +318,7 @@ fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
         pos: element.position + offset,
         font: element.font,
         text: element.text,
+        spans: None,
         wrap_width: element.max_width,
         font_size: element.size,
         line_height: element.line_height,
@@ -348,12 +349,21 @@ fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
                         _ => 2.0,
                     };
 
+                    // use glyph color if available (but not for shadows)
+                    let gc = if is_shadow {
+                        c
+                    } else {
+                        data.color
+                            .map(|col| col.with_alpha(col.a * element.alpha))
+                            .unwrap_or(c)
+                    };
+
                     #[rustfmt::skip]
                         let vertices = [
-                            x1, y1, u1, v1, t, c.r, c.g, c.b, c.a,
-                            x2, y1, u2, v1, t, c.r, c.g, c.b, c.a,
-                            x1, y2, u1, v2, t, c.r, c.g, c.b, c.a,
-                            x2, y2, u2, v2, t, c.r, c.g, c.b, c.a,
+                            x1, y1, u1, v1, t, gc.r, gc.g, gc.b, gc.a,
+                            x2, y1, u2, v1, t, gc.r, gc.g, gc.b, gc.a,
+                            x1, y2, u1, v2, t, gc.r, gc.g, gc.b, gc.a,
+                            x2, y2, u2, v2, t, gc.r, gc.g, gc.b, gc.a,
                         ];
 
                     let n = (i * 4) as u32;

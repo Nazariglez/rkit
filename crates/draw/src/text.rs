@@ -1,17 +1,19 @@
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use corelib::gfx::{
-    self, BindGroup, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat,
+    self, BindGroup, Color, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat,
 };
 use corelib::math::{UVec2, Vec2, uvec2, vec2};
 use cosmic_text::fontdb::Source;
 use cosmic_text::{
-    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, Stretch, Style, SwashCache,
-    SwashContent, Weight,
+    Attrs, Buffer, CacheKey, Color as CosmicColor, Family, FontSystem, Metrics, Shaping, Stretch,
+    Style, SwashCache, SwashContent, Weight,
 };
 use etagere::{BucketedAtlasAllocator, size2};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
 use std::borrow::Cow;
+use std::ops::Range;
 use std::sync::Arc;
 use utils::helpers::closest_multiple_of;
 
@@ -71,6 +73,13 @@ pub struct GlyphData {
     pub uvs2: Vec2,
     pub(crate) typ: AtlasType,
     pub(crate) pixelated: bool,
+    pub color: Option<Color>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ColorTextSpan<'a> {
+    pub text: &'a str,
+    pub color: Option<Color>,
 }
 
 pub struct BlockInfo<'a> {
@@ -91,6 +100,7 @@ pub struct TextInfo<'a> {
     pub pos: Vec2,
     pub font: Option<&'a Font>,
     pub text: &'a str,
+    pub spans: Option<&'a [ColorTextSpan<'a>]>,
     pub wrap_width: Option<f32>,
     pub font_size: f32,
     pub line_height: Option<f32>,
@@ -104,6 +114,7 @@ pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
             pos: Default::default(),
             font: None,
             text,
+            spans: None,
             wrap_width: None,
             font_size: 14.0,
             line_height: None,
@@ -162,6 +173,7 @@ struct ProcessData {
     pos: Vec2,
     line_w: f32,
     line_y: f32,
+    color_opt: Option<CosmicColor>,
 }
 
 pub struct TextSystem {
@@ -399,7 +411,42 @@ impl TextSystem {
         self.buffer
             .set_size(&mut self.font_system, text.wrap_width, None);
 
-        if text.wrap_width.is_some() {
+        if let Some(spans) = &text.spans {
+            // for colored text we convert spans to cosmic-text format
+            // TODO: remove it when comisc-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
+            if text.wrap_width.is_some() {
+                if let Some(hinted) = try_add_zwsp_hints_spans(&mut self.temp_hack_string, spans) {
+                    let cosmic_spans = hinted.iter().map(|(range, color)| {
+                        (
+                            &self.temp_hack_string[range.clone()],
+                            color_attrs(attrs, *color),
+                        )
+                    });
+                    self.buffer.set_rich_text(
+                        &mut self.font_system,
+                        cosmic_spans,
+                        attrs,
+                        Shaping::Advanced,
+                    );
+                } else {
+                    let cosmic_spans = spans.iter().map(|s| (s.text, color_attrs(attrs, s.color)));
+                    self.buffer.set_rich_text(
+                        &mut self.font_system,
+                        cosmic_spans,
+                        attrs,
+                        Shaping::Advanced,
+                    );
+                }
+            } else {
+                let cosmic_spans = spans.iter().map(|s| (s.text, color_attrs(attrs, s.color)));
+                self.buffer.set_rich_text(
+                    &mut self.font_system,
+                    cosmic_spans,
+                    attrs,
+                    Shaping::Advanced,
+                );
+            }
+        } else if text.wrap_width.is_some() {
             // TODO: remove it when comisc-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
             let fix_wrap_text = add_zwsp_hints(&mut self.temp_hack_string, text.text);
             self.buffer.set_text(
@@ -463,6 +510,11 @@ impl TextSystem {
                     let pos = text.pos + data.pos + (info.pos.as_vec2() / resolution);
                     let xy = pos - offset + vec2(0.0, data.line_y);
 
+                    let glyph_color = data.color_opt.map(|c| {
+                        let (r, g, b, a) = c.as_rgba_tuple();
+                        Color::rgba_u8(r, g, b, a)
+                    });
+
                     Some(GlyphData {
                         xy,
                         size: screen_size,
@@ -470,6 +522,7 @@ impl TextSystem {
                         uvs2: (info.atlas_pos + atlas_size) / tex_size,
                         typ: info.typ,
                         pixelated,
+                        color: glyph_color,
                     })
                 });
                 self.temp_data.extend(processed);
@@ -539,6 +592,7 @@ impl TextSystem {
                     pos: vec2(glyph.x as _, glyph.y as _) / resolution,
                     line_w: run.line_w,
                     line_y: run.line_y,
+                    color_opt: layout.color_opt,
                 });
 
                 // if it's already in the main cache just skip it
@@ -752,6 +806,64 @@ fn add_zwsp_hints<'a>(temp_hack_string: &mut String, s: &'a str) -> Cow<'a, str>
         }
     }
     Cow::Owned(std::mem::take(temp_hack_string))
+}
+
+// builds cosmic-text attrs with optional color
+#[inline]
+fn color_attrs(attrs: Attrs, color: Option<Color>) -> Attrs {
+    match color.map(|c| c.to_rgba_u8()) {
+        Some([r, g, b, a]) => attrs.color(CosmicColor::rgba(r, g, b, a)),
+        None => attrs,
+    }
+}
+
+type RichSpanRanges = SmallVec<(Range<usize>, Option<Color>), 8>;
+
+// checks if ZWSP hints are needed and builds hinted spans if so
+fn try_add_zwsp_hints_spans(
+    temp: &mut String,
+    spans: &[ColorTextSpan<'_>],
+) -> Option<RichSpanRanges> {
+    let mut prev_space = false;
+    let mut needs_hint = false;
+    for span in spans {
+        if span.text.is_empty() {
+            continue;
+        }
+        let bytes = span.text.as_bytes();
+        if prev_space && bytes[0] != b' ' {
+            needs_hint = true;
+            break;
+        }
+        for w in bytes.windows(2) {
+            if w[0] == b' ' {
+                needs_hint = true;
+                break;
+            }
+        }
+        if needs_hint {
+            break;
+        }
+        prev_space = *bytes.last().unwrap() == b' ';
+    }
+
+    if !needs_hint {
+        return None;
+    }
+
+    temp.clear();
+    let mut ranges = RichSpanRanges::new();
+    for span in spans {
+        let start = temp.len();
+        for ch in span.text.chars() {
+            temp.push(ch);
+            if ch == ' ' {
+                temp.push('\u{200B}');
+            }
+        }
+        ranges.push((start..temp.len(), span.color));
+    }
+    Some(ranges)
 }
 
 #[derive(Copy, Clone, Debug)]
