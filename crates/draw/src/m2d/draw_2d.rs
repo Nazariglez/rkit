@@ -2,7 +2,6 @@ use crate::{
     BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D, get_2d_painter,
     get_mut_2d_painter,
     m2d::{
-        color_text::ColorText2D,
         images::Image2D,
         mat3_stack::Mat3Stack,
         nine_slice::NineSlice2D,
@@ -516,12 +515,6 @@ impl Draw2D {
     #[inline]
     pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D<'a>> {
         Drawing::new(self, Text2D::new(text))
-    }
-
-    // - color text
-    #[inline]
-    pub fn color_text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, ColorText2D<'a>> {
-        Drawing::new(self, ColorText2D::new(text))
     }
 
     #[inline]

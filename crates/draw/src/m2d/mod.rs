@@ -1,6 +1,5 @@
 pub mod batch;
 mod camera;
-mod color_text;
 mod draw_2d;
 mod images;
 mod mat3_stack;
@@ -11,7 +10,6 @@ mod shapes;
 mod text;
 
 pub use camera::*;
-pub use color_text::*;
 pub use draw_2d::*;
 pub use images::*;
 pub use mat3_stack::*;

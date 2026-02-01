@@ -76,12 +76,6 @@ pub struct GlyphData {
     pub color: Option<Color>,
 }
 
-#[derive(Clone, Debug)]
-pub struct ColorTextSpan<'a> {
-    pub text: &'a str,
-    pub color: Option<Color>,
-}
-
 pub struct BlockInfo<'a> {
     pub size: Vec2,
     pub lines: usize,
@@ -100,12 +94,13 @@ pub struct TextInfo<'a> {
     pub pos: Vec2,
     pub font: Option<&'a Font>,
     pub text: &'a str,
-    pub spans: Option<&'a [ColorTextSpan<'a>]>,
     pub wrap_width: Option<f32>,
     pub font_size: f32,
     pub line_height: Option<f32>,
     pub resolution: f32,
     pub h_align: HAlign,
+    pub color_tags: bool,
+    pub default_color: Color,
 }
 
 pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
@@ -114,12 +109,13 @@ pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
             pos: Default::default(),
             font: None,
             text,
-            spans: None,
             wrap_width: None,
             font_size: 14.0,
             line_height: None,
             resolution: 1.0,
             h_align: Default::default(),
+            color_tags: false,
+            default_color: Color::WHITE,
         },
     }
 }
@@ -160,6 +156,16 @@ impl<'a> TextMetricsBuilder<'a> {
         self
     }
 
+    pub fn color_tags(mut self) -> Self {
+        self.info.color_tags = true;
+        self
+    }
+
+    pub fn default_color(mut self, color: Color) -> Self {
+        self.info.default_color = color;
+        self
+    }
+
     pub fn measure(self) -> TextMetrics {
         let BlockInfo { size, lines, .. } = get_mut_text_system()
             .prepare_text(&self.info, true)
@@ -196,6 +202,9 @@ pub struct TextSystem {
 
     // reusable string to avoid allocations
     temp_hack_string: String,
+
+    // storage for parsed color tag spans so we avoid allocations
+    span_ranges: Vec<(Range<usize>, Option<Color>)>,
 }
 
 impl TextSystem {
@@ -276,6 +285,7 @@ impl TextSystem {
             process_data: vec![],
             temp_data: vec![],
             temp_hack_string: String::new(),
+            span_ranges: vec![],
         };
 
         #[cfg(feature = "default-font")]
@@ -411,11 +421,18 @@ impl TextSystem {
         self.buffer
             .set_size(&mut self.font_system, text.wrap_width, None);
 
-        if let Some(spans) = &text.spans {
-            // for colored text we convert spans to cosmic-text format
-            // TODO: remove it when comisc-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
+        if text.color_tags {
+            self.span_ranges.clear();
+            self.span_ranges
+                .extend(parse_color_tag_ranges(text.text, text.default_color));
+
+            // TODO: remove it when cosmic-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
             if text.wrap_width.is_some() {
-                if let Some(hinted) = try_add_zwsp_hints_spans(&mut self.temp_hack_string, spans) {
+                if let Some(hinted) = try_add_zwsp_hints_ranges(
+                    &mut self.temp_hack_string,
+                    text.text,
+                    &self.span_ranges,
+                ) {
                     let cosmic_spans = hinted.iter().map(|(range, color)| {
                         (
                             &self.temp_hack_string[range.clone()],
@@ -429,7 +446,9 @@ impl TextSystem {
                         Shaping::Advanced,
                     );
                 } else {
-                    let cosmic_spans = spans.iter().map(|s| (s.text, color_attrs(attrs, s.color)));
+                    let cosmic_spans = self.span_ranges.iter().map(|(range, color)| {
+                        (&text.text[range.clone()], color_attrs(attrs, *color))
+                    });
                     self.buffer.set_rich_text(
                         &mut self.font_system,
                         cosmic_spans,
@@ -438,7 +457,10 @@ impl TextSystem {
                     );
                 }
             } else {
-                let cosmic_spans = spans.iter().map(|s| (s.text, color_attrs(attrs, s.color)));
+                let cosmic_spans = self
+                    .span_ranges
+                    .iter()
+                    .map(|(range, color)| (&text.text[range.clone()], color_attrs(attrs, *color)));
                 self.buffer.set_rich_text(
                     &mut self.font_system,
                     cosmic_spans,
@@ -808,7 +830,9 @@ fn add_zwsp_hints<'a>(temp_hack_string: &mut String, s: &'a str) -> Cow<'a, str>
     Cow::Owned(std::mem::take(temp_hack_string))
 }
 
-// builds cosmic-text attrs with optional color
+type ColorStack = SmallVec<Color, 4>;
+type SpanRanges = SmallVec<(Range<usize>, Option<Color>), 8>;
+
 #[inline]
 fn color_attrs(attrs: Attrs, color: Option<Color>) -> Attrs {
     match color.map(|c| c.to_rgba_u8()) {
@@ -817,20 +841,20 @@ fn color_attrs(attrs: Attrs, color: Option<Color>) -> Attrs {
     }
 }
 
-type RichSpanRanges = SmallVec<(Range<usize>, Option<Color>), 8>;
-
-// checks if ZWSP hints are needed and builds hinted spans if so
-fn try_add_zwsp_hints_spans(
+// TODO: remove it when cosmic-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
+fn try_add_zwsp_hints_ranges(
     temp: &mut String,
-    spans: &[ColorTextSpan<'_>],
-) -> Option<RichSpanRanges> {
+    text: &str,
+    span_ranges: &[(Range<usize>, Option<Color>)],
+) -> Option<SpanRanges> {
     let mut prev_space = false;
     let mut needs_hint = false;
-    for span in spans {
-        if span.text.is_empty() {
+    for (range, _) in span_ranges {
+        let span_text = &text[range.clone()];
+        if span_text.is_empty() {
             continue;
         }
-        let bytes = span.text.as_bytes();
+        let bytes = span_text.as_bytes();
         if prev_space && bytes[0] != b' ' {
             needs_hint = true;
             break;
@@ -852,18 +876,101 @@ fn try_add_zwsp_hints_spans(
     }
 
     temp.clear();
-    let mut ranges = RichSpanRanges::new();
-    for span in spans {
+    let mut ranges = SpanRanges::new();
+    for (range, color) in span_ranges {
+        let span_text = &text[range.clone()];
         let start = temp.len();
-        for ch in span.text.chars() {
+        for ch in span_text.chars() {
             temp.push(ch);
             if ch == ' ' {
                 temp.push('\u{200B}');
             }
         }
-        ranges.push((start..temp.len(), span.color));
+        ranges.push((start..temp.len(), *color));
     }
     Some(ranges)
+}
+
+const COLOR_TAG_OPEN: &str = "[color:#";
+const COLOR_TAG_CLOSE: &str = "[/color]";
+
+#[inline]
+fn try_parse_open_tag(s: &str) -> Option<(Color, usize)> {
+    let close_bracket = s.find(']')?;
+    let hex_str = &s[..close_bracket];
+    let color = parse_hex_color(hex_str);
+    Some((color, close_bracket + 1))
+}
+
+#[inline]
+fn parse_hex_color(hex: &str) -> Color {
+    let bytes = hex.as_bytes();
+    let mut value: u32 = 0;
+
+    for &b in bytes.iter().take(8) {
+        let nibble = match b {
+            b'0'..=b'9' => b - b'0',
+            b'a'..=b'f' => b - b'a' + 10,
+            b'A'..=b'F' => b - b'A' + 10,
+            _ => 0,
+        };
+        value = (value << 4) | nibble as u32;
+    }
+
+    if bytes.len() <= 6 {
+        value = (value << 8) | 0xFF;
+    }
+
+    Color::hex(value)
+}
+
+fn parse_color_tag_ranges(input: &str, default_color: Color) -> SpanRanges {
+    let mut ranges = SpanRanges::new();
+    let mut color_stack: ColorStack = SmallVec::new();
+    color_stack.push(default_color);
+    let mut cursor = 0;
+    let mut span_start = 0;
+
+    while cursor < input.len() {
+        let remaining = &input[cursor..];
+        let open_pos = remaining.find(COLOR_TAG_OPEN);
+        let close_pos = remaining.find(COLOR_TAG_CLOSE);
+
+        match (open_pos, close_pos) {
+            (Some(op), close) if close.is_none() || op < close.unwrap() => {
+                if cursor + op > span_start {
+                    ranges.push((span_start..cursor + op, Some(*color_stack.last().unwrap())));
+                }
+                let after_prefix = &remaining[op + COLOR_TAG_OPEN.len()..];
+                if let Some((color, consumed)) = try_parse_open_tag(after_prefix) {
+                    color_stack.push(color);
+                    cursor += op + COLOR_TAG_OPEN.len() + consumed;
+                    span_start = cursor;
+                } else {
+                    cursor += op + 1;
+                }
+            }
+            (open, Some(cp)) if open.is_none() || cp < open.unwrap() => {
+                if cursor + cp > span_start {
+                    ranges.push((span_start..cursor + cp, Some(*color_stack.last().unwrap())));
+                }
+                if color_stack.len() > 1 {
+                    color_stack.pop();
+                }
+                cursor += cp + COLOR_TAG_CLOSE.len();
+                span_start = cursor;
+            }
+            (None, None) => {
+                if span_start < input.len() {
+                    ranges.push((span_start..input.len(), Some(*color_stack.last().unwrap())));
+                }
+                break;
+            }
+            _ => break,
+        }
+    }
+
+    ranges
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -896,4 +1003,68 @@ struct GlyphInfo {
     size: Pos<u16>,
     atlas_pos: Vec2,
     typ: AtlasType,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_no_tags() {
+        let ranges = parse_color_tag_ranges("Hello world", Color::WHITE);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].0, 0..11);
+        assert_eq!(ranges[0].1, Some(Color::WHITE));
+    }
+
+    #[test]
+    fn test_parse_single_color_tag() {
+        let input = "Hello [color:#FF0000]red[/color] world";
+        let ranges = parse_color_tag_ranges(input, Color::WHITE);
+        assert_eq!(ranges.len(), 3);
+        assert_eq!(&input[ranges[0].0.clone()], "Hello ");
+        assert_eq!(ranges[0].1, Some(Color::WHITE));
+        assert_eq!(&input[ranges[1].0.clone()], "red");
+        assert_eq!(ranges[1].1, Some(Color::hex(0xFF0000FF)));
+        assert_eq!(&input[ranges[2].0.clone()], " world");
+        assert_eq!(ranges[2].1, Some(Color::WHITE));
+    }
+
+    #[test]
+    fn test_parse_nested_color_tags() {
+        let input = "[color:#FF0000]red [color:#00FF00]green[/color] back[/color]";
+        let ranges = parse_color_tag_ranges(input, Color::WHITE);
+        assert_eq!(ranges.len(), 3);
+        assert_eq!(&input[ranges[0].0.clone()], "red ");
+        assert_eq!(ranges[0].1, Some(Color::hex(0xFF0000FF)));
+        assert_eq!(&input[ranges[1].0.clone()], "green");
+        assert_eq!(ranges[1].1, Some(Color::hex(0x00FF00FF)));
+        assert_eq!(&input[ranges[2].0.clone()], " back");
+        assert_eq!(ranges[2].1, Some(Color::hex(0xFF0000FF)));
+    }
+
+    #[test]
+    fn test_parse_with_alpha() {
+        let input = "[color:#FF000080]semi-transparent[/color]";
+        let ranges = parse_color_tag_ranges(input, Color::WHITE);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(&input[ranges[0].0.clone()], "semi-transparent");
+        assert_eq!(ranges[0].1, Some(Color::hex(0xFF000080)));
+    }
+
+    #[test]
+    fn test_parse_default_color() {
+        let default = Color::hex(0x123456FF);
+        let ranges = parse_color_tag_ranges("text", default);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].1, Some(default));
+    }
+
+    #[test]
+    fn test_parse_hex_color() {
+        assert_eq!(parse_hex_color("FF0000"), Color::hex(0xFF0000FF));
+        assert_eq!(parse_hex_color("00FF00"), Color::hex(0x00FF00FF));
+        assert_eq!(parse_hex_color("0000FF"), Color::hex(0x0000FFFF));
+        assert_eq!(parse_hex_color("FF000080"), Color::hex(0xFF000080));
+    }
 }

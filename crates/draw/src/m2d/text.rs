@@ -195,6 +195,7 @@ pub struct Text2D<'a> {
     res: f32,
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
+    color_tags: bool,
 
     #[pipeline_id]
     pip: DrawPipelineId,
@@ -218,6 +219,7 @@ impl<'a> Text2D<'a> {
             res: 1.0,
             shadow_color: Color::BLACK,
             shadow_offset: None,
+            color_tags: false,
 
             pip: DrawPipelineId::Text,
             transform: None,
@@ -288,6 +290,11 @@ impl<'a> Text2D<'a> {
         self.shadow_offset = Some(offset.into_vec2());
         self
     }
+
+    pub fn color_tags(&mut self) -> &mut Self {
+        self.color_tags = true;
+        self
+    }
 }
 
 impl Element2D for Text2D<'_> {
@@ -318,12 +325,13 @@ fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
         pos: element.position + offset,
         font: element.font,
         text: element.text,
-        spans: None,
         wrap_width: element.max_width,
         font_size: element.size,
         line_height: element.line_height,
         resolution: element.res,
         h_align: element.h_align,
+        color_tags: element.color_tags,
+        default_color: c,
     };
 
     TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
