@@ -19,6 +19,19 @@ impl Default for Locales {
     }
 }
 
+fn line_col_from_byte_pos(source: &str, byte_pos: usize) -> (usize, usize) {
+    let mut pos = byte_pos.min(source.len());
+    while pos > 0 && !source.is_char_boundary(pos) {
+        pos -= 1;
+    }
+
+    let before = &source[..pos];
+    let line = before.as_bytes().iter().filter(|&&b| b == b'\n').count() + 1;
+    let line_start = before.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+    let col = before[line_start..].chars().count() + 1;
+    (line, col)
+}
+
 impl Locales {
     pub fn new(selected_lang: &str, fallback_lang: &str) -> Self {
         Locales {
@@ -32,9 +45,12 @@ impl Locales {
     pub fn load(&mut self, lang: &str, source: &str) -> Result<(), String> {
         let res = FluentResource::try_new(source.to_string()).map_err(|(_self, errs)| {
             errs.iter()
-                .map(|e| e.to_string())
+                .map(|e| {
+                    let (line, col) = line_col_from_byte_pos(source, e.pos.start);
+                    format!("line {line}, col {col}: {e}")
+                })
                 .collect::<Vec<_>>()
-                .join("\n")
+                .join("; ")
         })?;
         let lang_id: LanguageIdentifier = lang
             .parse()
@@ -190,6 +206,11 @@ bye = До свидания
 count = У вас { $n } сообщений.
 "#;
 
+    const FTL_BAD: &str = r#"
+hello = Hello
+@bad = nope
+"#;
+
     #[test]
     fn test_english() {
         let mut loc = Locales::default();
@@ -221,6 +242,15 @@ count = У вас { $n } сообщений.
             strip_isolates(&loc.translate_with_lang("fr", "bye", None).unwrap()),
             "Goodbye"
         );
+    }
+
+    #[test]
+    fn test_load_error_includes_line_col_single_line() {
+        let mut loc = Locales::default();
+        let err = loc.load("en", FTL_BAD).unwrap_err();
+        assert!(err.contains("line 2"));
+        assert!(err.contains("col"));
+        assert!(!err.contains('\n'));
     }
 
     #[test]
