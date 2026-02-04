@@ -46,6 +46,7 @@ web-time.workspace = true
 # Process images
 image = { version = "0.25.8", default-features = false, features = [
     "png",
+    "ico",
     "jpeg",
     "webp",
     "rayon",

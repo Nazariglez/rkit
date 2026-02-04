@@ -2,6 +2,7 @@
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
+use std::path::PathBuf;
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalSize, PhysicalPosition},
@@ -9,14 +10,14 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode as WKeyCode, PhysicalKey},
     monitor::MonitorHandle,
-    window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId},
+    window::{CursorGrabMode, Fullscreen, Icon, Window, WindowAttributes, WindowId},
 };
 
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowAttributesExtWebSys;
 
 use crate::{
-    app::WindowConfig,
+    app::{IconSource, WindowConfig},
     backend::{
         limiter::{FpsLimiter, LimitMode},
         traits::{BackendImpl, GfxBackendImpl},
@@ -582,6 +583,8 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         pixelated: _,
         cursor: _,
         fullscreen,
+        window_icon,
+        taskbar_icon,
     } = config;
 
     let mut attrs = WindowAttributes::default()
@@ -602,7 +605,69 @@ fn window_attrs(config: WindowConfig) -> WindowAttributes {
         attrs = attrs.with_fullscreen(Some(fullscreen_mode(None)));
     }
 
+    attrs = attrs.with_window_icon(load_icon(&window_icon));
+
+    #[cfg(target_os = "windows")]
+    {
+        use winit::platform::windows::WindowAttributesExtWindows;
+
+        attrs = attrs.with_taskbar_icon(load_icon(&taskbar_icon));
+    }
+
     attrs
+}
+
+fn load_icon(source: &Option<IconSource>) -> Option<Icon> {
+    match source {
+        Some(IconSource::Path(path)) => load_icon_from_path(path),
+        Some(IconSource::Bytes(data)) => load_icon_from_data(*data),
+        None => None,
+    }
+}
+
+fn load_icon_from_path(path: &PathBuf) -> Option<Icon> {
+    let image = match image::open(path) {
+        Ok(image) => image.into_rgba8(),
+        Err(err) => {
+            log::warn!("Failed to open icon path '{}': {err}", path.display());
+            return None;
+        }
+    };
+
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+
+    match Icon::from_rgba(rgba, width, height) {
+        Ok(icon) => Some(icon),
+        Err(err) => {
+            log::warn!(
+                "Failed to create icon from path '{}': {err}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+fn load_icon_from_data(data: &'static [u8]) -> Option<Icon> {
+    let image = match image::load_from_memory(data) {
+        Ok(image) => image.into_rgba8(),
+        Err(err) => {
+            log::warn!("Failed to load icon from bytes: {err}");
+            return None;
+        }
+    };
+
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+
+    match Icon::from_rgba(rgba, width, height) {
+        Ok(icon) => Some(icon),
+        Err(err) => {
+            log::warn!("Failed to create icon from bytes: {err}");
+            None
+        }
+    }
 }
 
 fn mouse_btn_cast(wbtn: WMouseButton) -> MouseButton {

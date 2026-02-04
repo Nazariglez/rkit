@@ -118,6 +118,18 @@ impl WindowConfigPlugin {
         self.fullscreen = fullscreen;
         self
     }
+
+    #[inline]
+    pub fn window_icon(mut self, icon: impl Into<IconSource>) -> Self {
+        self.window_icon = Some(icon.into());
+        self
+    }
+
+    #[inline]
+    pub fn taskbar_icon(mut self, icon: impl Into<IconSource>) -> Self {
+        self.taskbar_icon = Some(icon.into());
+        self
+    }
 }
 
 #[derive(Resource, Default)]
