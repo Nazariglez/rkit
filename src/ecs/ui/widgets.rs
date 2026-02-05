@@ -92,6 +92,7 @@ pub struct UIText {
     pub line_height: Option<f32>,
     pub shadow_color: Color,
     pub shadow_offset: Option<Vec2>,
+    pub color_tags: bool,
 }
 
 impl Default for UIText {
@@ -105,6 +106,7 @@ impl Default for UIText {
             line_height: None,
             shadow_color: Color::BLACK,
             shadow_offset: None,
+            color_tags: false,
         }
     }
 }
@@ -125,6 +127,7 @@ fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
         line_height: text.line_height,
         shadow_color: text.shadow_color,
         shadow_offset: text.shadow_offset,
+        color_tags: text.color_tags,
     };
 
     draw_text(draw, &data);
@@ -141,10 +144,15 @@ struct TextData<'a> {
     line_height: Option<f32>,
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
+    color_tags: bool,
 }
 
 fn draw_text(draw: &mut Draw2D, data: &TextData) {
     let mut d_text = draw.text(data.text);
+
+    if data.color_tags {
+        d_text.color_tags();
+    }
 
     if let Some(font) = data.font {
         d_text.font(font);
