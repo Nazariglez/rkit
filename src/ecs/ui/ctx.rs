@@ -97,6 +97,9 @@ fn measure_text(
     if let Some(lh) = text.line_height {
         metrics = metrics.line_height(lh);
     }
+    if text.color_tags {
+        metrics = metrics.color_tags();
+    }
 
     let max_width = known_dimensions.width.or(match available_space.width {
         AvailableSpace::Definite(w) => Some(w),
