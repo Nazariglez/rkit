@@ -518,6 +518,11 @@ fn make_pascal_dir_ident(rel_dir: &Path) -> syn::Ident {
     keyword_guard_ident(&name)
 }
 
+fn make_atlas_type_ident(namespace: &str) -> syn::Ident {
+    let name = format!("{}Atlas", namespace.to_upper_camel_case());
+    keyword_guard_ident(&name)
+}
+
 /// Generate PascalCase root struct name from the module identifier.
 fn pascal_from_ident(ident: &syn::Ident) -> syn::Ident {
     let name = {
@@ -753,6 +758,8 @@ fn gen_dir_node(
 ) {
     let ty_ident = if node.rel_dir.as_os_str().is_empty() {
         root_struct_ident.clone()
+    } else if let Some(ref atlas_info) = node.atlas_info {
+        make_atlas_type_ident(&atlas_info.namespace)
     } else {
         make_pascal_dir_ident(&node.rel_dir)
     };
@@ -771,6 +778,8 @@ fn gen_dir_node(
             let field_ident = make_snake_ident(dir_name);
             let field_ty = if child.rel_dir.as_os_str().is_empty() {
                 root_struct_ident.clone()
+            } else if let Some(ref atlas_info) = child.atlas_info {
+                make_atlas_type_ident(&atlas_info.namespace)
             } else {
                 make_pascal_dir_ident(&child.rel_dir)
             };
@@ -886,6 +895,8 @@ fn gen_parse_expr(
 ) -> TokenStream2 {
     let this_ty = if node.rel_dir.as_os_str().is_empty() {
         root_struct_ident.clone()
+    } else if let Some(ref atlas_info) = node.atlas_info {
+        make_atlas_type_ident(&atlas_info.namespace)
     } else {
         make_pascal_dir_ident(&node.rel_dir)
     };
