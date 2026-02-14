@@ -21,12 +21,38 @@ const WITH_EXT_ATTR: &str = "with_ext";
 const EMBED_ATTR: &str = "embed";
 const LIST_ID_ATTR: &str = "id";
 const CUSTOM_ATTR: &str = "custom";
+const ATLAS_ATTR: &str = "atlas";
 
-#[derive(Debug)]
 struct CustomField {
     name: String,
     ty: Type,
     parser: syn::Path,
+}
+
+#[derive(serde::Deserialize)]
+struct MacroAtlasRoot {
+    frames: Vec<MacroAtlasFrame>,
+    meta: MacroAtlasMeta,
+}
+
+#[derive(serde::Deserialize)]
+struct MacroAtlasFrame {
+    filename: String,
+}
+
+#[derive(serde::Deserialize)]
+struct MacroAtlasMeta {
+    image: Option<String>,
+}
+
+#[derive(Debug)]
+struct AtlasInfo {
+    json_rel: String,
+    parent_dir: PathBuf,
+    namespace: String,
+    image_rel: String,
+    image_already_exists: bool,
+    frame_names: Vec<String>,
 }
 
 pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -37,6 +63,7 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut list_id: Option<String> = None;
     let mut parser_map: HashMap<String, Type> = HashMap::new();
     let mut custom_fields: Vec<CustomField> = vec![];
+    let mut atlas_paths: Vec<String> = vec![];
 
     let parser = syn::meta::parser(|meta| {
         if meta.path.is_ident(ROOT_ATTR) {
@@ -106,9 +133,27 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
                 });
                 Ok(())
             })
+        } else if meta.path.is_ident(ATLAS_ATTR) {
+            let arr: ExprArray = meta.value()?.parse()?;
+            for e in arr.elems.iter() {
+                match e {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }) => {
+                        atlas_paths.push(s.value());
+                    }
+                    _ => {
+                        return Err(meta.error(
+                            "atlas expects string literals, e.g. atlas = [\"img/sprites.json\"]",
+                        ));
+                    }
+                }
+            }
+            Ok(())
         } else {
             Err(meta
-                .error("unknown attribute; use: root, skip, types(...), with_ext, embed, id, or custom(...)"))
+                .error("unknown attribute; use: root, skip, types(...), with_ext, embed, id, custom(...), or atlas"))
         }
     });
 
@@ -136,15 +181,28 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let skipset = match build_skipset(user_skip) {
         Ok(s) => s,
-        Err(e) => abort_call_site!("{}", e),
+        Err(e) => abort_call_site!("{e}"),
     };
 
     let files = match collect_files_with_gitignore(&root_abs, &skipset) {
         Ok(v) => v,
-        Err(e) => abort_call_site!("{}", e),
+        Err(e) => abort_call_site!("{e}"),
     };
 
-    let tree = DirNode::from_files(&files);
+    let mut tree = DirNode::from_files(&files);
+
+    // process atlas files
+    let atlas_infos = match process_atlases(&atlas_paths, &root_abs, &root_rel, &tree) {
+        Ok(infos) => infos,
+        Err(e) => abort_call_site!("{e}"),
+    };
+
+    // inject atlas into the tree
+    for atlas_info in &atlas_infos {
+        if let Err(e) = inject_atlas_into_tree(&mut tree, atlas_info) {
+            abort_call_site!("{e}");
+        }
+    }
 
     let mut errs: Vec<String> = vec![];
     tree.collect_collisions(&mut errs, with_ext);
@@ -167,6 +225,162 @@ pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     items.push(syn::Item::Verbatim(generated));
     TokenStream::from(quote! { #module })
+}
+
+fn process_atlases(
+    atlas_paths: &[String],
+    root_abs: &Path,
+    root_rel: &str,
+    tree: &DirNode,
+) -> Result<Vec<AtlasInfo>, String> {
+    use std::collections::HashSet;
+
+    let mut atlas_infos = vec![];
+    let mut existing_files: HashSet<String> = HashSet::new();
+
+    // collect all existing files in tree
+    fn collect_files(node: &DirNode, existing: &mut HashSet<String>, base: &str) {
+        for f in &node.files {
+            let rel = f.to_string_lossy().replace('\\', "/");
+            let full = if base.is_empty() {
+                rel
+            } else {
+                format!("{}/{}", base, rel)
+            };
+            existing.insert(full);
+        }
+        for child in node.dirs.values() {
+            collect_files(child, existing, base);
+        }
+    }
+    collect_files(tree, &mut existing_files, root_rel);
+
+    for atlas_path in atlas_paths {
+        // resolve relative to root
+        let atlas_abs = root_abs.join(atlas_path);
+
+        let json_bytes = std::fs::read(&atlas_abs)
+            .map_err(|e| format!("Cannot read atlas '{}': {}", atlas_path, e))?;
+
+        let atlas_root: MacroAtlasRoot = serde_json::from_slice(&json_bytes)
+            .map_err(|e| format!("Cannot parse atlas '{}': {}", atlas_path, e))?;
+
+        if atlas_root.frames.is_empty() {
+            return Err(format!("Atlas '{}' has no frames", atlas_path));
+        }
+
+        // extract parent directory and namespace
+        let atlas_pathbuf = PathBuf::from(atlas_path);
+        let parent_dir = atlas_pathbuf
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::new());
+
+        let namespace = atlas_pathbuf
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| format!("Invalid atlas filename: {}", atlas_path))?
+            .to_string();
+
+        let image_filename = atlas_root
+            .meta
+            .image
+            .unwrap_or_else(|| format!("{}.png", namespace));
+
+        let image_rel = if parent_dir.as_os_str().is_empty() {
+            image_filename.clone()
+        } else {
+            format!(
+                "{}/{}",
+                parent_dir.to_string_lossy().replace('\\', "/"),
+                image_filename
+            )
+        };
+
+        // check if image already exists in tree
+        let full_image_path = if root_rel.is_empty() {
+            image_rel.clone()
+        } else {
+            format!("{}/{}", root_rel, image_rel)
+        };
+        let image_already_exists = existing_files.contains(&full_image_path);
+
+        let frame_names: Vec<String> = atlas_root
+            .frames
+            .iter()
+            .map(|f| f.filename.clone())
+            .collect();
+
+        atlas_infos.push(AtlasInfo {
+            json_rel: atlas_path.clone(),
+            parent_dir,
+            namespace,
+            image_rel,
+            image_already_exists,
+            frame_names,
+        });
+    }
+
+    Ok(atlas_infos)
+}
+
+fn inject_atlas_into_tree(tree: &mut DirNode, atlas_info: &AtlasInfo) -> Result<(), String> {
+    let mut node = tree;
+    for comp in atlas_info.parent_dir.iter() {
+        let name = comp.to_string_lossy().to_string();
+        node = node.dirs.get_mut(&name).ok_or_else(|| {
+            format!(
+                "Parent directory '{}' not found for atlas",
+                atlas_info.parent_dir.display()
+            )
+        })?;
+    }
+
+    // remove JSON file from files list
+    let json_filename = PathBuf::from(&atlas_info.json_rel)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| format!("Invalid JSON filename: {}", atlas_info.json_rel))?
+        .to_string();
+
+    node.files
+        .retain(|f| f.file_name().and_then(|s| s.to_str()) != Some(&json_filename));
+
+    // remove image file from files list if it exists
+    let image_filename = PathBuf::from(&atlas_info.image_rel)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| format!("Invalid image filename: {}", atlas_info.image_rel))?
+        .to_string();
+
+    node.files
+        .retain(|f| f.file_name().and_then(|s| s.to_str()) != Some(&image_filename));
+
+    let namespace_path = if atlas_info.parent_dir.as_os_str().is_empty() {
+        PathBuf::from(&atlas_info.namespace)
+    } else {
+        atlas_info.parent_dir.join(&atlas_info.namespace)
+    };
+
+    let namespace_node = DirNode {
+        rel_dir: namespace_path,
+        files: vec![],
+        dirs: BTreeMap::new(),
+        atlas_info: Some(AtlasInfo {
+            json_rel: atlas_info.json_rel.clone(),
+            parent_dir: atlas_info.parent_dir.clone(),
+            namespace: atlas_info.namespace.clone(),
+            image_rel: atlas_info.image_rel.clone(),
+            image_already_exists: atlas_info.image_already_exists,
+            frame_names: atlas_info.frame_names.clone(),
+        }),
+    };
+
+    // insert into parent's dirs
+    node.dirs
+        .insert(atlas_info.namespace.clone(), namespace_node);
+
+    Ok(())
 }
 
 fn build_skipset(user_skip: Vec<String>) -> Result<GlobSet, String> {
@@ -318,6 +532,7 @@ struct DirNode {
     rel_dir: PathBuf,
     files: Vec<PathBuf>,
     dirs: BTreeMap<String, DirNode>,
+    atlas_info: Option<AtlasInfo>,
 }
 
 impl DirNode {
@@ -326,6 +541,7 @@ impl DirNode {
             rel_dir: PathBuf::new(),
             files: vec![],
             dirs: BTreeMap::new(),
+            atlas_info: None,
         };
         for f in files {
             root.insert_file(f);
@@ -346,6 +562,7 @@ impl DirNode {
                     rel_dir: cur_rel.clone(),
                     files: vec![],
                     dirs: BTreeMap::new(),
+                    atlas_info: None,
                 });
             }
         }
@@ -359,7 +576,6 @@ impl DirNode {
         }
     }
 
-    /// Detect naming collisions by simulating field name generation (critical for catching compile errors early).
     fn collect_collisions(&self, errs: &mut Vec<String>, with_ext: bool) {
         use std::collections::HashMap;
         let mut seen: HashMap<String, PathBuf> = HashMap::new();
@@ -390,12 +606,15 @@ impl DirNode {
             }
         }
 
-        for dir_name in self.dirs.keys() {
+        for (dir_name, child) in &self.dirs {
             let key = snake_with_digit_boundaries(dir_name);
             if let Some(conf) = seen.get(&key) {
+                let is_atlas = child.atlas_info.is_some();
+                let entity_type = if is_atlas { "atlas" } else { "dir" };
                 errs.push(format!(
-                    "collision in '{}': dir '{}' and file '{}' -> '{}'",
+                    "collision in '{}': {} '{}' and file '{}' -> '{}'",
                     display_rel(&self.rel_dir),
+                    entity_type,
                     dir_name,
                     conf.display(),
                     key
@@ -403,7 +622,22 @@ impl DirNode {
             }
         }
 
+        // Check atlas frame name collisions
         for child in self.dirs.values() {
+            if let Some(ref atlas_info) = child.atlas_info {
+                let mut frame_seen: HashMap<String, String> = HashMap::new();
+                for frame_name in &atlas_info.frame_names {
+                    let key = make_snake_ident(frame_name).to_string();
+                    if let Some(prev) = frame_seen.get(&key) {
+                        errs.push(format!(
+                            "collision in atlas '{}': frames '{}' and '{}' -> '{}'",
+                            atlas_info.json_rel, prev, frame_name, key
+                        ));
+                    } else {
+                        frame_seen.insert(key, frame_name.clone());
+                    }
+                }
+            }
             child.collect_collisions(errs, with_ext);
         }
     }
@@ -526,46 +760,53 @@ fn gen_dir_node(
     let mut field_idents = vec![];
     let mut field_types = vec![];
 
-    for (dir_name, child) in &node.dirs {
-        let field_ident = make_snake_ident(dir_name);
-        let field_ty = if child.rel_dir.as_os_str().is_empty() {
-            root_struct_ident.clone()
-        } else {
-            make_pascal_dir_ident(&child.rel_dir)
-        };
-        field_idents.push(field_ident);
-        field_types.push(quote!(#field_ty));
-        gen_dir_node(
-            child,
-            parsers,
-            root_struct_ident,
-            defs,
-            with_ext,
-            custom_fields,
-        );
-    }
-
-    for f in &node.files {
-        let field_ident = field_ident_from_filename(f, with_ext);
-        let ext = f
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        let field_ty = parsers
-            .get(&ext)
-            .map_or_else(|| quote!(::std::vec::Vec<u8>), |ty| quote!(#ty));
-        field_idents.push(field_ident);
-        field_types.push(field_ty);
-    }
-
-    // Add custom fields if this is the root node
-    if node.rel_dir.as_os_str().is_empty() {
-        for custom_field in custom_fields {
-            let field_ident = make_snake_ident(&custom_field.name);
-            let field_ty = &custom_field.ty;
+    if let Some(ref atlas_info) = node.atlas_info {
+        for frame_name in &atlas_info.frame_names {
+            let field_ident = make_snake_ident(frame_name);
+            field_idents.push(field_ident);
+            field_types.push(quote!(Sprite));
+        }
+    } else {
+        for (dir_name, child) in &node.dirs {
+            let field_ident = make_snake_ident(dir_name);
+            let field_ty = if child.rel_dir.as_os_str().is_empty() {
+                root_struct_ident.clone()
+            } else {
+                make_pascal_dir_ident(&child.rel_dir)
+            };
             field_idents.push(field_ident);
             field_types.push(quote!(#field_ty));
+            gen_dir_node(
+                child,
+                parsers,
+                root_struct_ident,
+                defs,
+                with_ext,
+                custom_fields,
+            );
+        }
+
+        for f in &node.files {
+            let field_ident = field_ident_from_filename(f, with_ext);
+            let ext = f
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let field_ty = parsers
+                .get(&ext)
+                .map_or_else(|| quote!(::std::vec::Vec<u8>), |ty| quote!(#ty));
+            field_idents.push(field_ident);
+            field_types.push(field_ty);
+        }
+
+        if node.rel_dir.as_os_str().is_empty() {
+            for custom_field in custom_fields {
+                let field_ident = make_snake_ident(&custom_field.name);
+                let field_ty = &custom_field.ty;
+                field_idents.push(field_ident);
+                field_types.push(quote!(#field_ty));
+            }
         }
     }
 
@@ -619,6 +860,11 @@ fn gather_full_paths(root: &DirNode, root_rel: &str) -> Vec<String> {
             acc.push(build_full_path(base, &rel));
         }
         for child in node.dirs.values() {
+            // if this is an atlas namespace add its JSON and image paths
+            if let Some(ref atlas_info) = child.atlas_info {
+                acc.push(build_full_path(base, &atlas_info.json_rel));
+                acc.push(build_full_path(base, &atlas_info.image_rel));
+            }
             rec(child, acc, base);
         }
     }
@@ -627,7 +873,7 @@ fn gather_full_paths(root: &DirNode, root_rel: &str) -> Vec<String> {
     out
 }
 
-/// Generate code that extracts assets from loader and constructs the typed tree.
+/// generate code that extracts assets from loader and constructs the typed tree.
 fn gen_parse_expr(
     node: &DirNode,
     root_struct_ident: &syn::Ident,
@@ -647,77 +893,149 @@ fn gen_parse_expr(
     let mut pre_lets = vec![];
     let mut field_inits = vec![];
 
-    for (dir_name, child) in &node.dirs {
-        let field_ident = make_snake_ident(dir_name);
-        let child_expr = gen_parse_expr(
-            child,
-            root_struct_ident,
-            root_rel,
-            with_ext,
-            path_to_idx,
-            embed,
-            parsers,
-            custom_fields,
-        );
-        pre_lets.push(quote! { let #field_ident = #child_expr; });
-        field_inits.push(quote!(#field_ident: #field_ident));
-    }
+    // check if this is an atlas namespac
+    if let Some(ref atlas_info) = node.atlas_info {
+        let json_full = build_full_path(root_rel, &atlas_info.json_rel);
+        let json_idx = *path_to_idx
+            .get(&json_full)
+            .expect("atlas JSON must exist in PATHS/DATA mapping");
+        let json_idx_lit = syn::LitInt::new(&json_idx.to_string(), Span::call_site());
 
-    for f in &node.files {
-        let field_ident = field_ident_from_filename(f, with_ext);
-        let ext = f
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        let field_ty: TokenStream2 = parsers
-            .get(&ext)
-            .map_or_else(|| quote!(::std::vec::Vec<u8>), |ty| quote!(#ty));
+        let image_full = build_full_path(root_rel, &atlas_info.image_rel);
+        let image_idx = *path_to_idx
+            .get(&image_full)
+            .expect("atlas image must exist in PATHS/DATA mapping");
+        let image_idx_lit = syn::LitInt::new(&image_idx.to_string(), Span::call_site());
 
-        let rel = f.to_string_lossy().replace('\\', "/");
-        let full = build_full_path(root_rel, &rel);
-        let idx = *path_to_idx
-            .get(&full)
-            .expect("path must exist in PATHS/DATA mapping");
-        let idx_lit = syn::LitInt::new(&idx.to_string(), Span::call_site());
-
-        let id_expr = if embed {
-            quote!(Self::DATA[#idx_lit].0)
+        let json_id_expr = if embed {
+            quote!(Self::DATA[#json_idx_lit].0)
         } else {
-            quote!(Self::PATHS[#idx_lit])
+            quote!(Self::PATHS[#json_idx_lit])
         };
 
+        let image_id_expr = if embed {
+            quote!(Self::DATA[#image_idx_lit].0)
+        } else {
+            quote!(Self::PATHS[#image_idx_lit])
+        };
+
+        let json_lit = LitStr::new(&json_full, Span::call_site());
+        let image_lit = LitStr::new(&image_full, Span::call_site());
+
         pre_lets.push(quote! {
-            let #field_ident: #field_ty = match loader.take::<#field_ty>(#id_expr) {
+            let __atlas_base: Sprite = match loader.take::<Sprite>(#image_id_expr) {
                 Some(v) => v,
                 None => return Err(::std::format!(
-                    "asset '{}' missing or wrong type (expected {})",
-                    #id_expr,
-                    ::core::any::type_name::<#field_ty>(),
+                    "atlas base image '{}' missing or wrong type",
+                    #image_lit,
                 )),
             };
         });
-        field_inits.push(quote!(#field_ident: #field_ident));
-    }
 
-    if node.rel_dir.as_os_str().is_empty() {
-        for custom_field in custom_fields {
-            let field_ident = make_snake_ident(&custom_field.name);
-            let field_ty = &custom_field.ty;
-            let parser_fn = &custom_field.parser;
+        pre_lets.push(quote! {
+            let __atlas_json: ::std::vec::Vec<u8> = match loader.take::<::std::vec::Vec<u8>>(#json_id_expr) {
+                Some(v) => v,
+                None => return Err(::std::format!(
+                    "atlas json '{}' missing",
+                    #json_lit,
+                )),
+            };
+        });
+
+        pre_lets.push(quote! {
+            let mut __atlas_map = create_sprites_from_spritesheet(&__atlas_json, &__atlas_base)
+                .map_err(|e| ::std::format!("atlas '{}' parse error: {}", #json_lit, e))?;
+        });
+
+        // extract each frame
+        for frame_name in &atlas_info.frame_names {
+            let field_ident = make_snake_ident(frame_name);
+            let frame_lit = LitStr::new(frame_name, Span::call_site());
 
             pre_lets.push(quote! {
-                let #field_ident: #field_ty = match #parser_fn(world, loader) {
-                    Ok(Some(v)) => v,
-                    Ok(None) => return Ok(None),
-                    Err(e) => return Err(::std::format!(
-                        "custom field '{}' parser failed: {}",
-                        stringify!(#field_ident),
-                        e
+                let #field_ident: Sprite = __atlas_map.remove(#frame_lit)
+                    .ok_or_else(|| ::std::format!(
+                        "atlas frame '{}' not found in '{}'",
+                        #frame_lit,
+                        #json_lit,
+                    ))?;
+            });
+            field_inits.push(quote!(#field_ident: #field_ident));
+        }
+    } else {
+        // normal directory node processing
+        for (dir_name, child) in &node.dirs {
+            let field_ident = make_snake_ident(dir_name);
+            let child_expr = gen_parse_expr(
+                child,
+                root_struct_ident,
+                root_rel,
+                with_ext,
+                path_to_idx,
+                embed,
+                parsers,
+                custom_fields,
+            );
+            pre_lets.push(quote! { let #field_ident = #child_expr; });
+            field_inits.push(quote!(#field_ident: #field_ident));
+        }
+
+        for f in &node.files {
+            let field_ident = field_ident_from_filename(f, with_ext);
+            let ext = f
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let field_ty: TokenStream2 = parsers
+                .get(&ext)
+                .map_or_else(|| quote!(::std::vec::Vec<u8>), |ty| quote!(#ty));
+
+            let rel = f.to_string_lossy().replace('\\', "/");
+            let full = build_full_path(root_rel, &rel);
+            let idx = *path_to_idx
+                .get(&full)
+                .expect("path must exist in PATHS/DATA mapping");
+            let idx_lit = syn::LitInt::new(&idx.to_string(), Span::call_site());
+
+            let id_expr = if embed {
+                quote!(Self::DATA[#idx_lit].0)
+            } else {
+                quote!(Self::PATHS[#idx_lit])
+            };
+
+            pre_lets.push(quote! {
+                let #field_ident: #field_ty = match loader.take::<#field_ty>(#id_expr) {
+                    Some(v) => v,
+                    None => return Err(::std::format!(
+                        "asset '{}' missing or wrong type (expected {})",
+                        #id_expr,
+                        ::core::any::type_name::<#field_ty>(),
                     )),
                 };
             });
             field_inits.push(quote!(#field_ident: #field_ident));
+        }
+
+        if node.rel_dir.as_os_str().is_empty() {
+            for custom_field in custom_fields {
+                let field_ident = make_snake_ident(&custom_field.name);
+                let field_ty = &custom_field.ty;
+                let parser_fn = &custom_field.parser;
+
+                pre_lets.push(quote! {
+                    let #field_ident: #field_ty = match #parser_fn(world, loader) {
+                        Ok(Some(v)) => v,
+                        Ok(None) => return Ok(None),
+                        Err(e) => return Err(::std::format!(
+                            "custom field '{}' parser failed: {}",
+                            stringify!(#field_ident),
+                            e
+                        )),
+                    };
+                });
+                field_inits.push(quote!(#field_ident: #field_ident));
+            }
         }
     }
 
@@ -773,5 +1091,30 @@ mod tests {
         assert_eq!(key, "power_up_12_ogg");
         let field = make_snake_ident("powerUp12_ogg").to_string();
         assert_eq!(field, "power_up_12_ogg");
+    }
+
+    #[test]
+    fn atlas_frame_name_normalization() {
+        assert_eq!(
+            make_snake_ident("player_idle.png").to_string(),
+            "player_idle_png"
+        );
+        assert_eq!(
+            make_snake_ident("PlayerRun.png").to_string(),
+            "player_run_png"
+        );
+        assert_eq!(
+            make_snake_ident("ui/button.png").to_string(),
+            "ui_button_png"
+        );
+        assert_eq!(make_snake_ident("Icon2D.png").to_string(), "icon_2_d_png");
+    }
+
+    #[test]
+    fn atlas_frame_collision_detection() {
+        let frame1 = make_snake_ident("Idle.png").to_string();
+        let frame2 = make_snake_ident("idle.png").to_string();
+        assert_eq!(frame1, frame2, "These should collide");
+        assert_eq!(frame1, "idle_png");
     }
 }

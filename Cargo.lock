@@ -2783,6 +2783,8 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
+ "serde",
+ "serde_json",
  "syn",
  "unicode-ident",
 ]
