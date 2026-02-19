@@ -857,7 +857,9 @@ impl GfxBackend {
             log::info!("Fallback to WebGL");
             Backends::GL
         } else {
-            Backends::default()
+            Backends::from_env()
+                .filter(|b| !b.is_empty())
+                .unwrap_or(Backends::default())
         };
 
         let descriptor = InstanceDescriptor {
