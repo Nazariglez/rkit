@@ -66,6 +66,14 @@ impl Font {
 }
 
 #[derive(Debug)]
+pub struct OutlineGlyphData {
+    pub xy: Vec2,
+    pub size: Vec2,
+    pub uvs1: Vec2,
+    pub uvs2: Vec2,
+}
+
+#[derive(Debug)]
 pub struct GlyphData {
     pub xy: Vec2,
     pub size: Vec2,
@@ -74,6 +82,7 @@ pub struct GlyphData {
     pub(crate) typ: AtlasType,
     pub(crate) pixelated: bool,
     pub color: Option<Color>,
+    pub outline: Option<OutlineGlyphData>,
 }
 
 pub struct BlockInfo<'a> {
@@ -101,6 +110,7 @@ pub struct TextInfo<'a> {
     pub h_align: HAlign,
     pub color_tags: bool,
     pub default_color: Color,
+    pub outline_width: u16,
 }
 
 pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
@@ -116,6 +126,7 @@ pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
             h_align: Default::default(),
             color_tags: false,
             default_color: Color::WHITE,
+            outline_width: 0,
         },
     }
 }
@@ -166,12 +177,23 @@ impl<'a> TextMetricsBuilder<'a> {
         self
     }
 
+    pub fn outline(mut self, width: u16) -> Self {
+        self.info.outline_width = width;
+        self
+    }
+
     pub fn measure(self) -> TextMetrics {
         let BlockInfo { size, lines, .. } = get_mut_text_system()
             .prepare_text(&self.info, true)
             .unwrap();
         TextMetrics { size, lines }
     }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+struct GlyphCacheKey {
+    key: CacheKey,
+    outline: u16,
 }
 
 struct ProcessData {
@@ -187,7 +209,7 @@ pub struct TextSystem {
     pub(crate) color: AtlasData,
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
-    cache: FxHashMap<CacheKey, GlyphInfo>,
+    cache: FxHashMap<GlyphCacheKey, GlyphInfo>,
     font_system: FontSystem,
     swash: SwashCache,
     buffer: Buffer,
@@ -205,6 +227,9 @@ pub struct TextSystem {
 
     // storage for parsed color tag spans so we avoid allocations
     span_ranges: Vec<(Range<usize>, Option<Color>)>,
+
+    // reusable buffer used to avoid per glyph allocations
+    temp_outline_buff: Vec<u8>,
 }
 
 impl TextSystem {
@@ -285,6 +310,7 @@ impl TextSystem {
             process_data: vec![],
             temp_data: vec![],
             temp_hack_string: String::new(),
+            temp_outline_buff: vec![],
             span_ranges: vec![],
         };
 
@@ -488,7 +514,7 @@ impl TextSystem {
 
         // do not mess with textures when we only want the size of the block
         if only_measure {
-            let (size, lines) = self.measure()?;
+            let (size, lines) = self.measure(text.outline_width)?;
             return Ok(BlockInfo {
                 size,
                 lines,
@@ -496,7 +522,7 @@ impl TextSystem {
             });
         }
 
-        match self.process(resolution)? {
+        match self.process(resolution, text.outline_width)? {
             PostAction::Restore => {
                 self.restore();
                 self.prepare_text(text, false)
@@ -509,8 +535,15 @@ impl TextSystem {
                 // cleaning the temporal data shared with the user at the end
                 self.temp_data.clear();
 
+                let outline_width = text.outline_width;
+                let outline_shift = outline_width as f32 / resolution;
+
                 let processed = self.process_data.iter().filter_map(|data| {
-                    let info = self.cache.get(&data.key)?;
+                    let normal_key = GlyphCacheKey {
+                        key: data.key,
+                        outline: 0,
+                    };
+                    let info = self.cache.get(&normal_key)?;
 
                     let tex_size = match info.typ {
                         AtlasType::None => return None,
@@ -536,7 +569,12 @@ impl TextSystem {
                     } else {
                         screen_size
                     };
-                    let pos = text.pos + data.pos + (info.pos.as_vec2() / resolution);
+
+                    // offset the glyph position so the content stays centered
+                    let pos = text.pos
+                        + data.pos
+                        + (info.pos.as_vec2() / resolution)
+                        + vec2(outline_shift, outline_shift);
                     let xy = pos - offset + vec2(0.0, data.line_y);
                     let xy = if pixelated { xy.round() } else { xy };
 
@@ -544,6 +582,36 @@ impl TextSystem {
                         let (r, g, b, a) = c.as_rgba_tuple();
                         Color::rgba_u8(r, g, b, a)
                     });
+
+                    // reuse the snapped glyph data so the outline stays centered
+                    let outline = if outline_width > 0 {
+                        let ok = GlyphCacheKey {
+                            key: data.key,
+                            outline: outline_width,
+                        };
+                        self.cache.get(&ok).map(|oi| {
+                            let mask_tex_size = self.mask.texture.size();
+                            let oa = oi.size.as_vec2();
+
+                            let outline_px = if pixelated {
+                                (outline_width as f32 / resolution).round()
+                            } else {
+                                outline_width as f32 / resolution
+                            };
+
+                            let oxy = xy - vec2(outline_px, outline_px);
+                            let os = screen_size + vec2(outline_px * 2.0, outline_px * 2.0);
+
+                            OutlineGlyphData {
+                                xy: oxy,
+                                size: os,
+                                uvs1: oi.atlas_pos / mask_tex_size,
+                                uvs2: (oi.atlas_pos + oa) / mask_tex_size,
+                            }
+                        })
+                    } else {
+                        None
+                    };
 
                     Some(GlyphData {
                         xy,
@@ -553,6 +621,7 @@ impl TextSystem {
                         typ: info.typ,
                         pixelated,
                         color: glyph_color,
+                        outline,
                     })
                 });
                 self.temp_data.extend(processed);
@@ -570,26 +639,36 @@ impl TextSystem {
         log::debug!("Restoring TextAtlas glyphs.",);
 
         // TODO: eventually add gfx::copy_texture_to_texture should be more efficient
-        for (key, glyph) in self.cache.iter() {
+        for (ck, glyph) in self.cache.iter() {
             let atlas = match glyph.typ {
                 AtlasType::Mask => &mut self.mask,
                 AtlasType::Color => &mut self.color,
                 AtlasType::None => continue,
             };
 
-            let Some(image) = self.swash.get_image_uncached(&mut self.font_system, *key) else {
+            let Some(image) = self.swash.get_image_uncached(&mut self.font_system, ck.key) else {
                 continue;
             };
 
             let offset = glyph.atlas_pos.as_uvec2();
             let size = uvec2(glyph.size.x as _, glyph.size.y as _);
-            atlas.upload(size, offset, &image.data).unwrap();
+
+            if ck.outline > 0 {
+                // re-expand and upload the outline bitmap
+                let radius = ck.outline as u32;
+                let iw = image.placement.width;
+                let ih = image.placement.height;
+                expanded_mask(&mut self.temp_outline_buff, &image.data, iw, ih, radius);
+                atlas.upload(size, offset, &self.temp_outline_buff).unwrap();
+            } else {
+                atlas.upload(size, offset, &image.data).unwrap();
+            }
         }
 
         self.bind_group = None;
     }
 
-    fn measure(&mut self) -> Result<(Vec2, usize), String> {
+    fn measure(&mut self, outline_width: u16) -> Result<(Vec2, usize), String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -598,14 +677,15 @@ impl TextSystem {
             total_lines += 1;
         }
 
+        let outline_pad = outline_width as f32 * 2.0;
         let size = vec2(
-            width,
-            total_lines as f32 * (self.buffer.metrics().line_height),
+            width + outline_pad,
+            total_lines as f32 * (self.buffer.metrics().line_height) + outline_pad,
         );
         Ok((size, total_lines))
     }
 
-    fn process(&mut self, resolution: f32) -> Result<PostAction, String> {
+    fn process(&mut self, resolution: f32, outline_width: u16) -> Result<PostAction, String> {
         let mut width: f32 = 0.0;
         let mut total_lines: usize = 0;
 
@@ -625,8 +705,70 @@ impl TextSystem {
                     color_opt: layout.color_opt,
                 });
 
-                // if it's already in the main cache just skip it
-                if self.cache.contains_key(&glyph.cache_key) {
+                let normal_key = GlyphCacheKey {
+                    key: glyph.cache_key,
+                    outline: 0,
+                };
+                let normal_cached = self.cache.contains_key(&normal_key);
+
+                // generate the outline variant if needed
+                if outline_width > 0 {
+                    let outline_key = GlyphCacheKey {
+                        key: glyph.cache_key,
+                        outline: outline_width,
+                    };
+                    if !self.cache.contains_key(&outline_key) {
+                        if let Some(image) = self
+                            .swash
+                            .get_image_uncached(&mut self.font_system, glyph.cache_key)
+                        {
+                            let gw = image.placement.width;
+                            let gh = image.placement.height;
+                            if gw > 0 && gh > 0 && image.content == SwashContent::Mask {
+                                let radius = outline_width as u32;
+                                let ow = gw + radius * 2;
+                                let oh = gh + radius * 2;
+                                expanded_mask(
+                                    &mut self.temp_outline_buff,
+                                    &image.data,
+                                    gw,
+                                    gh,
+                                    radius,
+                                );
+
+                                let atlas_pos_outline = match self
+                                    .mask
+                                    .store(uvec2(ow, oh), &self.temp_outline_buff)
+                                    .unwrap()
+                                {
+                                    Some(pos) => pos,
+                                    None => {
+                                        let grow = self.mask.grow()?;
+                                        if grow {
+                                            return Ok(PostAction::Restore);
+                                        } else {
+                                            return Ok(PostAction::Clear);
+                                        }
+                                    }
+                                };
+
+                                let outline_info = GlyphInfo {
+                                    pos: Pos::new(
+                                        image.placement.left as i16 - radius as i16,
+                                        -(image.placement.top as i16 + radius as i16),
+                                    ),
+                                    size: Pos::new(ow as u16, oh as u16),
+                                    atlas_pos: atlas_pos_outline,
+                                    typ: AtlasType::Mask,
+                                };
+                                self.cache.insert(outline_key, outline_info);
+                            }
+                        }
+                    }
+                }
+
+                // skip if the normal glyph is already cached
+                if normal_cached {
                     continue;
                 }
 
@@ -637,12 +779,12 @@ impl TextSystem {
                     continue;
                 };
 
-                let width = image.placement.width;
-                let height = image.placement.height;
-                if width == 0 || height == 0 {
-                    // if there is nothing to rasterize, then cache it to avoid getting the image but mark it as skipable
+                let gw = image.placement.width;
+                let gh = image.placement.height;
+                if gw == 0 || gh == 0 {
+                    // if there is nothing to rasterize, cache it as skippable
                     self.cache.insert(
-                        glyph.cache_key,
+                        normal_key,
                         GlyphInfo {
                             pos: Pos::new(0, 0),
                             size: Pos::new(0, 0),
@@ -665,7 +807,7 @@ impl TextSystem {
                     AtlasType::None => unreachable!("This should never happen"),
                 };
 
-                let atlas_pos = match atlas.store(uvec2(width, height), &image.data).unwrap() {
+                let atlas_pos = match atlas.store(uvec2(gw, gh), &image.data).unwrap() {
                     Some(pos) => pos,
                     None => {
                         let grow = atlas.grow()?;
@@ -679,17 +821,18 @@ impl TextSystem {
 
                 let info = GlyphInfo {
                     pos: Pos::new(image.placement.left as _, -image.placement.top as _),
-                    size: Pos::new(image.placement.width as _, image.placement.height as _),
+                    size: Pos::new(gw as _, gh as _),
                     atlas_pos,
                     typ,
                 };
-                self.cache.insert(glyph.cache_key, info);
+                self.cache.insert(normal_key, info);
             }
         }
 
+        let outline_pad = outline_width as f32 * 2.0 / resolution;
         let size = vec2(
-            width,
-            total_lines as f32 * self.buffer.metrics().line_height,
+            width + outline_pad,
+            total_lines as f32 * self.buffer.metrics().line_height + outline_pad,
         );
 
         Ok(PostAction::End {
@@ -719,7 +862,7 @@ enum PostAction {
     Clear,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum AtlasType {
     None,
     Mask,
@@ -1011,6 +1154,31 @@ struct GlyphInfo {
     size: Pos<u16>,
     atlas_pos: Vec2,
     typ: AtlasType,
+}
+
+fn expanded_mask(dst: &mut Vec<u8>, src: &[u8], w: u32, h: u32, radius: u32) {
+    let (w, h, r) = (w as usize, h as usize, radius as usize);
+    let ow = w + r * 2;
+    let oh = h + r * 2;
+
+    dst.clear();
+    dst.resize(ow * oh, 0);
+
+    for sy in 0..h {
+        let src_row = sy * w;
+        for sx in 0..w {
+            if src[src_row + sx] == 0 {
+                continue;
+            }
+
+            let x0 = sx;
+            let x1 = sx + r * 2 + 1;
+            for dy in 0..=r * 2 {
+                let row_start = (sy + dy) * ow;
+                dst[row_start + x0..row_start + x1].fill(255);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

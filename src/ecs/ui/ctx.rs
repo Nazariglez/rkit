@@ -100,6 +100,9 @@ fn measure_text(
     if text.color_tags {
         metrics = metrics.color_tags();
     }
+    if text.outline_width > 0 {
+        metrics = metrics.outline(text.outline_width);
+    }
 
     let max_width = known_dimensions.width.or(match available_space.width {
         AvailableSpace::Definite(w) => Some(w),

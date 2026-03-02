@@ -196,6 +196,8 @@ pub struct Text2D<'a> {
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
     color_tags: bool,
+    outline_color: Color,
+    outline_width: u16,
 
     #[pipeline_id]
     pip: DrawPipelineId,
@@ -220,6 +222,8 @@ impl<'a> Text2D<'a> {
             shadow_color: Color::BLACK,
             shadow_offset: None,
             color_tags: false,
+            outline_color: Color::BLACK,
+            outline_width: 0,
 
             pip: DrawPipelineId::Text,
             transform: None,
@@ -295,31 +299,55 @@ impl<'a> Text2D<'a> {
         self.color_tags = true;
         self
     }
+
+    pub fn outline(&mut self, color: Color, width: u16) -> &mut Self {
+        self.outline_color = color;
+        self.outline_width = width;
+        self
+    }
+}
+
+enum TextPass {
+    ShadowOutline,
+    ShadowFill,
+    Outline,
+    Fill,
 }
 
 impl Element2D for Text2D<'_> {
     fn process(&self, draw: &mut Draw2D) {
+        let outlined = self.outline_width > 0;
+
         if self.shadow_offset.is_some() {
-            add_text_to_batch(self, true, draw);
+            if outlined {
+                add_text_to_batch(self, TextPass::ShadowOutline, draw);
+            }
+            add_text_to_batch(self, TextPass::ShadowFill, draw);
         }
 
-        add_text_to_batch(self, false, draw);
+        if outlined {
+            add_text_to_batch(self, TextPass::Outline, draw);
+        }
+
+        add_text_to_batch(self, TextPass::Fill, draw);
     }
 }
 
-fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
-    let (offset, c) = match element.shadow_offset {
-        Some(offset) if is_shadow => (
-            offset,
-            element
-                .shadow_color
-                .with_alpha(element.shadow_color.a * element.alpha),
-        ),
-        _ => (
-            Vec2::ZERO,
-            element.color.with_alpha(element.color.a * element.alpha),
-        ),
+fn add_text_to_batch(element: &Text2D, pass: TextPass, draw: &mut Draw2D) {
+    let is_shadow = matches!(pass, TextPass::ShadowOutline | TextPass::ShadowFill);
+    let is_outline = matches!(pass, TextPass::ShadowOutline | TextPass::Outline);
+
+    let base_col = element.color.with_alpha(element.color.a * element.alpha);
+    let shadow_col = element.shadow_color.with_alpha(element.shadow_color.a * element.alpha);
+    let outline_col = element.outline_color.with_alpha(element.outline_color.a * element.alpha);
+
+    let offset = if is_shadow {
+        element.shadow_offset.unwrap_or(Vec2::ZERO)
+    } else {
+        Vec2::ZERO
     };
+
+    let default_color = if is_shadow { shadow_col } else { base_col };
 
     let info = TextInfo {
         pos: element.position + offset,
@@ -331,7 +359,8 @@ fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
         resolution: element.res,
         h_align: element.h_align,
         color_tags: element.color_tags,
-        default_color: c,
+        default_color,
+        outline_width: element.outline_width,
     };
 
     TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
@@ -347,40 +376,48 @@ fn add_text_to_batch(element: &Text2D, is_shadow: bool, draw: &mut Draw2D) {
                 }
 
                 block.data.iter().enumerate().for_each(|(i, data)| {
-                    let Vec2 { x: x1, y: y1 } = data.xy;
-                    let Vec2 { x: x2, y: y2 } = data.xy + data.size;
-                    let Vec2 { x: u1, y: v1 } = data.uvs1;
-                    let Vec2 { x: u2, y: v2 } = data.uvs2;
-                    let t = match data.typ {
-                        AtlasType::Mask if data.pixelated => 1.0,
-                        AtlasType::Mask => 0.0,
-                        _ => 2.0,
+                    let (xy, size, uvs1, uvs2, t_val) = if is_outline {
+                        let Some(od) = &data.outline else { return };
+                        let t = if data.pixelated { 1.0 } else { 0.0 };
+                        (od.xy, od.size, od.uvs1, od.uvs2, t)
+                    } else {
+                        let t = match data.typ {
+                            AtlasType::Mask if data.pixelated => 1.0,
+                            AtlasType::Mask => 0.0,
+                            _ => 2.0,
+                        };
+                        (data.xy, data.size, data.uvs1, data.uvs2, t)
                     };
 
-                    // use glyph color if available (but not for shadows)
-                    let gc = if is_shadow {
-                        c
-                    } else {
-                        data.color
+                    let gc = match pass {
+                        TextPass::ShadowOutline | TextPass::ShadowFill => shadow_col,
+                        TextPass::Outline => outline_col,
+                        TextPass::Fill => data
+                            .color
                             .map(|col| col.with_alpha(col.a * element.alpha))
-                            .unwrap_or(c)
+                            .unwrap_or(base_col),
                     };
+
+                    let Vec2 { x: x1, y: y1 } = xy;
+                    let Vec2 { x: x2, y: y2 } = xy + size;
+                    let Vec2 { x: u1, y: v1 } = uvs1;
+                    let Vec2 { x: u2, y: v2 } = uvs2;
 
                     #[rustfmt::skip]
-                        let vertices = [
-                            x1, y1, u1, v1, t, gc.r, gc.g, gc.b, gc.a,
-                            x2, y1, u2, v1, t, gc.r, gc.g, gc.b, gc.a,
-                            x1, y2, u1, v2, t, gc.r, gc.g, gc.b, gc.a,
-                            x2, y2, u2, v2, t, gc.r, gc.g, gc.b, gc.a,
-                        ];
+                    let vertices = [
+                        x1, y1, u1, v1, t_val, gc.r, gc.g, gc.b, gc.a,
+                        x2, y1, u2, v1, t_val, gc.r, gc.g, gc.b, gc.a,
+                        x1, y2, u1, v2, t_val, gc.r, gc.g, gc.b, gc.a,
+                        x2, y2, u2, v2, t_val, gc.r, gc.g, gc.b, gc.a,
+                    ];
 
                     let n = (i * 4) as u32;
 
                     #[rustfmt::skip]
-                        let indices = [
-                            n,     n + 1,   n + 2,
-                            n + 2, n + 1,   n + 3
-                        ];
+                    let indices = [
+                        n,     n + 1,   n + 2,
+                        n + 2, n + 1,   n + 3
+                    ];
 
                     temp_vertices.extend_from_slice(vertices.as_slice());
                     temp_indices.extend_from_slice(indices.as_slice());

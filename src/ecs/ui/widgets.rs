@@ -93,6 +93,8 @@ pub struct UIText {
     pub shadow_color: Color,
     pub shadow_offset: Option<Vec2>,
     pub color_tags: bool,
+    pub outline_color: Color,
+    pub outline_width: u16,
 }
 
 impl Default for UIText {
@@ -107,6 +109,8 @@ impl Default for UIText {
             shadow_color: Color::BLACK,
             shadow_offset: None,
             color_tags: false,
+            outline_color: Color::BLACK,
+            outline_width: 0,
         }
     }
 }
@@ -128,6 +132,8 @@ fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
         shadow_color: text.shadow_color,
         shadow_offset: text.shadow_offset,
         color_tags: text.color_tags,
+        outline_color: text.outline_color,
+        outline_width: text.outline_width,
     };
 
     draw_text(draw, &data);
@@ -145,6 +151,8 @@ struct TextData<'a> {
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
     color_tags: bool,
+    outline_color: Color,
+    outline_width: u16,
 }
 
 fn draw_text(draw: &mut Draw2D, data: &TextData) {
@@ -185,6 +193,10 @@ fn draw_text(draw: &mut Draw2D, data: &TextData) {
 
     if let Some(offset) = data.shadow_offset {
         d_text.shadow_offset(offset).shadow_color(data.shadow_color);
+    }
+
+    if data.outline_width > 0 {
+        d_text.outline(data.outline_color, data.outline_width);
     }
 
     d_text
