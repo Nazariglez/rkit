@@ -406,7 +406,9 @@ impl TextSystem {
 
         let font_size = text.font_size * ppem;
         let resolution = if pixelated {
-            let next_fs = closest_multiple_of(font_size as _, res_ppem as _) as f32;
+            let base = res_ppem as usize;
+            let fs = font_size.round() as usize;
+            let next_fs = (closest_multiple_of(fs, base) as f32).max(res_ppem);
             let scale = next_fs / font_size;
             text.resolution * scale
         } else {
@@ -529,8 +531,14 @@ impl TextSystem {
 
                     let atlas_size = info.size.as_vec2();
                     let screen_size = atlas_size / resolution;
+                    let screen_size = if pixelated {
+                        screen_size.round()
+                    } else {
+                        screen_size
+                    };
                     let pos = text.pos + data.pos + (info.pos.as_vec2() / resolution);
                     let xy = pos - offset + vec2(0.0, data.line_y);
+                    let xy = if pixelated { xy.round() } else { xy };
 
                     let glyph_color = data.color_opt.map(|c| {
                         let (r, g, b, a) = c.as_rgba_tuple();

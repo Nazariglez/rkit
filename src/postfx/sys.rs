@@ -360,7 +360,7 @@ impl PostProcessSys {
     }
 
     pub fn check_and_get_pfx_frame(&mut self) -> Result<Option<&RenderTexture>, String> {
-        let size = window_size().as_uvec2();
+        let size = (window_size() * window_dpi_scale()).as_uvec2();
         let can_render = size.x > 0 && size.y > 0;
         if !can_render {
             // on win_os minimized wwindows report 0 size

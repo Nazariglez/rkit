@@ -18,7 +18,7 @@ use corelib::{
         self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer,
         consts::MAX_BIND_GROUPS_PER_PIPELINE,
     },
-    math::{Mat3, Mat4, Rect, Vec2, vec2, vec3, vec4},
+    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, vec2, vec3, vec4},
 };
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
@@ -300,15 +300,14 @@ impl Draw2D {
                 let x = chunk[x_pos];
                 let y = chunk[y_pos];
 
-                let prev_xyz = if self.round_pixels {
-                    vec3(x, y, 1.0).round()
+                let xyz = matrix * vec3(x, y, 1.0);
+                let (x, y) = if self.round_pixels {
+                    (xyz.x.round(), xyz.y.round())
                 } else {
-                    vec3(x, y, 1.0)
+                    (xyz.x, xyz.y)
                 };
-
-                let xyz = matrix * prev_xyz;
-                chunk[x_pos] = xyz.x;
-                chunk[y_pos] = xyz.y;
+                chunk[x_pos] = x;
+                chunk[y_pos] = y;
 
                 if let Some(a_pos) = alpha_pos {
                     let alpha = chunk[a_pos] * self.alpha;

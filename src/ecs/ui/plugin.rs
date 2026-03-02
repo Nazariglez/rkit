@@ -118,7 +118,11 @@ fn update_nodes_system<T: Component>(
                     } else {
                         last_alpha * style.opacity
                     };
-                    node.update_transform(transform, *last_transform);
+                    node.update_transform(
+                        transform,
+                        *last_transform,
+                        layout.cam_info.pixel_perfect,
+                    );
                     stack.insert(
                         EntityId::Raw(*entity),
                         (node.global_transform, node.global_alpha),

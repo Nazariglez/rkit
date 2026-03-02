@@ -59,8 +59,18 @@ impl UINode {
         self.global_alpha() > 0.0
     }
 
-    pub(super) fn update_transform(&mut self, transform: &UITransform, parent: Mat3) {
-        let pivot_offset = transform.pivot * self.size;
+    pub(super) fn update_transform(
+        &mut self,
+        transform: &UITransform,
+        parent: Mat3,
+        pixel_perfect: bool,
+    ) {
+        let pivot_offset = if pixel_perfect {
+            (transform.pivot * self.size).round()
+        } else {
+            transform.pivot * self.size
+        };
+
         let position = self.position + transform.offset;
 
         let translate = Mat3::from_translation(position);
