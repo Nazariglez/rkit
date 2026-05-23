@@ -1,6 +1,13 @@
 use corelib::app::window_height;
 use corelib::input::{KeyCode, is_key_pressed};
-use rkit::{app::window_size, draw::{Sprite, create_draw_2d}, gfx::{self, Color}, math::{Vec2, vec2}, postfx::{BlurFx, ColorReplaceFx, GrayScaleFx, PixelateFx, PostFx, PostProcess, RgbSplitFx}, time};
+use rkit::{
+    app::window_size,
+    draw::{Sprite, create_draw_2d},
+    gfx::{self, Color},
+    math::{Vec2, vec2},
+    postfx::{BlurFx, ColorReplaceFx, GrayScaleFx, PixelateFx, PostFx, PostProcess, RgbSplitFx},
+    time,
+};
 
 struct MyFilters {
     pixelate: PixelateFx,

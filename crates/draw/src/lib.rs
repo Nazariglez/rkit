@@ -64,6 +64,7 @@ pub(crate) fn clean_2d() {
 pub struct FontBuilder<'a> {
     source: &'a [u8],
     nearest: bool,
+    line_height_pem: Option<f32>,
 }
 
 impl<'a> FontBuilder<'a> {
@@ -71,6 +72,7 @@ impl<'a> FontBuilder<'a> {
         Self {
             source: data,
             nearest: false,
+            line_height_pem: None,
         }
     }
 
@@ -79,11 +81,20 @@ impl<'a> FontBuilder<'a> {
         self
     }
 
+    pub fn with_line_height_pem(mut self, pem: f32) -> Self {
+        self.line_height_pem = Some(pem);
+        self
+    }
+
     // TODO from_system("Arial") it uses a system font (not supported on wasm)
 
     pub fn build(self) -> Result<Font, String> {
-        let Self { source, nearest } = self;
-        get_mut_text_system().create_font(source, nearest)
+        let Self {
+            source,
+            nearest,
+            line_height_pem,
+        } = self;
+        get_mut_text_system().create_font(source, nearest, line_height_pem)
     }
 }
 

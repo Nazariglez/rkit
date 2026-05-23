@@ -1,7 +1,7 @@
 use rkit::{
-    prelude::*,
     egui::{EguiContext, EguiPlugin},
     gfx::{self, Color},
+    prelude::*,
 };
 
 fn main() -> Result<(), String> {

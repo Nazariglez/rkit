@@ -39,14 +39,16 @@ fn draw_system(time: Res<Time>) {
         .max_width(300.0);
 
     // center align with colors
-    draw.text("[color:#FF00FF]Center[/color] aligned [color:#00FFFF]rich text[/color] with wrapping")
-        .color_tags()
-        .position(vec2(550.0, 160.0))
-        .size(16.0)
-        .color(Color::WHITE)
-        .max_width(200.0)
-        .h_align_center()
-        .anchor(vec2(0.5, 0.0));
+    draw.text(
+        "[color:#FF00FF]Center[/color] aligned [color:#00FFFF]rich text[/color] with wrapping",
+    )
+    .color_tags()
+    .position(vec2(550.0, 160.0))
+    .size(16.0)
+    .color(Color::WHITE)
+    .max_width(200.0)
+    .h_align_center()
+    .anchor(vec2(0.5, 0.0));
 
     // right align
     draw.text("[color:#FFFF00]Right[/color] aligned text")

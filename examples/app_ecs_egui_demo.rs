@@ -1,8 +1,8 @@
 use egui_demo_lib::DemoWindows;
 use rkit::{
-    prelude::*,
     egui::{EguiContext, EguiPlugin},
     gfx::{self, Color},
+    prelude::*,
 };
 
 fn main() -> Result<(), String> {

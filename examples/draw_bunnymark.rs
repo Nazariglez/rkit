@@ -1,9 +1,9 @@
 use rkit::{
     draw::{Sprite, create_draw_2d},
-    prelude::*,
     gfx::{self, Color},
     input::{MouseButton, is_mouse_btn_down},
     math::{Vec2, vec2},
+    prelude::*,
     random::{self, Rng},
 };
 
@@ -36,7 +36,11 @@ fn setup_system(mut cmds: Commands) {
 
     cmds.insert_resource(BunnySprite(sprite));
 
-    cmds.spawn((Pos(Vec2::ZERO), Speed(vec2(2.0, 10.0)), BunnyColor(Color::WHITE)));
+    cmds.spawn((
+        Pos(Vec2::ZERO),
+        Speed(vec2(2.0, 10.0)),
+        BunnyColor(Color::WHITE),
+    ));
 }
 
 fn spawn_bunnies_system(mut cmds: Commands) {
@@ -83,9 +87,13 @@ fn draw_system(query: Query<(&Pos, &BunnyColor)>, sprite: Res<BunnySprite>, time
         draw.image(&sprite.0).position(pos.0).color(color.0);
     }
 
-    draw.text(&format!("Bunnies: {}\nFPS: {:.2}", query.iter().count(), time.fps()))
-        .size(10.0)
-        .position(vec2(10.0, 10.0));
+    draw.text(&format!(
+        "Bunnies: {}\nFPS: {:.2}",
+        query.iter().count(),
+        time.fps()
+    ))
+    .size(10.0)
+    .position(vec2(10.0, 10.0));
 
     gfx::render_to_frame(&draw).unwrap();
 }

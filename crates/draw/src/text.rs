@@ -47,7 +47,7 @@ pub struct Font {
     // designed ppem
     res_ppem: f32,
     px_per_em: f32,
-    line_height_per_em: f32,
+    line_height_pem: f32,
     family: Arc<String>,
     weight: Weight,
     style: Style,
@@ -319,6 +319,7 @@ impl TextSystem {
             let font = sys.create_font(
                 include_bytes!("./resources/arcade-legacy/arcade-legacy.ttf"),
                 true,
+                None,
             )?;
             sys.default_font = Some(font);
         }
@@ -349,7 +350,12 @@ impl TextSystem {
         self.default_font = Some(font.clone());
     }
 
-    pub fn create_font(&mut self, data: &[u8], nearest: bool) -> Result<Font, String> {
+    pub fn create_font(
+        &mut self,
+        data: &[u8],
+        nearest: bool,
+        line_height_pem: Option<f32>,
+    ) -> Result<Font, String> {
         let id = self.font_ids;
         self.font_ids += 1;
         let ids = self
@@ -376,9 +382,10 @@ impl TextSystem {
         // right later when processing the glyphs
         let upm = metrics.units_per_em as f32;
         let asc = metrics.ascent;
-        let desc = -metrics.descent;
+        let desc = metrics.descent;
         let lead = metrics.leading;
-        let line_height_per_em = (asc + desc + lead) / upm;
+        let metrics_lh_pem = (asc + desc + lead) / upm;
+        let line_height_pem = line_height_pem.unwrap_or(metrics_lh_pem);
         let px_per_em = upm / metrics.cap_height;
 
         let face = self
@@ -393,7 +400,7 @@ impl TextSystem {
             nearest,
             res_ppem,
             px_per_em,
-            line_height_per_em,
+            line_height_pem,
             family: Arc::new(face.families[0].0.to_string()),
             weight: face.weight,
             style: face.style,
@@ -412,14 +419,7 @@ impl TextSystem {
         // start processing the new text with the data provided by the user
         let font = text.font.or(self.default_font.as_ref());
         let (pixelated, ppem, res_ppem, lh_pem) = font
-            .map(|f| {
-                (
-                    f.is_pixelated(),
-                    f.px_per_em,
-                    f.res_ppem,
-                    f.line_height_per_em,
-                )
-            })
+            .map(|f| (f.is_pixelated(), f.px_per_em, f.res_ppem, f.line_height_pem))
             .unwrap_or((false, 1.0, 1.0, 1.0));
         let attrs = match font {
             Some(f) => Attrs::new()
@@ -443,7 +443,7 @@ impl TextSystem {
             text.resolution
         };
 
-        let line_height = text.line_height.unwrap_or(font_size * lh_pem * 1.4);
+        let line_height = text.line_height.unwrap_or(font_size * lh_pem);
         let metrics = Metrics::new(font_size, line_height);
         self.buffer.set_metrics(&mut self.font_system, metrics);
         self.buffer

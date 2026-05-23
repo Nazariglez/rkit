@@ -1,5 +1,11 @@
 use draw::Transform2D;
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::mouse_position, math::{Vec2, vec2}};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    input::mouse_position,
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 const RECT_SIZE: Vec2 = Vec2::new(400.0, 300.0);
 

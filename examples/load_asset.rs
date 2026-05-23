@@ -3,9 +3,9 @@ use draw::Sprite;
 use rkit::{
     assets::AssetId,
     draw::create_draw_2d,
-    prelude::*,
     gfx::{self, Color},
     math::Vec2,
+    prelude::*,
 };
 
 enum LoadingState {

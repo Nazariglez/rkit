@@ -1,9 +1,9 @@
 use rkit::{
     draw::{Sprite, create_draw_2d},
-    prelude::*,
     gfx::{self, Color},
     input::{MouseButton, is_mouse_btn_down},
     math::{Vec2, vec2},
+    prelude::*,
     random::{self, Rng},
 };
 

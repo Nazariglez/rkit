@@ -1,5 +1,11 @@
 use draw::{BaseCam2D, ScreenMode};
-use rkit::{app::window_size, draw::{Camera2D, create_draw_2d}, gfx::{self, Color}, math::{Vec2, vec2}, prelude::*};
+use rkit::{
+    app::window_size,
+    draw::{Camera2D, create_draw_2d},
+    gfx::{self, Color},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 /// Identify the layout and the entities that belongs to it
 #[derive(Component, Clone, Copy)]

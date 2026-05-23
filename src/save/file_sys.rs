@@ -1,7 +1,10 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use super::driver::SaveDriverImpl;
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub struct FileSysSaveDriver;
 

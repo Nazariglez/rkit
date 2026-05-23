@@ -1,4 +1,8 @@
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    prelude::*,
+};
 
 const RADIUS: f32 = 150.0;
 

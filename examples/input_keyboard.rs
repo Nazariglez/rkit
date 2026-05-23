@@ -1,4 +1,10 @@
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::{KeyCode, is_key_down, keys_released}, math::{Vec2, vec2}};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    input::{KeyCode, is_key_down, keys_released},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 const MOVE_SPEED: f32 = 100.0;
 

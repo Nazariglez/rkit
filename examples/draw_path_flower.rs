@@ -1,5 +1,10 @@
 use draw::{Drawing, Path2D};
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, math::vec2};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    math::vec2,
+    prelude::*,
+};
 
 const CENTER_X: f32 = 400.0;
 const CENTER_Y: f32 = 300.0;

@@ -1,5 +1,8 @@
 use draw::create_draw_2d;
-use rkit::{prelude::*, gfx::{self, Color}};
+use rkit::{
+    gfx::{self, Color},
+    prelude::*,
+};
 
 #[derive(Resource)]
 struct MySounds {

@@ -1,4 +1,8 @@
-use rkit::{draw::create_draw_2d, gfx::{self, Color}, prelude::*};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    prelude::*,
+};
 
 /// Identify the layout and the entities that belongs to it
 #[derive(Component, Clone, Copy)]

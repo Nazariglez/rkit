@@ -1,4 +1,10 @@
-use rkit::{app::window_size, draw::{Camera2D, Draw2D, Transform2D, create_draw_2d}, gfx::{self, Color}, math::Vec2, ui::{UIControl, UIElement, UIEvents, UIHandler, UIInput, UIManager, UINodeMetadata}};
+use rkit::{
+    app::window_size,
+    draw::{Camera2D, Draw2D, Transform2D, create_draw_2d},
+    gfx::{self, Color},
+    math::Vec2,
+    ui::{UIControl, UIElement, UIEvents, UIHandler, UIInput, UIManager, UINodeMetadata},
+};
 
 #[derive(Default)]
 struct State {

@@ -1,4 +1,9 @@
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, math::{Vec2, vec2}};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 use std::ops::Rem;
 
 fn main() -> Result<(), String> {

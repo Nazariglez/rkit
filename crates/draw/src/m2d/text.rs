@@ -338,8 +338,12 @@ fn add_text_to_batch(element: &Text2D, pass: TextPass, draw: &mut Draw2D) {
     let is_outline = matches!(pass, TextPass::ShadowOutline | TextPass::Outline);
 
     let base_col = element.color.with_alpha(element.color.a * element.alpha);
-    let shadow_col = element.shadow_color.with_alpha(element.shadow_color.a * element.alpha);
-    let outline_col = element.outline_color.with_alpha(element.outline_color.a * element.alpha);
+    let shadow_col = element
+        .shadow_color
+        .with_alpha(element.shadow_color.a * element.alpha);
+    let outline_col = element
+        .outline_color
+        .with_alpha(element.outline_color.a * element.alpha);
 
     let offset = if is_shadow {
         element.shadow_offset.unwrap_or(Vec2::ZERO)

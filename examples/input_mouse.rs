@@ -1,4 +1,10 @@
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::{MouseButton, is_mouse_btn_pressed, mouse_position}, math::Vec2};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    input::{MouseButton, is_mouse_btn_pressed, mouse_position},
+    math::Vec2,
+    prelude::*,
+};
 
 #[derive(Resource, Default)]
 struct MouseState {

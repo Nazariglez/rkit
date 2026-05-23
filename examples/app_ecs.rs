@@ -1,5 +1,9 @@
 use draw::create_draw_2d;
-use rkit::{prelude::*, gfx::{self, Color}, math::{Vec2, vec2}};
+use rkit::{
+    gfx::{self, Color},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 fn main() -> Result<(), String> {
     App::new()

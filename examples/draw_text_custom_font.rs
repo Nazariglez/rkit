@@ -1,4 +1,9 @@
-use rkit::{draw::{self, Font, create_draw_2d}, prelude::*, gfx::{self, Color}, math::vec2};
+use rkit::{
+    draw::{self, Font, create_draw_2d},
+    gfx::{self, Color},
+    math::vec2,
+    prelude::*,
+};
 
 #[derive(Resource)]
 struct CustomFont(Font);

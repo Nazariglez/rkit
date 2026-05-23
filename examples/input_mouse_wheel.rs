@@ -1,4 +1,10 @@
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::{is_mouse_scrolling, mouse_wheel_delta}, math::{Vec2, vec2}};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    input::{is_mouse_scrolling, mouse_wheel_delta},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 #[derive(Resource)]
 struct MousePos(Vec2);
