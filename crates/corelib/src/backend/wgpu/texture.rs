@@ -215,6 +215,13 @@ impl TextureFilter {
             TextureFilter::Nearest => wgpu::FilterMode::Nearest,
         }
     }
+
+    pub(crate) fn as_wgpu_mipmap(&self) -> wgpu::MipmapFilterMode {
+        match self {
+            TextureFilter::Linear => wgpu::MipmapFilterMode::Linear,
+            TextureFilter::Nearest => wgpu::MipmapFilterMode::Nearest,
+        }
+    }
 }
 
 // - Sampler

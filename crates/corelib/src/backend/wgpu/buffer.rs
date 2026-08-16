@@ -90,7 +90,7 @@ impl VertexFormat {
 }
 
 impl VertexStepMode {
-    pub fn as_wgpu(self) -> wgpu::VertexStepMode {
+    pub(crate) fn as_wgpu(self) -> wgpu::VertexStepMode {
         match self {
             VertexStepMode::Vertex => wgpu::VertexStepMode::Vertex,
             VertexStepMode::Instance => wgpu::VertexStepMode::Instance,

@@ -256,6 +256,7 @@ impl GfxBackendImpl for GfxBackend {
                     depth_stencil_attachment,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
 
                 if let Some(pip) = rp.pipeline {
@@ -404,7 +405,7 @@ impl GfxBackendImpl for GfxBackend {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: desc.label,
                     bind_group_layouts: &bind_group_layouts.iter().collect::<Vec<&_>>(),
-                    push_constant_ranges: &[],
+                    immediate_size: 0,
                 });
 
         let (attrs, mut buffers): (Vec<_>, Vec<_>) = desc
@@ -490,7 +491,7 @@ impl GfxBackendImpl for GfxBackend {
                 },
                 depth_stencil: wgpu_depth_stencil(desc.depth_stencil, desc.stencil),
                 multisample: wgpu::MultisampleState::default(),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             });
 
@@ -684,7 +685,7 @@ impl GfxBackendImpl for GfxBackend {
             min_filter: desc.min_filter.as_wgpu(),
             mipmap_filter: desc
                 .mipmap_filter
-                .map_or(Default::default(), |tf| tf.as_wgpu()),
+                .map_or(Default::default(), |tf| tf.as_wgpu_mipmap()),
             ..Default::default()
         });
         Ok(Sampler {
@@ -1023,6 +1024,7 @@ impl GfxBackend {
                     },
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
 
                 if let Some(pip) = rp.pipeline {
@@ -1214,7 +1216,7 @@ fn create_texture(
 }
 
 impl Color {
-    pub fn as_wgpu(&self) -> wgpu::Color {
+    pub(crate) fn as_wgpu(&self) -> wgpu::Color {
         wgpu::Color {
             r: self.r as f64,
             g: self.g as f64,
