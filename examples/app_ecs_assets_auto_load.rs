@@ -10,7 +10,7 @@ use rkit::{
 #[assets(
     root = "./examples/assets",
     types(
-        png: Sprite, 
+        png: Sprite,
         txt: String
     ),
     embed = true,

@@ -13,7 +13,6 @@ allow = [
   "Zlib",
   "ISC",
   "Unlicense",
-  "CC0-1.0",
   "Unicode-3.0",
 
   # Kira uses this license, if the source is modified we need to publish the files changes

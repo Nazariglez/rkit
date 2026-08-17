@@ -1,4 +1,9 @@
-use rkit::{draw::{Sprite, create_draw_2d}, prelude::*, gfx::{self, Color}, math::{Vec2, vec2}}};
+use rkit::{
+    draw::{Sprite, create_draw_2d},
+    gfx::{self, Color},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 const COLORS: [Color; 6] = [
     Color::rgb(1.0, 0.0, 0.4666),

@@ -462,6 +462,7 @@ impl GfxBackendImpl for GfxBackend {
             .iter_mut()
             .enumerate()
             .for_each(|(i, buff)| buff.attributes = &attrs[i]);
+        let buffers = buffers.into_iter().map(Some).collect::<Vec<_>>();
 
         let mut compatible_formats = desc
             .compatible_textures
@@ -1143,7 +1144,7 @@ impl GfxBackend {
             self.ctx.queue.submit(Some(encoder.finish()));
             self.current_stats.draw_calls += 1;
             drop(view);
-            frame.present();
+            self.ctx.queue.present(frame);
         } else {
             drop(df);
         }

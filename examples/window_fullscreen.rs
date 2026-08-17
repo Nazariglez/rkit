@@ -1,4 +1,10 @@
-use rkit::{draw::create_draw_2d, prelude::*, gfx::{self, Color}, input::{KeyCode, is_key_pressed}, math::{Vec2, vec2}}};
+use rkit::{
+    draw::create_draw_2d,
+    gfx::{self, Color},
+    input::{KeyCode, is_key_pressed},
+    math::{Vec2, vec2},
+    prelude::*,
+};
 
 fn main() -> Result<(), String> {
     App::new()

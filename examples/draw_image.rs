@@ -1,4 +1,8 @@
-use rkit::{draw::{Sprite, create_draw_2d}, prelude::*, gfx::{self, Color}}};
+use rkit::{
+    draw::{Sprite, create_draw_2d},
+    gfx::{self, Color},
+    prelude::*,
+};
 
 #[derive(Resource)]
 struct FerrisSprite(Sprite);
