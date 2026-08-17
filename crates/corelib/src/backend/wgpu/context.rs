@@ -16,10 +16,53 @@ pub(crate) struct Context {
 impl Context {
     pub(crate) async fn new(
         instance: Instance,
-        surface: Option<&RawSurface<'static>>,
+        surface: &RawSurface<'static>,
     ) -> Result<Self, String> {
-        let (adapter, device, queue, supports_view_formats) =
-            generate_wgpu_ctx(&instance, surface).await?;
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: PowerPreference::HighPerformance,
+                compatible_surface: Some(surface),
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| format!("Cannot create WGPU Adapter: {e}"))?;
+
+        log::debug!("Wgpu Adapter: {:?}", adapter.get_info());
+        log::info!(
+            "GPU Adapter: {} - {} ({}: {})",
+            adapter.get_info().backend,
+            adapter.get_info().name,
+            adapter.get_info().driver,
+            adapter.get_info().driver_info
+        );
+
+        let supports_view_formats = adapter
+            .get_downlevel_capabilities()
+            .flags
+            .contains(DownlevelFlags::VIEW_FORMATS);
+        let limits = adapter.limits();
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::default(),
+                required_limits: limits,
+                memory_hints: Default::default(),
+                trace: wgpu::Trace::Off,
+                experimental_features: ExperimentalFeatures::default(),
+            })
+            .await
+            .map_err(|err| err.to_string())?;
+
+        device.on_uncaptured_error(Arc::new(|e| {
+            eprintln!("WGPU Error: {e}");
+            log::error!("WGPU Error: {e}");
+
+            if cfg!(debug_assertions) {
+                panic!("WGPU Error: {e}");
+            }
+        }));
+        log::debug!("WGPU Features {:?}", device.features());
+
         Ok(Self {
             instance,
             adapter,
@@ -32,71 +75,4 @@ impl Context {
     pub fn is_surface_compatible(&self, surface: &RawSurface) -> bool {
         self.adapter.is_surface_supported(surface)
     }
-
-    pub async fn ensure_surface_compatibility(
-        &mut self,
-        surface: &RawSurface<'_>,
-    ) -> Result<(), String> {
-        let (adapter, device, queue, supports_view_formats) =
-            generate_wgpu_ctx(&self.instance, Some(surface)).await?;
-        self.adapter = adapter;
-        self.device = device;
-        self.queue = queue;
-        self.supports_view_formats = supports_view_formats;
-        Ok(())
-    }
-}
-
-async fn generate_wgpu_ctx(
-    instance: &Instance,
-    surface: Option<&RawSurface<'_>>,
-) -> Result<(Adapter, Device, Queue, bool), String> {
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: PowerPreference::HighPerformance,
-            compatible_surface: surface,
-            ..Default::default()
-        })
-        .await
-        .map_err(|e| format!("Cannot create WGPU Adapter: {e}"))?;
-
-    log::debug!("Wgpu Adapter: {:?}", adapter.get_info());
-    log::info!(
-        "GPU Adapter: {} - {} ({}: {})",
-        adapter.get_info().backend,
-        adapter.get_info().name,
-        adapter.get_info().driver,
-        adapter.get_info().driver_info
-    );
-
-    let supports_view_formats = adapter
-        .get_downlevel_capabilities()
-        .flags
-        .contains(DownlevelFlags::VIEW_FORMATS);
-
-    let limits = adapter.limits();
-
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: None,
-            required_features: wgpu::Features::default(),
-            required_limits: limits,
-            memory_hints: Default::default(),
-            trace: wgpu::Trace::Off,
-            experimental_features: ExperimentalFeatures::default(),
-        })
-        .await
-        .map_err(|err| err.to_string())?;
-
-    device.on_uncaptured_error(Arc::new(|e| {
-        eprintln!("WGPU Error: {e}");
-        log::error!("WGPU Error: {e}");
-
-        if cfg!(debug_assertions) {
-            panic!("WGPU Error: {e}");
-        }
-    }));
-    log::debug!("WGPU Features {:?}", device.features());
-
-    Ok((adapter, device, queue, supports_view_formats))
 }

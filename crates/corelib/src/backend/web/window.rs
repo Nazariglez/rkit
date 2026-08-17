@@ -4,17 +4,9 @@ use super::utils::{canvas_add_event_listener, get_gk_size, set_cursor_visible, s
 use crate::app::WindowConfig;
 use crate::math::{UVec2, uvec2};
 use glam::{Vec2, vec2};
-use js_sys::wasm_bindgen::JsValue;
-use raw_window_handle::{
-    DisplayHandle, HasDisplayHandle, RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle,
-    WebDisplayHandle,
-};
-use std::cell::RefCell;
-use std::ptr::NonNull;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, Event as WebEvent, HtmlCanvasElement};
-use wgpu::rwh::{HandleError, HasWindowHandle, WindowHandle};
 
 pub(crate) struct WebWindow {
     pub canvas: HtmlCanvasElement,
@@ -36,20 +28,6 @@ pub(crate) struct WebWindow {
     pub max_size: Rc<RefCell<Option<UVec2>>>,
 
     pub pixelated: bool,
-}
-
-impl HasWindowHandle for WebWindow {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        let canvas: &JsValue = &self.canvas;
-        let window_handle = WebCanvasWindowHandle::new(NonNull::from(canvas).cast());
-        Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::WebCanvas(window_handle)) })
-    }
-}
-
-impl HasDisplayHandle for WebWindow {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        Ok(unsafe { DisplayHandle::borrow_raw(RawDisplayHandle::Web(WebDisplayHandle::new())) })
-    }
 }
 
 impl WebWindow {

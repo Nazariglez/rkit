@@ -2,7 +2,6 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use glam::Vec2;
 use once_cell::sync::Lazy;
 use spin_sleep_util::Interval;
-use time::Duration;
 
 use crate::{
     backend::traits::{BackendImpl, GfxBackendImpl},
@@ -18,33 +17,9 @@ pub(crate) static BACKEND: Lazy<AtomicRefCell<HeadlessBackend>> =
 pub(crate) struct HeadlessGfx;
 
 impl GfxBackendImpl for HeadlessGfx {
-    async fn init<W>(
-        window: &W,
-        vsync: bool,
-        win_size: glam::UVec2,
-        pixelated: bool,
-    ) -> Result<Self, String>
-    where
-        Self: Sized,
-        W: raw_window_handle::HasDisplayHandle + raw_window_handle::HasWindowHandle,
-    {
-        Ok(Self)
-    }
-
-    async fn update_surface<W>(
-        &mut self,
-        _window: &W,
-        _vsync: bool,
-        _win_size: glam::UVec2,
-    ) -> Result<(), String>
-    where
-        Self: Sized,
-        W: raw_window_handle::HasDisplayHandle + raw_window_handle::HasWindowHandle,
-    {
+    fn prepare_frame(&mut self) -> Result<(), String> {
         Ok(())
     }
-
-    fn prepare_frame(&mut self) {}
 
     fn present_frame(&mut self) {}
 
@@ -244,7 +219,7 @@ struct Runner<S> {
 }
 
 impl<S> Runner<S> {
-    fn tick(&mut self) -> bool {
+    fn tick(&mut self) -> Result<bool, String> {
         crate::time::tick();
 
         // pre frame
@@ -252,7 +227,7 @@ impl<S> Runner<S> {
             CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);
             self.process_events();
             let mut bck = get_mut_backend();
-            bck.gfx().prepare_frame();
+            bck.gfx().prepare_frame()?;
         }
 
         (*self.update)(&mut self.state);
@@ -266,7 +241,7 @@ impl<S> Runner<S> {
 
         self.interval.tick();
 
-        get_backend().request_close
+        Ok(get_backend().request_close)
     }
 
     fn process_events(&mut self) {
@@ -302,17 +277,18 @@ where
         interval,
     };
 
-    loop {
-        let close = runner.tick();
-        if close {
-            break;
+    let run_result = loop {
+        match runner.tick() {
+            Ok(true) => break Ok(()),
+            Ok(false) => {}
+            Err(err) => break Err(err),
         }
-    }
+    };
 
     // at this point the runner is not in use, the app is closing
     cleanup_cb(&mut runner.state);
 
     CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
 
-    Ok(())
+    run_result
 }

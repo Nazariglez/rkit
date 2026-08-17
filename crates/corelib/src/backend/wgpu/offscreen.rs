@@ -6,6 +6,7 @@ use crate::gfx::{
     RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
     SamplerDescriptor, TextureFilter, TextureFormat, VertexFormat, VertexLayout,
 };
+use crate::math::UVec2;
 
 // TODO bufferless vertex?
 
@@ -85,6 +86,11 @@ pub(crate) struct OffscreenSurfaceData {
     pub bind_group: BindGroup,
 }
 
+pub(crate) struct OffscreenResize {
+    texture: RenderTexture,
+    bind_group: BindGroup,
+}
+
 impl OffscreenSurfaceData {
     pub fn new(gfx: &mut GfxBackend, pixelated: bool) -> Result<Self, String> {
         // let's assume we always a depth tex so we can use stencil without add anything extra
@@ -114,7 +120,7 @@ impl OffscreenSurfaceData {
 
         // output always srgb values even if the device does not support a srgb surface
         // is this the right thing to do?
-        let (vert, frag) = if gfx.surface.raw_format.is_srgb() {
+        let (vert, frag) = if gfx.surface.config.format.is_srgb() {
             (VERT, FRAG)
         } else {
             (VERT, FRAG_TO_SRGB)
@@ -130,7 +136,7 @@ impl OffscreenSurfaceData {
                 .unwrap(),
             blend_mode: Some(BlendMode::NORMAL),
             index_format: IndexFormat::UInt16,
-            compatible_textures: (&[TextureFormat::from_wgpu(gfx.surface.raw_format).unwrap()]
+            compatible_textures: (&[TextureFormat::from_wgpu(gfx.surface.config.format).unwrap()]
                 as &[_])
                 .try_into()
                 .unwrap(),
@@ -198,42 +204,56 @@ impl OffscreenSurfaceData {
         })
     }
 
-    pub fn update(&mut self, gfx: &mut GfxBackend) -> Result<(), String> {
-        let same_width = gfx.surface.config.width == self.texture.width() as u32;
-        let same_height = gfx.surface.config.height == self.texture.height() as u32;
-        let needs_update = !(same_width && same_height);
-        if !needs_update {
-            // do nothing
-            return Ok(());
+    pub fn prepare_resize(
+        &self,
+        gfx: &GfxBackend,
+        size: UVec2,
+        next_resource_id: &mut u64,
+    ) -> Result<Option<OffscreenResize>, String> {
+        let current_size = UVec2::new(self.texture.width() as u32, self.texture.height() as u32);
+        if size == current_size {
+            return Ok(None);
         }
 
-        let texture = gfx.create_render_texture(RenderTextureDescriptor {
-            label: Some("Offscreen Surface"),
-            depth: self.texture.depth_texture.is_some(),
-            width: gfx.surface.config.width,
-            height: gfx.surface.config.height,
-            format: None,
-        })?;
-        self.texture = texture;
+        let texture = gfx.prepare_render_texture(
+            next_resource_id,
+            RenderTextureDescriptor {
+                label: Some("Offscreen Surface"),
+                depth: self.texture.depth_texture.is_some(),
+                width: size.x,
+                height: size.y,
+                format: None,
+            },
+        )?;
+        let bind_group = gfx.prepare_bind_group(
+            next_resource_id,
+            BindGroupDescriptor {
+                label: Some("Offscreen Surface BindGroup"),
+                layout: Some(self.pip.bind_group_layout_ref(0)?),
+                entry: (&[
+                    BindGroupEntry::Texture {
+                        location: 0,
+                        texture: &texture,
+                    },
+                    BindGroupEntry::Sampler {
+                        location: 1,
+                        sampler: &self.sampler,
+                    },
+                ] as &[_])
+                    .try_into()
+                    .unwrap(),
+            },
+        )?;
 
-        self.bind_group = gfx.create_bind_group(BindGroupDescriptor {
-            label: Some("Offscreen Surface BindGroup"),
-            layout: Some(self.pip.bind_group_layout_ref(0)?),
-            entry: (&[
-                BindGroupEntry::Texture {
-                    location: 0,
-                    texture: &self.texture,
-                },
-                BindGroupEntry::Sampler {
-                    location: 1,
-                    sampler: &self.sampler,
-                },
-            ] as &[_])
-                .try_into()
-                .unwrap(),
-        })?;
+        Ok(Some(OffscreenResize {
+            texture,
+            bind_group,
+        }))
+    }
 
-        Ok(())
+    pub fn commit_resize(&mut self, resized: OffscreenResize) {
+        self.texture = resized.texture;
+        self.bind_group = resized.bind_group;
     }
 
     pub fn present(&self, gfx: &mut GfxBackend, frame: &mut DrawFrame) -> Result<(), String> {

@@ -35,7 +35,7 @@ glam = { version = "0.30.8", features = [
 
 # gfx
 pollster = "0.4"
-wgpu = { version = "28.0.0", features = [
+wgpu = { version = "29.0.4", features = [
     "fragile-send-sync-non-atomic-wasm",
     "static-dxc",
 ] }

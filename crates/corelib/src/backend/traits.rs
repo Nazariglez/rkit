@@ -7,7 +7,40 @@ use crate::{
     input::{KeyboardState, MouseState},
     math::{UVec2, Vec2},
 };
-use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
+use web_sys::HtmlCanvasElement;
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+use winit::{event_loop::OwnedDisplayHandle, window::Window};
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+#[derive(Clone)]
+pub(crate) struct SurfaceSource {
+    pub(crate) window: Arc<Window>,
+    pub(crate) display: OwnedDisplayHandle,
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+impl SurfaceSource {
+    pub(crate) fn new(window: Arc<Window>, display: OwnedDisplayHandle) -> Self {
+        Self { window, display }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone)]
+pub(crate) struct SurfaceSource {
+    pub(crate) canvas: HtmlCanvasElement,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl SurfaceSource {
+    pub(crate) fn new(canvas: HtmlCanvasElement) -> Self {
+        Self { canvas }
+    }
+}
 
 pub(crate) trait BackendImpl<G: GfxBackendImpl> {
     // Window
@@ -43,28 +76,22 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
 }
 
 pub(crate) trait GfxBackendImpl {
-    async fn init<W>(
-        window: &W,
+    #[cfg(any(target_arch = "wasm32", not(feature = "headless")))]
+    async fn init(
+        source: SurfaceSource,
         vsync: bool,
         win_size: UVec2,
         pixelated: bool,
     ) -> Result<Self, String>
     where
-        Self: Sized,
-        W: HasDisplayHandle + HasWindowHandle;
+        Self: Sized;
 
-    #[cfg_attr(target_arch = "wasm32", allow(unused))]
-    async fn update_surface<W>(
-        &mut self,
-        window: &W,
-        vsync: bool,
-        win_size: UVec2,
-    ) -> Result<(), String>
+    #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+    fn update_surface(&mut self, source: SurfaceSource, win_size: UVec2) -> Result<(), String>
     where
-        Self: Sized,
-        W: HasDisplayHandle + HasWindowHandle;
+        Self: Sized;
 
-    fn prepare_frame(&mut self);
+    fn prepare_frame(&mut self) -> Result<(), String>;
     fn present_frame(&mut self);
 
     fn render(&mut self, renderer: &Renderer) -> Result<(), String>;

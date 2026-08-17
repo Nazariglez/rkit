@@ -82,8 +82,8 @@ pub fn wgpu_depth_stencil(
 
     Some(wgpu::DepthStencilState {
         format: SURFACE_DEFAULT_DEPTH_FORMAT.as_wgpu(),
-        depth_write_enabled,
-        depth_compare,
+        depth_write_enabled: Some(depth_write_enabled),
+        depth_compare: Some(depth_compare),
         stencil: stencil.map_or(Default::default(), |stencil| {
             let stencil_face = wgpu::StencilFaceState {
                 compare: stencil.compare.as_wgpu(),

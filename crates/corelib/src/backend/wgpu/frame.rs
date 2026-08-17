@@ -5,4 +5,5 @@ pub struct DrawFrame {
     pub(crate) view: TextureView,
     pub(crate) encoder: CommandEncoder,
     pub(crate) dirty: bool,
+    pub(crate) reconfigure_after_frame: bool,
 }

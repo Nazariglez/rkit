@@ -2,7 +2,7 @@
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use winit::{
     application::ApplicationHandler,
     dpi::{LogicalSize, PhysicalPosition},
@@ -20,7 +20,7 @@ use crate::{
     app::{IconSource, WindowConfig},
     backend::{
         limiter::{FpsLimiter, LimitMode},
-        traits::{BackendImpl, GfxBackendImpl},
+        traits::{BackendImpl, GfxBackendImpl, SurfaceSource},
         wgpu::GfxBackend,
     },
     builder::AppBuilder,
@@ -35,7 +35,7 @@ pub(crate) static BACKEND: Lazy<AtomicRefCell<WinitBackend>> =
     Lazy::new(|| AtomicRefCell::new(WinitBackend::default()));
 
 pub(crate) struct WinitBackend {
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
     request_close: bool,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
@@ -67,7 +67,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     #[inline]
     fn set_title(&mut self, title: &str) {
         debug_assert!(self.window.is_some(), "Window must be present");
-        self.window.as_mut().unwrap().set_title(title);
+        self.window.as_ref().unwrap().set_title(title);
     }
 
     #[inline]
@@ -89,7 +89,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
         debug_assert!(self.window.is_some(), "Window must be present");
         let _ = self
             .window
-            .as_mut()
+            .as_ref()
             .unwrap()
             .request_inner_size(LogicalSize::new(size.x, size.y));
     }
@@ -98,7 +98,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     fn set_min_size(&mut self, size: Vec2) {
         debug_assert!(self.window.is_some(), "Window must be present");
         self.window
-            .as_mut()
+            .as_ref()
             .unwrap()
             .set_min_inner_size(Some(LogicalSize::new(size.x, size.y)));
     }
@@ -107,7 +107,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     fn set_max_size(&mut self, size: Vec2) {
         debug_assert!(self.window.is_some(), "Window must be present");
         self.window
-            .as_mut()
+            .as_ref()
             .unwrap()
             .set_max_inner_size(Some(LogicalSize::new(size.x, size.y)));
     }
@@ -133,7 +133,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     fn toggle_fullscreen(&mut self) {
         debug_assert!(self.window.is_some(), "Window must be present");
         let is_not_fullscreen = !self.is_fullscreen();
-        if let Some(win) = &mut self.window {
+        if let Some(win) = &self.window {
             let mode = is_not_fullscreen.then(|| fullscreen_mode(win.current_monitor()));
             log::debug!(
                 "Changing fullscreen mode to '{}'",
@@ -173,7 +173,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
     fn set_position(&mut self, x: f32, y: f32) {
         debug_assert!(self.window.is_some(), "Window must be present");
         self.window
-            .as_mut()
+            .as_ref()
             .unwrap()
             .set_outer_position(PhysicalPosition::new(x, y))
     }
@@ -235,7 +235,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
             CursorGrabMode::None
         };
 
-        let res = self.window.as_mut().unwrap().set_cursor_grab(mode);
+        let res = self.window.as_ref().unwrap().set_cursor_grab(mode);
         if let Err(err) = res {
             log::warn!("Error locking cursor: {err}");
             return;
@@ -255,7 +255,7 @@ impl BackendImpl<GfxBackend> for WinitBackend {
             return;
         }
 
-        self.window.as_mut().unwrap().set_cursor_visible(visible);
+        self.window.as_ref().unwrap().set_cursor_visible(visible);
         self.cursor_visible = visible;
     }
 
@@ -307,10 +307,14 @@ struct Runner<S> {
     fps_limiter: FpsLimiter,
     request_redraw: bool,
     lazy: bool,
+    graphics_error: Option<String>,
 }
 
 impl<S> ApplicationHandler for Runner<S> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.graphics_error.is_some() {
+            return;
+        }
         #[allow(unused_mut)]
         let mut attrs = self.window_attrs.clone();
 
@@ -319,29 +323,32 @@ impl<S> ApplicationHandler for Runner<S> {
             attrs = attrs.with_append(true);
         }
 
-        let win = event_loop.create_window(attrs).unwrap();
+        let win = Arc::new(event_loop.create_window(attrs).unwrap());
         win.set_ime_allowed(true); // allow for chars
         win.set_cursor_visible(self.cursor_visible);
 
         let win_size = win.inner_size();
         let gfx_initiated = get_backend().gfx.is_some();
         if gfx_initiated {
-            let res = pollster::block_on(get_mut_backend().gfx.as_mut().unwrap().update_surface(
-                &win,
-                self.vsync,
-                uvec2(win_size.width, win_size.height),
-            ));
+            let source = SurfaceSource::new(win.clone(), event_loop.owned_display_handle());
+            let res = get_mut_backend()
+                .gfx
+                .as_mut()
+                .unwrap()
+                .update_surface(source, uvec2(win_size.width, win_size.height));
             match res {
-                Ok(_) => {
-                    log::trace!("Surface updated");
-                }
-                Err(e) => {
-                    log::error!("Error updating surface on Gfx backend: {e}");
+                Ok(()) => log::trace!("Surface updated"),
+                Err(err) => {
+                    log::error!("Error updating surface on Gfx backend: {err}");
+                    self.graphics_error = Some(err);
+                    event_loop.exit();
+                    return;
                 }
             }
         } else {
+            let source = SurfaceSource::new(win.clone(), event_loop.owned_display_handle());
             let gfx = pollster::block_on(GfxBackend::init(
-                &win,
+                source,
                 self.vsync,
                 uvec2(win_size.width, win_size.height),
                 self.pixelated_offscreen,
@@ -351,8 +358,11 @@ impl<S> ApplicationHandler for Runner<S> {
                     get_mut_backend().gfx = Some(gfx);
                     log::trace!("Surface initiated");
                 }
-                Err(e) => {
-                    log::error!("Error initiating Gfx backend: {e}");
+                Err(err) => {
+                    log::error!("Error initiating Gfx backend: {err}");
+                    self.graphics_error = Some(err);
+                    event_loop.exit();
+                    return;
                 }
             }
         }
@@ -370,6 +380,10 @@ impl<S> ApplicationHandler for Runner<S> {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if self.graphics_error.is_some() {
+            return;
+        }
+
         // TODO: we probably should not get the refresh rate each frame
         // it's unlikely to change so we may need to cache it and check
         // each N seconds, or in scale/resize events?
@@ -398,6 +412,10 @@ impl<S> ApplicationHandler for Runner<S> {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        if self.graphics_error.is_some() {
+            return;
+        }
+
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 let mut bck = get_mut_backend();
@@ -475,7 +493,12 @@ impl<S> ApplicationHandler for Runner<S> {
                 // app's update cb
                 CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);
 
-                get_mut_backend().gfx().prepare_frame();
+                if let Err(err) = get_mut_backend().gfx().prepare_frame() {
+                    log::error!("Error preparing frame: {err}");
+                    self.graphics_error = Some(err);
+                    event_loop.exit();
+                    return;
+                }
                 (*self.update)(self.state.as_mut().unwrap());
                 get_mut_backend().gfx().present_frame();
 
@@ -548,16 +571,25 @@ where
         fps_limiter,
         request_redraw: true,
         lazy: false,
+        graphics_error: None,
     };
 
-    event_loop.run_app(&mut runner).map_err(|e| e.to_string())?;
+    let run_result = event_loop.run_app(&mut runner);
+    let graphics_error = runner.graphics_error.take();
+    if graphics_error.is_none() {
+        run_result.map_err(|e| e.to_string())?;
+    }
 
     // at this point the runner is not in use, the app is closing
-    cleanup_cb(runner.state.as_mut().unwrap());
+    let Some(state) = runner.state.as_mut() else {
+        return Err(graphics_error
+            .unwrap_or_else(|| "Application exited before initialization".to_string()));
+    };
+    cleanup_cb(state);
 
     CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
 
-    Ok(())
+    graphics_error.map_or(Ok(()), Err)
 }
 
 #[inline]

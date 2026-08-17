@@ -4,7 +4,7 @@ mod utils;
 mod window;
 
 use crate::{
-    backend::{BackendImpl, GfxBackendImpl},
+    backend::traits::{BackendImpl, GfxBackendImpl, SurfaceSource},
     builder::AppBuilder,
     events::{CORE_EVENTS_MAP, CoreEvent},
     gfx::GfxBackend,
@@ -15,7 +15,10 @@ use crate::{
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use glam::vec2;
 use once_cell::sync::Lazy;
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use wasm_bindgen::closure::Closure;
 use window::WebWindow;
 
@@ -51,7 +54,8 @@ where
     let win = WebWindow::new(config).unwrap();
     let size = win.size().as_uvec2();
     let close_requested = win.close_requested.clone();
-    let gfx = GfxBackend::init(&win, vsync, size, pixelated)
+    let source = SurfaceSource::new(win.canvas.clone());
+    let gfx = GfxBackend::init(source, vsync, size, pixelated)
         .await
         .unwrap();
     {
@@ -74,12 +78,18 @@ where
     let offscreen_dt = use_fixed_updates.then_some(1.0 / 30.0);
 
     let frame_id = RefCell::new(None);
+    let terminated = Rc::new(Cell::new(false));
 
     // reusable closure for scheduling the next frame
     let schedule_next_frame = {
         let frame_id = frame_id.clone();
         let callback = callback.clone();
+        let terminated = terminated.clone();
         Rc::new(move || {
+            if terminated.get() {
+                return;
+            }
+
             let win = web_sys::window().unwrap();
             // cancel the current pending frame
             if let Some(id) = frame_id.borrow_mut().take() {
@@ -93,14 +103,39 @@ where
         })
     };
 
+    let terminate = {
+        let frame_id = frame_id.clone();
+        let terminated = terminated.clone();
+        Rc::new(move || {
+            if terminated.replace(true) {
+                return;
+            }
+
+            if let Some(id) = frame_id.borrow_mut().take() {
+                utils::cancel_frame(&web_sys::window().unwrap(), id);
+            }
+            CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
+        })
+    };
+
     let next_frame = schedule_next_frame.clone();
     *callback.borrow_mut() = Some(Closure::wrap(Box::new(move || {
         if *close_requested.borrow() {
-            CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
+            terminate();
             return;
         }
 
-        runner.tick();
+        if let Err(err) = runner.tick() {
+            log::error!("Error preparing frame: {err}");
+            get_mut_backend().close();
+            terminate();
+            return;
+        }
+
+        if *close_requested.borrow() {
+            terminate();
+            return;
+        }
         next_frame();
     }) as Box<dyn FnMut()>));
 
@@ -119,8 +154,6 @@ where
 
         visibility_cb.forget();
     }
-
-    // TODO CoreEvent::Cleanup, and also stop request animation frame?
 }
 
 struct Runner<S> {
@@ -130,7 +163,7 @@ struct Runner<S> {
 }
 
 impl<S> Runner<S> {
-    fn tick(&mut self) {
+    fn tick(&mut self) -> Result<(), String> {
         time::tick();
 
         // pre frame
@@ -138,7 +171,7 @@ impl<S> Runner<S> {
             CORE_EVENTS_MAP.borrow().trigger(CoreEvent::PreUpdate);
             self.process_events();
             let mut bck = get_mut_backend();
-            bck.gfx().prepare_frame();
+            bck.gfx().prepare_frame()?;
         }
 
         (*self.update)(&mut self.state);
@@ -152,6 +185,8 @@ impl<S> Runner<S> {
             bck.mouse_state.tick();
             bck.keyboard_state.tick();
         }
+
+        Ok(())
     }
 
     fn process_events(&mut self) {

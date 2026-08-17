@@ -2,12 +2,12 @@
 
 use crate::{
     backend::{
-        traits::GfxBackendImpl,
+        traits::{GfxBackendImpl, SurfaceSource},
         wgpu::{
             context::Context,
             frame::DrawFrame,
             offscreen::OffscreenSurfaceData,
-            surface::Surface,
+            surface::{Surface, SurfaceCandidate, SurfaceOwner},
             utils::{wgpu_depth_stencil, wgpu_shader_visibility},
         },
     },
@@ -23,16 +23,26 @@ use crate::{
 };
 use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
-use glam::uvec2;
+#[cfg(target_arch = "wasm32")]
+use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Dx12BackendOptions, Extent3d,
-    GlBackendOptions, GlFenceBehavior, Gles3MinorVersion, Instance, InstanceDescriptor, Origin3d,
-    Queue, StoreOp, Surface as RawSurface, TexelCopyBufferLayout, TextureDimension,
-    rwh::HasWindowHandle,
+    GlBackendOptions, InstanceDescriptor, Origin3d, Queue, StoreOp, TexelCopyBufferLayout,
+    TextureDimension,
     util::{BufferInitDescriptor, DeviceExt, new_instance_with_webgpu_detection},
 };
-use winit::raw_window_handle::HasDisplayHandle;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
+struct WebDisplay;
+
+#[cfg(target_arch = "wasm32")]
+impl HasDisplayHandle for WebDisplay {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        Ok(DisplayHandle::web())
+    }
+}
 
 pub(crate) struct GfxBackend {
     pub(crate) surface: Surface, // Eventually we could have a HashMap<WindowId, Surface> if we want multiple window
@@ -40,14 +50,12 @@ pub(crate) struct GfxBackend {
     next_resource_id: u64,
     ctx: Context,
 
-    #[cfg_attr(target_arch = "wasm32", allow(unused))]
+    #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
     depth_format: TextureFormat,
     frame: Option<DrawFrame>,
 
     // used as intermediate for surface and pipeline texture formats
     offscreen: Option<OffscreenSurfaceData>,
-
-    last_size: UVec2,
 
     last_frame_stats: GpuStats,
     current_stats: GpuStats,
@@ -60,23 +68,22 @@ unsafe impl Send for GfxBackend {}
 unsafe impl Sync for GfxBackend {}
 
 impl GfxBackendImpl for GfxBackend {
-    async fn init<W>(
-        window: &W,
+    async fn init(
+        source: SurfaceSource,
         vsync: bool,
         win_size: UVec2,
         pixelated: bool,
     ) -> Result<Self, String>
     where
         Self: Sized,
-        W: HasDisplayHandle + HasWindowHandle,
     {
-        let res = Self::new(window, vsync, win_size, pixelated, false).await;
+        let res = Self::new(source.clone(), vsync, win_size, pixelated, false).await;
         match res {
             Ok(gfx) => Ok(gfx),
             // allow fallback to webgl if webgpu is not supported
             Err(e) if cfg!(all(target_arch = "wasm32", feature = "webgl")) => {
                 log::error!("Error initializing Gfx backend: {e}");
-                Self::new(window, vsync, win_size, pixelated, true)
+                Self::new(source, vsync, win_size, pixelated, true)
                     .await
                     .map_err(|e| e)
             }
@@ -87,41 +94,54 @@ impl GfxBackendImpl for GfxBackend {
         }
     }
 
-    async fn update_surface<W>(
-        &mut self,
-        window: &W,
-        vsync: bool,
-        win_size: UVec2,
-    ) -> Result<(), String>
+    #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+    fn update_surface(&mut self, source: SurfaceSource, win_size: UVec2) -> Result<(), String>
     where
         Self: Sized,
-        W: HasDisplayHandle + HasWindowHandle,
     {
-        let id = resource_id(&mut self.next_resource_id);
-        let surface = Surface::create_raw_surface(window, &self.ctx.instance)?;
-        let surface = init_surface_from_raw(
-            id,
-            &mut self.ctx,
-            surface,
+        let size = if win_size.x == 0 || win_size.y == 0 {
+            UVec2::new(self.surface.config.width, self.surface.config.height)
+        } else {
+            win_size
+        };
+        if size.x == 0 || size.y == 0 {
+            return Err("Cannot replace a surface without a nonzero size".to_string());
+        }
+
+        let owner = SurfaceOwner::new(source, &self.ctx.instance)?;
+        let candidate = SurfaceCandidate::replacement(&self.ctx, owner, size, &self.surface)?;
+        let mut next_resource_id = self.next_resource_id;
+        let depth_texture = create_surface_depth(
+            resource_id(&mut next_resource_id),
+            &self.ctx,
             self.depth_format,
-            win_size,
-            vsync,
-        )
-        .await?;
+            size,
+        )?;
+        let offscreen = self
+            .offscreen
+            .as_ref()
+            .ok_or_else(|| "Invalid Offscreen surface".to_string())?
+            .prepare_resize(self, size, &mut next_resource_id)?;
+
+        let surface = candidate.configure(&self.ctx.device, depth_texture);
+
         self.surface = surface;
+        if let Some(resized) = offscreen {
+            self.offscreen.as_mut().unwrap().commit_resize(resized);
+        }
+        self.next_resource_id = next_resource_id;
+        self.frame = None;
         Ok(())
     }
 
-    fn prepare_frame(&mut self) {
+    fn prepare_frame(&mut self) -> Result<(), String> {
         let can_render = self.surface.config.width > 0 && self.surface.config.height > 0;
         if !can_render {
             // on win_os minized windows can report 0 size, skip rendering
-            return;
+            return Ok(());
         }
 
-        if let Err(e) = self.push_frame() {
-            log::error!("Error creating frame: {e}");
-        }
+        self.push_frame()
     }
 
     fn present_frame(&mut self) {
@@ -399,12 +419,13 @@ impl GfxBackendImpl for GfxBackend {
             })
             .collect::<Vec<_>>();
 
+        let layout_refs = bind_group_layouts.iter().map(Some).collect::<Vec<_>>();
         let pipeline_layout =
             self.ctx
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: desc.label,
-                    bind_group_layouts: &bind_group_layouts.iter().collect::<Vec<&_>>(),
+                    bind_group_layouts: &layout_refs,
                     immediate_size: 0,
                 });
 
@@ -449,7 +470,7 @@ impl GfxBackendImpl for GfxBackend {
             .collect::<ArrayVec<_, MAX_PIPELINE_COMPATIBLE_TEXTURES>>();
 
         if compatible_formats.is_empty() {
-            compatible_formats.push(self.surface.raw_format);
+            compatible_formats.push(self.surface.config.format);
         }
 
         let blend = desc.blend_mode.map(|bm| bm.as_wgpu());
@@ -558,58 +579,10 @@ impl GfxBackendImpl for GfxBackend {
     }
 
     fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String> {
-        log::trace!("Creating BindGroup (label={:?})", desc.label);
-        // NOTE: borrow checker hack to reference Arc<Buffer> later
-        let buffers: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
-            .entry
-            .iter()
-            .map(|entry| match entry {
-                BindGroupEntry::Uniform { buffer, .. } => Some(buffer.inner.borrow().raw.clone()),
-                _ => None,
-            })
-            .collect();
-
-        let entries: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
-            .entry
-            .iter()
-            .enumerate()
-            .map(|(idx, entry)| match entry {
-                BindGroupEntry::Texture { location, texture } => wgpu::BindGroupEntry {
-                    binding: *location,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                BindGroupEntry::Uniform {
-                    location,
-                    buffer: _,
-                } => wgpu::BindGroupEntry {
-                    binding: *location,
-                    // NOTE: hacky as hell... this is made to please the borrow checker,
-                    // we need to reference a buffer who lives outside of this loop
-                    resource: buffers[idx].as_ref().unwrap().as_entire_binding(),
-                },
-                BindGroupEntry::Sampler { location, sampler } => wgpu::BindGroupEntry {
-                    binding: *location,
-                    resource: wgpu::BindingResource::Sampler(&sampler.raw),
-                },
-            })
-            .collect();
-
-        let raw = self
-            .ctx
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: desc.label,
-                layout: &desc
-                    .layout
-                    .ok_or("Cannot create binding group with a missing layout.")?
-                    .raw,
-                entries: &entries,
-            });
-
-        Ok(BindGroup {
-            id: resource_id(&mut self.next_resource_id),
-            raw: Arc::new(raw),
-        })
+        let mut next_resource_id = self.next_resource_id;
+        let bind_group = self.prepare_bind_group(&mut next_resource_id, desc)?;
+        self.next_resource_id = next_resource_id;
+        Ok(bind_group)
     }
 
     fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String> {
@@ -757,58 +730,10 @@ impl GfxBackendImpl for GfxBackend {
         &mut self,
         desc: RenderTextureDescriptor,
     ) -> Result<RenderTexture, String> {
-        log::trace!("Creating RenderTexture (label={:?})", desc.label);
-        // Create the color texture
-        let texture = self.create_texture(
-            TextureDescriptor {
-                label: Some(&format!(
-                    "RenderTexture (label={:?}) inner color texture",
-                    desc.label
-                )),
-                format: desc
-                    .format
-                    .unwrap_or_else(|| TextureFormat::from_wgpu(self.surface.raw_format).unwrap()),
-                write: true,
-            },
-            Some(TextureData {
-                bytes: &[],
-                width: desc.width,
-                height: desc.height,
-            }),
-        )?;
-
-        // Create the depth texture
-        let depth_texture = {
-            let tex = desc.depth.then(|| {
-                self.create_texture(
-                    TextureDescriptor {
-                        label: Some(&format!(
-                            "RenderTexture (label={:?}) inner depth texture",
-                            desc.label
-                        )),
-                        format: SURFACE_DEFAULT_DEPTH_FORMAT,
-                        write: true,
-                    },
-                    Some(TextureData {
-                        bytes: &[],
-                        width: desc.width,
-                        height: desc.height,
-                    }),
-                )
-            });
-
-            match tex {
-                Some(Ok(t)) => Some(t),
-                Some(Err(e)) => return Err(e),
-                None => None,
-            }
-        };
-
-        Ok(RenderTexture {
-            id: resource_id(&mut self.next_resource_id),
-            texture,
-            depth_texture,
-        })
+        let mut next_resource_id = self.next_resource_id;
+        let texture = self.prepare_render_texture(&mut next_resource_id, desc)?;
+        self.next_resource_id = next_resource_id;
+        Ok(texture)
     }
 
     fn limits(&self) -> Limits {
@@ -841,16 +766,125 @@ fn resource_id<T: From<u64>>(count: &mut u64) -> T {
 }
 
 impl GfxBackend {
-    async fn new<W>(
-        window: &W,
+    pub(crate) fn prepare_bind_group(
+        &self,
+        next_resource_id: &mut u64,
+        desc: BindGroupDescriptor,
+    ) -> Result<BindGroup, String> {
+        log::trace!("Creating BindGroup (label={:?})", desc.label);
+        let buffers: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
+            .entry
+            .iter()
+            .map(|entry| match entry {
+                BindGroupEntry::Uniform { buffer, .. } => Some(buffer.inner.borrow().raw.clone()),
+                _ => None,
+            })
+            .collect();
+        let entries: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
+            .entry
+            .iter()
+            .enumerate()
+            .map(|(idx, entry)| match entry {
+                BindGroupEntry::Texture { location, texture } => wgpu::BindGroupEntry {
+                    binding: *location,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                BindGroupEntry::Uniform { location, .. } => wgpu::BindGroupEntry {
+                    binding: *location,
+                    resource: buffers[idx].as_ref().unwrap().as_entire_binding(),
+                },
+                BindGroupEntry::Sampler { location, sampler } => wgpu::BindGroupEntry {
+                    binding: *location,
+                    resource: wgpu::BindingResource::Sampler(&sampler.raw),
+                },
+            })
+            .collect();
+        let layout = desc
+            .layout
+            .ok_or("Cannot create binding group with a missing layout.")?;
+        let raw = self
+            .ctx
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: desc.label,
+                layout: &layout.raw,
+                entries: &entries,
+            });
+
+        Ok(BindGroup {
+            id: resource_id(next_resource_id),
+            raw: Arc::new(raw),
+        })
+    }
+
+    pub(crate) fn prepare_render_texture(
+        &self,
+        next_resource_id: &mut u64,
+        desc: RenderTextureDescriptor,
+    ) -> Result<RenderTexture, String> {
+        log::trace!("Creating RenderTexture (label={:?})", desc.label);
+        let format = match desc.format {
+            Some(format) => format,
+            None => TextureFormat::from_wgpu(self.surface.config.format)
+                .ok_or_else(|| "Unsupported surface texture format".to_string())?,
+        };
+        let color_label = format!("RenderTexture (label={:?}) inner color texture", desc.label);
+        let texture = create_texture(
+            resource_id(next_resource_id),
+            &self.ctx.device,
+            &self.ctx.queue,
+            self.ctx.supports_view_formats,
+            TextureDescriptor {
+                label: Some(&color_label),
+                format,
+                write: true,
+            },
+            Some(TextureData {
+                bytes: &[],
+                width: desc.width,
+                height: desc.height,
+            }),
+        )?;
+        let depth_texture = if desc.depth {
+            let depth_label = format!("RenderTexture (label={:?}) inner depth texture", desc.label);
+            Some(create_texture(
+                resource_id(next_resource_id),
+                &self.ctx.device,
+                &self.ctx.queue,
+                self.ctx.supports_view_formats,
+                TextureDescriptor {
+                    label: Some(&depth_label),
+                    format: SURFACE_DEFAULT_DEPTH_FORMAT,
+                    write: true,
+                },
+                Some(TextureData {
+                    bytes: &[],
+                    width: desc.width,
+                    height: desc.height,
+                }),
+            )?)
+        } else {
+            None
+        };
+
+        Ok(RenderTexture {
+            id: resource_id(next_resource_id),
+            texture,
+            depth_texture,
+        })
+    }
+
+    async fn new(
+        source: SurfaceSource,
         vsync: bool,
         win_size: UVec2,
         pixelated: bool,
         force_webgl: bool,
-    ) -> Result<Self, String>
-    where
-        W: HasWindowHandle + HasDisplayHandle,
-    {
+    ) -> Result<Self, String> {
+        if win_size.x == 0 || win_size.y == 0 {
+            return Err("Cannot initialize a surface with a zero size".to_string());
+        }
+
         let depth_format = SURFACE_DEFAULT_DEPTH_FORMAT; // make it configurable?
         let mut next_resource_id = 0;
 
@@ -863,49 +897,47 @@ impl GfxBackend {
                 .unwrap_or(Backends::default())
         };
 
-        let descriptor = InstanceDescriptor {
-            backends: backend,
-            backend_options: BackendOptions {
-                gl: GlBackendOptions {
-                    gles_minor_version: Gles3MinorVersion::from_env()
-                        .unwrap_or(Gles3MinorVersion::Automatic),
-                    fence_behavior: GlFenceBehavior::default(),
-                },
-                dx12: Dx12BackendOptions {
-                    shader_compiler: wgpu::Dx12Compiler::StaticDxc,
-                    ..Dx12BackendOptions::from_env_or_default()
-                },
-                ..BackendOptions::from_env_or_default()
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut descriptor =
+            InstanceDescriptor::new_with_display_handle_from_env(Box::new(source.display.clone()));
+        #[cfg(target_arch = "wasm32")]
+        let mut descriptor =
+            InstanceDescriptor::new_with_display_handle_from_env(Box::new(WebDisplay));
+        descriptor.backends = backend;
+        descriptor.backend_options = BackendOptions {
+            gl: GlBackendOptions::from_env_or_default(),
+            dx12: Dx12BackendOptions {
+                shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                ..Dx12BackendOptions::from_env_or_default()
             },
-            ..InstanceDescriptor::from_env_or_default()
+            ..BackendOptions::from_env_or_default()
         };
 
         // this will automatically fallback to webgl if webgpu is not supported
-        let instance = new_instance_with_webgpu_detection(&descriptor).await;
+        let instance = new_instance_with_webgpu_detection(descriptor).await;
 
         let (ctx, surface) = {
-            let raw = Surface::create_raw_surface(window, &instance)?;
-            let mut ctx = Context::new(instance, Some(&raw)).await?;
-            let surface = init_surface_from_raw(
+            let owner = SurfaceOwner::new(source, &instance)?;
+            let ctx = Context::new(instance, owner.raw()).await?;
+            let candidate = SurfaceCandidate::initial(&ctx, owner, win_size, vsync)?;
+            let depth_texture = create_surface_depth(
                 resource_id(&mut next_resource_id),
-                &mut ctx,
-                raw,
+                &ctx,
                 depth_format,
                 win_size,
-                vsync,
-            )
-            .await?;
+            )?;
+            let surface = candidate.configure(&ctx.device, depth_texture);
             (ctx, surface)
         };
 
         let mut bck = Self {
             next_resource_id,
             ctx,
+            #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
             depth_format,
             surface,
             frame: None,
             offscreen: None,
-            last_size: win_size,
             last_frame_stats: GpuStats::default(),
             current_stats: GpuStats::default(),
         };
@@ -917,34 +949,47 @@ impl GfxBackend {
     }
 
     fn push_frame(&mut self) -> Result<(), String> {
-        match self.surface.frame() {
-            Ok(frame) => {
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                let encoder =
-                    self.ctx
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Frame Encode"),
-                        });
-                self.frame = Some(DrawFrame {
-                    frame,
-                    view,
-                    encoder,
-                    dirty: false,
-                });
+        let (frame, reconfigure_after_frame) = match self.surface.frame() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => (frame, false),
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(());
             }
-            Err(err) => match err {
-                wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
-                    log::debug!("Resizng surface because: {err}");
-                    self.resize(self.last_size.x, self.last_size.y);
-                }
-                e => {
-                    return Err(e.to_string());
-                }
-            },
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                let config = &self.surface.config;
+                let size = UVec2::new(config.width, config.height);
+                self.try_resize(size.x, size.y)?;
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                self.surface.recreate(&self.ctx).map_err(|e| {
+                    format!(
+                        "Cannot recover lost WGPU surface while preserving the existing adapter, device, and color format: {e}"
+                    )
+                })?;
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err("WGPU surface texture acquisition failed validation".to_string());
+            }
         };
+
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let encoder = self
+            .ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Frame Encode"),
+            });
+        self.frame = Some(DrawFrame {
+            frame,
+            view,
+            encoder,
+            dirty: false,
+            reconfigure_after_frame,
+        });
 
         Ok(())
     }
@@ -1078,52 +1123,72 @@ impl GfxBackend {
     }
 
     fn present_to_screen(&mut self) {
-        match self.frame.take() {
-            Some(mut df) => {
-                if df.dirty {
-                    // TODO change this: "take" is ugly as hell
-                    let offscreen = self.offscreen.take().unwrap();
-                    offscreen.present(self, &mut df).unwrap();
-                    self.offscreen = Some(offscreen);
+        let Some(mut df) = self.frame.take() else {
+            return;
+        };
+        let reconfigure_after_frame = df.reconfigure_after_frame;
 
-                    let DrawFrame { frame, encoder, .. } = df;
+        if df.dirty {
+            // TODO change this: "take" is ugly as hell
+            let offscreen = self.offscreen.take().unwrap();
+            offscreen.present(self, &mut df).unwrap();
+            self.offscreen = Some(offscreen);
 
-                    self.ctx.queue.submit(Some(encoder.finish()));
-                    self.current_stats.draw_calls += 1;
-                    frame.present();
-                }
-            }
-            _ => {
-                log::debug!("Cannot find a frame to present. Skipping.");
-            }
+            let DrawFrame {
+                frame,
+                view,
+                encoder,
+                ..
+            } = df;
+            self.ctx.queue.submit(Some(encoder.finish()));
+            self.current_stats.draw_calls += 1;
+            drop(view);
+            frame.present();
+        } else {
+            drop(df);
+        }
+
+        if reconfigure_after_frame {
+            self.surface.reconfigure(&self.ctx.device);
         }
     }
 
     #[inline]
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        let can_resize = width > 0 && height > 0;
-        if !can_resize {
-            return;
+        if let Err(err) = self.try_resize(width, height) {
+            log::error!("Error resizing Gfx backend: {err}");
+        }
+    }
+
+    fn try_resize(&mut self, width: u32, height: u32) -> Result<(), String> {
+        if width == 0 || height == 0 {
+            return Ok(());
         }
 
-        self.last_size = uvec2(width, height);
+        let size = UVec2::new(width, height);
+        let mut next_resource_id = self.next_resource_id;
+        let resized = self
+            .offscreen
+            .as_ref()
+            .ok_or_else(|| "Invalid Offscreen surface".to_string())?
+            .prepare_resize(self, size, &mut next_resource_id)?;
 
-        self.surface.resize(&self.ctx.device, width, height);
-        let mut offscreen = self.offscreen.take().unwrap();
-        offscreen.update(self).unwrap();
-        self.offscreen = Some(offscreen);
+        self.surface.configure_size(&self.ctx.device, size);
+        if let Some(resized) = resized {
+            self.offscreen.as_mut().unwrap().commit_resize(resized);
+        }
+        self.next_resource_id = next_resource_id;
+        Ok(())
     }
 }
 
-async fn init_surface_from_raw(
+fn create_surface_depth(
     id: TextureId,
-    ctx: &mut Context,
-    raw: RawSurface<'static>,
+    ctx: &Context,
     depth_format: TextureFormat,
-    win_physical_size: UVec2,
-    vsync: bool,
-) -> Result<Surface, String> {
-    let depth_texture = create_texture(
+    size: UVec2,
+) -> Result<Texture, String> {
+    create_texture(
         id,
         &ctx.device,
         &ctx.queue,
@@ -1135,12 +1200,10 @@ async fn init_surface_from_raw(
         },
         Some(TextureData {
             bytes: &[],
-            width: win_physical_size.x,
-            height: win_physical_size.y,
+            width: size.x,
+            height: size.y,
         }),
-    )?;
-
-    Surface::new_from_raw(ctx, raw, win_physical_size, vsync, depth_texture).await
+    )
 }
 
 fn create_texture(
