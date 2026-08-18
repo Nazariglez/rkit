@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
 use crate::sound::{InstanceId, SoundId};
 use crate::{Sound, SoundInstance, clean_audio_manager};
 use atomic_refcell::AtomicRefCell;
@@ -34,10 +37,97 @@ impl InstanceData {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+const BACKEND_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Default)]
+struct BackendDiagnostics {
+    last_report: Option<Instant>,
+    pending_errors: u64,
+    first_error: Option<String>,
+    latest_error: Option<String>,
+    last_discarded: Option<u64>,
+    pending_discarded: u64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl BackendDiagnostics {
+    fn record(
+        &mut self,
+        count: u64,
+        first: Option<String>,
+        latest: Option<String>,
+        discarded: Option<u64>,
+    ) {
+        if count > 0 {
+            self.pending_errors = self.pending_errors.saturating_add(count);
+            if self.first_error.is_none() {
+                self.first_error = first;
+            }
+            self.latest_error = latest;
+        }
+
+        if let Some(total) = discarded {
+            match self.last_discarded {
+                Some(previous) if total >= previous => {
+                    let delta = total - previous;
+                    self.pending_discarded = self.pending_discarded.saturating_add(delta);
+                }
+                None => self.pending_discarded = total,
+                Some(_) => {}
+            }
+            self.last_discarded = Some(total);
+        }
+
+        let has_pending = self.pending_errors > 0 || self.pending_discarded > 0;
+        if !has_pending {
+            return;
+        }
+
+        let now = Instant::now();
+        let report_due = match self.last_report {
+            Some(last_report) => now.duration_since(last_report) >= BACKEND_REPORT_INTERVAL,
+            None => true,
+        };
+        if !report_due {
+            return;
+        }
+
+        if self.pending_errors == 1 {
+            let error = self.first_error.take().unwrap_or_default();
+            log::error!("Audio backend reported 1 stream error: {error}");
+            self.latest_error = None;
+            self.pending_errors = 0;
+        } else if self.pending_errors > 1 {
+            let first = self.first_error.take().unwrap_or_default();
+            let latest = self.latest_error.take().unwrap_or_default();
+            log::error!(
+                "Audio backend reported {} stream errors; first: {first}; latest: {latest}",
+                self.pending_errors
+            );
+            self.pending_errors = 0;
+        }
+
+        if self.pending_discarded > 0 {
+            log::warn!(
+                "Audio backend discarded {} stream errors since the last report ({} cumulative)",
+                self.pending_discarded,
+                self.last_discarded.unwrap_or_default()
+            );
+            self.pending_discarded = 0;
+        }
+
+        self.last_report = Some(now);
+    }
+}
+
 pub struct Manager {
     count_ids: u64,
     manager: AudioManager,
     instances: FxHashMap<SoundId, SmallVec<InstanceData, 10>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    diagnostics: BackendDiagnostics,
     pub(crate) volume: f32,
     pub(crate) muted: bool,
 }
@@ -52,6 +142,8 @@ impl Default for Manager {
             count_ids: 0,
             manager,
             instances: FxHashMap::with_capacity_and_hasher(10, FxBuildHasher),
+            #[cfg(not(target_arch = "wasm32"))]
+            diagnostics: BackendDiagnostics::default(),
             volume: 1.0,
             muted: false,
         }
@@ -369,8 +461,34 @@ impl Manager {
         id
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    fn poll_backend_diagnostics(&mut self) {
+        let (count, first, latest, discarded) = {
+            let backend = self.manager.backend_mut();
+            let mut count = 0u64;
+            let mut first = None;
+            let mut latest = None;
+
+            while let Some(error) = backend.pop_error() {
+                let detail = format!("{:?}: {error}", error.kind());
+                count = count.saturating_add(1);
+                if first.is_none() {
+                    first = Some(detail.clone());
+                }
+                latest = Some(detail);
+            }
+
+            (count, first, latest, backend.num_stream_errors_discarded())
+        };
+
+        self.diagnostics.record(count, first, latest, discarded);
+    }
+
     #[inline]
     pub fn clean(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        self.poll_backend_diagnostics();
+
         self.instances.retain(|_, v| {
             v.retain(|d| !d.is_stopped());
             !v.is_empty()

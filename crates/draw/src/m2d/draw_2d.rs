@@ -18,7 +18,7 @@ use corelib::{
         self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer,
         consts::MAX_BIND_GROUPS_PER_PIPELINE,
     },
-    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, vec2, vec3, vec4},
+    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, orthographic, vec2, vec3, vec4},
 };
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut, Range};
@@ -179,7 +179,7 @@ pub struct Draw2D {
 
 impl Draw2D {
     pub fn new(size: Vec2) -> Self {
-        let projection = Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0);
+        let projection = orthographic(0.0, size.x, size.y, 0.0, 0.0, 1.0);
         let inverse_projection = projection.inverse();
         Self {
             size,
@@ -342,7 +342,7 @@ impl Draw2D {
 
         if self.size != size {
             self.size = size;
-            self.set_projection(Mat4::orthographic_rh(0.0, size.x, size.y, 0.0, 0.0, 1.0));
+            self.set_projection(orthographic(0.0, size.x, size.y, 0.0, 0.0, 1.0));
         }
     }
 

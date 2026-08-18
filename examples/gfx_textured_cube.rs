@@ -2,7 +2,11 @@ use rkit::gfx::{
     self, BindGroup, BindGroupLayout, BindingType, Buffer, Color, CullMode, IndexFormat,
     RenderPipeline, Renderer, VertexFormat, VertexLayout,
 };
-use rkit::math::{Mat4, vec3};
+use rkit::math::{
+    Mat4,
+    camera::rh::{proj::opengl::perspective, view::look_at_mat4},
+    vec3,
+};
 use rkit::time;
 
 // language=wgsl
@@ -176,8 +180,8 @@ fn update(state: &mut State) {
 }
 
 fn create_mvp() -> Mat4 {
-    let projection = Mat4::perspective_rh_gl(45.0, 4.0 / 3.0, 0.1, 100.0);
-    let view = Mat4::look_at_rh(
+    let projection = perspective(45.0, 4.0 / 3.0, 0.1, 100.0);
+    let view = look_at_mat4(
         vec3(4.0, 3.0, 3.0),
         vec3(0.0, 0.0, 0.0),
         vec3(0.0, 1.0, 0.0),

@@ -4,7 +4,7 @@ use corelib::{
         self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, RenderPipeline,
         Renderer, VertexFormat, VertexLayout, VertexStepMode,
     },
-    math::{Mat3, Mat4, Vec2},
+    math::{Mat3, Mat4, Vec2, orthographic},
 };
 use encase::{ShaderType, UniformBuffer};
 
@@ -166,7 +166,7 @@ impl CircleBatcher {
             .with_write_flag(true)
             .build()?;
 
-        let projection = Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
+        let projection = orthographic(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
         let locals = Locals {
             mvp: projection,
             fade_at: 0.9,

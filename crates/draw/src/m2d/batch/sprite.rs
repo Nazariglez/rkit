@@ -4,7 +4,7 @@ use corelib::{
         self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, RenderPipeline,
         Renderer, VertexFormat, VertexLayout, VertexStepMode,
     },
-    math::{Mat3, Mat4, Vec2, Vec3},
+    math::{Mat3, Mat4, Vec2, Vec3, orthographic},
 };
 use encase::{ShaderType, UniformBuffer};
 use rustc_hash::FxHashMap;
@@ -95,7 +95,7 @@ impl SpriteBatcher {
             .with_write_flag(true)
             .build()?;
 
-        let projection = Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
+        let projection = orthographic(0.0, 800.0, 600.0, 0.0, 0.0, 1.0);
         let locals = Locals { mvp: projection };
         let mut ubs = UniformBuffer::new([0; Locals::size()]);
         ubs.write(&locals).map_err(|e| e.to_string())?;

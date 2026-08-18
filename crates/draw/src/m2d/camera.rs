@@ -1,4 +1,4 @@
-use corelib::math::{Mat3, Mat4, Rect, Vec2, vec2, vec3, vec4};
+use corelib::math::{Mat3, Mat4, Rect, Vec2, orthographic, vec2, vec3, vec4};
 
 pub trait BaseCam2D {
     fn projection(&self) -> Mat4;
@@ -384,7 +384,7 @@ fn calculate_ortho_projection(win_size: Vec2, pixel_perfect: bool) -> (Mat4, Vec
     } else {
         win_size * 0.5
     };
-    let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
+    let projection = orthographic(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
     let position = Mat4::from_translation(vec3(pos.x, pos.y, 0.0));
     let final_projection = projection * position;
     (final_projection, vec2(1.0, 1.0))
@@ -399,7 +399,7 @@ fn calculate_scaled_projection(win_size: Vec2, ratio: Vec2, pixel_perfect: bool)
     };
     let position = vec3(pos.x, pos.y, 0.0);
     let translation = Mat4::from_translation(position);
-    let projection = Mat4::orthographic_rh(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
+    let projection = orthographic(0.0, win_size.x, win_size.y, 0.0, 0.0, 1.0);
 
     projection * translation * scale
 }

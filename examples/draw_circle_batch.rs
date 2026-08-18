@@ -1,7 +1,7 @@
 use rkit::{
     draw::batch::CircleBatcher,
     gfx::{self, Color, Renderer},
-    math::{Mat4, Vec2, vec2},
+    math::{Vec2, orthographic, vec2},
     prelude::*,
 };
 
@@ -19,7 +19,7 @@ fn main() -> Result<(), String> {
 impl Batcher {
     fn new() -> Self {
         let mut batcher = CircleBatcher::new().unwrap();
-        batcher.set_projection(Mat4::orthographic_rh(0.0, 800.0, 600.0, 0.0, 0.0, 1.0));
+        batcher.set_projection(orthographic(0.0, 800.0, 600.0, 0.0, 0.0, 1.0));
         Batcher(batcher)
     }
 }

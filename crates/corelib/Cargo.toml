@@ -26,7 +26,7 @@ winit = { version = "0.30.12" }
 raw-window-handle = "0.6.2"
 
 # math
-glam = { version = "0.30.8", features = [
+glam = { version = "0.33.4", features = [
     "bytemuck",
     "debug-glam-assert",
     "serde",

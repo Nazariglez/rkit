@@ -3,7 +3,7 @@ use crate::{
     math::{Mat3, Mat4, Vec2, Vec3Swizzles, vec2, vec3},
 };
 use bevy_ecs::prelude::*;
-use corelib::math::vec4;
+use corelib::math::{orthographic, vec4};
 use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
@@ -63,8 +63,7 @@ impl UICameraInfo {
 
         self.cam_size = size;
         self.layout_size = size;
-        self.projection =
-            Mat4::orthographic_rh(0.0, self.layout_size.x, self.layout_size.y, 0.0, 0.0, 1.0);
+        self.projection = orthographic(0.0, self.layout_size.x, self.layout_size.y, 0.0, 0.0, 1.0);
         self.inverse_projection = self.projection.inverse();
         self.transform = Mat3::IDENTITY;
         self.inverse_transform = Mat3::IDENTITY;

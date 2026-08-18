@@ -1,5 +1,11 @@
 pub use glam::*;
 
+/// Creates RKit's right-handed orthographic projection with a `0.0..=1.0` depth range.
+#[inline]
+pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
+    glam::camera::rh::proj::directx::orthographic(left, right, bottom, top, near, far)
+}
+
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
     pub origin: Vec2,
