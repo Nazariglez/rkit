@@ -115,5 +115,5 @@ pub fn text_mask_atlas() -> Texture {
 
 #[inline]
 pub fn text_color_atlas() -> Texture {
-    get_text_system().color.texture.clone()
+    get_text_system().rgba_linear.texture.clone()
 }

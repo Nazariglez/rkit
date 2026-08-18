@@ -5,16 +5,19 @@ use corelib::gfx::{
 use corelib::math::{UVec2, Vec2, uvec2, vec2};
 use cosmic_text::fontdb::Source;
 use cosmic_text::{
-    Attrs, Buffer, CacheKey, Color as CosmicColor, Family, FontSystem, Metrics, Shaping, Stretch,
-    Style, SwashCache, SwashContent, Weight,
+    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, ShapeLine, Shaping, Stretch, Style,
+    SwashCache, SwashContent, Weight, Wrap,
 };
 use etagere::{BucketedAtlasAllocator, size2};
+use markup::MarkupMode;
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
-use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::ops::Range;
 use std::sync::Arc;
+
+mod markup;
+mod rich;
+
+pub use rich::{RichTextBuilder, RichTextLayout, RichTextLine, TextIcon, TextIcons, rich_text};
 use utils::helpers::closest_multiple_of;
 
 pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
@@ -35,6 +38,7 @@ pub fn get_mut_text_system() -> AtomicRefMut<'static, TextSystem> {
 
 const DEFAULT_TEXTURE_SIZE: u32 = 256;
 const ATLAS_PIXEL_OFFSET: u32 = 1;
+const MAX_OUTLINE_BUFFER_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FontId(pub(crate) u64);
@@ -65,30 +69,79 @@ impl Font {
     }
 }
 
-#[derive(Debug)]
-pub struct OutlineGlyphData {
-    pub xy: Vec2,
-    pub size: Vec2,
-    pub uvs1: Vec2,
-    pub uvs2: Vec2,
+#[derive(Clone, Debug)]
+pub(crate) struct OutlineQuad {
+    pub(crate) xy: Vec2,
+    pub(crate) size: Vec2,
+    pub(crate) uvs1: Vec2,
+    pub(crate) uvs2: Vec2,
+    pub(crate) source: TextSource,
 }
 
-#[derive(Debug)]
-pub struct GlyphData {
-    pub xy: Vec2,
-    pub size: Vec2,
-    pub uvs1: Vec2,
-    pub uvs2: Vec2,
-    pub(crate) typ: AtlasType,
+#[derive(Clone, Debug)]
+pub(crate) struct QuadData {
+    pub(crate) xy: Vec2,
+    pub(crate) size: Vec2,
+    pub(crate) uvs1: Vec2,
+    pub(crate) uvs2: Vec2,
+    pub(crate) source: TextSource,
+    pub(crate) color: Color,
     pub(crate) pixelated: bool,
-    pub color: Option<Color>,
-    pub outline: Option<OutlineGlyphData>,
+    pub(crate) outline: Option<OutlineQuad>,
 }
 
-pub struct BlockInfo<'a> {
-    pub size: Vec2,
-    pub lines: usize,
-    pub data: &'a [GlyphData],
+pub(crate) struct TextLayout {
+    pub(crate) size: Vec2,
+    pub(crate) lines: Vec<rich::RichTextLine>,
+    items: Vec<LayoutItem>,
+    resolution: f32,
+    pixelated: bool,
+    outline_width: u16,
+    outline_radius: f32,
+}
+
+impl Default for TextLayout {
+    fn default() -> Self {
+        Self {
+            size: Vec2::ZERO,
+            lines: Vec::new(),
+            items: Vec::new(),
+            resolution: 1.0,
+            pixelated: false,
+            outline_width: 0,
+            outline_radius: 0.0,
+        }
+    }
+}
+
+impl TextLayout {
+    fn clear(&mut self) {
+        self.size = Vec2::ZERO;
+        self.lines.clear();
+        self.items.clear();
+        self.resolution = 1.0;
+        self.pixelated = false;
+        self.outline_width = 0;
+        self.outline_radius = 0.0;
+    }
+}
+
+enum LayoutItem {
+    Glyph(PlacedGlyph),
+    Icon(PlacedIcon),
+}
+
+struct PlacedGlyph {
+    key: CacheKey,
+    pos: Vec2,
+    color: Color,
+}
+
+struct PlacedIcon {
+    icon: TextIcon,
+    pos: Vec2,
+    size: Vec2,
+    color: Color,
 }
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
@@ -99,24 +152,23 @@ pub enum HAlign {
     Right,
 }
 
-pub struct TextInfo<'a> {
-    pub pos: Vec2,
-    pub font: Option<&'a Font>,
-    pub text: &'a str,
-    pub wrap_width: Option<f32>,
-    pub font_size: f32,
-    pub line_height: Option<f32>,
-    pub resolution: f32,
-    pub h_align: HAlign,
-    pub color_tags: bool,
-    pub default_color: Color,
-    pub outline_width: u16,
+pub(crate) struct TextInfo<'a> {
+    pub(crate) font: Option<&'a Font>,
+    pub(crate) text: &'a str,
+    pub(crate) wrap_width: Option<f32>,
+    pub(crate) font_size: f32,
+    pub(crate) line_height: Option<f32>,
+    pub(crate) resolution: f32,
+    pub(crate) h_align: HAlign,
+    pub(crate) color_tags: bool,
+    pub(crate) default_color: Color,
+    pub(crate) outline_width: u16,
+    pub(crate) strict_metrics: bool,
 }
 
 pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
     TextMetricsBuilder {
         info: TextInfo {
-            pos: Default::default(),
             font: None,
             text,
             wrap_width: None,
@@ -127,6 +179,7 @@ pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
             color_tags: false,
             default_color: Color::WHITE,
             outline_width: 0,
+            strict_metrics: false,
         },
     }
 }
@@ -183,10 +236,15 @@ impl<'a> TextMetricsBuilder<'a> {
     }
 
     pub fn measure(self) -> TextMetrics {
-        let BlockInfo { size, lines, .. } = get_mut_text_system()
-            .prepare_text(&self.info, true)
-            .unwrap();
-        TextMetrics { size, lines }
+        let mut system = get_mut_text_system();
+        let mut layout = system.take_layout();
+        system.layout_text(&self.info, &mut layout).unwrap();
+        let metrics = TextMetrics {
+            size: layout.size,
+            lines: layout.lines.len(),
+        };
+        system.recycle_layout(layout);
+        metrics
     }
 }
 
@@ -196,20 +254,14 @@ struct GlyphCacheKey {
     outline: u16,
 }
 
-struct ProcessData {
-    key: CacheKey,
-    pos: Vec2,
-    line_w: f32,
-    line_y: f32,
-    color_opt: Option<CosmicColor>,
-}
-
 pub struct TextSystem {
     pub(crate) mask: AtlasData,
-    pub(crate) color: AtlasData,
+    pub(crate) rgba_linear: AtlasData,
+    pub(crate) rgba_nearest: AtlasData,
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
     cache: FxHashMap<GlyphCacheKey, GlyphInfo>,
+    icon_cache: FxHashMap<rich::TextIconId, IconInfo>,
     font_system: FontSystem,
     swash: SwashCache,
     buffer: Buffer,
@@ -218,18 +270,11 @@ pub struct TextSystem {
 
     bind_group: Option<BindGroup>,
 
-    // used to calculate rendering data
-    process_data: Vec<ProcessData>,
-    temp_data: Vec<GlyphData>,
-
-    // reusable string to avoid allocations
-    temp_hack_string: String,
-
-    // storage for parsed color tag spans so we avoid allocations
-    span_ranges: Vec<(Range<usize>, Option<Color>)>,
-
     // reusable buffer used to avoid per glyph allocations
     temp_outline_buff: Vec<u8>,
+    temp_rgba: Vec<u8>,
+    temp_layout: TextLayout,
+    temp_line_items: Vec<std::ops::Range<usize>>,
 }
 
 impl TextSystem {
@@ -248,42 +293,21 @@ impl TextSystem {
             .with_mag_filter(TextureFilter::Nearest)
             .build()?;
 
-        // mask atlas
-        let allocator = BucketedAtlasAllocator::new(size2(
-            DEFAULT_TEXTURE_SIZE as _,
-            DEFAULT_TEXTURE_SIZE as _,
-        ));
-        let texture = gfx::create_texture()
-            .with_label("TextSystem Texture Mask")
-            .with_empty_size(DEFAULT_TEXTURE_SIZE, DEFAULT_TEXTURE_SIZE)
-            .with_format(TextureFormat::R8UNorm)
-            .with_write_flag(true)
-            .build()?;
-
-        let mask = AtlasData {
-            allocator,
-            texture,
+        let mask = AtlasData::new(
+            "TextSystem Texture Mask",
+            TextureFormat::R8UNorm,
             max_texture_size,
-            current_size: DEFAULT_TEXTURE_SIZE,
-        };
-
-        // color atlas
-        let allocator = BucketedAtlasAllocator::new(size2(
-            DEFAULT_TEXTURE_SIZE as _,
-            DEFAULT_TEXTURE_SIZE as _,
-        ));
-        let texture = gfx::create_texture()
-            .with_label("TextSystem Texture Color")
-            .with_empty_size(DEFAULT_TEXTURE_SIZE, DEFAULT_TEXTURE_SIZE)
-            .with_write_flag(true)
-            .build()?;
-
-        let color = AtlasData {
-            allocator,
-            texture,
+        )?;
+        let rgba_linear = AtlasData::new(
+            "TextSystem Texture RGBA Linear",
+            TextureFormat::Rgba8UNormSrgb,
             max_texture_size,
-            current_size: DEFAULT_TEXTURE_SIZE,
-        };
+        )?;
+        let rgba_nearest = AtlasData::new(
+            "TextSystem Texture RGBA Nearest",
+            TextureFormat::Rgba8UNormSrgb,
+            max_texture_size,
+        )?;
 
         let cache = FxHashMap::default();
 
@@ -295,10 +319,12 @@ impl TextSystem {
         #[allow(unused_mut)]
         let mut sys = Self {
             mask,
-            color,
+            rgba_linear,
+            rgba_nearest,
             linear_sampler,
             nearest_sampler,
             cache,
+            icon_cache: FxHashMap::default(),
             font_system,
             swash,
             buffer,
@@ -307,11 +333,10 @@ impl TextSystem {
 
             bind_group: None,
 
-            process_data: vec![],
-            temp_data: vec![],
-            temp_hack_string: String::new(),
             temp_outline_buff: vec![],
-            span_ranges: vec![],
+            temp_rgba: vec![],
+            temp_layout: TextLayout::default(),
+            temp_line_items: Vec::new(),
         };
 
         #[cfg(feature = "default-font")]
@@ -335,7 +360,8 @@ impl TextSystem {
                 .with_sampler(0, &self.linear_sampler)
                 .with_sampler(1, &self.nearest_sampler)
                 .with_texture(2, &self.mask.texture)
-                .with_texture(3, &self.color.texture)
+                .with_texture(3, &self.rgba_linear.texture)
+                .with_texture(4, &self.rgba_nearest.texture)
                 .with_layout(pip.bind_group_layout_ref(1).unwrap())
                 .build()
                 .unwrap();
@@ -356,6 +382,10 @@ impl TextSystem {
         nearest: bool,
         line_height_pem: Option<f32>,
     ) -> Result<Font, String> {
+        if let Some(line_height_pem) = line_height_pem {
+            validate_positive(line_height_pem, "Text font line-height scale")?;
+        }
+
         let id = self.font_ids;
         self.font_ids += 1;
         let ids = self
@@ -385,8 +415,10 @@ impl TextSystem {
         let desc = metrics.descent;
         let lead = metrics.leading;
         let metrics_lh_pem = (asc + desc + lead) / upm;
+        validate_positive(metrics_lh_pem, "Text font line-height scale")?;
         let line_height_pem = line_height_pem.unwrap_or(metrics_lh_pem);
         let px_per_em = upm / metrics.cap_height;
+        validate_positive(px_per_em, "Text font pixel scale")?;
 
         let face = self
             .font_system
@@ -408,465 +440,786 @@ impl TextSystem {
         })
     }
 
-    pub fn prepare_text(
+    pub(crate) fn take_layout(&mut self) -> TextLayout {
+        std::mem::take(&mut self.temp_layout)
+    }
+
+    pub(crate) fn recycle_layout(&mut self, mut layout: TextLayout) {
+        layout.clear();
+        self.temp_layout = layout;
+    }
+
+    pub(crate) fn layout_text(
         &mut self,
         text: &TextInfo,
-        only_measure: bool,
-    ) -> Result<BlockInfo<'_>, String> {
-        // clean the keys before we process a new text
-        self.process_data.clear();
+        layout: &mut TextLayout,
+    ) -> Result<(), String> {
+        let markup = if text.color_tags {
+            markup::parse(
+                text.text,
+                text.default_color,
+                MarkupMode::Colors,
+                text.wrap_width.is_some(),
+            )
+        } else {
+            markup::plain(text.text, text.default_color, text.wrap_width.is_some())
+        };
+        self.layout_markup(text, markup, layout)
+    }
 
-        // start processing the new text with the data provided by the user
+    pub(crate) fn layout_markup(
+        &mut self,
+        text: &TextInfo,
+        markup: markup::Markup<'_>,
+        layout: &mut TextLayout,
+    ) -> Result<(), String> {
+        layout.clear();
+        self.temp_line_items.clear();
         let font = text.font.or(self.default_font.as_ref());
-        let (pixelated, ppem, res_ppem, lh_pem) = font
-            .map(|f| (f.is_pixelated(), f.px_per_em, f.res_ppem, f.line_height_pem))
+        let (pixelated, ppem, res_ppem, line_height_pem) = font
+            .map(|font| {
+                (
+                    font.is_pixelated(),
+                    font.px_per_em,
+                    font.res_ppem,
+                    font.line_height_pem,
+                )
+            })
             .unwrap_or((false, 1.0, 1.0, 1.0));
         let attrs = match font {
-            Some(f) => Attrs::new()
-                .family(Family::Name(&f.family))
-                .weight(f.weight)
-                .style(f.style)
-                .stretch(f.stretch),
+            Some(font) => Attrs::new()
+                .family(Family::Name(&font.family))
+                .weight(font.weight)
+                .style(font.style)
+                .stretch(font.stretch),
             None => Attrs::new(),
         };
-
-        let font_size = text.font_size * ppem;
-        let resolution = if pixelated {
-            let base = res_ppem as usize;
-            let fs = font_size.round() as usize;
-            let next_fs = (closest_multiple_of(fs, base) as f32).max(res_ppem);
-            let scale = next_fs / font_size;
-            text.resolution * scale
-        } else {
-            // TODO: for regular fonts we may want to pass the dpi so we
-            // scale it related to the screen space to look better?
-            text.resolution
-        };
-
-        let line_height = text.line_height.unwrap_or(font_size * lh_pem);
-        let metrics = Metrics::new(font_size, line_height);
-        self.buffer.set_metrics(&mut self.font_system, metrics);
+        let (font_size, resolution, base_line_height) =
+            validate_layout_metrics(text, pixelated, ppem, res_ppem, line_height_pem)?;
+        self.buffer.set_metrics(
+            &mut self.font_system,
+            Metrics::new(font_size, base_line_height),
+        );
         self.buffer
             .set_size(&mut self.font_system, text.wrap_width, None);
 
-        if text.color_tags {
-            self.span_ranges.clear();
-            self.span_ranges
-                .extend(parse_color_tag_ranges(text.text, text.default_color));
-
-            // TODO: remove it when cosmic-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
-            if text.wrap_width.is_some() {
-                if let Some(hinted) = try_add_zwsp_hints_ranges(
-                    &mut self.temp_hack_string,
-                    text.text,
-                    &self.span_ranges,
-                ) {
-                    let cosmic_spans = hinted.iter().map(|(range, color)| {
-                        (
-                            &self.temp_hack_string[range.clone()],
-                            color_attrs(attrs, *color),
-                        )
-                    });
-                    self.buffer.set_rich_text(
-                        &mut self.font_system,
-                        cosmic_spans,
-                        attrs,
-                        Shaping::Advanced,
-                    );
-                } else {
-                    let cosmic_spans = self.span_ranges.iter().map(|(range, color)| {
-                        (&text.text[range.clone()], color_attrs(attrs, *color))
-                    });
-                    self.buffer.set_rich_text(
-                        &mut self.font_system,
-                        cosmic_spans,
-                        attrs,
-                        Shaping::Advanced,
-                    );
-                }
-            } else {
-                let cosmic_spans = self
-                    .span_ranges
-                    .iter()
-                    .map(|(range, color)| (&text.text[range.clone()], color_attrs(attrs, *color)));
-                self.buffer.set_rich_text(
-                    &mut self.font_system,
-                    cosmic_spans,
-                    attrs,
-                    Shaping::Advanced,
-                );
-            }
-        } else if text.wrap_width.is_some() {
-            // TODO: remove it when comisc-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
-            let fix_wrap_text = add_zwsp_hints(&mut self.temp_hack_string, text.text);
-            self.buffer.set_text(
-                &mut self.font_system,
-                &fix_wrap_text,
-                attrs,
-                Shaping::Advanced,
-            );
-        } else {
-            self.buffer
-                .set_text(&mut self.font_system, text.text, attrs, Shaping::Advanced);
-        }
-
+        let spans = markup
+            .spans
+            .iter()
+            .enumerate()
+            .map(|(index, span)| (&markup.text[span.range.clone()], attrs.metadata(index + 1)));
+        self.buffer
+            .set_rich_text(&mut self.font_system, spans, attrs, Shaping::Advanced);
         self.buffer.shape_until_scroll(&mut self.font_system, false);
 
-        // do not mess with textures when we only want the size of the block
-        if only_measure {
-            let (size, lines) = self.measure(text.outline_width)?;
-            return Ok(BlockInfo {
-                size,
-                lines,
-                data: &[],
-            });
-        }
-
-        match self.process(resolution, text.outline_width)? {
-            PostAction::Restore => {
-                self.restore();
-                self.prepare_text(text, false)
-            }
-            PostAction::Clear => {
-                self.clear()?;
-                self.prepare_text(text, false)
-            }
-            PostAction::End { block_size, lines } => {
-                // cleaning the temporal data shared with the user at the end
-                self.temp_data.clear();
-
-                let outline_width = text.outline_width;
-                let outline_shift = outline_width as f32 / resolution;
-
-                let processed = self.process_data.iter().filter_map(|data| {
-                    let normal_key = GlyphCacheKey {
-                        key: data.key,
-                        outline: 0,
-                    };
-                    let info = self.cache.get(&normal_key)?;
-
-                    let tex_size = match info.typ {
-                        AtlasType::None => return None,
-                        AtlasType::Mask => self.mask.texture.size(),
-                        AtlasType::Color => self.color.texture.size(),
-                    };
-
-                    let offset = {
-                        let x = match text.h_align {
-                            HAlign::Left => 0.0,
-                            HAlign::Center => 0.5,
-                            HAlign::Right => 1.0,
-                        };
-
-                        let ww = (block_size.x - data.line_w) * -x;
-                        vec2(ww, 0.0)
-                    };
-
-                    let atlas_size = info.size.as_vec2();
-                    let screen_size = atlas_size / resolution;
-                    let screen_size = if pixelated {
-                        screen_size.round()
-                    } else {
-                        screen_size
-                    };
-
-                    // offset the glyph position so the content stays centered
-                    let pos = text.pos
-                        + data.pos
-                        + (info.pos.as_vec2() / resolution)
-                        + vec2(outline_shift, outline_shift);
-                    let xy = pos - offset + vec2(0.0, data.line_y);
-                    let xy = if pixelated { xy.round() } else { xy };
-
-                    let glyph_color = data.color_opt.map(|c| {
-                        let (r, g, b, a) = c.as_rgba_tuple();
-                        Color::rgba_u8(r, g, b, a)
-                    });
-
-                    // reuse the snapped glyph data so the outline stays centered
-                    let outline = if outline_width > 0 {
-                        let ok = GlyphCacheKey {
-                            key: data.key,
-                            outline: outline_width,
-                        };
-                        self.cache.get(&ok).map(|oi| {
-                            let mask_tex_size = self.mask.texture.size();
-                            let oa = oi.size.as_vec2();
-
-                            let outline_px = if pixelated {
-                                (outline_width as f32 / resolution).round()
-                            } else {
-                                outline_width as f32 / resolution
-                            };
-
-                            let oxy = xy - vec2(outline_px, outline_px);
-                            let os = screen_size + vec2(outline_px * 2.0, outline_px * 2.0);
-
-                            OutlineGlyphData {
-                                xy: oxy,
-                                size: os,
-                                uvs1: oi.atlas_pos / mask_tex_size,
-                                uvs2: (oi.atlas_pos + oa) / mask_tex_size,
-                            }
-                        })
-                    } else {
-                        None
-                    };
-
-                    Some(GlyphData {
-                        xy,
-                        size: screen_size,
-                        uvs1: info.atlas_pos / tex_size,
-                        uvs2: (info.atlas_pos + atlas_size) / tex_size,
-                        typ: info.typ,
-                        pixelated,
-                        color: glyph_color,
-                        outline,
-                    })
-                });
-                self.temp_data.extend(processed);
-
-                Ok(BlockInfo {
-                    size: block_size,
-                    lines,
-                    data: &self.temp_data,
+        let objects: Vec<_> = markup
+            .objects
+            .into_iter()
+            .map(|object| {
+                let height = object.height.unwrap_or(text.font_size);
+                let source_size = object.icon.source_size();
+                let width = height * source_size.x as f32 / source_size.y as f32;
+                if !height.is_finite() || height <= 0.0 || !width.is_finite() || width <= 0.0 {
+                    return Err("Text icon has an invalid logical size".to_string());
+                }
+                Ok(PlacedIcon {
+                    icon: object.icon,
+                    pos: Vec2::ZERO,
+                    size: vec2(width, height),
+                    color: object.color,
                 })
-            }
-        }
-    }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut seen = vec![0_u8; objects.len()];
+        let mut line_top = 0.0;
+        let mut content_width = 0.0_f32;
 
-    fn restore(&mut self) {
-        log::debug!("Restoring TextAtlas glyphs.",);
-
-        // TODO: eventually add gfx::copy_texture_to_texture should be more efficient
-        for (ck, glyph) in self.cache.iter() {
-            let atlas = match glyph.typ {
-                AtlasType::Mask => &mut self.mask,
-                AtlasType::Color => &mut self.color,
-                AtlasType::None => continue,
-            };
-
-            let Some(image) = self.swash.get_image_uncached(&mut self.font_system, ck.key) else {
+        for buffer_line in &self.buffer.lines {
+            let Some(shape) = buffer_line.shape_opt().as_ref() else {
                 continue;
             };
-
-            let offset = glyph.atlas_pos.as_uvec2();
-            let size = uvec2(glyph.size.x as _, glyph.size.y as _);
-
-            if ck.outline > 0 {
-                // re-expand and upload the outline bitmap
-                let radius = ck.outline as u32;
-                let iw = image.placement.width;
-                let ih = image.placement.height;
-                expanded_mask(&mut self.temp_outline_buff, &image.data, iw, ih, radius);
-                atlas.upload(size, offset, &self.temp_outline_buff).unwrap();
+            let shape = if objects.is_empty() {
+                std::borrow::Cow::Borrowed(shape)
             } else {
-                atlas.upload(size, offset, &image.data).unwrap();
-            }
-        }
-
-        self.bind_group = None;
-    }
-
-    fn measure(&mut self, outline_width: u16) -> Result<(Vec2, usize), String> {
-        let mut width: f32 = 0.0;
-        let mut total_lines: usize = 0;
-
-        for run in self.buffer.layout_runs() {
-            width = run.line_w.max(width);
-            total_lines += 1;
-        }
-
-        let outline_pad = outline_width as f32 * 2.0;
-        let size = vec2(
-            width + outline_pad,
-            total_lines as f32 * (self.buffer.metrics().line_height) + outline_pad,
-        );
-        Ok((size, total_lines))
-    }
-
-    fn process(&mut self, resolution: f32, outline_width: u16) -> Result<PostAction, String> {
-        let mut width: f32 = 0.0;
-        let mut total_lines: usize = 0;
-
-        for run in self.buffer.layout_runs() {
-            width = run.line_w.max(width);
-            total_lines += 1;
-
-            for layout in run.glyphs {
-                let glyph = layout.physical((0.0, 0.0), resolution);
-
-                // store to get rendering data later
-                self.process_data.push(ProcessData {
-                    key: glyph.cache_key,
-                    pos: vec2(glyph.x as _, glyph.y as _) / resolution,
-                    line_w: run.line_w,
-                    line_y: run.line_y,
-                    color_opt: layout.color_opt,
+                let mut shape = shape.clone();
+                patch_inline_objects(
+                    buffer_line.text(),
+                    &mut shape,
+                    &markup.spans,
+                    &objects,
+                    &mut seen,
+                )?;
+                std::borrow::Cow::Owned(shape)
+            };
+            let layout_lines =
+                shape.layout(font_size, text.wrap_width, Wrap::WordOrGlyph, None, None);
+            if layout_lines.is_empty() {
+                let start = layout.items.len();
+                layout.lines.push(rich::RichTextLine {
+                    offset_y: line_top,
+                    size: vec2(0.0, base_line_height),
                 });
-
-                let normal_key = GlyphCacheKey {
-                    key: glyph.cache_key,
-                    outline: 0,
-                };
-                let normal_cached = self.cache.contains_key(&normal_key);
-
-                // generate the outline variant if needed
-                if outline_width > 0 {
-                    let outline_key = GlyphCacheKey {
-                        key: glyph.cache_key,
-                        outline: outline_width,
-                    };
-                    if !self.cache.contains_key(&outline_key) {
-                        if let Some(image) = self
-                            .swash
-                            .get_image_uncached(&mut self.font_system, glyph.cache_key)
-                        {
-                            let gw = image.placement.width;
-                            let gh = image.placement.height;
-                            if gw > 0 && gh > 0 && image.content == SwashContent::Mask {
-                                let radius = outline_width as u32;
-                                let ow = gw + radius * 2;
-                                let oh = gh + radius * 2;
-                                expanded_mask(
-                                    &mut self.temp_outline_buff,
-                                    &image.data,
-                                    gw,
-                                    gh,
-                                    radius,
-                                );
-
-                                let atlas_pos_outline = match self
-                                    .mask
-                                    .store(uvec2(ow, oh), &self.temp_outline_buff)
-                                    .unwrap()
-                                {
-                                    Some(pos) => pos,
-                                    None => {
-                                        let grow = self.mask.grow()?;
-                                        if grow {
-                                            return Ok(PostAction::Restore);
-                                        } else {
-                                            return Ok(PostAction::Clear);
-                                        }
-                                    }
-                                };
-
-                                let outline_info = GlyphInfo {
-                                    pos: Pos::new(
-                                        image.placement.left as i16 - radius as i16,
-                                        -(image.placement.top as i16 + radius as i16),
-                                    ),
-                                    size: Pos::new(ow as u16, oh as u16),
-                                    atlas_pos: atlas_pos_outline,
-                                    typ: AtlasType::Mask,
-                                };
-                                self.cache.insert(outline_key, outline_info);
-                            }
-                        }
+                self.temp_line_items.push(start..start);
+                line_top += base_line_height;
+                continue;
+            }
+            for layout_line in layout_lines {
+                let start = layout.items.len();
+                let min_x = layout_line
+                    .glyphs
+                    .iter()
+                    .flat_map(|glyph| [glyph.x, glyph.x + glyph.w])
+                    .reduce(f32::min)
+                    .unwrap_or(0.0);
+                let tallest_icon = layout_line
+                    .glyphs
+                    .iter()
+                    .filter_map(|glyph| glyph.metadata.checked_sub(1))
+                    .filter_map(|index| markup.spans.get(index))
+                    .filter_map(|span| span.object)
+                    .filter_map(|index| objects.get(index))
+                    .map(|icon| icon.size.y)
+                    .fold(0.0_f32, f32::max);
+                let height = base_line_height.max(tallest_icon);
+                let text_height = layout_line.max_ascent + layout_line.max_descent;
+                let baseline = line_top + (height - text_height) * 0.5 + layout_line.max_ascent;
+                for glyph in &layout_line.glyphs {
+                    let span_index = glyph
+                        .metadata
+                        .checked_sub(1)
+                        .ok_or_else(|| "Text glyph is missing semantic metadata".to_string())?;
+                    let span = markup
+                        .spans
+                        .get(span_index)
+                        .ok_or_else(|| "Text glyph metadata is out of bounds".to_string())?;
+                    if let Some(index) = span.object {
+                        let icon = objects
+                            .get(index)
+                            .ok_or_else(|| "Text icon metadata is out of bounds".to_string())?;
+                        layout.items.push(LayoutItem::Icon(PlacedIcon {
+                            icon: icon.icon.clone(),
+                            pos: vec2(glyph.x - min_x, line_top + (height - icon.size.y) * 0.5),
+                            size: icon.size,
+                            color: span.color,
+                        }));
+                    } else {
+                        let physical = glyph.physical((0.0, 0.0), resolution);
+                        layout.items.push(LayoutItem::Glyph(PlacedGlyph {
+                            key: physical.cache_key,
+                            pos: vec2(
+                                physical.x as f32 / resolution - min_x,
+                                physical.y as f32 / resolution + baseline,
+                            ),
+                            color: span.color,
+                        }));
                     }
                 }
-
-                // skip if the normal glyph is already cached
-                if normal_cached {
-                    continue;
-                }
-
-                let Some(image) = self
-                    .swash
-                    .get_image_uncached(&mut self.font_system, glyph.cache_key)
-                else {
-                    continue;
-                };
-
-                let gw = image.placement.width;
-                let gh = image.placement.height;
-                if gw == 0 || gh == 0 {
-                    // if there is nothing to rasterize, cache it as skippable
-                    self.cache.insert(
-                        normal_key,
-                        GlyphInfo {
-                            pos: Pos::new(0, 0),
-                            size: Pos::new(0, 0),
-                            atlas_pos: Default::default(),
-                            typ: AtlasType::None,
-                        },
-                    );
-                    continue;
-                }
-
-                let typ = match image.content {
-                    SwashContent::Mask => AtlasType::Mask,
-                    SwashContent::Color => AtlasType::Color,
-                    SwashContent::SubpixelMask => continue, // not supported by cosmic-text yet
-                };
-
-                let atlas = match typ {
-                    AtlasType::Mask => &mut self.mask,
-                    AtlasType::Color => &mut self.color,
-                    AtlasType::None => unreachable!("This should never happen"),
-                };
-
-                let atlas_pos = match atlas.store(uvec2(gw, gh), &image.data).unwrap() {
-                    Some(pos) => pos,
-                    None => {
-                        let grow = atlas.grow()?;
-                        if grow {
-                            return Ok(PostAction::Restore);
-                        } else {
-                            return Ok(PostAction::Clear);
-                        }
-                    }
-                };
-
-                let info = GlyphInfo {
-                    pos: Pos::new(image.placement.left as _, -image.placement.top as _),
-                    size: Pos::new(gw as _, gh as _),
-                    atlas_pos,
-                    typ,
-                };
-                self.cache.insert(normal_key, info);
+                let size = vec2(layout_line.w, height);
+                content_width = content_width.max(size.x);
+                layout.lines.push(rich::RichTextLine {
+                    offset_y: line_top,
+                    size,
+                });
+                self.temp_line_items.push(start..layout.items.len());
+                line_top += height;
             }
         }
-
-        let outline_pad = outline_width as f32 * 2.0 / resolution;
-        let size = vec2(
-            width + outline_pad,
-            total_lines as f32 * self.buffer.metrics().line_height + outline_pad,
-        );
-
-        Ok(PostAction::End {
-            block_size: size,
-            lines: total_lines,
-        })
+        if seen.iter().any(|count| *count != 1) {
+            return Err("Text icon placeholder did not produce exactly one glyph".into());
+        }
+        validate_finite(content_width, "Text layout width")?;
+        validate_finite(line_top, "Text layout height")?;
+        for (line, item_range) in layout.lines.iter().zip(&self.temp_line_items) {
+            let offset = match text.h_align {
+                HAlign::Left => 0.0,
+                HAlign::Center => (content_width - line.size.x) * 0.5,
+                HAlign::Right => content_width - line.size.x,
+            };
+            for item in &mut layout.items[item_range.clone()] {
+                match item {
+                    LayoutItem::Glyph(glyph) => glyph.pos.x += offset,
+                    LayoutItem::Icon(icon) => icon.pos.x += offset,
+                }
+            }
+        }
+        let outline_radius = outline_radius(text.outline_width, resolution, pixelated);
+        let outline_pad = outline_radius * 2.0;
+        let size = vec2(content_width + outline_pad, line_top + outline_pad);
+        validate_finite(size.x, "Text layout width")?;
+        validate_finite(size.y, "Text layout height")?;
+        layout.size = size;
+        layout.resolution = resolution;
+        layout.pixelated = pixelated;
+        layout.outline_width = text.outline_width;
+        layout.outline_radius = outline_radius;
+        Ok(())
     }
 
-    fn clear(&mut self) -> Result<(), String> {
-        self.color
-            .clear()
-            .map_err(|e| format!("Cannot clear Color text atlas: {e}"))?;
-        self.mask
-            .clear()
-            .map_err(|e| format!("Cannot clear Mask text atlas: {e}"))?;
+    pub(crate) fn ensure_layout(&mut self, layout: &TextLayout) -> Result<(), String> {
+        let mut resets = [false; TextAtlas::COUNT];
+        loop {
+            match self.ensure_sources(layout)? {
+                ProcessResult::Ready => return Ok(()),
+                ProcessResult::Full(atlas) => {
+                    if self.grow_atlas(atlas)? {
+                        continue;
+                    }
+                    if resets[atlas.index()] {
+                        return Err(format!(
+                            "Text {} atlas cannot fit this text after a maximum-size reset",
+                            atlas.name()
+                        ));
+                    }
+                    self.reset_atlas(atlas)?;
+                    resets[atlas.index()] = true;
+                }
+            }
+        }
+    }
 
-        self.cache.clear();
-        self.temp_data.clear();
+    pub(crate) fn resolve_layout(&self, layout: &TextLayout, quads: &mut Vec<QuadData>) {
+        quads.clear();
+        quads.reserve(layout.items.len());
+        for item in &layout.items {
+            match item {
+                LayoutItem::Glyph(glyph) => self.resolve_glyph(layout, glyph, quads),
+                LayoutItem::Icon(icon) => self.resolve_icon(icon, quads),
+            }
+        }
+    }
 
+    fn resolve_glyph(&self, layout: &TextLayout, glyph: &PlacedGlyph, quads: &mut Vec<QuadData>) {
+        let normal_key = GlyphCacheKey {
+            key: glyph.key,
+            outline: 0,
+        };
+        let Some(info) = self.cache.get(&normal_key) else {
+            return;
+        };
+        let Some(atlas) = info.atlas else { return };
+        let atlas_size = self.atlas(atlas).texture.size();
+        let atlas_glyph_size = info.size.as_vec2();
+        let mut size = atlas_glyph_size / layout.resolution;
+        if layout.pixelated {
+            size = size.round();
+        }
+        let mut xy =
+            glyph.pos + info.pos.as_vec2() / layout.resolution + Vec2::splat(layout.outline_radius);
+        if layout.pixelated {
+            xy = xy.round();
+        }
+        let outline = if layout.outline_width > 0 {
+            let key = GlyphCacheKey {
+                key: glyph.key,
+                outline: layout.outline_width,
+            };
+            self.cache.get(&key).map(|info| {
+                let texture_size = self.mask.texture.size();
+                let outline_size = info.size.as_vec2();
+                OutlineQuad {
+                    xy: xy - Vec2::splat(layout.outline_radius),
+                    size: size + Vec2::splat(layout.outline_radius * 2.0),
+                    uvs1: info.atlas_pos / texture_size,
+                    uvs2: (info.atlas_pos + outline_size) / texture_size,
+                    source: TextSource::mask(layout.pixelated),
+                }
+            })
+        } else {
+            None
+        };
+        quads.push(QuadData {
+            xy,
+            size,
+            uvs1: info.atlas_pos / atlas_size,
+            uvs2: (info.atlas_pos + atlas_glyph_size) / atlas_size,
+            source: atlas.source(layout.pixelated),
+            color: glyph.color,
+            pixelated: layout.pixelated,
+            outline,
+        });
+    }
+
+    fn resolve_icon(&self, icon: &PlacedIcon, quads: &mut Vec<QuadData>) {
+        let Some(info) = self.icon_cache.get(&icon.icon.id) else {
+            return;
+        };
+        let texture_size = self.atlas(info.atlas).texture.size();
+        let source_size = icon.icon.source_size().as_vec2();
+        let inner = info.outer_pos + Vec2::ONE;
+        quads.push(QuadData {
+            xy: icon.pos,
+            size: icon.size,
+            uvs1: inner / texture_size,
+            uvs2: (inner + source_size) / texture_size,
+            source: info.atlas.source(false),
+            color: icon.color,
+            pixelated: false,
+            outline: None,
+        });
+    }
+
+    fn atlas(&self, atlas: TextAtlas) -> &AtlasData {
+        match atlas {
+            TextAtlas::Mask => &self.mask,
+            TextAtlas::RgbaLinear => &self.rgba_linear,
+            TextAtlas::RgbaNearest => &self.rgba_nearest,
+        }
+    }
+
+    fn atlas_mut(&mut self, atlas: TextAtlas) -> &mut AtlasData {
+        match atlas {
+            TextAtlas::Mask => &mut self.mask,
+            TextAtlas::RgbaLinear => &mut self.rgba_linear,
+            TextAtlas::RgbaNearest => &mut self.rgba_nearest,
+        }
+    }
+
+    fn grow_atlas(&mut self, atlas: TextAtlas) -> Result<bool, String> {
+        let Some(mut generation) = self.atlas(atlas).grown_generation()? else {
+            return Ok(false);
+        };
+        self.restore_into(atlas, &generation.texture)?;
+        self.atlas_mut(atlas).commit(&mut generation);
+        self.bind_group = None;
+        Ok(true)
+    }
+
+    fn reset_atlas(&mut self, atlas: TextAtlas) -> Result<(), String> {
+        let mut generation = self.atlas(atlas).fresh_generation()?;
+        self.atlas_mut(atlas).commit(&mut generation);
+        self.cache.retain(|_, glyph| glyph.atlas != Some(atlas));
+        self.icon_cache.retain(|_, icon| icon.atlas != atlas);
+        self.bind_group = None;
         Ok(())
+    }
+
+    fn restore_into(&mut self, atlas: TextAtlas, texture: &Texture) -> Result<(), String> {
+        let glyphs: Vec<_> = self
+            .cache
+            .iter()
+            .filter(|(_, glyph)| glyph.atlas == Some(atlas))
+            .map(|(key, glyph)| (*key, glyph.clone()))
+            .collect();
+        for (key, glyph) in glyphs {
+            let image = self
+                .swash
+                .get_image_uncached(&mut self.font_system, key.key)
+                .ok_or_else(|| "Cannot restore a cached text glyph".to_string())?;
+            let offset = glyph.atlas_pos.as_uvec2();
+            if key.outline > 0 {
+                let outline = outline_info(
+                    image.placement.width,
+                    image.placement.height,
+                    image.placement.left,
+                    image.placement.top,
+                    key.outline,
+                    self.atlas(atlas),
+                )?;
+                expanded_mask(&mut self.temp_outline_buff, &image.data, &outline)?;
+                upload_texture(texture, outline.size, offset, &self.temp_outline_buff)?;
+            } else {
+                upload_texture(
+                    texture,
+                    uvec2(glyph.size.x as _, glyph.size.y as _),
+                    offset,
+                    &image.data,
+                )?;
+            }
+        }
+        let icons: Vec<_> = self
+            .icon_cache
+            .values()
+            .filter(|icon| icon.atlas == atlas)
+            .cloned()
+            .collect();
+        for icon in icons {
+            let size = padded_icon_size(&icon.icon)?;
+            fill_icon_border(&mut self.temp_rgba, &icon.icon, size)?;
+            upload_texture(texture, size, icon.outer_pos.as_uvec2(), &self.temp_rgba)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_sources(&mut self, layout: &TextLayout) -> Result<ProcessResult, String> {
+        for item in &layout.items {
+            match item {
+                LayoutItem::Glyph(glyph) => {
+                    if let Some(full) = self.ensure_glyph(glyph.key, layout.outline_width)? {
+                        return Ok(ProcessResult::Full(full));
+                    }
+                }
+                LayoutItem::Icon(icon) => {
+                    if let Some(full) = self.ensure_icon(&icon.icon)? {
+                        return Ok(ProcessResult::Full(full));
+                    }
+                }
+            }
+        }
+        Ok(ProcessResult::Ready)
+    }
+
+    fn ensure_glyph(
+        &mut self,
+        key: CacheKey,
+        outline_width: u16,
+    ) -> Result<Option<TextAtlas>, String> {
+        let normal_key = GlyphCacheKey { key, outline: 0 };
+        let normal_cached = self.cache.contains_key(&normal_key);
+        if outline_width > 0 {
+            let outline_key = GlyphCacheKey {
+                key,
+                outline: outline_width,
+            };
+            if !self.cache.contains_key(&outline_key)
+                && let Some(image) = self.swash.get_image_uncached(&mut self.font_system, key)
+                && image.placement.width > 0
+                && image.placement.height > 0
+                && image.content == SwashContent::Mask
+            {
+                let outline = outline_info(
+                    image.placement.width,
+                    image.placement.height,
+                    image.placement.left,
+                    image.placement.top,
+                    outline_width,
+                    &self.mask,
+                )?;
+                expanded_mask(&mut self.temp_outline_buff, &image.data, &outline)?;
+                let Some(atlas_pos) = self.mask.store(outline.size, &self.temp_outline_buff)?
+                else {
+                    return Ok(Some(TextAtlas::Mask));
+                };
+                self.cache.insert(
+                    outline_key,
+                    GlyphInfo {
+                        pos: outline.pos,
+                        size: outline.cache_size,
+                        atlas_pos,
+                        atlas: Some(TextAtlas::Mask),
+                    },
+                );
+            }
+        }
+        if normal_cached {
+            return Ok(None);
+        }
+        let Some(image) = self.swash.get_image_uncached(&mut self.font_system, key) else {
+            return Ok(None);
+        };
+        if image.placement.width == 0 || image.placement.height == 0 {
+            self.cache.insert(
+                normal_key,
+                GlyphInfo {
+                    pos: Pos::new(0, 0),
+                    size: Pos::new(0, 0),
+                    atlas_pos: Default::default(),
+                    atlas: None,
+                },
+            );
+            return Ok(None);
+        }
+        let atlas = match image.content {
+            SwashContent::Mask => TextAtlas::Mask,
+            SwashContent::Color => TextAtlas::RgbaLinear,
+            SwashContent::SubpixelMask => return Ok(None),
+        };
+        let Some(atlas_pos) = self.atlas_mut(atlas).store(
+            uvec2(image.placement.width, image.placement.height),
+            &image.data,
+        )?
+        else {
+            return Ok(Some(atlas));
+        };
+        self.cache.insert(
+            normal_key,
+            GlyphInfo {
+                pos: Pos::new(image.placement.left as _, -image.placement.top as _),
+                size: Pos::new(image.placement.width as _, image.placement.height as _),
+                atlas_pos,
+                atlas: Some(atlas),
+            },
+        );
+        Ok(None)
+    }
+
+    fn ensure_icon(&mut self, icon: &TextIcon) -> Result<Option<TextAtlas>, String> {
+        if self.icon_cache.contains_key(&icon.id) {
+            return Ok(None);
+        }
+        let atlas = icon_atlas(icon);
+        let size = padded_icon_size(icon)?;
+        self.atlas(atlas).preflight(size)?;
+        fill_icon_border(&mut self.temp_rgba, icon, size)?;
+        let staging = std::mem::take(&mut self.temp_rgba);
+        let stored = self.atlas_mut(atlas).store(size, &staging);
+        self.temp_rgba = staging;
+        let Some(outer_pos) = stored? else {
+            return Ok(Some(atlas));
+        };
+        self.icon_cache.insert(
+            icon.id,
+            IconInfo {
+                icon: icon.clone(),
+                outer_pos,
+                atlas,
+            },
+        );
+        Ok(None)
     }
 }
 
-enum PostAction {
-    End { block_size: Vec2, lines: usize },
-    Restore,
-    Clear,
+fn validate_layout_metrics(
+    text: &TextInfo,
+    pixelated: bool,
+    ppem: f32,
+    res_ppem: f32,
+    line_height_pem: f32,
+) -> Result<(f32, f32, f32), String> {
+    if text.strict_metrics {
+        validate_positive(text.font_size, "Text size")?;
+        validate_positive(text.resolution, "Text resolution")?;
+        if let Some(height) = text.line_height {
+            validate_positive(height, "Text line height")?;
+        }
+        if let Some(width) = text.wrap_width {
+            validate_positive(width, "Text maximum width")?;
+        }
+    }
+    validate_finite(text.font_size, "Text size")?;
+    validate_finite(text.resolution, "Text resolution")?;
+    if let Some(height) = text.line_height {
+        validate_finite(height, "Text line height")?;
+    }
+    if let Some(width) = text.wrap_width {
+        validate_finite(width, "Text maximum width")?;
+    }
+    validate_positive(ppem, "Text font pixel scale")?;
+    validate_positive(line_height_pem, "Text font line-height scale")?;
+
+    let font_size = text.font_size * ppem;
+    validate_positive(font_size, "Text effective font size")?;
+    let resolution = if pixelated {
+        validate_positive(res_ppem, "Text pixel font resolution")?;
+        if res_ppem > usize::MAX as f32 {
+            return Err("Text pixel font resolution is out of range".into());
+        }
+        let base = res_ppem as usize;
+        if base == 0 {
+            return Err("Text pixel font resolution is out of range".into());
+        }
+        let rounded_size = font_size.round();
+        if rounded_size > usize::MAX as f32 {
+            return Err("Text effective font size is out of range".into());
+        }
+        let snapped_size = (closest_multiple_of(rounded_size as usize, base) as f32).max(res_ppem);
+        validate_positive(snapped_size, "Text snapped pixel font size")?;
+        text.resolution * snapped_size / font_size
+    } else {
+        text.resolution
+    };
+    validate_positive(resolution, "Text effective resolution")?;
+
+    let line_height = text.line_height.unwrap_or(font_size * line_height_pem);
+    if text.line_height.is_some() {
+        validate_finite(line_height, "Text effective line height")?;
+    } else {
+        validate_positive(line_height, "Text effective line height")?;
+    }
+    Ok((font_size, resolution, line_height))
+}
+
+fn validate_finite(value: f32, name: &str) -> Result<(), String> {
+    if value.is_finite() {
+        Ok(())
+    } else {
+        Err(format!("{name} must be finite"))
+    }
+}
+
+fn validate_positive(value: f32, name: &str) -> Result<(), String> {
+    if value.is_finite() && value > 0.0 {
+        Ok(())
+    } else {
+        Err(format!("{name} must be finite and greater than zero"))
+    }
+}
+
+fn patch_inline_objects(
+    text: &str,
+    shape: &mut ShapeLine,
+    spans: &[markup::MarkupSpan],
+    objects: &[PlacedIcon],
+    seen: &mut [u8],
+) -> Result<(), String> {
+    for span in &mut shape.spans {
+        for word in &mut span.words {
+            for glyph in &mut word.glyphs {
+                let span_index = glyph
+                    .metadata
+                    .checked_sub(1)
+                    .ok_or_else(|| "Text glyph is missing semantic metadata".to_string())?;
+                let semantic = spans
+                    .get(span_index)
+                    .ok_or_else(|| "Text glyph metadata is out of bounds".to_string())?;
+                let Some(index) = semantic.object else {
+                    continue;
+                };
+                let object = objects
+                    .get(index)
+                    .ok_or_else(|| "Text icon metadata is out of bounds".to_string())?;
+                if text.get(glyph.start..glyph.end) != Some("\u{FFFC}") {
+                    return Err("Text icon metadata does not refer to an object placeholder".into());
+                }
+                let count = seen
+                    .get_mut(index)
+                    .ok_or_else(|| "Text icon metadata is out of bounds".to_string())?;
+                *count = count
+                    .checked_add(1)
+                    .ok_or_else(|| "Text icon placeholder was repeated too often".to_string())?;
+                if *count > 1 {
+                    return Err("Text icon placeholder produced multiple glyphs".into());
+                }
+                glyph.x_advance = object.size.x / object.size.y;
+                glyph.metrics_opt = Some(Metrics::new(object.size.y, object.size.y));
+                glyph.y_advance = 0.0;
+                glyph.ascent = 0.0;
+                glyph.descent = 0.0;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone)]
+struct IconInfo {
+    icon: TextIcon,
+    outer_pos: Vec2,
+    atlas: TextAtlas,
+}
+
+fn icon_atlas(icon: &TextIcon) -> TextAtlas {
+    match icon.sampling {
+        TextureFilter::Linear => TextAtlas::RgbaLinear,
+        TextureFilter::Nearest => TextAtlas::RgbaNearest,
+    }
+}
+
+fn padded_icon_size(icon: &TextIcon) -> Result<UVec2, String> {
+    let source = icon.source_size();
+    let width = source
+        .x
+        .checked_add(2)
+        .ok_or_else(|| "Text icon width overflowed".to_string())?;
+    let height = source
+        .y
+        .checked_add(2)
+        .ok_or_else(|| "Text icon height overflowed".to_string())?;
+    Ok(uvec2(width, height))
+}
+
+fn fill_icon_border(buffer: &mut Vec<u8>, icon: &TextIcon, padded: UVec2) -> Result<(), String> {
+    let length = usize::try_from(padded.x)
+        .ok()
+        .and_then(|width| {
+            usize::try_from(padded.y)
+                .ok()
+                .and_then(|height| width.checked_mul(height))
+        })
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or_else(|| "Text icon staging buffer exceeds platform limits".to_string())?;
+    buffer.clear();
+    buffer
+        .try_reserve_exact(length)
+        .map_err(|_| "Cannot allocate text icon staging buffer".to_string())?;
+    buffer.resize(length, 0);
+    let source = icon.source_size();
+    let source_width = usize::try_from(source.x)
+        .map_err(|_| "Text icon width exceeds platform limits".to_string())?;
+    let source_height = usize::try_from(source.y)
+        .map_err(|_| "Text icon height exceeds platform limits".to_string())?;
+    let padded_width = usize::try_from(padded.x)
+        .map_err(|_| "Text icon width exceeds platform limits".to_string())?;
+    for y in 0..usize::try_from(padded.y)
+        .map_err(|_| "Text icon height exceeds platform limits".to_string())?
+    {
+        let source_y = y.saturating_sub(1).min(source_height - 1);
+        for x in 0..padded_width {
+            let source_x = x.saturating_sub(1).min(source_width - 1);
+            let source_offset = (source_y * source_width + source_x) * 4;
+            let target_offset = (y * padded_width + x) * 4;
+            buffer[target_offset..target_offset + 4]
+                .copy_from_slice(&icon.pixels[source_offset..source_offset + 4]);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Copy, Clone, Debug)]
+enum ProcessResult {
+    Ready,
+    Full(TextAtlas),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) enum AtlasType {
-    None,
+enum TextAtlas {
     Mask,
-    Color,
+    RgbaLinear,
+    RgbaNearest,
+}
+
+impl TextAtlas {
+    const COUNT: usize = 3;
+
+    fn index(self) -> usize {
+        match self {
+            Self::Mask => 0,
+            Self::RgbaLinear => 1,
+            Self::RgbaNearest => 2,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Mask => "mask",
+            Self::RgbaLinear => "linear RGBA",
+            Self::RgbaNearest => "nearest RGBA",
+        }
+    }
+
+    fn source(self, pixelated: bool) -> TextSource {
+        match self {
+            Self::Mask => TextSource::mask(pixelated),
+            Self::RgbaLinear => TextSource::RgbaLinear,
+            Self::RgbaNearest => TextSource::RgbaNearest,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub(crate) enum TextSource {
+    MaskLinear,
+    MaskNearest,
+    RgbaLinear,
+    RgbaNearest,
+}
+
+impl TextSource {
+    fn mask(pixelated: bool) -> Self {
+        if pixelated {
+            Self::MaskNearest
+        } else {
+            Self::MaskLinear
+        }
+    }
+
+    pub(crate) fn selector(self) -> f32 {
+        match self {
+            Self::MaskLinear => 0.0,
+            Self::MaskNearest => 1.0,
+            Self::RgbaLinear => 2.0,
+            Self::RgbaNearest => 3.0,
+        }
+    }
 }
 
 pub(crate) struct AtlasData {
@@ -874,254 +1227,144 @@ pub(crate) struct AtlasData {
     allocator: BucketedAtlasAllocator,
     max_texture_size: u32,
     current_size: u32,
+    label: &'static str,
+}
+
+struct AtlasGeneration {
+    texture: Texture,
+    allocator: BucketedAtlasAllocator,
+    size: u32,
 }
 
 impl AtlasData {
-    fn store(&mut self, size: UVec2, data: &[u8]) -> Result<Option<Vec2>, String> {
-        let alloc = self.allocator.allocate(size2(
-            (size.x + ATLAS_PIXEL_OFFSET) as _,
-            (size.y + ATLAS_PIXEL_OFFSET) as _,
-        ));
-
-        let alloc = match alloc {
-            Some(alloc) => alloc,
-            None => {
-                return Ok(None);
-            }
-        };
-
-        let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
-        self.upload(size, offset, data)?;
-
-        Ok(Some(vec2(
-            alloc.rectangle.min.x as _,
-            alloc.rectangle.min.y as _,
-        )))
+    fn new(
+        label: &'static str,
+        format: TextureFormat,
+        max_texture_size: u32,
+    ) -> Result<Self, String> {
+        let max_texture_size = max_texture_size.min(u32::from(u16::MAX) - 1);
+        let current_size = DEFAULT_TEXTURE_SIZE.min(max_texture_size);
+        if current_size == 0 {
+            return Err("Text atlas maximum texture size is zero".into());
+        }
+        Ok(Self {
+            texture: Self::create_texture(label, format, current_size)?,
+            allocator: BucketedAtlasAllocator::new(size2(current_size as _, current_size as _)),
+            max_texture_size,
+            current_size,
+            label,
+        })
     }
 
-    fn upload(&self, size: UVec2, offset: UVec2, data: &[u8]) -> Result<(), String> {
-        log::trace!("Uploading new glyph to texture");
-        gfx::write_texture(&self.texture)
-            .from_data(data)
-            .with_offset(offset)
-            .with_size(size)
+    fn create_texture(
+        label: &'static str,
+        format: TextureFormat,
+        size: u32,
+    ) -> Result<Texture, String> {
+        gfx::create_texture()
+            .with_label(label)
+            .with_empty_size(size, size)
+            .with_format(format)
+            .with_write_flag(true)
             .build()
     }
 
-    fn grow(&mut self) -> Result<bool, String> {
-        let next_size = self.current_size * 2;
-        if next_size > self.max_texture_size {
-            log::debug!("Max text atlas size reached.");
-            return Ok(false);
+    fn preflight(&self, size: UVec2) -> Result<(i32, i32), String> {
+        let width = size
+            .x
+            .checked_add(ATLAS_PIXEL_OFFSET)
+            .ok_or_else(|| "Text atlas allocation width overflowed".to_string())?;
+        let height = size
+            .y
+            .checked_add(ATLAS_PIXEL_OFFSET)
+            .ok_or_else(|| "Text atlas allocation height overflowed".to_string())?;
+        if width > self.max_texture_size || height > self.max_texture_size {
+            return Err(format!(
+                "Text atlas entry {width}x{height} exceeds the {}x{} atlas limit",
+                self.max_texture_size, self.max_texture_size
+            ));
         }
-
-        log::debug!(
-            "Growing text atlas from {} to {}",
-            self.current_size,
-            next_size
-        );
-        self.allocator.grow(size2(next_size as _, next_size as _));
-
-        self.texture = gfx::create_texture()
-            .with_label("TextSystem Texture")
-            .with_empty_size(next_size, next_size)
-            .with_format(self.texture.format())
-            .with_write_flag(true)
-            .build()?;
-
-        self.current_size = next_size;
-
-        Ok(true)
+        let width = i32::try_from(width)
+            .map_err(|_| "Text atlas allocation width exceeds allocator limits".to_string())?;
+        let height = i32::try_from(height)
+            .map_err(|_| "Text atlas allocation height exceeds allocator limits".to_string())?;
+        Ok((width, height))
     }
 
-    fn clear(&mut self) -> Result<(), String> {
-        let channels = self.texture.format().channels();
-        let len = self.texture.size().element_product() as usize * channels as usize;
-        let empty = vec![0; len];
-
-        gfx::write_texture(&self.texture)
-            .from_data(&empty)
-            .build()?;
-
-        self.allocator.clear();
-
-        Ok(())
-    }
-}
-
-/// Comisc text have an issue when a wrap ends up on a whitespace
-/// https://github.com/pop-os/cosmic-text/issues/251
-/// this is a hackish way of avoid this for now
-/// it's kind of expensive because we need to process the string
-/// each time we renderer it, although I am not allocating a new
-/// string each time but reusing it.
-fn add_zwsp_hints<'a>(temp_hack_string: &mut String, s: &'a str) -> Cow<'a, str> {
-    if !s.as_bytes().contains(&b' ') {
-        return Cow::Borrowed(s);
-    }
-
-    let mut need = false;
-    for w in s.as_bytes().windows(2) {
-        if w[0] == b' ' {
-            need = true;
-            break;
-        }
-    }
-    if !need {
-        return Cow::Borrowed(s);
-    }
-
-    temp_hack_string.clear();
-    for ch in s.chars() {
-        temp_hack_string.push(ch);
-        if ch == ' ' {
-            temp_hack_string.push('\u{200B}');
-        }
-    }
-    Cow::Owned(std::mem::take(temp_hack_string))
-}
-
-type ColorStack = SmallVec<Color, 4>;
-type SpanRanges = SmallVec<(Range<usize>, Option<Color>), 8>;
-
-#[inline]
-fn color_attrs(attrs: Attrs, color: Option<Color>) -> Attrs {
-    match color.map(|c| c.to_rgba_u8()) {
-        Some([r, g, b, a]) => attrs.color(CosmicColor::rgba(r, g, b, a)),
-        None => attrs,
-    }
-}
-
-// TODO: remove it when cosmic-text adds a fix for https://github.com/pop-os/cosmic-text/issues/251
-fn try_add_zwsp_hints_ranges(
-    temp: &mut String,
-    text: &str,
-    span_ranges: &[(Range<usize>, Option<Color>)],
-) -> Option<SpanRanges> {
-    let mut prev_space = false;
-    let mut needs_hint = false;
-    for (range, _) in span_ranges {
-        let span_text = &text[range.clone()];
-        if span_text.is_empty() {
-            continue;
-        }
-        let bytes = span_text.as_bytes();
-        if prev_space && bytes[0] != b' ' {
-            needs_hint = true;
-            break;
-        }
-        for w in bytes.windows(2) {
-            if w[0] == b' ' {
-                needs_hint = true;
-                break;
-            }
-        }
-        if needs_hint {
-            break;
-        }
-        prev_space = *bytes.last().unwrap() == b' ';
-    }
-
-    if !needs_hint {
-        return None;
-    }
-
-    temp.clear();
-    let mut ranges = SpanRanges::new();
-    for (range, color) in span_ranges {
-        let span_text = &text[range.clone()];
-        let start = temp.len();
-        for ch in span_text.chars() {
-            temp.push(ch);
-            if ch == ' ' {
-                temp.push('\u{200B}');
-            }
-        }
-        ranges.push((start..temp.len(), *color));
-    }
-    Some(ranges)
-}
-
-const COLOR_TAG_OPEN: &str = "[color:#";
-const COLOR_TAG_CLOSE: &str = "[/color]";
-
-#[inline]
-fn try_parse_open_tag(s: &str) -> Option<(Color, usize)> {
-    let close_bracket = s.find(']')?;
-    let hex_str = &s[..close_bracket];
-    let color = parse_hex_color(hex_str);
-    Some((color, close_bracket + 1))
-}
-
-#[inline]
-fn parse_hex_color(hex: &str) -> Color {
-    let bytes = hex.as_bytes();
-    let mut value: u32 = 0;
-
-    for &b in bytes.iter().take(8) {
-        let nibble = match b {
-            b'0'..=b'9' => b - b'0',
-            b'a'..=b'f' => b - b'a' + 10,
-            b'A'..=b'F' => b - b'A' + 10,
-            _ => 0,
+    fn store(&mut self, size: UVec2, data: &[u8]) -> Result<Option<Vec2>, String> {
+        let (width, height) = self.preflight(size)?;
+        let Some(alloc) = self.allocator.allocate(size2(width, height)) else {
+            return Ok(None);
         };
-        value = (value << 4) | nibble as u32;
+        let offset = uvec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
+        if let Err(error) = upload_texture(&self.texture, size, offset, data) {
+            self.allocator.deallocate(alloc.id);
+            return Err(error);
+        }
+        Ok(Some(offset.as_vec2()))
     }
 
-    if bytes.len() <= 6 {
-        value = (value << 8) | 0xFF;
+    fn grown_generation(&self) -> Result<Option<AtlasGeneration>, String> {
+        if self.current_size >= self.max_texture_size {
+            return Ok(None);
+        }
+        let size = self
+            .current_size
+            .checked_mul(2)
+            .unwrap_or(self.max_texture_size)
+            .min(self.max_texture_size);
+        let mut allocator = self.allocator.clone();
+        allocator.grow(size2(size as _, size as _));
+        Ok(Some(AtlasGeneration {
+            texture: Self::create_texture(self.label, self.texture.format(), size)?,
+            allocator,
+            size,
+        }))
     }
 
-    Color::hex(value)
+    fn fresh_generation(&self) -> Result<AtlasGeneration, String> {
+        Ok(AtlasGeneration {
+            texture: Self::create_texture(self.label, self.texture.format(), self.current_size)?,
+            allocator: BucketedAtlasAllocator::new(size2(
+                self.current_size as _,
+                self.current_size as _,
+            )),
+            size: self.current_size,
+        })
+    }
+
+    fn commit(&mut self, generation: &mut AtlasGeneration) {
+        std::mem::swap(&mut self.texture, &mut generation.texture);
+        std::mem::swap(&mut self.allocator, &mut generation.allocator);
+        self.current_size = generation.size;
+    }
 }
 
-fn parse_color_tag_ranges(input: &str, default_color: Color) -> SpanRanges {
-    let mut ranges = SpanRanges::new();
-    let mut color_stack: ColorStack = SmallVec::new();
-    color_stack.push(default_color);
-    let mut cursor = 0;
-    let mut span_start = 0;
+fn upload_texture(
+    texture: &Texture,
+    size: UVec2,
+    offset: UVec2,
+    data: &[u8],
+) -> Result<(), String> {
+    log::trace!("Uploading new glyph to text atlas");
+    gfx::write_texture(texture)
+        .from_data(data)
+        .with_offset(offset)
+        .with_size(size)
+        .build()
+}
 
-    while cursor < input.len() {
-        let remaining = &input[cursor..];
-        let open_pos = remaining.find(COLOR_TAG_OPEN);
-        let close_pos = remaining.find(COLOR_TAG_CLOSE);
+#[derive(Clone, Debug)]
+struct GlyphInfo {
+    pos: Pos<i16>,
+    size: Pos<u16>,
+    atlas_pos: Vec2,
+    atlas: Option<TextAtlas>,
+}
 
-        match (open_pos, close_pos) {
-            (Some(op), close) if close.is_none() || op < close.unwrap() => {
-                if cursor + op > span_start {
-                    ranges.push((span_start..cursor + op, Some(*color_stack.last().unwrap())));
-                }
-                let after_prefix = &remaining[op + COLOR_TAG_OPEN.len()..];
-                if let Some((color, consumed)) = try_parse_open_tag(after_prefix) {
-                    color_stack.push(color);
-                    cursor += op + COLOR_TAG_OPEN.len() + consumed;
-                    span_start = cursor;
-                } else {
-                    cursor += op + 1;
-                }
-            }
-            (open, Some(cp)) if open.is_none() || cp < open.unwrap() => {
-                if cursor + cp > span_start {
-                    ranges.push((span_start..cursor + cp, Some(*color_stack.last().unwrap())));
-                }
-                if color_stack.len() > 1 {
-                    color_stack.pop();
-                }
-                cursor += cp + COLOR_TAG_CLOSE.len();
-                span_start = cursor;
-            }
-            (None, None) => {
-                if span_start < input.len() {
-                    ranges.push((span_start..input.len(), Some(*color_stack.last().unwrap())));
-                }
-                break;
-            }
-            _ => break,
-        }
-    }
-
-    ranges
+fn outline_radius(width: u16, resolution: f32, pixelated: bool) -> f32 {
+    let radius = f32::from(width) / resolution;
+    if pixelated { radius.round() } else { radius }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1148,99 +1391,116 @@ impl Pos<u16> {
     }
 }
 
-#[derive(Debug)]
-struct GlyphInfo {
+struct OutlineInfo {
+    size: UVec2,
+    cache_size: Pos<u16>,
     pos: Pos<i16>,
-    size: Pos<u16>,
-    atlas_pos: Vec2,
-    typ: AtlasType,
+    source_width: usize,
+    source_height: usize,
+    radius: usize,
+    output_width: usize,
+    output_len: usize,
 }
 
-fn expanded_mask(dst: &mut Vec<u8>, src: &[u8], w: u32, h: u32, radius: u32) {
-    let (w, h, r) = (w as usize, h as usize, radius as usize);
-    let ow = w + r * 2;
-    let oh = h + r * 2;
+fn outline_info(
+    source_width: u32,
+    source_height: u32,
+    left: i32,
+    top: i32,
+    outline_width: u16,
+    atlas: &AtlasData,
+) -> Result<OutlineInfo, String> {
+    let radius = u32::from(outline_width);
+    let padding = radius
+        .checked_mul(2)
+        .ok_or_else(|| "Text outline dimensions overflowed".to_string())?;
+    let width = source_width
+        .checked_add(padding)
+        .ok_or_else(|| "Text outline dimensions overflowed".to_string())?;
+    let height = source_height
+        .checked_add(padding)
+        .ok_or_else(|| "Text outline dimensions overflowed".to_string())?;
+    let size = uvec2(width, height);
+    atlas.preflight(size)?;
+    let cache_size = Pos::new(
+        u16::try_from(width)
+            .map_err(|_| "Text outline width exceeds glyph cache limits".to_string())?,
+        u16::try_from(height)
+            .map_err(|_| "Text outline height exceeds glyph cache limits".to_string())?,
+    );
 
+    let radius = i16::try_from(radius)
+        .map_err(|_| "Text outline width exceeds glyph position limits".to_string())?;
+    let radius_usize = radius as usize;
+    let left = i16::try_from(left)
+        .map_err(|_| "Text glyph horizontal position exceeds supported limits".to_string())?;
+    let top = i16::try_from(top)
+        .map_err(|_| "Text glyph vertical position exceeds supported limits".to_string())?;
+    let x = left
+        .checked_sub(radius)
+        .ok_or_else(|| "Text outline horizontal position overflowed".to_string())?;
+    let y = top
+        .checked_add(radius)
+        .and_then(i16::checked_neg)
+        .ok_or_else(|| "Text outline vertical position overflowed".to_string())?;
+
+    let source_width = usize::try_from(source_width)
+        .map_err(|_| "Text outline source width exceeds platform limits".to_string())?;
+    let source_height = usize::try_from(source_height)
+        .map_err(|_| "Text outline source height exceeds platform limits".to_string())?;
+    let output_width = usize::try_from(width)
+        .map_err(|_| "Text outline buffer exceeds platform limits".to_string())?;
+    let output_len = usize::try_from(height)
+        .ok()
+        .and_then(|height| output_width.checked_mul(height))
+        .ok_or_else(|| "Text outline buffer exceeds platform limits".to_string())?;
+    if output_len > MAX_OUTLINE_BUFFER_BYTES {
+        return Err(format!(
+            "Text outline bitmap exceeds the {} MiB limit",
+            MAX_OUTLINE_BUFFER_BYTES / (1024 * 1024)
+        ));
+    }
+
+    Ok(OutlineInfo {
+        size,
+        cache_size,
+        pos: Pos::new(x, y),
+        source_width,
+        source_height,
+        radius: radius_usize,
+        output_width,
+        output_len,
+    })
+}
+
+fn expanded_mask(dst: &mut Vec<u8>, src: &[u8], outline: &OutlineInfo) -> Result<(), String> {
+    let source_len = outline
+        .source_width
+        .checked_mul(outline.source_height)
+        .ok_or_else(|| "Text outline source buffer exceeds platform limits".to_string())?;
+    if src.len() < source_len {
+        return Err("Text outline source buffer is smaller than its glyph dimensions".into());
+    }
     dst.clear();
-    dst.resize(ow * oh, 0);
+    dst.try_reserve_exact(outline.output_len)
+        .map_err(|_| "Cannot allocate text outline buffer".to_string())?;
+    dst.resize(outline.output_len, 0);
 
-    for sy in 0..h {
-        let src_row = sy * w;
-        for sx in 0..w {
+    let width = outline.output_width;
+    let radius = outline.radius;
+    for sy in 0..outline.source_height {
+        let src_row = sy * outline.source_width;
+        for sx in 0..outline.source_width {
             if src[src_row + sx] == 0 {
                 continue;
             }
-
             let x0 = sx;
-            let x1 = sx + r * 2 + 1;
-            for dy in 0..=r * 2 {
-                let row_start = (sy + dy) * ow;
+            let x1 = sx + radius * 2 + 1;
+            for dy in 0..=radius * 2 {
+                let row_start = (sy + dy) * width;
                 dst[row_start + x0..row_start + x1].fill(255);
             }
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_no_tags() {
-        let ranges = parse_color_tag_ranges("Hello world", Color::WHITE);
-        assert_eq!(ranges.len(), 1);
-        assert_eq!(ranges[0].0, 0..11);
-        assert_eq!(ranges[0].1, Some(Color::WHITE));
-    }
-
-    #[test]
-    fn test_parse_single_color_tag() {
-        let input = "Hello [color:#FF0000]red[/color] world";
-        let ranges = parse_color_tag_ranges(input, Color::WHITE);
-        assert_eq!(ranges.len(), 3);
-        assert_eq!(&input[ranges[0].0.clone()], "Hello ");
-        assert_eq!(ranges[0].1, Some(Color::WHITE));
-        assert_eq!(&input[ranges[1].0.clone()], "red");
-        assert_eq!(ranges[1].1, Some(Color::hex(0xFF0000FF)));
-        assert_eq!(&input[ranges[2].0.clone()], " world");
-        assert_eq!(ranges[2].1, Some(Color::WHITE));
-    }
-
-    #[test]
-    fn test_parse_nested_color_tags() {
-        let input = "[color:#FF0000]red [color:#00FF00]green[/color] back[/color]";
-        let ranges = parse_color_tag_ranges(input, Color::WHITE);
-        assert_eq!(ranges.len(), 3);
-        assert_eq!(&input[ranges[0].0.clone()], "red ");
-        assert_eq!(ranges[0].1, Some(Color::hex(0xFF0000FF)));
-        assert_eq!(&input[ranges[1].0.clone()], "green");
-        assert_eq!(ranges[1].1, Some(Color::hex(0x00FF00FF)));
-        assert_eq!(&input[ranges[2].0.clone()], " back");
-        assert_eq!(ranges[2].1, Some(Color::hex(0xFF0000FF)));
-    }
-
-    #[test]
-    fn test_parse_with_alpha() {
-        let input = "[color:#FF000080]semi-transparent[/color]";
-        let ranges = parse_color_tag_ranges(input, Color::WHITE);
-        assert_eq!(ranges.len(), 1);
-        assert_eq!(&input[ranges[0].0.clone()], "semi-transparent");
-        assert_eq!(ranges[0].1, Some(Color::hex(0xFF000080)));
-    }
-
-    #[test]
-    fn test_parse_default_color() {
-        let default = Color::hex(0x123456FF);
-        let ranges = parse_color_tag_ranges("text", default);
-        assert_eq!(ranges.len(), 1);
-        assert_eq!(ranges[0].1, Some(default));
-    }
-
-    #[test]
-    fn test_parse_hex_color() {
-        assert_eq!(parse_hex_color("FF0000"), Color::hex(0xFF0000FF));
-        assert_eq!(parse_hex_color("00FF00"), Color::hex(0x00FF00FF));
-        assert_eq!(parse_hex_color("0000FF"), Color::hex(0x0000FFFF));
-        assert_eq!(parse_hex_color("FF000080"), Color::hex(0xFF000080));
-    }
+    Ok(())
 }

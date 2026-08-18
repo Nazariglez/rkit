@@ -7,10 +7,10 @@ use crate::{
         nine_slice::NineSlice2D,
         painter::DrawPipelineId,
         shapes::{Line2D, Path2D, Rectangle2D, Triangle2D},
-        text::Text2D,
+        text::{RichText2D, Text2D},
     },
     sprite::Sprite,
-    text::get_mut_text_system,
+    text::{RichTextLayout, get_mut_text_system},
 };
 use arrayvec::ArrayVec;
 use corelib::{
@@ -514,6 +514,11 @@ impl Draw2D {
     #[inline]
     pub fn text<'a, 'b: 'a>(&'a mut self, text: &'b str) -> Drawing<'a, Text2D<'a>> {
         Drawing::new(self, Text2D::new(text))
+    }
+
+    #[inline]
+    pub fn rich_text<'a>(&'a mut self, layout: &'a RichTextLayout) -> Drawing<'a, RichText2D<'a>> {
+        Drawing::new(self, RichText2D::new(layout))
     }
 
     #[inline]

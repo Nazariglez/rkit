@@ -1,11 +1,11 @@
-use crate::text::{AtlasType, Font, HAlign, TextInfo, get_mut_text_system};
+use crate::text::{Font, HAlign, QuadData, RichTextLayout, TextInfo, get_mut_text_system};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Transform2D};
 use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
 };
-use corelib::math::{IntoVec2, Rect, Vec2, bvec2};
+use corelib::math::{IntoVec2, Rect, Vec2, bvec2, vec2, vec3};
 use macros::Drawable2D;
-use std::cell::RefCell;
+use std::{borrow::Cow, cell::RefCell};
 
 #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
 use corelib::app::is_window_pixelated;
@@ -13,6 +13,7 @@ use corelib::app::is_window_pixelated;
 thread_local! {
     static TEMP_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(vec![]) };
     static TEMP_INDICES: RefCell<Vec<u32>> = const { RefCell::new(vec![]) };
+    static TEMP_QUADS: RefCell<Vec<QuadData>> = const { RefCell::new(vec![]) };
 }
 
 // language=wgsl
@@ -57,7 +58,9 @@ var s_nearest: sampler;
 @group(1) @binding(2)
 var t_mask: texture_2d<f32>;
 @group(1) @binding(3)
-var t_color: texture_2d<f32>;
+var t_rgba_linear: texture_2d<f32>;
+@group(1) @binding(4)
+var t_rgba_nearest: texture_2d<f32>;
 
 // srg to linear
 {{SRGB_TO_LINEAR}}
@@ -66,82 +69,62 @@ var t_color: texture_2d<f32>;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let in_color = srgb_to_linear(in.color);
 
-    // naga translation to webgl does not support using multiple samples per texture but webgpu does
     {{SELECT_TEXTURE_AND_SAMPLER}}
-
-    // emojis
-    let color_sample = textureSampleLevel(t_color, s_linear, in.uvs, 0.0);
-    return color_sample * in_color;
 }
 "#;
 
 #[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
 const SELECT_TEXTURE_SAMPLER: &str = r#"
-    // linear
     if (in.tex == 0.0) {
-        let mask_sample = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
-        return vec4(in_color.rgb, mask_sample.r * in_color.a);
+        let mask = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask.r * in_color.a);
     }
-
-    // nearest
     if (in.tex == 1.0) {
-        let mask_sample = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
-        return vec4(in_color.rgb, mask_sample.r * in_color.a);
+        let mask = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask.r * in_color.a);
     }
+    if (in.tex == 2.0) {
+        return textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0) * in_color;
+    }
+    return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
 "#;
 
 #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
-const SELECT_TEXTURE_SAMPLER_LINEAR: &str = r#"
-    // linear
-    if (in.tex != 2.0) {
-        let mask_sample = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
-        return vec4(in_color.rgb, mask_sample.r * in_color.a);
+const SELECT_TEXTURE_SAMPLER_WEBGL: &str = r#"
+    if (in.tex == 0.0 || in.tex == 1.0) {
+        let mask = textureSampleLevel(t_mask, {{MASK_SAMPLER}}, in.uvs, 0.0);
+        return vec4(in_color.rgb, mask.r * in_color.a);
     }
+    if (in.tex == 2.0) {
+        return textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0) * in_color;
+    }
+    return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
 "#;
 
-#[cfg(all(target_arch = "wasm32", feature = "webgl"))]
-const SELECT_TEXTURE_SAMPLER_NEAREST: &str = r#"
-    // nearest
-    if (in.tex != 2.0) {
-        let mask_sample = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
-        return vec4(in_color.rgb, mask_sample.r * in_color.a);
-    }
-"#;
-
-//  NOTE: WebGL shader translation does not support multiple shader per texture
-// to make this work, webgpu targets will select the sampler based on the font but
-// webgl will select only one sampler based on the window "pixelated" flag. This means that
-// if the window is defined as pixelated all font will use a NEAREST sampler while targeting WebGL
-// FIXME: not only webgl but if using opengl we should do the same
-fn select_texture_sampler() -> &'static str {
+fn select_texture_sampler() -> Cow<'static, str> {
     #[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
     {
-        #[allow(clippy::needless_return)]
-        return SELECT_TEXTURE_SAMPLER;
+        Cow::Borrowed(SELECT_TEXTURE_SAMPLER)
     }
 
     #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
     {
-        if is_window_pixelated() {
-            SELECT_TEXTURE_SAMPLER_NEAREST
+        let sampler = if is_window_pixelated() {
+            "s_nearest"
         } else {
-            SELECT_TEXTURE_SAMPLER_LINEAR
-        }
+            "s_linear"
+        };
+        Cow::Owned(SELECT_TEXTURE_SAMPLER_WEBGL.replace("{{MASK_SAMPLER}}", sampler))
     }
 }
 
-// TODO: alternatively we can create a new pipeline for WebGL using only one sampler and then
-// we swap the binding group depending if the font is pixelated or not. This will match the WebGPU
-// behavior where the same app can have pixelated and linear fonts, the downside is that this
-// we'll need to swap the batches if we're swapping between pixelated or linear fonts incurring in more
-// draw calls. Which is probably worth it if we want better webgl suppor.
 pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
     let shader = SHADER
         .replace(
             "{{SRGB_TO_LINEAR}}",
             include_str!("../resources/to_linear.wgsl"),
         )
-        .replace("{{SELECT_TEXTURE_AND_SAMPLER}}", select_texture_sampler());
+        .replace("{{SELECT_TEXTURE_AND_SAMPLER}}", &select_texture_sampler());
 
     let pip = gfx::create_render_pipeline(&shader)
         .with_label("Draw2D text default pipeline")
@@ -160,7 +143,8 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
                 .with_entry(BindingType::sampler(0).with_fragment_visibility(true))
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true))
                 .with_entry(BindingType::texture(2).with_fragment_visibility(true))
-                .with_entry(BindingType::texture(3).with_fragment_visibility(true)),
+                .with_entry(BindingType::texture(3).with_fragment_visibility(true))
+                .with_entry(BindingType::texture(4).with_fragment_visibility(true)),
         )
         .with_blend_mode(BlendMode::NORMAL)
         .build()?;
@@ -316,137 +300,280 @@ enum TextPass {
 
 impl Element2D for Text2D<'_> {
     fn process(&self, draw: &mut Draw2D) {
-        let outlined = self.outline_width > 0;
-
-        if self.shadow_offset.is_some() {
-            if outlined {
-                add_text_to_batch(self, TextPass::ShadowOutline, draw);
+        let info = TextInfo {
+            font: self.font,
+            text: self.text,
+            wrap_width: self.max_width,
+            font_size: self.size,
+            line_height: self.line_height,
+            resolution: self.res,
+            h_align: self.h_align,
+            color_tags: self.color_tags,
+            default_color: self.color,
+            outline_width: self.outline_width,
+            strict_metrics: false,
+        };
+        TEMP_QUADS.with_borrow_mut(|quads| {
+            let size = {
+                let mut system = get_mut_text_system();
+                let mut layout = system.take_layout();
+                system.layout_text(&info, &mut layout).unwrap();
+                system.ensure_layout(&layout).unwrap();
+                system.resolve_layout(&layout, quads);
+                let size = layout.size;
+                system.recycle_layout(layout);
+                size
+            };
+            set_text_bounds(
+                draw,
+                self.position,
+                size,
+                self.transform.unwrap_or_default(),
+            );
+            if quads.is_empty() {
+                return;
             }
-            add_text_to_batch(self, TextPass::ShadowFill, draw);
-        }
-
-        if outlined {
-            add_text_to_batch(self, TextPass::Outline, draw);
-        }
-
-        add_text_to_batch(self, TextPass::Fill, draw);
+            let outlined = self.outline_width > 0;
+            if self.shadow_offset.is_some() {
+                if outlined {
+                    add_text_to_batch(self, quads, size, TextPass::ShadowOutline, draw);
+                }
+                add_text_to_batch(self, quads, size, TextPass::ShadowFill, draw);
+            }
+            if outlined {
+                add_text_to_batch(self, quads, size, TextPass::Outline, draw);
+            }
+            add_text_to_batch(self, quads, size, TextPass::Fill, draw);
+        });
     }
 }
 
-fn add_text_to_batch(element: &Text2D, pass: TextPass, draw: &mut Draw2D) {
+#[derive(Drawable2D)]
+pub struct RichText2D<'a> {
+    layout: &'a RichTextLayout,
+    position: Vec2,
+    alpha: f32,
+
+    #[transform_2d]
+    transform: Option<Transform2D>,
+}
+
+impl<'a> RichText2D<'a> {
+    pub(crate) fn new(layout: &'a RichTextLayout) -> Self {
+        Self {
+            layout,
+            position: Vec2::ZERO,
+            alpha: 1.0,
+            transform: None,
+        }
+    }
+
+    pub fn position(&mut self, position: Vec2) -> &mut Self {
+        self.position = position;
+        self
+    }
+
+    pub fn alpha(&mut self, alpha: f32) -> &mut Self {
+        self.alpha = alpha;
+        self
+    }
+}
+
+impl Element2D for RichText2D<'_> {
+    fn process(&self, draw: &mut Draw2D) {
+        let size = self.layout.size();
+        let transform = self.transform.unwrap_or_default();
+        set_text_bounds(draw, self.position, size, transform);
+
+        TEMP_QUADS.with_borrow_mut(|quads| {
+            let mut system = get_mut_text_system();
+            system.ensure_layout(&self.layout.layout).unwrap();
+            system.resolve_layout(&self.layout.layout, quads);
+            drop(system);
+            add_rich_text_to_batch(self, quads, size, draw);
+        });
+    }
+}
+
+fn add_text_to_batch(
+    element: &Text2D,
+    quads: &[QuadData],
+    size: Vec2,
+    pass: TextPass,
+    draw: &mut Draw2D,
+) {
     let is_shadow = matches!(pass, TextPass::ShadowOutline | TextPass::ShadowFill);
     let is_outline = matches!(pass, TextPass::ShadowOutline | TextPass::Outline);
-
-    let base_col = element.color.with_alpha(element.color.a * element.alpha);
-    let shadow_col = element
+    let shadow_color = element
         .shadow_color
         .with_alpha(element.shadow_color.a * element.alpha);
-    let outline_col = element
+    let outline_color = element
         .outline_color
         .with_alpha(element.outline_color.a * element.alpha);
-
     let offset = if is_shadow {
         element.shadow_offset.unwrap_or(Vec2::ZERO)
     } else {
         Vec2::ZERO
     };
+    let position = element.position + offset;
 
-    let default_color = if is_shadow { shadow_col } else { base_col };
+    TEMP_VERTICES.with_borrow_mut(|vertices| {
+        TEMP_INDICES.with_borrow_mut(|indices| {
+            vertices.clear();
+            indices.clear();
 
-    let info = TextInfo {
-        pos: element.position + offset,
-        font: element.font,
-        text: element.text,
-        wrap_width: element.max_width,
-        font_size: element.size,
-        line_height: element.line_height,
-        resolution: element.res,
-        h_align: element.h_align,
-        color_tags: element.color_tags,
-        default_color,
-        outline_width: element.outline_width,
-    };
-
-    TEMP_VERTICES.with_borrow_mut(|temp_vertices| {
-        TEMP_INDICES.with_borrow_mut(|temp_indices| {
-            temp_vertices.clear();
-            temp_indices.clear();
-
-            let block_size = {
-                let mut sys = get_mut_text_system();
-                let block = sys.prepare_text(&info, false).unwrap();
-                if block.data.is_empty() {
-                    return;
-                }
-
-                block.data.iter().enumerate().for_each(|(i, data)| {
-                    let (xy, size, uvs1, uvs2, t_val) = if is_outline {
-                        let Some(od) = &data.outline else { return };
-                        let t = if data.pixelated { 1.0 } else { 0.0 };
-                        (od.xy, od.size, od.uvs1, od.uvs2, t)
-                    } else {
-                        let t = match data.typ {
-                            AtlasType::Mask if data.pixelated => 1.0,
-                            AtlasType::Mask => 0.0,
-                            _ => 2.0,
-                        };
-                        (data.xy, data.size, data.uvs1, data.uvs2, t)
+            for quad in quads {
+                let (xy, quad_size, uvs1, uvs2, source) = if is_outline {
+                    let Some(outline) = &quad.outline else {
+                        continue;
                     };
-
-                    let gc = match pass {
-                        TextPass::ShadowOutline | TextPass::ShadowFill => shadow_col,
-                        TextPass::Outline => outline_col,
-                        TextPass::Fill => data
-                            .color
-                            .map(|col| col.with_alpha(col.a * element.alpha))
-                            .unwrap_or(base_col),
-                    };
-
-                    let Vec2 { x: x1, y: y1 } = xy;
-                    let Vec2 { x: x2, y: y2 } = xy + size;
-                    let Vec2 { x: u1, y: v1 } = uvs1;
-                    let Vec2 { x: u2, y: v2 } = uvs2;
-
-                    #[rustfmt::skip]
-                    let vertices = [
-                        x1, y1, u1, v1, t_val, gc.r, gc.g, gc.b, gc.a,
-                        x2, y1, u2, v1, t_val, gc.r, gc.g, gc.b, gc.a,
-                        x1, y2, u1, v2, t_val, gc.r, gc.g, gc.b, gc.a,
-                        x2, y2, u2, v2, t_val, gc.r, gc.g, gc.b, gc.a,
-                    ];
-
-                    let n = (i * 4) as u32;
-
-                    #[rustfmt::skip]
-                    let indices = [
-                        n,     n + 1,   n + 2,
-                        n + 2, n + 1,   n + 3
-                    ];
-
-                    temp_vertices.extend_from_slice(vertices.as_slice());
-                    temp_indices.extend_from_slice(indices.as_slice());
-                });
-
-                block.size
-            };
-
-            let mut t = element.transform.unwrap_or_default();
-            t.set_size(block_size);
-            let pos = t.translation();
-            let anchor = t.anchor();
-            let scaled_size = t.size() * t.scale();
-            let matrix = t.updated_mat3();
-
-            let origin = element.position + pos - anchor * scaled_size;
-            draw.last_text_bounds = Rect::new(origin, scaled_size);
-
-            draw.add_to_batch(DrawingInfo {
-                pipeline: element.pip,
-                vertices: temp_vertices,
-                indices: temp_indices,
-                transform: matrix,
-                sprite: None,
-            });
+                    (
+                        outline.xy + position,
+                        outline.size,
+                        outline.uvs1,
+                        outline.uvs2,
+                        outline.source,
+                    )
+                } else {
+                    (
+                        quad.xy + position,
+                        quad.size,
+                        quad.uvs1,
+                        quad.uvs2,
+                        quad.source,
+                    )
+                };
+                let color = match pass {
+                    TextPass::ShadowOutline | TextPass::ShadowFill => shadow_color,
+                    TextPass::Outline => outline_color,
+                    TextPass::Fill => quad.color.with_alpha(quad.color.a * element.alpha),
+                };
+                push_quad(
+                    vertices,
+                    indices,
+                    xy,
+                    quad_size,
+                    uvs1,
+                    uvs2,
+                    source,
+                    color,
+                    quad.pixelated,
+                );
+            }
+            submit_text_batch(
+                draw,
+                vertices,
+                indices,
+                size,
+                element.transform.unwrap_or_default(),
+                element.pip,
+            );
         });
     });
+}
+
+fn add_rich_text_to_batch(element: &RichText2D, quads: &[QuadData], size: Vec2, draw: &mut Draw2D) {
+    TEMP_VERTICES.with_borrow_mut(|vertices| {
+        TEMP_INDICES.with_borrow_mut(|indices| {
+            vertices.clear();
+            indices.clear();
+            for quad in quads {
+                let color = quad.color.with_alpha(quad.color.a * element.alpha);
+                push_quad(
+                    vertices,
+                    indices,
+                    quad.xy + element.position,
+                    quad.size,
+                    quad.uvs1,
+                    quad.uvs2,
+                    quad.source,
+                    color,
+                    quad.pixelated,
+                );
+            }
+            submit_text_batch(
+                draw,
+                vertices,
+                indices,
+                size,
+                element.transform.unwrap_or_default(),
+                DrawPipelineId::Text,
+            );
+        });
+    });
+}
+
+fn push_quad(
+    vertices: &mut Vec<f32>,
+    indices: &mut Vec<u32>,
+    xy: Vec2,
+    size: Vec2,
+    uvs1: Vec2,
+    uvs2: Vec2,
+    source: crate::text::TextSource,
+    color: Color,
+    pixelated: bool,
+) {
+    let xy = if pixelated { xy.round() } else { xy };
+    let size = if pixelated { size.round() } else { size };
+    let Vec2 { x: x1, y: y1 } = xy;
+    let Vec2 { x: x2, y: y2 } = xy + size;
+    let Vec2 { x: u1, y: v1 } = uvs1;
+    let Vec2 { x: u2, y: v2 } = uvs2;
+    let source = source.selector();
+    let index = (vertices.len() / 9) as u32;
+
+    #[rustfmt::skip]
+    let quad = [
+        x1, y1, u1, v1, source, color.r, color.g, color.b, color.a,
+        x2, y1, u2, v1, source, color.r, color.g, color.b, color.a,
+        x1, y2, u1, v2, source, color.r, color.g, color.b, color.a,
+        x2, y2, u2, v2, source, color.r, color.g, color.b, color.a,
+    ];
+    #[rustfmt::skip]
+    let quad_indices = [
+        index, index + 1, index + 2,
+        index + 2, index + 1, index + 3,
+    ];
+    vertices.extend_from_slice(&quad);
+    indices.extend_from_slice(&quad_indices);
+}
+
+fn submit_text_batch(
+    draw: &mut Draw2D,
+    vertices: &mut Vec<f32>,
+    indices: &mut Vec<u32>,
+    size: Vec2,
+    mut transform: Transform2D,
+    pipeline: DrawPipelineId,
+) {
+    if vertices.is_empty() {
+        return;
+    }
+    transform.set_size(size);
+    draw.add_to_batch(DrawingInfo {
+        pipeline,
+        vertices,
+        indices,
+        transform: transform.updated_mat3(),
+        sprite: None,
+    });
+}
+
+fn set_text_bounds(draw: &mut Draw2D, position: Vec2, size: Vec2, mut transform: Transform2D) {
+    transform.set_size(size);
+    let matrix = draw.matrix() * transform.updated_mat3();
+    let mut min = Vec2::splat(f32::INFINITY);
+    let mut max = Vec2::splat(f32::NEG_INFINITY);
+    for corner in [
+        position,
+        position + vec2(size.x, 0.0),
+        position + vec2(0.0, size.y),
+        position + size,
+    ] {
+        let point = matrix * vec3(corner.x, corner.y, 1.0);
+        min = min.min(vec2(point.x, point.y));
+        max = max.max(vec2(point.x, point.y));
+    }
+    draw.last_text_bounds = Rect::from_min_max(min, max);
 }

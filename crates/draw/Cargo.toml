@@ -23,6 +23,7 @@ lyon = "1.0.16"
 
 etagere = "0.2.15"
 cosmic-text = "0.12.1"
+image = { version = "0.25.8", default-features = false, features = ["png", "ico", "jpeg", "webp"] }
 
 [features]
 default = []
