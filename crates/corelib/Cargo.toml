@@ -111,6 +111,7 @@ features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_System_LibraryLoader",
 ]
 
 [features]

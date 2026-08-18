@@ -28,8 +28,8 @@ use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Dx12BackendOptions, Extent3d,
-    GlBackendOptions, InstanceDescriptor, Origin3d, Queue, StoreOp, TexelCopyBufferLayout,
-    TextureDimension,
+    GlBackendOptions, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp,
+    TexelCopyBufferLayout, TextureDimension,
     util::{BufferInitDescriptor, DeviceExt, new_instance_with_webgpu_detection},
 };
 
@@ -42,6 +42,117 @@ impl HasDisplayHandle for WebDisplay {
     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
         Ok(DisplayHandle::web())
     }
+}
+
+#[cfg(target_os = "windows")]
+fn is_wine() -> bool {
+    use windows::{
+        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
+        core::s,
+    };
+
+    // SAFETY: This only queries the handle for a system module already loaded by the process.
+    let Ok(ntdll) = (unsafe { GetModuleHandleA(s!("ntdll.dll")) }) else {
+        return false;
+    };
+
+    // SAFETY: This only checks whether the export exists; the returned pointer is not retained or called.
+    unsafe { GetProcAddress(ntdll, s!("wine_get_version")) }.is_some()
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn init_wasm_gfx(
+    source: SurfaceSource,
+    vsync: bool,
+    win_size: UVec2,
+    pixelated: bool,
+    backend_override: Option<Backends>,
+) -> Result<GfxBackend, String> {
+    let backends = backend_override.unwrap_or_default();
+    match GfxBackend::new(source.clone(), vsync, win_size, pixelated, backends).await {
+        Ok(gfx) => Ok(gfx),
+        #[cfg(feature = "webgl")]
+        Err(error) => {
+            log::error!("Error initializing Gfx backend: {error}");
+            log::info!("Fallback to WebGL");
+            GfxBackend::new(source, vsync, win_size, pixelated, Backends::GL).await
+        }
+        #[cfg(not(feature = "webgl"))]
+        Err(error) => {
+            log::error!("Error initializing Gfx backend: {error}");
+            Err(error)
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn init_native_gfx(
+    source: SurfaceSource,
+    vsync: bool,
+    win_size: UVec2,
+    pixelated: bool,
+    backend_override: Option<Backends>,
+) -> Result<GfxBackend, String> {
+    let backends = match backend_override {
+        Some(backends) => {
+            log::info!("Using explicit graphics backend mask: {backends:?}");
+            backends
+        }
+        None => {
+            #[cfg(target_os = "windows")]
+            {
+                if is_wine() {
+                    log::info!(
+                        "Wine-compatible runtime detected; using default graphics backend selection"
+                    );
+                    Backends::default()
+                } else {
+                    log::info!("Using ordered Windows graphics backend policy");
+                    let attempts = [Backends::DX12, Backends::VULKAN, Backends::GL];
+                    let mut errors = Vec::with_capacity(attempts.len());
+
+                    for backends in attempts {
+                        log::info!("Attempting graphics backend: {backends:?}");
+                        match GfxBackend::new(source.clone(), vsync, win_size, pixelated, backends)
+                            .await
+                        {
+                            Ok(gfx) => {
+                                log::info!(
+                                    "Successfully initialized graphics backend: {backends:?}"
+                                );
+                                return Ok(gfx);
+                            }
+                            Err(error) => {
+                                log::warn!(
+                                    "Graphics backend initialization failed: {backends:?}: {error}"
+                                );
+                                errors.push(format!("{backends:?}: {error}"));
+                            }
+                        }
+                    }
+
+                    let error = format!(
+                        "All ordered Windows graphics backend attempts failed:\n{}",
+                        errors.join("\n")
+                    );
+                    log::error!("Error initializing Gfx backend: {error}");
+                    return Err(error);
+                }
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                Backends::default()
+            }
+        }
+    };
+
+    GfxBackend::new(source, vsync, win_size, pixelated, backends)
+        .await
+        .map_err(|error| {
+            log::error!("Error initializing Gfx backend: {error}");
+            error
+        })
 }
 
 pub(crate) struct GfxBackend {
@@ -77,20 +188,21 @@ impl GfxBackendImpl for GfxBackend {
     where
         Self: Sized,
     {
-        let res = Self::new(source.clone(), vsync, win_size, pixelated, false).await;
-        match res {
-            Ok(gfx) => Ok(gfx),
-            // allow fallback to webgl if webgpu is not supported
-            Err(e) if cfg!(all(target_arch = "wasm32", feature = "webgl")) => {
-                log::error!("Error initializing Gfx backend: {e}");
-                Self::new(source, vsync, win_size, pixelated, true)
-                    .await
-                    .map_err(|e| e)
-            }
-            Err(e) => {
-                log::error!("Error initializing Gfx backend: {e}");
-                Err(e)
-            }
+        let is_zero = win_size.x == 0 || win_size.y == 0;
+        if is_zero {
+            return Err("Cannot initialize a surface with a zero size".to_string());
+        }
+
+        let backend_override = Backends::from_env().filter(|backends| !backends.is_empty());
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            init_wasm_gfx(source, vsync, win_size, pixelated, backend_override).await
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            init_native_gfx(source, vsync, win_size, pixelated, backend_override).await
         }
     }
 
@@ -354,7 +466,7 @@ impl GfxBackendImpl for GfxBackend {
         &mut self,
         desc: RenderPipelineDescriptor,
     ) -> Result<RenderPipeline, String> {
-        log::trace!("Creating RenderPipeline (label={:?})", desc.label);
+        log::debug!("Creating RenderPipeline (label={:?})", desc.label);
         let shader = self
             .ctx
             .device
@@ -880,31 +992,18 @@ impl GfxBackend {
         vsync: bool,
         win_size: UVec2,
         pixelated: bool,
-        force_webgl: bool,
+        backends: Backends,
     ) -> Result<Self, String> {
-        if win_size.x == 0 || win_size.y == 0 {
-            return Err("Cannot initialize a surface with a zero size".to_string());
-        }
-
         let depth_format = SURFACE_DEFAULT_DEPTH_FORMAT; // make it configurable?
         let mut next_resource_id = 0;
 
-        let backend = if force_webgl && cfg!(all(target_arch = "wasm32", feature = "webgl")) {
-            log::info!("Fallback to WebGL");
-            Backends::GL
-        } else {
-            Backends::from_env()
-                .filter(|b| !b.is_empty())
-                .unwrap_or(Backends::default())
-        };
-
         #[cfg(not(target_arch = "wasm32"))]
         let mut descriptor =
-            InstanceDescriptor::new_with_display_handle_from_env(Box::new(source.display.clone()));
+            InstanceDescriptor::new_with_display_handle(Box::new(source.display.clone()));
         #[cfg(target_arch = "wasm32")]
-        let mut descriptor =
-            InstanceDescriptor::new_with_display_handle_from_env(Box::new(WebDisplay));
-        descriptor.backends = backend;
+        let mut descriptor = InstanceDescriptor::new_with_display_handle(Box::new(WebDisplay));
+        descriptor.backends = backends;
+        descriptor.flags = InstanceFlags::from_env_or_default();
         descriptor.backend_options = BackendOptions {
             gl: GlBackendOptions::from_env_or_default(),
             dx12: Dx12BackendOptions {
