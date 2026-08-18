@@ -487,7 +487,10 @@ impl<'w, S: Screen> ScreenWorld<'w, S> {
         I: IntoIterator,
         I::Item: Bundle<Effect: NoBundleEffect>,
     {
-        let batch = iter.into_iter().map(|b| (InScreen::<S>::default(), b));
+        let batch = iter
+            .into_iter()
+            .map(|b| (InScreen::<S>::default(), b))
+            .collect::<Vec<_>>();
         self.world.spawn_batch(batch)
     }
 

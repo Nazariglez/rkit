@@ -17,6 +17,7 @@ struct MouseState {
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
+        .insert_resource(MouseState::default())
         .on_update(update_system)
         .on_render(draw_system)
         .run()
