@@ -7,6 +7,7 @@ use super::{
 use crate::{
     ecs::{app::App, input::Mouse, plugin::Plugin, schedules::OnPostUpdate},
     input::MouseButton,
+    input_transition::{ButtonEdge, ordered_button_edges},
     math::Vec2,
     prelude::OnPreUpdate,
 };
@@ -213,8 +214,10 @@ fn pointer_interactivity_system<T: Component>(
     let mut consumed_click = false;
 
     let mut down_button = mouse.down_buttons();
+    let down_for_lifecycle = down_button.clone();
     let mut pressed_button = mouse.pressed_buttons();
     let mut released_button = mouse.released_buttons();
+    let released_for_lifecycle = released_button.clone();
     let mut scrolling = mouse.is_scrolling().then_some(mouse.wheel_delta());
     let is_moving = mouse.is_moving();
 
@@ -258,8 +261,16 @@ fn pointer_interactivity_system<T: Component>(
                     let init_click = pointer.init_click.contains_key(&btn);
                     let drag_started = pointer.init_drag.contains_key(&btn);
                     let is_down = mouse.is_down(btn);
+                    let released = released_for_lifecycle.contains(btn);
 
-                    if is_moving {
+                    if drag_started && (released || !is_down) {
+                        pointer.dragging.remove(&btn);
+                        pointer.init_drag.remove(&btn);
+                        pointer
+                            .dragging
+                            .insert(btn, UIDragEvent::End(parent_pos))
+                            .unwrap();
+                    } else if is_moving && !released {
                         let can_start = init_click && is_down && !drag_started;
                         let can_move = drag_started && is_down;
 
@@ -294,16 +305,6 @@ fn pointer_interactivity_system<T: Component>(
                                 .unwrap();
                         }
                     }
-
-                    let can_end = drag_started && !is_down;
-                    if can_end {
-                        pointer.dragging.remove(&btn);
-                        pointer.init_drag.remove(&btn);
-                        pointer
-                            .dragging
-                            .insert(btn, UIDragEvent::End(parent_pos))
-                            .unwrap();
-                    }
                 });
 
                 // clean last frame states
@@ -329,40 +330,45 @@ fn pointer_interactivity_system<T: Component>(
                             }
                         }
 
-                        if pressed_button.contains(btn) {
-                            pointer.pressed.insert(btn).unwrap();
-                            pointer.init_click.insert(btn, local_pos).unwrap();
+                        let pressed = pressed_button.contains(btn);
+                        let released = released_button.contains(btn);
+                        let down = down_for_lifecycle.contains(btn);
+                        for edge in ordered_button_edges(pressed, released, down) {
+                            match edge {
+                                ButtonEdge::Pressed => {
+                                    pointer.pressed.insert(btn).unwrap();
+                                    pointer.init_click.insert(btn, local_pos).unwrap();
 
-                            // consume
-                            if policy.on_pressed.contains(&btn) {
-                                pressed_button.remove(btn);
-                            }
+                                    if policy.on_pressed.contains(&btn) {
+                                        pressed_button.remove(btn);
+                                    }
 
-                            if policy.block_global_pressed.contains(&btn) {
-                                mouse.clear_pressed_btn(btn);
-                            }
-                        }
+                                    if policy.block_global_pressed.contains(&btn) {
+                                        mouse.clear_pressed_btn(btn);
+                                    }
+                                }
+                                ButtonEdge::Released => {
+                                    pointer.released.insert(btn).unwrap();
 
-                        if released_button.contains(btn) {
-                            pointer.released.insert(btn).unwrap();
+                                    if policy.on_released.contains(&btn) {
+                                        released_button.remove(btn);
+                                    }
 
-                            if policy.on_released.contains(&btn) {
-                                released_button.remove(btn);
-                            }
+                                    if policy.block_global_released.contains(&btn) {
+                                        mouse.clear_released_btn(btn);
+                                    }
 
-                            if policy.block_global_released.contains(&btn) {
-                                mouse.clear_released_btn(btn);
-                            }
+                                    if pointer.init_click.contains_key(&btn) && !consumed_click {
+                                        pointer.clicked.insert(btn).unwrap();
 
-                            if pointer.init_click.contains_key(&btn) && !consumed_click {
-                                pointer.clicked.insert(btn).unwrap();
+                                        if policy.on_click.contains(&btn) {
+                                            consumed_click = true;
+                                        }
+                                    }
 
-                                if policy.on_click.contains(&btn) {
-                                    consumed_click = true;
+                                    pointer.init_click.remove(&btn);
                                 }
                             }
-
-                            pointer.init_click.remove(&btn);
                         }
                     });
 

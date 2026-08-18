@@ -115,7 +115,6 @@ impl MouseState {
 
         self.pressed.insert(btn);
         self.down.insert(btn);
-        self.released.remove(btn);
     }
 
     pub fn release(&mut self, btn: MouseButton) {
@@ -125,7 +124,6 @@ impl MouseState {
 
         self.released.insert(btn);
         self.down.remove(btn);
-        self.pressed.remove(btn);
     }
 
     pub fn are_pressed<const N: usize>(&self, btns: &[MouseButton; N]) -> [bool; N] {
@@ -245,7 +243,7 @@ mod test {
         assert!(!state.is_released(MouseButton::Left));
 
         state.release(MouseButton::Left);
-        assert!(!state.is_pressed(MouseButton::Left));
+        assert!(state.is_pressed(MouseButton::Left));
         assert!(!state.is_down(MouseButton::Left));
         assert!(state.is_released(MouseButton::Left));
     }

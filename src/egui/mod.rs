@@ -13,6 +13,7 @@ use crate::{
     },
     egui::painter::get_mut_egui_painter,
     gfx::{self, Color},
+    input_transition::{ButtonEdge, ordered_button_edges},
 };
 use draw::Sprite;
 pub use egui::*;
@@ -168,35 +169,30 @@ fn read_input_system(
         command: mac_cmd || keyboard.is_crtl_down(),
     };
 
-    keyboard
-        .pressed_keys()
-        .iter()
-        .filter_map(kc_to_egui_key)
-        .for_each(|key| {
+    let pressed_keys = keyboard.pressed_keys();
+    let released_keys = keyboard.released_keys();
+    let keys = pressed_keys.iter().chain(
+        released_keys
+            .iter()
+            .filter(|key| !pressed_keys.contains(*key)),
+    );
+    for key in keys {
+        let Some(egui_key) = kc_to_egui_key(key) else {
+            continue;
+        };
+        let pressed = pressed_keys.contains(key);
+        let released = released_keys.contains(key);
+        for edge in ordered_button_edges(pressed, released, keyboard.is_down(key)) {
             input.events.push(Event::Key {
-                key,
+                key: egui_key,
                 // TODO: I this we should make this right, physical key vs logical
                 physical_key: None,
-                pressed: true,
+                pressed: matches!(edge, ButtonEdge::Pressed),
                 repeat: false,
                 modifiers,
             });
-        });
-
-    keyboard
-        .released_keys()
-        .iter()
-        .filter_map(kc_to_egui_key)
-        .for_each(|key| {
-            input.events.push(Event::Key {
-                key,
-                // TODO: I this we should make this right, physical key vs logical
-                physical_key: None,
-                pressed: false,
-                repeat: false,
-                modifiers,
-            });
-        });
+        }
+    }
 
     keyboard.pressed_text().iter().for_each(|text| {
         let printable = !text.is_empty() && text.chars().all(is_printable);
@@ -236,31 +232,28 @@ fn read_input_system(
         input.events.push(Event::PointerGone);
     }
 
-    mouse
-        .down_buttons()
-        .iter()
-        .filter_map(mb_to_egui_pointer)
-        .for_each(|button| {
+    let pressed_buttons = mouse.pressed_buttons();
+    let released_buttons = mouse.released_buttons();
+    let buttons = pressed_buttons.iter().chain(
+        released_buttons
+            .iter()
+            .filter(|button| !pressed_buttons.contains(*button)),
+    );
+    for button in buttons {
+        let Some(egui_button) = mb_to_egui_pointer(button) else {
+            continue;
+        };
+        let pressed = pressed_buttons.contains(button);
+        let released = released_buttons.contains(button);
+        for edge in ordered_button_edges(pressed, released, mouse.is_down(button)) {
             input.events.push(Event::PointerButton {
                 pos: mouse_pos,
-                button,
-                pressed: true,
+                button: egui_button,
+                pressed: matches!(edge, ButtonEdge::Pressed),
                 modifiers,
             });
-        });
-
-    mouse
-        .released_buttons()
-        .iter()
-        .filter_map(mb_to_egui_pointer)
-        .for_each(|button| {
-            input.events.push(Event::PointerButton {
-                pos: mouse_pos,
-                button,
-                pressed: false,
-                modifiers,
-            });
-        });
+        }
+    }
 
     if !input.events.is_empty() {
         ectx.ctx.request_repaint();

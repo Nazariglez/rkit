@@ -30,7 +30,10 @@ impl Plugin for MousePlugin {
     }
 }
 
-/// Mouse input state
+/// Mouse input state.
+///
+/// Pressed and released are independent frame-local transitions, so both can be
+/// true for one button. Down reports its final held state.
 #[derive(Resource)]
 pub struct Mouse {
     dirty: bool,
@@ -338,7 +341,10 @@ impl Plugin for KeyboardPlugin {
     }
 }
 
-/// Keyboard input state
+/// Keyboard input state.
+///
+/// Pressed and released are independent frame-local transitions, so both can be
+/// true for one key. Down reports its final held state.
 #[derive(Resource)]
 pub struct Keyboard {
     key_pressed: KeyCodeList,

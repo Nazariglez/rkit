@@ -9,14 +9,17 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use scene_graph::NodeIndex;
 use smallvec::SmallVec;
 use std::{any::TypeId, marker::PhantomData};
-use strum::EnumCount;
+use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::EnumCount;
 
-use crate::ui::{
-    UIEvents, UIInput, UINodeMetadata,
-    element::{UIElement, UIRoot},
-    events::{EventListener, ListenerType},
-    graph::{UIGraph, UIHandler, UINode},
+use crate::{
+    input_transition::{ButtonEdge, ordered_button_edges},
+    ui::{
+        UIEvents, UIInput, UINodeMetadata,
+        element::{UIElement, UIRoot},
+        events::{EventListener, ListenerType},
+        graph::{UIGraph, UIHandler, UINode},
+    },
 };
 
 /// Defines the actions to take after an input event is triggered.
@@ -270,6 +273,7 @@ impl<S> UIManager<S> {
         graph.reverse();
 
         let mut control = ProcessControl::default();
+        let mut new_clicks = FxHashSet::default();
 
         let down_btns = mouse_btns_down();
         let pressed_btns = mouse_btns_pressed();
@@ -330,48 +334,6 @@ impl<S> UIManager<S> {
                     }
                 });
 
-                pressed_btns.iter().for_each(|btn| {
-                    if control.can_trigger(ControlEvents::Pressed(btn), parent_raw, contains) {
-                        let id = (raw, btn);
-                        self.pressed.insert(id);
-                        self.start_click.insert(id, parent_point);
-                        let crtl = node.inner.input(
-                            UIInput::ButtonPressed(btn),
-                            state,
-                            &mut self.events,
-                            metadata,
-                        );
-                        control.store_control(ControlEvents::Pressed(btn), crtl, parent_raw);
-                    }
-                });
-
-                released_btns.iter().for_each(|btn| {
-                    let id = (raw, btn);
-                    if control.can_trigger(ControlEvents::Released(btn), parent_raw, contains) {
-                        self.released.insert(id);
-                        let crtl = node.inner.input(
-                            UIInput::ButtonReleased(btn),
-                            state,
-                            &mut self.events,
-                            metadata,
-                        );
-                        control.store_control(ControlEvents::Released(btn), crtl, parent_raw);
-                    }
-
-                    if control.can_trigger(ControlEvents::Click(btn), parent_raw, contains)
-                        && self.start_click.contains_key(&id)
-                    {
-                        self.clicked.insert(id);
-                        let crtl = node.inner.input(
-                            UIInput::ButtonClick(btn),
-                            state,
-                            &mut self.events,
-                            metadata,
-                        );
-                        control.store_control(ControlEvents::Click(btn), crtl, parent_raw);
-                    }
-                });
-
                 if let Some(delta) = scroll {
                     if control.can_trigger(ControlEvents::Scroll, parent_raw, contains) {
                         self.scrolling.insert(raw, delta);
@@ -393,10 +355,131 @@ impl<S> UIManager<S> {
                 control.store_control(ControlEvents::Leave, crtl, parent_raw);
             }
 
+            for btn in MouseButton::iter() {
+                let pressed = pressed_btns.contains(btn);
+                let released = released_btns.contains(btn);
+                let down = down_btns.contains(btn);
+                for edge in ordered_button_edges(pressed, released, down) {
+                    let id = (raw, btn);
+                    match edge {
+                        ButtonEdge::Pressed => {
+                            if contains
+                                && control.can_trigger(
+                                    ControlEvents::Pressed(btn),
+                                    parent_raw,
+                                    contains,
+                                )
+                            {
+                                self.pressed.insert(id);
+                                self.start_click.insert(id, parent_point);
+                                new_clicks.insert(id);
+                                let crtl = node.inner.input(
+                                    UIInput::ButtonPressed(btn),
+                                    state,
+                                    &mut self.events,
+                                    metadata,
+                                );
+                                control.store_control(
+                                    ControlEvents::Pressed(btn),
+                                    crtl,
+                                    parent_raw,
+                                );
+                            }
+                        }
+                        ButtonEdge::Released => {
+                            if contains {
+                                if control.can_trigger(
+                                    ControlEvents::Released(btn),
+                                    parent_raw,
+                                    contains,
+                                ) {
+                                    self.released.insert(id);
+                                    let crtl = node.inner.input(
+                                        UIInput::ButtonReleased(btn),
+                                        state,
+                                        &mut self.events,
+                                        metadata,
+                                    );
+                                    control.store_control(
+                                        ControlEvents::Released(btn),
+                                        crtl,
+                                        parent_raw,
+                                    );
+                                }
+
+                                if control.can_trigger(
+                                    ControlEvents::Click(btn),
+                                    parent_raw,
+                                    contains,
+                                ) && self.start_click.contains_key(&id)
+                                {
+                                    self.clicked.insert(id);
+                                    let crtl = node.inner.input(
+                                        UIInput::ButtonClick(btn),
+                                        state,
+                                        &mut self.events,
+                                        metadata,
+                                    );
+                                    control.store_control(
+                                        ControlEvents::Click(btn),
+                                        crtl,
+                                        parent_raw,
+                                    );
+                                }
+                            }
+
+                            if control.can_trigger(
+                                ControlEvents::ReleasedAnywhere(btn),
+                                parent_raw,
+                                contains,
+                            ) {
+                                let crtl = node.inner.input(
+                                    UIInput::ButtonReleasedAnywhere(btn),
+                                    state,
+                                    &mut self.events,
+                                    metadata,
+                                );
+                                control.store_control(
+                                    ControlEvents::ReleasedAnywhere(btn),
+                                    crtl,
+                                    parent_raw,
+                                );
+                            }
+
+                            if self.dragging.contains_key(&id)
+                                && control.can_trigger(
+                                    ControlEvents::DragEnd(btn),
+                                    parent_raw,
+                                    contains,
+                                )
+                            {
+                                let crtl = node.inner.input(
+                                    UIInput::DragEnd {
+                                        pos: parent_point,
+                                        btn,
+                                    },
+                                    state,
+                                    &mut self.events,
+                                    metadata,
+                                );
+                                control.store_control(
+                                    ControlEvents::DragEnd(btn),
+                                    crtl,
+                                    parent_raw,
+                                );
+                            }
+
+                            self.start_click.remove(&id);
+                            self.dragging.remove(&id);
+                        }
+                    }
+                }
+            }
+
             if moving {
                 self.start_click
                     .iter()
-                    .filter(|((ui_raw, _btn), _pos)| *ui_raw == raw)
+                    .filter(|((ui_raw, btn), _pos)| *ui_raw == raw && !pressed_btns.contains(*btn))
                     .for_each(|(&(raw, btn), pos)| {
                         let id = (raw, btn);
                         if !self.dragging.contains_key(&id)
@@ -436,36 +519,6 @@ impl<S> UIManager<S> {
                         *last_drag_pos = parent_point;
                     });
             }
-
-            released_btns.iter().for_each(|btn| {
-                if control.can_trigger(ControlEvents::ReleasedAnywhere(btn), parent_raw, contains) {
-                    let crtl = node.inner.input(
-                        UIInput::ButtonReleasedAnywhere(btn),
-                        state,
-                        &mut self.events,
-                        metadata,
-                    );
-                    control.store_control(ControlEvents::ReleasedAnywhere(btn), crtl, parent_raw);
-                }
-
-                let id = (raw, btn);
-                if self.dragging.contains_key(&id)
-                    && control.can_trigger(ControlEvents::DragEnd(btn), parent_raw, contains)
-                {
-                    let crtl = node.inner.input(
-                        UIInput::DragEnd {
-                            pos: parent_point,
-                            btn,
-                        },
-                        state,
-                        &mut self.events,
-                        metadata,
-                    );
-                    control.store_control(ControlEvents::DragEnd(btn), crtl, parent_raw);
-
-                    let _ = self.dragging.remove(&id);
-                }
-            });
         }
 
         // TODO: consume events on input callback
@@ -473,7 +526,8 @@ impl<S> UIManager<S> {
 
         // clean any node that was pressed with this button
         released_btns.iter().for_each(|btn| {
-            self.start_click.retain(|(_, b), _| btn != *b);
+            self.start_click
+                .retain(|id, _| id.1 != btn || new_clicks.contains(id));
             self.dragging.retain(|(_, b), _| btn != *b);
         });
     }

@@ -592,7 +592,6 @@ impl KeyboardState {
 
         self.pressed.insert(btn);
         self.down.insert(btn);
-        self.released.remove(btn);
     }
 
     pub fn release(&mut self, btn: KeyCode) {
@@ -602,7 +601,6 @@ impl KeyboardState {
 
         self.released.insert(btn);
         self.down.remove(btn);
-        self.pressed.remove(btn);
     }
 
     pub fn are_pressed<const N: usize>(&self, btns: &[KeyCode; N]) -> [bool; N] {
@@ -771,7 +769,7 @@ mod test {
         assert!(!state.is_released(KeyCode::KeyG));
 
         state.release(KeyCode::KeyG);
-        assert!(!state.is_pressed(KeyCode::KeyG));
+        assert!(state.is_pressed(KeyCode::KeyG));
         assert!(!state.is_down(KeyCode::KeyG));
         assert!(state.is_released(KeyCode::KeyG));
     }

@@ -1,3 +1,6 @@
+#[cfg(any(feature = "ui", feature = "egui"))]
+mod input_transition;
+
 pub mod assets2;
 pub mod tween;
 pub mod utils;

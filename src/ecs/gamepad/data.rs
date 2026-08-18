@@ -357,15 +357,21 @@ pub(super) struct GamepadInfo {
 
 impl GamepadInfo {
     pub fn press(&mut self, btn: GamepadButton) {
+        if self.down.contains(btn) {
+            return;
+        }
+
         self.pressed.insert(btn);
         self.down.insert(btn);
-        self.released.remove(btn);
     }
 
     pub fn release(&mut self, btn: GamepadButton) {
+        if !self.down.contains(btn) {
+            return;
+        }
+
         self.released.insert(btn);
         self.down.remove(btn);
-        self.pressed.remove(btn);
     }
 
     pub fn set_axis_strength(&mut self, axis: GamepadAxis, strength: f32) {
