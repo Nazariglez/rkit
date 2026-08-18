@@ -4,7 +4,10 @@ mod utils;
 mod window;
 
 use crate::{
-    backend::traits::{BackendImpl, GfxBackendImpl, SurfaceSource},
+    backend::{
+        traits::{BackendImpl, GfxBackendImpl},
+        wgpu::SurfaceSource,
+    },
     builder::AppBuilder,
     events::{CORE_EVENTS_MAP, CoreEvent},
     gfx::GfxBackend,

@@ -3,21 +3,21 @@ mod traits;
 mod web;
 mod wgpu;
 
-#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+#[cfg(native_windowed)]
 mod winit;
 
-#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+#[cfg(native_windowed)]
 mod limiter;
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "headless"))]
+#[cfg(native_headless)]
 mod headless;
 
 pub(crate) use traits::{BackendImpl, GfxBackendImpl};
 
-#[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+#[cfg(native_windowed)]
 pub(crate) use winit::*;
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "headless"))]
+#[cfg(native_headless)]
 pub(crate) use headless::*;
 
 #[cfg(target_arch = "wasm32")]

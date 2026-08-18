@@ -1,11 +1,44 @@
-use crate::backend::traits::SurfaceSource;
-use crate::backend::wgpu::context::Context;
+use super::context::Context;
 use crate::backend::wgpu::texture::Texture;
 use crate::math::UVec2;
 use wgpu::{
     CurrentSurfaceTexture, Device, Instance, PresentMode, Surface as RawSurface,
     SurfaceCapabilities, SurfaceConfiguration,
 };
+
+#[cfg(native_windowed)]
+use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
+use web_sys::HtmlCanvasElement;
+#[cfg(native_windowed)]
+use winit::{event_loop::OwnedDisplayHandle, window::Window};
+
+#[cfg(native_windowed)]
+#[derive(Clone)]
+pub(crate) struct SurfaceSource {
+    pub(crate) window: Arc<Window>,
+    pub(crate) display: OwnedDisplayHandle,
+}
+
+#[cfg(native_windowed)]
+impl SurfaceSource {
+    pub(crate) fn new(window: Arc<Window>, display: OwnedDisplayHandle) -> Self {
+        Self { window, display }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone)]
+pub(crate) struct SurfaceSource {
+    pub(crate) canvas: HtmlCanvasElement,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl SurfaceSource {
+    pub(crate) fn new(canvas: HtmlCanvasElement) -> Self {
+        Self { canvas }
+    }
+}
 
 pub(crate) struct SurfaceOwner {
     surface: RawSurface<'static>,
@@ -77,7 +110,7 @@ impl SurfaceCandidate {
         })
     }
 
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+    #[cfg(native_windowed)]
     pub fn replacement(
         ctx: &Context,
         owner: SurfaceOwner,

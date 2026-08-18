@@ -20,8 +20,8 @@ use crate::{
     app::{IconSource, WindowConfig},
     backend::{
         limiter::{FpsLimiter, LimitMode},
-        traits::{BackendImpl, GfxBackendImpl, SurfaceSource},
-        wgpu::GfxBackend,
+        traits::{BackendImpl, GfxBackendImpl},
+        wgpu::{GfxBackend, SurfaceSource},
     },
     builder::AppBuilder,
     events::{CORE_EVENTS_MAP, CoreEvent},

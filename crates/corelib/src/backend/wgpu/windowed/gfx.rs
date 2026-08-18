@@ -1,16 +1,14 @@
 #![allow(clippy::arc_with_non_send_sync)]
 
+use super::{
+    context::Context,
+    frame::DrawFrame,
+    offscreen::OffscreenSurfaceData,
+    surface::{Surface, SurfaceCandidate, SurfaceOwner, SurfaceSource},
+    utils::{wgpu_depth_stencil, wgpu_shader_visibility},
+};
 use crate::{
-    backend::{
-        traits::{GfxBackendImpl, SurfaceSource},
-        wgpu::{
-            context::Context,
-            frame::DrawFrame,
-            offscreen::OffscreenSurfaceData,
-            surface::{Surface, SurfaceCandidate, SurfaceOwner},
-            utils::{wgpu_depth_stencil, wgpu_shader_visibility},
-        },
-    },
+    backend::traits::GfxBackendImpl,
     gfx::{
         BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
         BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, MAX_BINDING_ENTRIES,
@@ -161,7 +159,7 @@ pub(crate) struct GfxBackend {
     next_resource_id: u64,
     ctx: Context,
 
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+    #[cfg(native_windowed)]
     depth_format: TextureFormat,
     frame: Option<DrawFrame>,
 
@@ -179,73 +177,6 @@ unsafe impl Send for GfxBackend {}
 unsafe impl Sync for GfxBackend {}
 
 impl GfxBackendImpl for GfxBackend {
-    async fn init(
-        source: SurfaceSource,
-        vsync: bool,
-        win_size: UVec2,
-        pixelated: bool,
-    ) -> Result<Self, String>
-    where
-        Self: Sized,
-    {
-        let is_zero = win_size.x == 0 || win_size.y == 0;
-        if is_zero {
-            return Err("Cannot initialize a surface with a zero size".to_string());
-        }
-
-        let backend_override = Backends::from_env().filter(|backends| !backends.is_empty());
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            init_wasm_gfx(source, vsync, win_size, pixelated, backend_override).await
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            init_native_gfx(source, vsync, win_size, pixelated, backend_override).await
-        }
-    }
-
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
-    fn update_surface(&mut self, source: SurfaceSource, win_size: UVec2) -> Result<(), String>
-    where
-        Self: Sized,
-    {
-        let size = if win_size.x == 0 || win_size.y == 0 {
-            UVec2::new(self.surface.config.width, self.surface.config.height)
-        } else {
-            win_size
-        };
-        if size.x == 0 || size.y == 0 {
-            return Err("Cannot replace a surface without a nonzero size".to_string());
-        }
-
-        let owner = SurfaceOwner::new(source, &self.ctx.instance)?;
-        let candidate = SurfaceCandidate::replacement(&self.ctx, owner, size, &self.surface)?;
-        let mut next_resource_id = self.next_resource_id;
-        let depth_texture = create_surface_depth(
-            resource_id(&mut next_resource_id),
-            &self.ctx,
-            self.depth_format,
-            size,
-        )?;
-        let offscreen = self
-            .offscreen
-            .as_ref()
-            .ok_or_else(|| "Invalid Offscreen surface".to_string())?
-            .prepare_resize(self, size, &mut next_resource_id)?;
-
-        let surface = candidate.configure(&self.ctx.device, depth_texture);
-
-        self.surface = surface;
-        if let Some(resized) = offscreen {
-            self.offscreen.as_mut().unwrap().commit_resize(resized);
-        }
-        self.next_resource_id = next_resource_id;
-        self.frame = None;
-        Ok(())
-    }
-
     fn prepare_frame(&mut self) -> Result<(), String> {
         let can_render = self.surface.config.width > 0 && self.surface.config.height > 0;
         if !can_render {
@@ -879,6 +810,71 @@ fn resource_id<T: From<u64>>(count: &mut u64) -> T {
 }
 
 impl GfxBackend {
+    pub(crate) async fn init(
+        source: SurfaceSource,
+        vsync: bool,
+        win_size: UVec2,
+        pixelated: bool,
+    ) -> Result<Self, String> {
+        let is_zero = win_size.x == 0 || win_size.y == 0;
+        if is_zero {
+            return Err("Cannot initialize a surface with a zero size".to_string());
+        }
+
+        let backend_override = Backends::from_env().filter(|backends| !backends.is_empty());
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            init_wasm_gfx(source, vsync, win_size, pixelated, backend_override).await
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            init_native_gfx(source, vsync, win_size, pixelated, backend_override).await
+        }
+    }
+
+    #[cfg(native_windowed)]
+    pub(crate) fn update_surface(
+        &mut self,
+        source: SurfaceSource,
+        win_size: UVec2,
+    ) -> Result<(), String> {
+        let size = if win_size.x == 0 || win_size.y == 0 {
+            UVec2::new(self.surface.config.width, self.surface.config.height)
+        } else {
+            win_size
+        };
+        if size.x == 0 || size.y == 0 {
+            return Err("Cannot replace a surface without a nonzero size".to_string());
+        }
+
+        let owner = SurfaceOwner::new(source, &self.ctx.instance)?;
+        let candidate = SurfaceCandidate::replacement(&self.ctx, owner, size, &self.surface)?;
+        let mut next_resource_id = self.next_resource_id;
+        let depth_texture = create_surface_depth(
+            resource_id(&mut next_resource_id),
+            &self.ctx,
+            self.depth_format,
+            size,
+        )?;
+        let offscreen = self
+            .offscreen
+            .as_ref()
+            .ok_or_else(|| "Invalid Offscreen surface".to_string())?
+            .prepare_resize(self, size, &mut next_resource_id)?;
+
+        let surface = candidate.configure(&self.ctx.device, depth_texture);
+
+        self.surface = surface;
+        if let Some(resized) = offscreen {
+            self.offscreen.as_mut().unwrap().commit_resize(resized);
+        }
+        self.next_resource_id = next_resource_id;
+        self.frame = None;
+        Ok(())
+    }
+
     pub(crate) fn prepare_bind_group(
         &self,
         next_resource_id: &mut u64,
@@ -1033,7 +1029,7 @@ impl GfxBackend {
         let mut bck = Self {
             next_resource_id,
             ctx,
-            #[cfg(all(not(target_arch = "wasm32"), not(feature = "headless")))]
+            #[cfg(native_windowed)]
             depth_format,
             surface,
             frame: None,

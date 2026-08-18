@@ -1,10 +1,10 @@
+use super::{frame::DrawFrame, gfx::GfxBackend};
 use crate::backend::GfxBackendImpl;
-use crate::backend::wgpu::frame::DrawFrame;
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingType, BlendMode,
-    Buffer, BufferDescriptor, BufferUsage, GfxBackend, IndexFormat, RenderPipeline,
-    RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
-    SamplerDescriptor, TextureFilter, TextureFormat, VertexFormat, VertexLayout,
+    Buffer, BufferDescriptor, BufferUsage, IndexFormat, RenderPipeline, RenderPipelineDescriptor,
+    RenderTexture, RenderTextureDescriptor, Renderer, Sampler, SamplerDescriptor, TextureFilter,
+    TextureFormat, VertexFormat, VertexLayout,
 };
 use crate::math::UVec2;
 
