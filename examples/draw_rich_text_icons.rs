@@ -17,6 +17,7 @@ struct State {
     colors: RichTextLayout,
     banner_and_fallback: RichTextLayout,
     unicode: RichTextLayout,
+    bidi_controls: RichTextLayout,
     transformed: RichTextLayout,
 }
 
@@ -111,6 +112,34 @@ fn init() -> State {
     .max_width(540.0)
     .layout()
     .unwrap();
+    let bidi_controls = rich_layout(
+        "Before: Keepers\u{2068}\u{00A0}\u{2069}[icon:pixel] end\n\
+         After: [icon:pixel]\u{2068}\u{00A0}\u{2069} end\n\
+         RTL: אבג \u{2066}ABC [icon:pixel]\u{2069} דהו",
+        &icons,
+        &font,
+    )
+    .layout()
+    .unwrap();
+    let bidi_baseline = rich_layout(
+        "Before: Keepers\u{00A0}[icon:pixel] end\n\
+         After: [icon:pixel]\u{00A0} end\n\
+         RTL: אבג ABC [icon:pixel] דהו",
+        &icons,
+        &font,
+    )
+    .layout()
+    .unwrap();
+    assert_eq!(bidi_controls.line_count(), bidi_baseline.line_count());
+    for (isolated, baseline) in bidi_controls.lines().iter().zip(bidi_baseline.lines()) {
+        assert!(
+            (isolated.size().x - baseline.size().x).abs() < 0.01,
+            "isolated {:?}, baseline {:?}",
+            isolated.size(),
+            baseline.size()
+        );
+    }
+
     let transformed = rich_layout("Origin + rotation [icon:pixel]", &icons, &font)
         .layout()
         .unwrap();
@@ -127,6 +156,7 @@ fn init() -> State {
         colors,
         banner_and_fallback,
         unicode,
+        bidi_controls,
         transformed,
     }
 }
@@ -208,8 +238,17 @@ fn update(state: &mut State) {
         "CJK and mixed RTL/LTR/numeric text",
         unicode_label,
     );
-    draw.rich_text(&state.unicode)
-        .position(unicode_label + vec2(0.0, 21.0));
+    let unicode_pos = unicode_label + vec2(0.0, 21.0);
+    draw.rich_text(&state.unicode).position(unicode_pos);
+
+    let bidi_label = unicode_pos + vec2(0.0, state.unicode.size().y + 28.0);
+    label(
+        &mut draw,
+        "Bidi controls before/after icons and RTL isolation",
+        bidi_label,
+    );
+    draw.rich_text(&state.bidi_controls)
+        .position(bidi_label + vec2(0.0, 21.0));
 
     let angle = 0.35_f32;
     let scale = 1.2;

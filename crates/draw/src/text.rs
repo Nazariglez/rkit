@@ -538,17 +538,13 @@ impl TextSystem {
             let Some(shape) = buffer_line.shape_opt().as_ref() else {
                 continue;
             };
-            let shape = if objects.is_empty() {
+            let line_text = buffer_line.text();
+            let has_bidi_controls = line_text.chars().any(is_bidi_formatting_control);
+            let shape = if objects.is_empty() && !has_bidi_controls {
                 std::borrow::Cow::Borrowed(shape)
             } else {
                 let mut shape = shape.clone();
-                patch_inline_objects(
-                    buffer_line.text(),
-                    &mut shape,
-                    &markup.spans,
-                    &objects,
-                    &mut seen,
-                )?;
+                patch_shape(line_text, &mut shape, &markup.spans, &objects, &mut seen)?;
                 std::borrow::Cow::Owned(shape)
             };
             let layout_lines =
@@ -568,6 +564,7 @@ impl TextSystem {
                 let min_x = layout_line
                     .glyphs
                     .iter()
+                    .filter(|glyph| !is_bidi_control_cluster(line_text, glyph.start, glyph.end))
                     .flat_map(|glyph| [glyph.x, glyph.x + glyph.w])
                     .reduce(f32::min)
                     .unwrap_or(0.0);
@@ -584,6 +581,9 @@ impl TextSystem {
                 let text_height = layout_line.max_ascent + layout_line.max_descent;
                 let baseline = line_top + (height - text_height) * 0.5 + layout_line.max_ascent;
                 for glyph in &layout_line.glyphs {
+                    if is_bidi_control_cluster(line_text, glyph.start, glyph.end) {
+                        continue;
+                    }
                     let span_index = glyph
                         .metadata
                         .checked_sub(1)
@@ -1044,7 +1044,28 @@ fn validate_positive(value: f32, name: &str) -> Result<(), String> {
     }
 }
 
-fn patch_inline_objects(
+fn is_bidi_formatting_control(character: char) -> bool {
+    matches!(
+        character,
+        '\u{202A}'
+            | '\u{202B}'
+            | '\u{202C}'
+            | '\u{202D}'
+            | '\u{202E}'
+            | '\u{2066}'
+            | '\u{2067}'
+            | '\u{2068}'
+            | '\u{2069}'
+    )
+}
+
+fn is_bidi_control_cluster(text: &str, start: usize, end: usize) -> bool {
+    text.get(start..end).is_some_and(|cluster| {
+        !cluster.is_empty() && cluster.chars().all(is_bidi_formatting_control)
+    })
+}
+
+fn patch_shape(
     text: &str,
     shape: &mut ShapeLine,
     spans: &[markup::MarkupSpan],
@@ -1054,6 +1075,14 @@ fn patch_inline_objects(
     for span in &mut shape.spans {
         for word in &mut span.words {
             for glyph in &mut word.glyphs {
+                if is_bidi_control_cluster(text, glyph.start, glyph.end) {
+                    glyph.x_advance = 0.0;
+                    glyph.y_advance = 0.0;
+                    glyph.ascent = 0.0;
+                    glyph.descent = 0.0;
+                    continue;
+                }
+
                 let span_index = glyph
                     .metadata
                     .checked_sub(1)
