@@ -50,6 +50,95 @@ impl TextIcon {
         })
     }
 
+    /// Removes fully transparent outer rows and columns.
+    /// Pixels with alpha greater than zero are considered visible.
+    /// Returns an error when every pixel is transparent.
+    pub fn trim_transparent(mut self) -> Result<Self, String> {
+        let Some(source_len) = rgba_len(self.size.x, self.size.y) else {
+            return Err("Text icon source has invalid RGBA8 dimensions".into());
+        };
+        if self.pixels.len() != source_len {
+            return Err(format!(
+                "Text icon source has {} RGBA8 bytes, expected {source_len}",
+                self.pixels.len()
+            ));
+        }
+
+        let width = usize::try_from(self.size.x)
+            .map_err(|_| "Text icon width exceeds platform limits".to_string())?;
+        let height = usize::try_from(self.size.y)
+            .map_err(|_| "Text icon height exceeds platform limits".to_string())?;
+        let mut min_x = width;
+        let mut min_y = height;
+        let mut max_x = 0;
+        let mut max_y = 0;
+
+        for (index, pixel) in self.pixels.chunks_exact(4).enumerate() {
+            if pixel[3] > 0 {
+                let x = index % width;
+                let y = index / width;
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+        if min_x == width {
+            return Err("Cannot trim a completely transparent text icon".into());
+        }
+
+        let cropped_width = max_x
+            .checked_sub(min_x)
+            .and_then(|width| width.checked_add(1))
+            .ok_or_else(|| "Text icon crop width overflowed".to_string())?;
+        let cropped_height = max_y
+            .checked_sub(min_y)
+            .and_then(|height| height.checked_add(1))
+            .ok_or_else(|| "Text icon crop height overflowed".to_string())?;
+        if min_x == 0 && min_y == 0 && cropped_width == width && cropped_height == height {
+            return Ok(self);
+        }
+
+        let output_width = u32::try_from(cropped_width)
+            .map_err(|_| "Trimmed text icon width exceeds source limits".to_string())?;
+        let output_height = u32::try_from(cropped_height)
+            .map_err(|_| "Trimmed text icon height exceeds source limits".to_string())?;
+        let cropped_len = rgba_len(output_width, output_height)
+            .ok_or_else(|| "Trimmed text icon dimensions exceed platform limits".to_string())?;
+        let row_len = source_len / height;
+        let crop_start = min_x
+            .checked_mul(4)
+            .ok_or_else(|| "Text icon crop offset overflowed".to_string())?;
+        let crop_row_len = cropped_len / cropped_height;
+        let crop_end = crop_start
+            .checked_add(crop_row_len)
+            .ok_or_else(|| "Text icon crop range overflowed".to_string())?;
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(cropped_len)
+            .map_err(|_| "Cannot allocate trimmed text icon RGBA8 data".to_string())?;
+
+        for row in self
+            .pixels
+            .chunks_exact(row_len)
+            .skip(min_y)
+            .take(cropped_height)
+        {
+            let cropped = row
+                .get(crop_start..crop_end)
+                .ok_or_else(|| "Text icon crop exceeds its RGBA8 data".to_string())?;
+            pixels.extend_from_slice(cropped);
+        }
+        if pixels.len() != cropped_len {
+            return Err("Text icon crop produced invalid RGBA8 data".into());
+        }
+
+        self.id = next_icon_id();
+        self.pixels = Arc::from(pixels);
+        self.size = uvec2(output_width, output_height);
+        Ok(self)
+    }
+
     /// Selects how this icon is sampled when rendered in text.
     pub fn sampling(mut self, filter: TextureFilter) -> Self {
         if !same_filter(self.sampling, filter) {
@@ -136,6 +225,79 @@ fn same_filter(lhs: TextureFilter, rhs: TextureFilter) -> bool {
         (TextureFilter::Linear, TextureFilter::Linear)
             | (TextureFilter::Nearest, TextureFilter::Nearest)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rgba(alphas: &[u8]) -> Vec<u8> {
+        alphas.iter().flat_map(|&alpha| [alpha; 4]).collect()
+    }
+
+    fn icon(alphas: &[u8], width: u32, height: u32) -> TextIcon {
+        TextIcon::from_rgba(&rgba(alphas), width, height).unwrap()
+    }
+
+    #[test]
+    fn trims_borders() {
+        let source = icon(&[0, 0, 0, 0, 0, 1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0], 4, 4)
+            .sampling(TextureFilter::Nearest);
+        let source_id = source.id;
+
+        let trimmed = source.trim_transparent().unwrap();
+
+        assert_eq!(trimmed.source_size(), uvec2(2, 2));
+        assert_eq!(trimmed.pixels.as_ref(), rgba(&[1, 2, 3, 4]));
+        assert!(trimmed.id != source_id);
+        assert!(same_filter(trimmed.sampling, TextureFilter::Nearest));
+    }
+
+    #[test]
+    fn trims_asymmetric_padding() {
+        let trimmed = icon(
+            &[
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 13, 14, 0, 0, 0, 0, 0,
+            ],
+            5,
+            4,
+        )
+        .trim_transparent()
+        .unwrap();
+
+        assert_eq!(trimmed.source_size(), uvec2(4, 1));
+        assert_eq!(trimmed.pixels.as_ref(), rgba(&[11, 12, 13, 14]));
+    }
+
+    #[test]
+    fn keeps_tightly_bounded_source() {
+        let source = icon(&[1, 2, 3, 4], 2, 2);
+        let source_id = source.id;
+        let source_pixels = Arc::clone(&source.pixels);
+
+        let trimmed = source.trim_transparent().unwrap();
+
+        assert!(trimmed.id == source_id);
+        assert!(Arc::ptr_eq(&trimmed.pixels, &source_pixels));
+        assert_eq!(trimmed.source_size(), uvec2(2, 2));
+    }
+
+    #[test]
+    fn trims_to_single_partially_transparent_pixel() {
+        let trimmed = icon(&[0, 0, 0, 0, 1, 0], 3, 2).trim_transparent().unwrap();
+
+        assert_eq!(trimmed.source_size(), uvec2(1, 1));
+        assert_eq!(trimmed.pixels.as_ref(), rgba(&[1]));
+    }
+
+    #[test]
+    fn rejects_fully_transparent_source() {
+        let Err(error) = icon(&[0; 4], 2, 2).trim_transparent() else {
+            panic!("fully transparent source was accepted");
+        };
+
+        assert!(error.contains("completely transparent"));
+    }
 }
 
 use super::{HAlign, TextInfo, TextLayout, get_mut_text_system, markup};
