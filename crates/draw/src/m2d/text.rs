@@ -562,7 +562,7 @@ fn submit_text_batch(
 
 fn set_text_bounds(draw: &mut Draw2D, position: Vec2, size: Vec2, mut transform: Transform2D) {
     transform.set_size(size);
-    let matrix = draw.matrix() * transform.updated_mat3();
+    let matrix = transform.updated_mat3();
     let mut min = Vec2::splat(f32::INFINITY);
     let mut max = Vec2::splat(f32::NEG_INFINITY);
     for corner in [

@@ -2,7 +2,7 @@ use rkit::{
     app::{WindowConfig, window_size},
     draw::{self, Font, RichTextBuilder, RichTextLayout, TextIcons, create_draw_2d, text},
     gfx::{self, Color, TextureFilter},
-    math::{Vec2, vec2},
+    math::{Mat3, Vec2, vec2},
 };
 
 struct State {
@@ -211,17 +211,31 @@ fn update(state: &mut State) {
     draw.rich_text(&state.unicode)
         .position(unicode_label + vec2(0.0, 21.0));
 
-    let center = window_size() - vec2(150.0, 95.0);
+    let angle = 0.35_f32;
+    let scale = 1.2;
+    let center = vec2(850.0, 650.0);
+    let parent = Mat3::from_translation(vec2(-50.0, -30.0)) * Mat3::from_scale(Vec2::splat(1.1));
+    draw.push_matrix(parent);
+
     label(&mut draw, "Transform / origin", center - vec2(0.0, 34.0));
     draw.rich_text(&state.transformed)
         .translate(center)
         .origin(Vec2::splat(0.5))
-        .rotation(0.35)
-        .scale(1.2);
+        .rotation(angle)
+        .scale(scale);
     let bounds = draw.last_text_bounds();
+    let scaled_size = state.transformed.size() * scale;
+    let (sin, cos) = angle.sin_cos();
+    let expected_size = vec2(
+        cos.abs() * scaled_size.x + sin.abs() * scaled_size.y,
+        sin.abs() * scaled_size.x + cos.abs() * scaled_size.y,
+    );
+    assert!((bounds.size - expected_size).length() < 0.01);
     draw.rect(bounds.min(), bounds.size)
         .stroke_color(Color::AQUA)
         .stroke(1.0);
+
+    draw.pop_matrix();
 
     // Keeps both setup-owned resources visibly live in this public API example.
     draw.text(&format!("{} retained icons", state.icons.len()))
