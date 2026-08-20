@@ -110,10 +110,10 @@ pub fn set_default_font(font: &Font) {
 
 #[inline]
 pub fn text_mask_atlas() -> Texture {
-    get_text_system().mask.texture.clone()
+    get_text_system().mask.texture.texture().clone()
 }
 
 #[inline]
 pub fn text_color_atlas() -> Texture {
-    get_text_system().rgba_linear.texture.clone()
+    get_text_system().rgba_linear.texture.texture().clone()
 }

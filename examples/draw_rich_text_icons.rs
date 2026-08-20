@@ -1,8 +1,9 @@
 use rkit::{
     app::{WindowConfig, window_size},
     draw::{self, Font, RichTextBuilder, RichTextLayout, TextIcons, create_draw_2d, text},
-    gfx::{self, Color, TextureFilter},
-    math::{Mat3, Vec2, vec2},
+    gfx::{self, Color, Texture, TextureFilter},
+    math::{Mat3, Rect, Vec2, vec2},
+    time,
 };
 
 struct State {
@@ -19,6 +20,8 @@ struct State {
     unicode: RichTextLayout,
     bidi_controls: RichTextLayout,
     transformed: RichTextLayout,
+    dynamic_texture: Texture,
+    dynamic_phase: u32,
 }
 
 fn main() -> Result<(), String> {
@@ -32,26 +35,40 @@ fn init() -> State {
     let font = draw::create_font(include_bytes!("./assets/Ubuntu-B.ttf"))
         .build()
         .unwrap();
+    let pixel = draw::create_sprite()
+        .from_image(include_bytes!("./assets/text_icon_pixel.png"))
+        .with_filter(TextureFilter::Nearest)
+        .build()
+        .unwrap();
+    let smooth = draw::create_sprite()
+        .from_image(include_bytes!("./assets/text_icon_smooth.png"))
+        .build()
+        .unwrap();
+    let banner = draw::create_sprite()
+        .from_image(include_bytes!("./assets/text_icon_banner.png"))
+        .build()
+        .unwrap();
+    let banner_left = banner.clone_with_frame(Rect::new(Vec2::ZERO, vec2(16.0, 16.0)));
+    let dynamic_pixels = [0x73, 0xEF, 0xF7, 0xFF].repeat(16);
+    let dynamic = draw::create_sprite()
+        .from_bytes(&dynamic_pixels, 4, 4)
+        .with_write_flag(true)
+        .with_filter(TextureFilter::Nearest)
+        .build()
+        .unwrap();
+    let dynamic_texture = dynamic.texture().clone();
     let icons = TextIcons::new([
-        (
-            "pixel",
-            text::TextIcon::from_image(include_bytes!("./assets/text_icon_pixel.png"))
-                .unwrap()
-                .sampling(TextureFilter::Nearest),
-        ),
-        (
-            "smooth",
-            text::TextIcon::from_image(include_bytes!("./assets/text_icon_smooth.png")).unwrap(),
-        ),
-        (
-            "banner",
-            text::TextIcon::from_image(include_bytes!("./assets/text_icon_banner.png")).unwrap(),
-        ),
+        ("pixel", pixel.clone()),
+        ("pixel_copy", pixel),
+        ("smooth", smooth),
+        ("banner", banner),
+        ("banner_left", banner_left),
+        ("dynamic", dynamic),
     ])
     .unwrap();
 
     let default_icon = rich_layout(
-        "Default 1em [icon:pixel] and smooth [icon:smooth] icons.",
+        "Nearest [icon:pixel] shared [icon:pixel_copy], linear [icon:smooth], dynamic [icon:dynamic].",
         &icons,
         &font,
     )
@@ -98,7 +115,7 @@ fn init() -> State {
     .layout()
     .unwrap();
     let banner_and_fallback = rich_layout(
-        "2:1 [icon:banner size=18] banner. [icon:missing] [icon:pixel size=0] [icon:]",
+        "2:1 [icon:banner size=18], cropped frame [icon:banner_left]. [icon:missing] [icon:pixel size=0] [icon:]",
         &icons,
         &font,
     )
@@ -158,6 +175,8 @@ fn init() -> State {
         unicode,
         bidi_controls,
         transformed,
+        dynamic_texture,
+        dynamic_phase: 0,
     }
 }
 
@@ -166,6 +185,20 @@ fn rich_layout<'a>(content: &'a str, icons: &'a TextIcons, font: &'a Font) -> Ri
 }
 
 fn update(state: &mut State) {
+    let phase = time::elapsed_f32() as u32 % 2;
+    if state.dynamic_phase != phase {
+        state.dynamic_phase = phase;
+        let color = if phase == 0 {
+            [0x73, 0xEF, 0xF7, 0xFF]
+        } else {
+            [0xFF, 0x70, 0x70, 0xFF]
+        };
+        gfx::write_texture(&state.dynamic_texture)
+            .from_data(&color.repeat(16))
+            .build()
+            .unwrap();
+    }
+
     let mut draw = create_draw_2d();
     draw.clear(Color::rgb(0.06, 0.07, 0.1));
 

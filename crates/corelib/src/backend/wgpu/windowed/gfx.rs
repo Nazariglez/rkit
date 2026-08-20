@@ -23,7 +23,10 @@ use arrayvec::ArrayVec;
 use atomic_refcell::AtomicRefCell;
 #[cfg(target_arch = "wasm32")]
 use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle};
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::{Arc, atomic::AtomicU32},
+};
 use wgpu::{
     BackendOptions, Backends, BufferDescriptor as WBufferDescriptor, Dx12BackendOptions, Extent3d,
     GlBackendOptions, InstanceDescriptor, InstanceFlags, Origin3d, Queue, StoreOp,
@@ -387,6 +390,7 @@ impl GfxBackendImpl for GfxBackend {
 
         if !renderer.passes.is_empty() {
             self.ctx.queue.submit(Some(encoder.finish()));
+            texture.texture.mark_written();
             self.current_stats.draw_calls += 1;
         }
 
@@ -767,6 +771,7 @@ impl GfxBackendImpl for GfxBackend {
                 depth_or_array_layers: 1,
             },
         );
+        texture.mark_written();
         Ok(())
     }
 
@@ -1371,6 +1376,7 @@ fn create_texture(
         size: vec2(size.width as _, size.height as _),
         write: desc.write,
         format: desc.format,
+        revision: Arc::new(AtomicU32::new(0)),
     })
 }
 

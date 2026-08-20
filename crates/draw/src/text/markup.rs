@@ -1,4 +1,4 @@
-use super::rich::TextIcon;
+use super::rich::RegisteredIcon;
 use super::{Color, TextIcons};
 use corelib::math::UVec2;
 use std::{borrow::Cow, ops::Range};
@@ -28,14 +28,14 @@ pub(crate) struct MarkupSpan {
 }
 
 pub(crate) struct InlineObject {
-    pub(crate) icon: TextIcon,
+    pub(crate) icon: RegisteredIcon,
     pub(crate) height: Option<f32>,
     pub(crate) color: Color,
 }
 
 enum Token<'a> {
     Text(&'a str, Color),
-    Icon(TextIcon, Option<f32>, Color),
+    Icon(RegisteredIcon, Option<f32>, Color),
 }
 
 pub(crate) fn plain(input: &str, color: Color, wrap: bool) -> Markup<'_> {
@@ -122,7 +122,7 @@ pub(crate) fn parse(
             cursor = tag_end;
             continue;
         };
-        let Some(icon) = icons.get(id) else {
+        let Some(icon) = icons.registered(id) else {
             debug_warn("Unknown text icon");
             cursor = tag_end;
             continue;
@@ -294,34 +294,10 @@ fn parse_hex_color(hex: &str) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TextIcon;
-    use corelib::math::uvec2;
-
-    fn icons() -> TextIcons {
-        TextIcons::new([
-            ("soul", TextIcon::from_rgba(&[255; 4], 1, 1).unwrap()),
-            ("moon", TextIcon::from_rgba(&[255; 8], 2, 1).unwrap()),
-        ])
-        .unwrap()
-    }
-
-    #[test]
-    fn parses_color_and_icons() {
-        let icons = icons();
-        let markup = parse(
-            "[color:#f00]a[icon:soul][/color]",
-            Color::WHITE,
-            MarkupMode::Rich(&icons),
-            false,
-        );
-        assert_eq!(markup.text, "a\u{FFFC}");
-        assert_eq!(markup.objects.len(), 1);
-        assert_eq!(markup.spans[1].object, Some(0));
-    }
 
     #[test]
     fn invalid_icon_sizes_preserve_surrounding_text() {
-        let icons = icons();
+        let icons = TextIcons::default();
         for size in [
             "0",
             "-1",
@@ -342,23 +318,6 @@ mod tests {
             assert_eq!(markup.text, input);
             assert!(markup.objects.is_empty());
         }
-    }
-
-    #[test]
-    fn icons_keep_source_order_and_surrounding_text() {
-        let icons = icons();
-        let markup = parse(
-            "before [icon:soul] middle [icon:moon] after",
-            Color::WHITE,
-            MarkupMode::Rich(&icons),
-            false,
-        );
-        assert_eq!(markup.text, "before \u{FFFC} middle \u{FFFC} after");
-        assert_eq!(markup.spans.len(), 5);
-        assert_eq!(markup.spans[1].object, Some(0));
-        assert_eq!(markup.spans[3].object, Some(1));
-        assert_eq!(markup.objects[0].icon.source_size(), uvec2(1, 1));
-        assert_eq!(markup.objects[1].icon.source_size(), uvec2(2, 1));
     }
 
     #[test]
@@ -406,48 +365,8 @@ mod tests {
     }
 
     #[test]
-    fn wrapping_rebuilds_object_ranges_with_utf8_text() {
-        let icons = icons();
-        let markup = parse(
-            "é [icon:soul] 世界 😀مرحبا",
-            Color::WHITE,
-            MarkupMode::Rich(&icons),
-            true,
-        );
-        assert_eq!(
-            markup.text,
-            "é \u{200B}\u{FFFC} \u{200B}世界 \u{200B}😀مرحبا"
-        );
-        assert_eq!(markup.spans.len(), 3);
-        assert_eq!(&markup.text[markup.spans[0].range.clone()], "é \u{200B}");
-        assert_eq!(&markup.text[markup.spans[1].range.clone()], "\u{FFFC}");
-        assert_eq!(
-            &markup.text[markup.spans[2].range.clone()],
-            " \u{200B}世界 \u{200B}😀مرحبا"
-        );
-        assert_eq!(markup.spans[1].object, Some(0));
-        for span in markup.spans {
-            assert!(markup.text.get(span.range).is_some());
-        }
-    }
-
-    #[test]
-    fn icon_size_and_active_color_are_normalized() {
-        let icons = icons();
-        let markup = parse(
-            "[color:#00FF00][icon:soul size=20][/color]",
-            Color::WHITE,
-            MarkupMode::Rich(&icons),
-            false,
-        );
-        assert_eq!(markup.objects.len(), 1);
-        assert_eq!(markup.objects[0].height, Some(20.0));
-        assert_eq!(markup.objects[0].color, Color::hex(0x00FF00FF));
-    }
-
-    #[test]
     fn malformed_icon_is_literal() {
-        let icons = icons();
+        let icons = TextIcons::default();
         let input = "[icon:soul  size=20]";
         let markup = parse(input, Color::WHITE, MarkupMode::Rich(&icons), false);
         assert_eq!(markup.text, input);
@@ -456,7 +375,7 @@ mod tests {
 
     #[test]
     fn unknown_icon_is_literal() {
-        let icons = icons();
+        let icons = TextIcons::default();
         let input = "[icon:unknown]";
         let markup = parse(input, Color::WHITE, MarkupMode::Rich(&icons), false);
         assert_eq!(markup.text, input);

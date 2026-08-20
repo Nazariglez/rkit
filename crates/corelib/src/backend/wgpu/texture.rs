@@ -2,7 +2,10 @@ use crate::gfx::{SamplerId, TextureFilter, TextureFormat, TextureId, TextureWrap
 use crate::math::Vec2;
 use arrayvec::ArrayVec;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+};
 use wgpu::{
     Sampler as RawSampler, Texture as RawTexture, TextureFormat as WTextureFormat, TextureView,
 };
@@ -15,6 +18,7 @@ pub struct Texture {
     pub(crate) size: Vec2,
     pub(crate) write: bool,
     pub(crate) format: TextureFormat,
+    pub(crate) revision: Arc<AtomicU32>,
 }
 
 impl PartialEq<Self> for Texture {
@@ -52,6 +56,16 @@ impl Texture {
     #[inline]
     pub fn format(&self) -> TextureFormat {
         self.format
+    }
+
+    #[inline]
+    pub fn revision(&self) -> u32 {
+        self.revision.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    pub(crate) fn mark_written(&self) {
+        self.revision.fetch_add(1, Ordering::Relaxed);
     }
 }
 

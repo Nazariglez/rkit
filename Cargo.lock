@@ -1312,7 +1312,6 @@ dependencies = [
  "cosmic-text",
  "encase",
  "etagere",
- "image",
  "log",
  "lyon",
  "macros",

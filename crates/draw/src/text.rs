@@ -1,6 +1,7 @@
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use corelib::gfx::{
-    self, BindGroup, Color, RenderPipeline, Sampler, Texture, TextureFilter, TextureFormat,
+    self, BindGroup, Color, RenderPipeline, RenderTexture, Sampler, Texture, TextureFilter,
+    TextureFormat, TextureId,
 };
 use corelib::math::{UVec2, Vec2, uvec2, vec2};
 use cosmic_text::fontdb::Source;
@@ -14,10 +15,13 @@ use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
+mod icon_baker;
 mod markup;
 mod rich;
 
-pub use rich::{RichTextBuilder, RichTextLayout, RichTextLine, TextIcon, TextIcons, rich_text};
+use icon_baker::{IconBake, IconBaker};
+use rich::{PixelRect, RegisteredIcon};
+pub use rich::{RichTextBuilder, RichTextLayout, RichTextLine, TextIcons, rich_text};
 use utils::helpers::closest_multiple_of;
 
 pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
@@ -138,7 +142,7 @@ struct PlacedGlyph {
 }
 
 struct PlacedIcon {
-    icon: TextIcon,
+    icon: RegisteredIcon,
     pos: Vec2,
     size: Vec2,
     color: Color,
@@ -261,7 +265,9 @@ pub struct TextSystem {
     linear_sampler: Sampler,
     nearest_sampler: Sampler,
     cache: FxHashMap<GlyphCacheKey, GlyphInfo>,
-    icon_cache: FxHashMap<rich::TextIconId, IconInfo>,
+    icon_cache: FxHashMap<IconCacheKey, IconInfo>,
+    pending_icons: FxHashMap<IconCacheKey, u32>,
+    icon_baker: IconBaker,
     font_system: FontSystem,
     swash: SwashCache,
     buffer: Buffer,
@@ -272,7 +278,6 @@ pub struct TextSystem {
 
     // reusable buffer used to avoid per glyph allocations
     temp_outline_buff: Vec<u8>,
-    temp_rgba: Vec<u8>,
     temp_layout: TextLayout,
     temp_line_items: Vec<std::ops::Range<usize>>,
 }
@@ -325,6 +330,8 @@ impl TextSystem {
             nearest_sampler,
             cache,
             icon_cache: FxHashMap::default(),
+            pending_icons: FxHashMap::default(),
+            icon_baker: IconBaker::new()?,
             font_system,
             swash,
             buffer,
@@ -334,7 +341,6 @@ impl TextSystem {
             bind_group: None,
 
             temp_outline_buff: vec![],
-            temp_rgba: vec![],
             temp_layout: TextLayout::default(),
             temp_line_items: Vec::new(),
         };
@@ -659,7 +665,7 @@ impl TextSystem {
         let mut resets = [false; TextAtlas::COUNT];
         loop {
             match self.ensure_sources(layout)? {
-                ProcessResult::Ready => return Ok(()),
+                ProcessResult::Ready => return self.flush_pending_icons(),
                 ProcessResult::Full(atlas) => {
                     if self.grow_atlas(atlas)? {
                         continue;
@@ -740,7 +746,8 @@ impl TextSystem {
     }
 
     fn resolve_icon(&self, icon: &PlacedIcon, quads: &mut Vec<QuadData>) {
-        let Some(info) = self.icon_cache.get(&icon.icon.id) else {
+        let key = IconCacheKey::from(&icon.icon);
+        let Some(info) = self.icon_cache.get(&key) else {
             return;
         };
         let texture_size = self.atlas(info.atlas).texture.size();
@@ -789,11 +796,12 @@ impl TextSystem {
         self.atlas_mut(atlas).commit(&mut generation);
         self.cache.retain(|_, glyph| glyph.atlas != Some(atlas));
         self.icon_cache.retain(|_, icon| icon.atlas != atlas);
+        self.pending_icons.retain(|key, _| key.atlas != atlas);
         self.bind_group = None;
         Ok(())
     }
 
-    fn restore_into(&mut self, atlas: TextAtlas, texture: &Texture) -> Result<(), String> {
+    fn restore_into(&mut self, atlas: TextAtlas, texture: &RenderTexture) -> Result<(), String> {
         let glyphs: Vec<_> = self
             .cache
             .iter()
@@ -826,16 +834,31 @@ impl TextSystem {
                 )?;
             }
         }
-        let icons: Vec<_> = self
+
+        let restored: Vec<_> = self
             .icon_cache
-            .values()
-            .filter(|icon| icon.atlas == atlas)
-            .cloned()
+            .iter()
+            .filter(|(_, icon)| icon.atlas == atlas)
+            .map(|(key, icon)| {
+                let revision = icon.sprite.texture().revision();
+                (
+                    *key,
+                    revision,
+                    IconBake {
+                        sprite: icon.sprite.clone(),
+                        frame: key.frame,
+                        outer_pos: icon.outer_pos,
+                    },
+                )
+            })
             .collect();
-        for icon in icons {
-            let size = padded_icon_size(&icon.icon)?;
-            fill_icon_border(&mut self.temp_rgba, &icon.icon, size)?;
-            upload_texture(texture, size, icon.outer_pos.as_uvec2(), &self.temp_rgba)?;
+        let bakes: Vec<_> = restored.iter().map(|(_, _, bake)| bake.clone()).collect();
+        self.icon_baker.bake(texture, &bakes)?;
+        for (key, revision, _) in restored {
+            if let Some(icon) = self.icon_cache.get_mut(&key) {
+                icon.baked_revision = Some(revision);
+            }
+            self.pending_icons.remove(&key);
         }
         Ok(())
     }
@@ -942,29 +965,68 @@ impl TextSystem {
         Ok(None)
     }
 
-    fn ensure_icon(&mut self, icon: &TextIcon) -> Result<Option<TextAtlas>, String> {
-        if self.icon_cache.contains_key(&icon.id) {
+    fn ensure_icon(&mut self, icon: &RegisteredIcon) -> Result<Option<TextAtlas>, String> {
+        let key = IconCacheKey::from(icon);
+        let revision = icon.sprite.texture().revision();
+        if let Some(cached) = self.icon_cache.get(&key) {
+            if cached.baked_revision != Some(revision) {
+                self.pending_icons.insert(key, revision);
+            }
             return Ok(None);
         }
-        let atlas = icon_atlas(icon);
-        let size = padded_icon_size(icon)?;
-        self.atlas(atlas).preflight(size)?;
-        fill_icon_border(&mut self.temp_rgba, icon, size)?;
-        let staging = std::mem::take(&mut self.temp_rgba);
-        let stored = self.atlas_mut(atlas).store(size, &staging);
-        self.temp_rgba = staging;
-        let Some(outer_pos) = stored? else {
-            return Ok(Some(atlas));
+
+        let size = padded_icon_size(icon.source_size())?;
+        let Some(outer_pos) = self.atlas_mut(icon.atlas).allocate(size)? else {
+            return Ok(Some(icon.atlas));
         };
         self.icon_cache.insert(
-            icon.id,
+            key,
             IconInfo {
-                icon: icon.clone(),
+                sprite: icon.sprite.clone(),
                 outer_pos,
-                atlas,
+                atlas: icon.atlas,
+                baked_revision: None,
             },
         );
+        self.pending_icons.insert(key, revision);
         Ok(None)
+    }
+
+    fn flush_pending_icons(&mut self) -> Result<(), String> {
+        for atlas in [TextAtlas::RgbaLinear, TextAtlas::RgbaNearest] {
+            let pending: Vec<_> = self
+                .pending_icons
+                .iter()
+                .filter(|(key, _)| key.atlas == atlas)
+                .filter_map(|(key, revision)| {
+                    self.icon_cache.get(key).map(|icon| {
+                        (
+                            *key,
+                            *revision,
+                            IconBake {
+                                sprite: icon.sprite.clone(),
+                                frame: key.frame,
+                                outer_pos: icon.outer_pos,
+                            },
+                        )
+                    })
+                })
+                .collect();
+            if pending.is_empty() {
+                continue;
+            }
+
+            let target = self.atlas(atlas).texture.clone();
+            let bakes: Vec<_> = pending.iter().map(|(_, _, bake)| bake.clone()).collect();
+            self.icon_baker.bake(&target, &bakes)?;
+            for (key, revision, _) in pending {
+                if let Some(icon) = self.icon_cache.get_mut(&key) {
+                    icon.baked_revision = Some(revision);
+                }
+                self.pending_icons.remove(&key);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1119,22 +1181,32 @@ fn patch_shape(
     Ok(())
 }
 
-#[derive(Clone)]
-struct IconInfo {
-    icon: TextIcon,
-    outer_pos: Vec2,
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+struct IconCacheKey {
+    texture: TextureId,
+    frame: PixelRect,
     atlas: TextAtlas,
 }
 
-fn icon_atlas(icon: &TextIcon) -> TextAtlas {
-    match icon.sampling {
-        TextureFilter::Linear => TextAtlas::RgbaLinear,
-        TextureFilter::Nearest => TextAtlas::RgbaNearest,
+impl From<&RegisteredIcon> for IconCacheKey {
+    fn from(icon: &RegisteredIcon) -> Self {
+        Self {
+            texture: icon.sprite.texture().id(),
+            frame: icon.frame,
+            atlas: icon.atlas,
+        }
     }
 }
 
-fn padded_icon_size(icon: &TextIcon) -> Result<UVec2, String> {
-    let source = icon.source_size();
+#[derive(Clone)]
+struct IconInfo {
+    sprite: crate::Sprite,
+    outer_pos: Vec2,
+    atlas: TextAtlas,
+    baked_revision: Option<u32>,
+}
+
+fn padded_icon_size(source: UVec2) -> Result<UVec2, String> {
     let width = source
         .x
         .checked_add(2)
@@ -1146,51 +1218,14 @@ fn padded_icon_size(icon: &TextIcon) -> Result<UVec2, String> {
     Ok(uvec2(width, height))
 }
 
-fn fill_icon_border(buffer: &mut Vec<u8>, icon: &TextIcon, padded: UVec2) -> Result<(), String> {
-    let length = usize::try_from(padded.x)
-        .ok()
-        .and_then(|width| {
-            usize::try_from(padded.y)
-                .ok()
-                .and_then(|height| width.checked_mul(height))
-        })
-        .and_then(|pixels| pixels.checked_mul(4))
-        .ok_or_else(|| "Text icon staging buffer exceeds platform limits".to_string())?;
-    buffer.clear();
-    buffer
-        .try_reserve_exact(length)
-        .map_err(|_| "Cannot allocate text icon staging buffer".to_string())?;
-    buffer.resize(length, 0);
-    let source = icon.source_size();
-    let source_width = usize::try_from(source.x)
-        .map_err(|_| "Text icon width exceeds platform limits".to_string())?;
-    let source_height = usize::try_from(source.y)
-        .map_err(|_| "Text icon height exceeds platform limits".to_string())?;
-    let padded_width = usize::try_from(padded.x)
-        .map_err(|_| "Text icon width exceeds platform limits".to_string())?;
-    for y in 0..usize::try_from(padded.y)
-        .map_err(|_| "Text icon height exceeds platform limits".to_string())?
-    {
-        let source_y = y.saturating_sub(1).min(source_height - 1);
-        for x in 0..padded_width {
-            let source_x = x.saturating_sub(1).min(source_width - 1);
-            let source_offset = (source_y * source_width + source_x) * 4;
-            let target_offset = (y * padded_width + x) * 4;
-            buffer[target_offset..target_offset + 4]
-                .copy_from_slice(&icon.pixels[source_offset..source_offset + 4]);
-        }
-    }
-    Ok(())
-}
-
 #[derive(Copy, Clone, Debug)]
 enum ProcessResult {
     Ready,
     Full(TextAtlas),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum TextAtlas {
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub(crate) enum TextAtlas {
     Mask,
     RgbaLinear,
     RgbaNearest,
@@ -1252,7 +1287,7 @@ impl TextSource {
 }
 
 pub(crate) struct AtlasData {
-    pub(crate) texture: Texture,
+    pub(crate) texture: RenderTexture,
     allocator: BucketedAtlasAllocator,
     max_texture_size: u32,
     current_size: u32,
@@ -1260,7 +1295,7 @@ pub(crate) struct AtlasData {
 }
 
 struct AtlasGeneration {
-    texture: Texture,
+    texture: RenderTexture,
     allocator: BucketedAtlasAllocator,
     size: u32,
 }
@@ -1289,12 +1324,11 @@ impl AtlasData {
         label: &'static str,
         format: TextureFormat,
         size: u32,
-    ) -> Result<Texture, String> {
-        gfx::create_texture()
+    ) -> Result<RenderTexture, String> {
+        gfx::create_render_texture()
             .with_label(label)
-            .with_empty_size(size, size)
+            .with_size(size, size)
             .with_format(format)
-            .with_write_flag(true)
             .build()
     }
 
@@ -1318,6 +1352,15 @@ impl AtlasData {
         let height = i32::try_from(height)
             .map_err(|_| "Text atlas allocation height exceeds allocator limits".to_string())?;
         Ok((width, height))
+    }
+
+    fn allocate(&mut self, size: UVec2) -> Result<Option<Vec2>, String> {
+        let (width, height) = self.preflight(size)?;
+        let Some(alloc) = self.allocator.allocate(size2(width, height)) else {
+            return Ok(None);
+        };
+        let offset = vec2(alloc.rectangle.min.x as _, alloc.rectangle.min.y as _);
+        Ok(Some(offset))
     }
 
     fn store(&mut self, size: UVec2, data: &[u8]) -> Result<Option<Vec2>, String> {
