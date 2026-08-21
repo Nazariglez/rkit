@@ -239,6 +239,11 @@ impl<S> Runner<S> {
                     let mut bck = get_mut_backend();
                     bck.keyboard_state.add_text(text.as_str());
                 }
+                FocusLost => {
+                    let mut bck = get_mut_backend();
+                    bck.keyboard_state.focus_lost();
+                    bck.mouse_state.focus_lost();
+                }
                 WindowResize { size } => {
                     {
                         let mut bck = get_mut_backend();
@@ -325,10 +330,11 @@ impl BackendImpl<GfxBackend> for WebBackend {
     }
     fn is_focused(&self) -> bool {
         self.win.as_ref().is_some_and(|w| {
-            w.document.has_focus().ok().is_some_and(|_| {
-                w.document
-                    .active_element()
-                    .is_some_and(|el| el.id() == w.canvas.id())
+            w.document.has_focus().ok().is_some_and(|focused| {
+                focused
+                    && w.document
+                        .active_element()
+                        .is_some_and(|el| el.id() == w.canvas.id())
             })
         })
     }

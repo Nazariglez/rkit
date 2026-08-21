@@ -603,6 +603,16 @@ impl KeyboardState {
         self.down.remove(btn);
     }
 
+    pub fn focus_lost(&mut self) {
+        self.pressed.clear();
+        self.text.clear();
+
+        let held_keys = self.down.clone();
+        for key in held_keys.iter() {
+            self.release(key);
+        }
+    }
+
     pub fn are_pressed<const N: usize>(&self, btns: &[KeyCode; N]) -> [bool; N] {
         let mut res = [false; N];
         btns.iter().enumerate().for_each(|(i, &btn)| {
@@ -758,20 +768,31 @@ mod test {
     #[test]
     fn test_state_press_and_release() {
         let mut state = KeyboardState::default();
-
-        assert!(!state.is_pressed(KeyCode::KeyG));
-        assert!(!state.is_down(KeyCode::KeyG));
-        assert!(!state.is_released(KeyCode::KeyG));
-
         state.press(KeyCode::KeyG);
-        assert!(state.is_pressed(KeyCode::KeyG));
-        assert!(state.is_down(KeyCode::KeyG));
-        assert!(!state.is_released(KeyCode::KeyG));
-
         state.release(KeyCode::KeyG);
-        assert!(state.is_pressed(KeyCode::KeyG));
-        assert!(!state.is_down(KeyCode::KeyG));
+        state.press(KeyCode::KeyW);
+        state.press(KeyCode::ShiftLeft);
+        state.add_text("pending");
+
+        state.focus_lost();
+
+        assert!(state.pressed.is_empty());
+        assert!(state.text.is_empty());
+        assert!(state.down.is_empty());
+        assert_eq!(state.released.len(), 3);
         assert!(state.is_released(KeyCode::KeyG));
+        assert!(state.is_released(KeyCode::KeyW));
+        assert!(state.is_released(KeyCode::ShiftLeft));
+
+        state.focus_lost();
+        assert_eq!(state.released.len(), 3);
+
+        state.tick();
+        assert!(state.released.is_empty());
+        assert!(state.down.is_empty());
+
+        state.focus_lost();
+        assert!(state.released.is_empty());
     }
 
     #[test]

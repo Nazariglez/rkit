@@ -203,6 +203,25 @@ fn listen_resize_win(win: &mut WebWindow) {
     std::mem::forget(evt);
 }
 
+fn listen_focus_lost(win: &WebWindow) {
+    let events = win.events.clone();
+    let blur = window_add_event_listener("blur", move |_: WEvent| {
+        events.borrow_mut().push(Event::FocusLost);
+    })
+    .unwrap();
+    blur.forget();
+
+    let document = win.document.clone();
+    let events = win.events.clone();
+    let visibility = document_add_event_listener("visibilitychange", move |_: WEvent| {
+        if document.hidden() {
+            events.borrow_mut().push(Event::FocusLost);
+        }
+    })
+    .unwrap();
+    visibility.forget();
+}
+
 pub(crate) fn enable_input_events(win: &mut WebWindow) {
     let delayed_dispatch = create_delayed_event_handler(win);
 
@@ -220,6 +239,7 @@ pub(crate) fn enable_input_events(win: &mut WebWindow) {
     listen_key_up(win, delayed_dispatch.clone());
 
     // window events
+    listen_focus_lost(win);
     listen_resize_win(win);
     listen_fullscreen_change(win);
 }

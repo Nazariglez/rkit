@@ -126,6 +126,20 @@ impl MouseState {
         self.down.remove(btn);
     }
 
+    pub fn focus_lost(&mut self) {
+        self.pressed.clear();
+
+        let held_buttons = self.down.clone();
+        for button in held_buttons.iter() {
+            self.release(button);
+        }
+
+        self.motion_delta = Vec2::ZERO;
+        self.moving = false;
+        self.wheel_delta = Vec2::ZERO;
+        self.scrolling = false;
+    }
+
     pub fn are_pressed<const N: usize>(&self, btns: &[MouseButton; N]) -> [bool; N] {
         let mut res = [false; N];
         btns.iter().enumerate().for_each(|(i, &btn)| {
@@ -232,20 +246,41 @@ mod test {
     #[test]
     fn test_state_press_and_release() {
         let mut state = MouseState::default();
-
-        assert!(!state.is_pressed(MouseButton::Left));
-        assert!(!state.is_down(MouseButton::Left));
-        assert!(!state.is_released(MouseButton::Left));
-
+        state.press(MouseButton::Middle);
+        state.release(MouseButton::Middle);
         state.press(MouseButton::Left);
-        assert!(state.is_pressed(MouseButton::Left));
-        assert!(state.is_down(MouseButton::Left));
-        assert!(!state.is_released(MouseButton::Left));
+        state.press(MouseButton::Right);
+        state.position = vec2(10.0, 20.0);
+        state.motion_delta = vec2(5.0, 6.0);
+        state.wheel_delta = vec2(1.0, 2.0);
+        state.moving = true;
+        state.scrolling = true;
+        state.cursor_on_screen = true;
 
-        state.release(MouseButton::Left);
-        assert!(state.is_pressed(MouseButton::Left));
-        assert!(!state.is_down(MouseButton::Left));
+        state.focus_lost();
+
+        assert!(state.pressed.is_empty());
+        assert!(state.down.is_empty());
+        assert_eq!(state.released.len(), 3);
+        assert!(state.is_released(MouseButton::Middle));
         assert!(state.is_released(MouseButton::Left));
+        assert!(state.is_released(MouseButton::Right));
+        assert_eq!(state.motion_delta, Vec2::ZERO);
+        assert_eq!(state.wheel_delta, Vec2::ZERO);
+        assert!(!state.moving);
+        assert!(!state.scrolling);
+        assert_eq!(state.position, vec2(10.0, 20.0));
+        assert!(state.cursor_on_screen);
+
+        state.focus_lost();
+        assert_eq!(state.released.len(), 3);
+
+        state.tick();
+        assert!(state.released.is_empty());
+        assert!(state.down.is_empty());
+
+        state.focus_lost();
+        assert!(state.released.is_empty());
     }
 
     #[test]

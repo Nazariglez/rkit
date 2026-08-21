@@ -16,6 +16,7 @@ pub enum Event {
     KeyUp { key: KeyCode },
     KeyDown { key: KeyCode },
     CharReceived { text: SmolStr },
+    FocusLost,
     WindowResize { size: UVec2 },
 }
 

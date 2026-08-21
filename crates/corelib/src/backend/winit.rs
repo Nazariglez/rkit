@@ -483,6 +483,12 @@ impl<S> ApplicationHandler for Runner<S> {
                 get_mut_backend().keyboard_state.add_text(c.as_str());
                 self.request_redraw = true;
             }
+            WindowEvent::Focused(false) => {
+                let mut bck = get_mut_backend();
+                bck.keyboard_state.focus_lost();
+                bck.mouse_state.focus_lost();
+                self.request_redraw = true;
+            }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
                 self.request_redraw = true;
