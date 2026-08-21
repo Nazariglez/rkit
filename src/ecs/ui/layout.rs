@@ -379,7 +379,7 @@ where
     pub(super) fn set_node_layout(&self, node: &mut UINode) {
         let l = self.tree.layout(node.node_id).unwrap();
         let size = vec2(l.size.width, l.size.height);
-        let position = vec2(l.location.x, l.location.y) + vec2(l.margin.left, l.margin.top);
+        let position = vec2(l.location.x, l.location.y);
         if self.cam_info.pixel_perfect {
             node.size = size.round();
             node.position = position.round();
