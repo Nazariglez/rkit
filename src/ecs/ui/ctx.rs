@@ -2,7 +2,7 @@ use crate::draw::text_metrics;
 use bevy_ecs::prelude::*;
 use taffy::{AvailableSpace, Size};
 
-use super::widgets::{UIImage, UIText};
+use super::widgets::{UIImage, UIRichText, UIText};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct NodeContext {
@@ -15,6 +15,7 @@ pub enum UINodeType {
     #[default]
     Container,
     Text,
+    RichText,
     Image,
 }
 
@@ -23,6 +24,7 @@ pub(super) fn measure<T: Component>(
     available_space: Size<AvailableSpace>,
     ctx: Option<&mut NodeContext>,
     images: &Query<&UIImage, With<T>>,
+    rich_texts: &Query<&UIRichText, With<T>>,
     texts: &Query<&UIText, With<T>>,
 ) -> Size<f32> {
     if let Size {
@@ -45,6 +47,16 @@ pub(super) fn measure<T: Component>(
             Ok(text) => measure_text(known_dimensions, available_space, text),
             Err(err) => {
                 log::debug!("Cannot measure UIText: {err}");
+                Size::ZERO
+            }
+        },
+        Some(NodeContext {
+            entity,
+            typ: UINodeType::RichText,
+        }) => match rich_texts.get(*entity) {
+            Ok(rich_text) => measure_rich_text(known_dimensions, rich_text),
+            Err(err) => {
+                log::debug!("Cannot measure UIRichText: {err}");
                 Size::ZERO
             }
         },
@@ -78,6 +90,14 @@ fn measure_image(known_dimensions: Size<Option<f32>>, image: &UIImage) -> Size<f
             width: img_size.x,
             height: img_size.y,
         },
+    }
+}
+
+fn measure_rich_text(known_dimensions: Size<Option<f32>>, rich_text: &UIRichText) -> Size<f32> {
+    let size = rich_text.size();
+    Size {
+        width: known_dimensions.width.unwrap_or(size.x),
+        height: known_dimensions.height.unwrap_or(size.y),
     }
 }
 

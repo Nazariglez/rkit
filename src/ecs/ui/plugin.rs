@@ -1,7 +1,7 @@
 use super::{
     components::{UIDragEvent, UINode, UIPointer, UIPointerConsumePolicy, UITransform},
     layout::{UILayout, UINodeGraph},
-    prelude::{UIImage, UIText},
+    prelude::{UIImage, UIRichText, UIText},
     style::UIStyle,
 };
 use crate::{
@@ -81,9 +81,10 @@ pub(super) fn update_layout_system<T: Component>(
     mut layout: ResMut<UILayout<T>>,
     mut evt: MessageWriter<UILayoutUpdateEvent<T>>,
     images: Query<&UIImage, With<T>>,
+    rich_texts: Query<&UIRichText, With<T>>,
     texts: Query<&UIText, With<T>>,
 ) {
-    let updated = layout.update(images, texts);
+    let updated = layout.update(images, rich_texts, texts);
     if updated {
         evt.write(UILayoutUpdateEvent::<T>::default());
     }
@@ -190,6 +191,7 @@ fn change_style_system<T: Component>(
                 Changed<UIStyle>,
                 Changed<UITransform>,
                 Changed<UIText>,
+                Changed<UIRichText>,
                 Changed<UIImage>,
             )>,
         ),

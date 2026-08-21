@@ -11,7 +11,7 @@ use super::{
     components::{UINode, UIRender},
     ctx::{NodeContext, UINodeType, measure},
     style::UIStyle,
-    widgets::{UIImage, UIText},
+    widgets::{UIImage, UIRichText, UIText},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -269,6 +269,7 @@ where
     pub fn update(
         &mut self,
         images: Query<&UIImage, With<T>>,
+        rich_texts: Query<&UIRichText, With<T>>,
         texts: Query<&UIText, With<T>>,
     ) -> bool {
         let needs_compute = self.dirty_graph || self.dirty_layout;
@@ -281,7 +282,14 @@ where
                         height: AvailableSpace::Definite(self.cam_info.layout_size.y),
                     },
                     |known_dimensions, available_space, _node_id, ctx, _style| {
-                        measure(known_dimensions, available_space, ctx, &images, &texts)
+                        measure(
+                            known_dimensions,
+                            available_space,
+                            ctx,
+                            &images,
+                            &rich_texts,
+                            &texts,
+                        )
                     },
                 )
                 .unwrap();

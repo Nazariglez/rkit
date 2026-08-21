@@ -1,7 +1,7 @@
 use super::components::{UINode, UIRender};
 use super::ctx::UINodeType;
 use super::style::UIStyle;
-use crate::draw::{Draw2D, Font, HAlign, Sprite};
+use crate::draw::{Draw2D, Font, HAlign, RichTextLayout, Sprite};
 use crate::gfx::Color;
 use crate::math::{Vec2, vec2};
 use bevy_ecs::prelude::*;
@@ -137,6 +137,35 @@ fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
     };
 
     draw_text(draw, &data);
+}
+
+// -- Rich Text
+#[derive(Component)]
+#[require(UIStyle, UIRender = rich_text_renderer(), UINodeType::RichText)]
+pub struct UIRichText {
+    layout: RichTextLayout,
+}
+
+impl UIRichText {
+    pub fn new(layout: RichTextLayout) -> Self {
+        Self { layout }
+    }
+
+    pub fn layout(&self) -> &RichTextLayout {
+        &self.layout
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.layout.size()
+    }
+}
+
+fn rich_text_renderer() -> UIRender {
+    UIRender::run::<&UIRichText, _>(render_rich_text)
+}
+
+fn render_rich_text(draw: &mut Draw2D, rich_text: &UIRichText) {
+    draw.rich_text(rich_text.layout());
 }
 
 struct TextData<'a> {
