@@ -107,10 +107,9 @@ features = [
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.61.3"
 features = [
+    "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
     "Win32_System_LibraryLoader",
 ]
 

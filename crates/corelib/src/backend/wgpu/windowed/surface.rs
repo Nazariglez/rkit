@@ -133,12 +133,12 @@ impl SurfaceCandidate {
 
     pub fn configure(self, device: &Device, depth_texture: Texture) -> Surface {
         self.owner.raw().configure(device, &self.config);
-        log::debug!(
-            "Surface size({:?} {:?}), depth_texture({:?}), format({:?})",
+        log::info!(
+            "Surface configured: size={}x{}, format={:?}, requested_present_mode={:?}",
             self.config.width,
             self.config.height,
-            depth_texture.size,
             self.config.format,
+            self.config.present_mode,
         );
 
         Surface {

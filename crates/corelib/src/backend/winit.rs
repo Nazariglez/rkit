@@ -1,7 +1,12 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+#[cfg(windows)]
+mod refresh;
+
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
+#[cfg(windows)]
+use std::time::{Duration, Instant};
 use std::{path::PathBuf, sync::Arc};
 use winit::{
     application::ApplicationHandler,
@@ -295,6 +300,15 @@ fn fullscreen_mode(current_monitor: Option<MonitorHandle>) -> Fullscreen {
     Fullscreen::Borderless(current_monitor)
 }
 
+#[cfg(windows)]
+const MONITOR_PROBE_INTERVAL: Duration = Duration::from_secs(1);
+
+#[cfg(windows)]
+struct CachedMonitorProbe {
+    state: refresh::MonitorProbe,
+    checked_at: Instant,
+}
+
 struct Runner<S> {
     window_attrs: WindowAttributes,
     init: Option<Box<dyn FnOnce() -> S>>,
@@ -305,9 +319,61 @@ struct Runner<S> {
     cursor_visible: bool,
     pixelated_offscreen: bool,
     fps_limiter: FpsLimiter,
+    #[cfg(windows)]
+    monitor_probe: Option<CachedMonitorProbe>,
     request_redraw: bool,
     lazy: bool,
     graphics_error: Option<String>,
+}
+
+#[cfg(windows)]
+impl<S> Runner<S> {
+    fn refresh_monitor_fps(&mut self) {
+        let probe_is_fresh = self
+            .monitor_probe
+            .as_ref()
+            .is_some_and(|probe| probe.checked_at.elapsed() < MONITOR_PROBE_INTERVAL);
+        if probe_is_fresh {
+            return;
+        }
+
+        let window = get_backend().window.clone();
+        let state = refresh::probe(window.as_deref());
+        let began_failure = state.native_error.is_some()
+            && self
+                .monitor_probe
+                .as_ref()
+                .is_none_or(|probe| probe.state.native_error.is_none());
+        let pacing_changed = self
+            .monitor_probe
+            .as_ref()
+            .is_none_or(|probe| !probe.state.pacing_eq(&state));
+
+        self.fps_limiter
+            .update(state.refresh.map(|refresh| refresh.hz));
+
+        if began_failure {
+            let fallback = match state.refresh {
+                Some(refresh::MonitorRefresh {
+                    source: refresh::MonitorFpsSource::WinitFallback,
+                    ..
+                }) => "using winit fallback",
+                _ => "winit fallback unavailable",
+            };
+            log::warn!(
+                "Windows active refresh query failed; {fallback}: {}",
+                state.native_error.as_deref().unwrap_or("unknown error")
+            );
+        }
+        if pacing_changed {
+            log_frame_pacing(&self.fps_limiter, self.vsync, &state);
+        }
+
+        self.monitor_probe = Some(CachedMonitorProbe {
+            state,
+            checked_at: Instant::now(),
+        });
+    }
 }
 
 impl<S> ApplicationHandler for Runner<S> {
@@ -373,6 +439,10 @@ impl<S> ApplicationHandler for Runner<S> {
             bck.window = Some(win);
             bck.pixelated = self.pixelated_offscreen;
         }
+        #[cfg(windows)]
+        {
+            self.monitor_probe = None;
+        }
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
         }
@@ -384,17 +454,14 @@ impl<S> ApplicationHandler for Runner<S> {
             return;
         }
 
-        // TODO: we probably should not get the refresh rate each frame
-        // it's unlikely to change so we may need to cache it and check
-        // each N seconds, or in scale/resize events?
+        #[cfg(windows)]
+        self.refresh_monitor_fps();
 
-        // fetch the monitor frecuency to calculate the frame pacing
-        // this will avoid the input lag just keeping the input events
-        // close to the draw event
-        let monitor_hz = monitor_fps();
-
-        // update the limiter's target delta according to the new hz
-        self.fps_limiter.update(monitor_hz);
+        #[cfg(not(windows))]
+        {
+            let monitor_hz = monitor_fps();
+            self.fps_limiter.update(monitor_hz);
+        }
 
         // if necessary sleep until the next frame
         self.fps_limiter.tick();
@@ -575,6 +642,8 @@ where
         cursor_visible,
         pixelated_offscreen,
         fps_limiter,
+        #[cfg(windows)]
+        monitor_probe: None,
         request_redraw: true,
         lazy: false,
         graphics_error: None,
@@ -922,6 +991,7 @@ fn physical_key_cast(wkey: PhysicalKey) -> KeyCode {
     }
 }
 
+#[cfg(not(windows))]
 #[inline(always)]
 fn monitor_fps() -> Option<f64> {
     let bck = get_backend();
@@ -934,105 +1004,30 @@ fn monitor_fps() -> Option<f64> {
     })
 }
 
-/// Winit's monitor refresh rate seems to lost some accuracy on windows
-/// This function asks directly to window about the framerate
 #[cfg(windows)]
-#[inline(always)]
-fn get_native_os_monitor_fps(
-    monitor: &MonitorHandle,
-    fullscreen: Option<Fullscreen>,
-) -> Option<f64> {
-    use winit::platform::windows::MonitorHandleExtWindows;
-
-    use windows::Win32::Graphics::Dxgi::{
-        Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC},
-        CreateDXGIFactory1, DXGI_ENUM_MODES, IDXGIFactory1,
+fn log_frame_pacing(limiter: &FpsLimiter, vsync: bool, state: &refresh::MonitorProbe) {
+    let target = match limiter.mode() {
+        LimitMode::Auto => "auto".to_string(),
+        LimitMode::Target(period) => format!("{:.3} Hz", period.as_secs_f64().recip()),
+        LimitMode::Disabled => "off".to_string(),
     };
+    let monitor = state
+        .refresh
+        .map(|refresh| format!("{:.3} Hz", refresh.hz))
+        .unwrap_or_else(|| "unavailable".to_string());
+    let source = state
+        .refresh
+        .map(|refresh| refresh.source.as_str())
+        .unwrap_or("unavailable");
+    let effective = limiter
+        .period()
+        .map(|period| format!("{:.3} Hz", period.as_secs_f64().recip()))
+        .unwrap_or_else(|| "off".to_string());
 
-    use smallvec::SmallVec;
-    use std::ffi::c_void;
-
-    // if in exclusive fullscreen mode return the selected hz from the video mode
-    match fullscreen {
-        Some(Fullscreen::Exclusive(vm)) => {
-            return Some(vm.refresh_rate_millihertz() as f64 / 1000.0);
-        }
-        _ => {}
-    }
-
-    unsafe {
-        // pull the native HMONITOR id from winit
-        let hmon = monitor.hmonitor() as *mut c_void;
-        let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
-
-        // find the output whose DXGI_OUTPUT_DESC.Monitor matches our HMONITOR
-        let (output, width, height) = {
-            // TODO: this shit is hard to read, I should move it to it's own function
-
-            let mut found = None;
-            for adapter_idx in 0.. {
-                let adapter = factory.EnumAdapters1(adapter_idx).ok()?;
-                for output_idx in 0.. {
-                    let out = match adapter.EnumOutputs(output_idx) {
-                        Ok(o) => o,
-                        Err(_) => break,
-                    };
-                    let desc = out.GetDesc().ok()?;
-                    if desc.Monitor.0 == hmon {
-                        found = Some((out, desc));
-                        break;
-                    }
-                }
-                if found.is_some() {
-                    break;
-                }
-            }
-
-            let (out, desc) = found?;
-
-            // calculate the desktop mode dimensions to select the display mode later
-            let width = (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left) as u32;
-            let height = (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top) as u32;
-
-            (out, width, height)
-        };
-
-        // TODO: we're doing two calls here, we may want to cache this inside the runner when on windows
-        // so we avoid some extra os calls here each frame
-
-        // count modes
-        let mut count = 0;
-        output
-            .GetDisplayModeList(
-                DXGI_FORMAT_R8G8B8A8_UNORM,
-                DXGI_ENUM_MODES(0),
-                &mut count,
-                None,
-            )
-            .ok()?;
-
-        // fetchs them
-        let mut modes: SmallVec<DXGI_MODE_DESC, 128> =
-            smallvec::smallvec![DXGI_MODE_DESC::default(); count as usize];
-        output
-            .GetDisplayModeList(
-                DXGI_FORMAT_R8G8B8A8_UNORM,
-                DXGI_ENUM_MODES(0),
-                &mut count,
-                Some(modes.as_mut_ptr()),
-            )
-            .ok()?;
-
-        // pick the mode matching our desktop dimensions
-        // this should help if we move to fullscreen although I am not a win32 programmer or user
-        // so I am not sure. If this fails we fallback to the last mode in the list
-        let mode = modes
-            .iter()
-            .find(|m| m.Width == width && m.Height == height)
-            .or_else(|| modes.last())?;
-
-        Some(mode.RefreshRate.Numerator as f64 / mode.RefreshRate.Denominator as f64)
-    }
+    log::info!(
+        "Frame pacing: target={target}, monitor={monitor}, source={source}, effective={effective}, vsync={vsync}, fullscreen={}",
+        state.window_mode.as_str()
+    );
 }
 
 #[cfg(not(windows))]
