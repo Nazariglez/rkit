@@ -135,7 +135,8 @@ pub fn rich_text(text: &str) -> RichTextBuilder<'_> {
 
 /// Builds an owned rich-text snapshot from borrowed markup, fonts, and icon registry data.
 /// The snapshot retains used icon sources, so the registry and markup may be dropped afterward.
-/// Rich text has no shadow or outline effects; changing layout properties requires rebuilding it.
+/// Shadows are configured when drawing; outlines are unsupported. Changing layout properties
+/// requires rebuilding the snapshot.
 pub struct RichTextBuilder<'a> {
     text: &'a str,
     icons: Option<&'a TextIcons>,

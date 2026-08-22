@@ -86,7 +86,15 @@ const SELECT_TEXTURE_SAMPLER: &str = r#"
     if (in.tex == 2.0) {
         return textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0) * in_color;
     }
-    return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
+    if (in.tex == 3.0) {
+        return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
+    }
+    if (in.tex == 4.0) {
+        let rgba = textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0);
+        return vec4(in_color.rgb, rgba.a * in_color.a);
+    }
+    let rgba = textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0);
+    return vec4(in_color.rgb, rgba.a * in_color.a);
 "#;
 
 #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
@@ -98,7 +106,15 @@ const SELECT_TEXTURE_SAMPLER_WEBGL: &str = r#"
     if (in.tex == 2.0) {
         return textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0) * in_color;
     }
-    return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
+    if (in.tex == 3.0) {
+        return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
+    }
+    if (in.tex == 4.0) {
+        let rgba = textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0);
+        return vec4(in_color.rgb, rgba.a * in_color.a);
+    }
+    let rgba = textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0);
+    return vec4(in_color.rgb, rgba.a * in_color.a);
 "#;
 
 fn select_texture_sampler() -> Cow<'static, str> {
@@ -298,6 +314,16 @@ enum TextPass {
     Fill,
 }
 
+struct TextBatchPass {
+    position: Vec2,
+    alpha: f32,
+    solid_color: Option<Color>,
+    outline: bool,
+    rgba_as_mask: bool,
+    transform: Transform2D,
+    pip: DrawPipelineId,
+}
+
 impl Element2D for Text2D<'_> {
     fn process(&self, draw: &mut Draw2D) {
         let info = TextInfo {
@@ -353,6 +379,8 @@ pub struct RichText2D<'a> {
     layout: &'a RichTextLayout,
     position: Vec2,
     alpha: f32,
+    shadow_color: Color,
+    shadow_offset: Option<Vec2>,
 
     #[transform_2d]
     transform: Option<Transform2D>,
@@ -364,6 +392,8 @@ impl<'a> RichText2D<'a> {
             layout,
             position: Vec2::ZERO,
             alpha: 1.0,
+            shadow_color: Color::BLACK,
+            shadow_offset: None,
             transform: None,
         }
     }
@@ -375,6 +405,16 @@ impl<'a> RichText2D<'a> {
 
     pub fn alpha(&mut self, alpha: f32) -> &mut Self {
         self.alpha = alpha;
+        self
+    }
+
+    pub fn shadow_color(&mut self, color: Color) -> &mut Self {
+        self.shadow_color = color;
+        self
+    }
+
+    pub fn shadow_offset(&mut self, offset: impl IntoVec2) -> &mut Self {
+        self.shadow_offset = Some(offset.into_vec2());
         self
     }
 }
@@ -390,7 +430,37 @@ impl Element2D for RichText2D<'_> {
             system.ensure_layout(&self.layout.layout).unwrap();
             system.resolve_layout(&self.layout.layout, quads);
             drop(system);
-            add_rich_text_to_batch(self, quads, size, draw);
+
+            if let Some(offset) = self.shadow_offset {
+                add_quads_to_batch(
+                    quads,
+                    size,
+                    TextBatchPass {
+                        position: self.position + offset,
+                        alpha: self.alpha,
+                        solid_color: Some(self.shadow_color),
+                        outline: false,
+                        rgba_as_mask: true,
+                        transform,
+                        pip: DrawPipelineId::Text,
+                    },
+                    draw,
+                );
+            }
+            add_quads_to_batch(
+                quads,
+                size,
+                TextBatchPass {
+                    position: self.position,
+                    alpha: self.alpha,
+                    solid_color: None,
+                    outline: false,
+                    rgba_as_mask: false,
+                    transform,
+                    pip: DrawPipelineId::Text,
+                },
+                draw,
+            );
         });
     }
 }
@@ -403,32 +473,47 @@ fn add_text_to_batch(
     draw: &mut Draw2D,
 ) {
     let is_shadow = matches!(pass, TextPass::ShadowOutline | TextPass::ShadowFill);
-    let is_outline = matches!(pass, TextPass::ShadowOutline | TextPass::Outline);
-    let shadow_color = element
-        .shadow_color
-        .with_alpha(element.shadow_color.a * element.alpha);
-    let outline_color = element
-        .outline_color
-        .with_alpha(element.outline_color.a * element.alpha);
+    let outline = matches!(pass, TextPass::ShadowOutline | TextPass::Outline);
     let offset = if is_shadow {
         element.shadow_offset.unwrap_or(Vec2::ZERO)
     } else {
         Vec2::ZERO
     };
-    let position = element.position + offset;
+    let solid_color = match pass {
+        TextPass::ShadowOutline | TextPass::ShadowFill => Some(element.shadow_color),
+        TextPass::Outline => Some(element.outline_color),
+        TextPass::Fill => None,
+    };
 
+    add_quads_to_batch(
+        quads,
+        size,
+        TextBatchPass {
+            position: element.position + offset,
+            alpha: element.alpha,
+            solid_color,
+            outline,
+            rgba_as_mask: false,
+            transform: element.transform.unwrap_or_default(),
+            pip: element.pip,
+        },
+        draw,
+    );
+}
+
+fn add_quads_to_batch(quads: &[QuadData], size: Vec2, pass: TextBatchPass, draw: &mut Draw2D) {
     TEMP_VERTICES.with_borrow_mut(|vertices| {
         TEMP_INDICES.with_borrow_mut(|indices| {
             vertices.clear();
             indices.clear();
 
             for quad in quads {
-                let (xy, quad_size, uvs1, uvs2, source) = if is_outline {
+                let (xy, quad_size, uvs1, uvs2, source) = if pass.outline {
                     let Some(outline) = &quad.outline else {
                         continue;
                     };
                     (
-                        outline.xy + position,
+                        outline.xy + pass.position,
                         outline.size,
                         outline.uvs1,
                         outline.uvs2,
@@ -436,18 +521,20 @@ fn add_text_to_batch(
                     )
                 } else {
                     (
-                        quad.xy + position,
+                        quad.xy + pass.position,
                         quad.size,
                         quad.uvs1,
                         quad.uvs2,
                         quad.source,
                     )
                 };
-                let color = match pass {
-                    TextPass::ShadowOutline | TextPass::ShadowFill => shadow_color,
-                    TextPass::Outline => outline_color,
-                    TextPass::Fill => quad.color.with_alpha(quad.color.a * element.alpha),
+                let source = if pass.rgba_as_mask {
+                    source.as_mask()
+                } else {
+                    source
                 };
+                let color = pass.solid_color.unwrap_or(quad.color);
+                let color = color.with_alpha(color.a * pass.alpha);
                 push_quad(
                     vertices,
                     indices,
@@ -460,45 +547,7 @@ fn add_text_to_batch(
                     quad.pixelated,
                 );
             }
-            submit_text_batch(
-                draw,
-                vertices,
-                indices,
-                size,
-                element.transform.unwrap_or_default(),
-                element.pip,
-            );
-        });
-    });
-}
-
-fn add_rich_text_to_batch(element: &RichText2D, quads: &[QuadData], size: Vec2, draw: &mut Draw2D) {
-    TEMP_VERTICES.with_borrow_mut(|vertices| {
-        TEMP_INDICES.with_borrow_mut(|indices| {
-            vertices.clear();
-            indices.clear();
-            for quad in quads {
-                let color = quad.color.with_alpha(quad.color.a * element.alpha);
-                push_quad(
-                    vertices,
-                    indices,
-                    quad.xy + element.position,
-                    quad.size,
-                    quad.uvs1,
-                    quad.uvs2,
-                    quad.source,
-                    color,
-                    quad.pixelated,
-                );
-            }
-            submit_text_batch(
-                draw,
-                vertices,
-                indices,
-                size,
-                element.transform.unwrap_or_default(),
-                DrawPipelineId::Text,
-            );
+            submit_text_batch(draw, vertices, indices, size, pass.transform, pass.pip);
         });
     });
 }

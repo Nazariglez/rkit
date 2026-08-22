@@ -144,11 +144,17 @@ fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
 #[require(UIStyle, UIRender = rich_text_renderer(), UINodeType::RichText)]
 pub struct UIRichText {
     layout: RichTextLayout,
+    pub shadow_color: Color,
+    pub shadow_offset: Option<Vec2>,
 }
 
 impl UIRichText {
     pub fn new(layout: RichTextLayout) -> Self {
-        Self { layout }
+        Self {
+            layout,
+            shadow_color: Color::BLACK,
+            shadow_offset: None,
+        }
     }
 
     pub fn layout(&self) -> &RichTextLayout {
@@ -165,7 +171,12 @@ fn rich_text_renderer() -> UIRender {
 }
 
 fn render_rich_text(draw: &mut Draw2D, rich_text: &UIRichText) {
-    draw.rich_text(rich_text.layout());
+    let mut d_text = draw.rich_text(rich_text.layout());
+    if let Some(offset) = rich_text.shadow_offset {
+        d_text
+            .shadow_offset(offset)
+            .shadow_color(rich_text.shadow_color);
+    }
 }
 
 struct TextData<'a> {

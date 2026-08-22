@@ -1265,6 +1265,8 @@ pub(crate) enum TextSource {
     MaskNearest,
     RgbaLinear,
     RgbaNearest,
+    RgbaMaskLinear,
+    RgbaMaskNearest,
 }
 
 impl TextSource {
@@ -1276,12 +1278,22 @@ impl TextSource {
         }
     }
 
+    pub(crate) fn as_mask(self) -> Self {
+        match self {
+            Self::RgbaLinear => Self::RgbaMaskLinear,
+            Self::RgbaNearest => Self::RgbaMaskNearest,
+            source => source,
+        }
+    }
+
     pub(crate) fn selector(self) -> f32 {
         match self {
             Self::MaskLinear => 0.0,
             Self::MaskNearest => 1.0,
             Self::RgbaLinear => 2.0,
             Self::RgbaNearest => 3.0,
+            Self::RgbaMaskLinear => 4.0,
+            Self::RgbaMaskNearest => 5.0,
         }
     }
 }

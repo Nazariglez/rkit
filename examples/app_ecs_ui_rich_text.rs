@@ -36,25 +36,31 @@ fn main() -> Result<(), String> {
 fn setup_system(mut cmds: Commands, mut ui: ResMut<UILayout<MainLayout>>) {
     ui.set_size(vec2(640.0, 360.0));
 
-    let icon = draw::create_sprite()
+    let nearest_icon = draw::create_sprite()
         .from_image(include_bytes!("./assets/text_icon_pixel.png"))
         .with_filter(TextureFilter::Nearest)
         .build()
         .unwrap();
-    let icons = TextIcons::new([("pixel", icon)]).unwrap();
-
-    let initial = text::rich_text("[color:#73eff7]Intrinsic[/color] [icon:pixel] size.")
-        .icons(&icons)
-        .size(20.0)
-        .layout()
+    let linear_icon = draw::create_sprite()
+        .from_image(include_bytes!("./assets/text_icon_pixel.png"))
+        .with_filter(TextureFilter::Linear)
+        .build()
         .unwrap();
-    let replacement = text::rich_text("[color:#ff7070]Bigger[/color] [icon:pixel]")
+    let icons = TextIcons::new([("nearest", nearest_icon), ("linear", linear_icon)]).unwrap();
+
+    let initial =
+        text::rich_text("[color:#73eff7]Intrinsic[/color] [icon:nearest] [icon:linear] size.")
+            .icons(&icons)
+            .size(20.0)
+            .layout()
+            .unwrap();
+    let replacement = text::rich_text("[color:#ff7070]Bigger[/color] [icon:nearest] [icon:linear]")
         .icons(&icons)
         .size(28.0)
         .layout()
         .unwrap();
     let fixed = text::rich_text(
-        "[color:#ffe066]The node is wider[/color] than this [icon:pixel] snapshot.",
+        "[color:#ffe066]The node is wider[/color] than this [icon:nearest] snapshot.",
     )
     .icons(&icons)
     .size(18.0)
@@ -70,6 +76,8 @@ fn setup_system(mut cmds: Commands, mut ui: ResMut<UILayout<MainLayout>>) {
     };
     drop(icons);
 
+    let initial = shadowed(initial);
+
     cmds.insert_resource(state);
     cmds.spawn_ui_node(
         MainLayout,
@@ -84,7 +92,7 @@ fn setup_system(mut cmds: Commands, mut ui: ResMut<UILayout<MainLayout>>) {
         ),
     )
     .with_children(|cmd| {
-        cmd.add((UIRichText::new(initial), UIStyle::default(), Intrinsic));
+        cmd.add((initial, UIStyle::default(), Intrinsic));
         cmd.add((
             UIRichText::new(fixed),
             UIStyle::default().width(520.0),
@@ -108,12 +116,22 @@ fn assert_layout_system(
         assert_size(node.size(), state.initial_size);
         assert!((fixed.size().x - 520.0).abs() < 1.0);
         assert!((fixed.size().y - state.fixed_size.y).abs() < 1.0);
-        cmds.entity(entity).insert(UIRichText::new(replacement));
+        cmds.entity(entity).insert(shadowed(replacement));
         return;
     }
 
     assert_size(node.size(), state.replacement_size);
     state.validated = true;
+    if std::env::var_os("RKIT_EXAMPLE_AUTO_EXIT").is_some() {
+        cmds.exit();
+    }
+}
+
+fn shadowed(layout: RichTextLayout) -> UIRichText {
+    let mut text = UIRichText::new(layout);
+    text.shadow_color = Color::rgba(0.25, 0.08, 0.35, 0.85);
+    text.shadow_offset = Some(Vec2::splat(3.0));
+    text
 }
 
 fn assert_size(actual: Vec2, expected: Vec2) {
