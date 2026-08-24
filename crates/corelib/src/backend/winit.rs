@@ -1,12 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-#[cfg(windows)]
-mod refresh;
-
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use once_cell::sync::Lazy;
-#[cfg(windows)]
-use std::time::{Duration, Instant};
 use std::{path::PathBuf, sync::Arc};
 use winit::{
     application::ApplicationHandler,
@@ -300,15 +295,6 @@ fn fullscreen_mode(current_monitor: Option<MonitorHandle>) -> Fullscreen {
     Fullscreen::Borderless(current_monitor)
 }
 
-#[cfg(windows)]
-const MONITOR_PROBE_INTERVAL: Duration = Duration::from_secs(1);
-
-#[cfg(windows)]
-struct CachedMonitorProbe {
-    state: refresh::MonitorProbe,
-    checked_at: Instant,
-}
-
 struct Runner<S> {
     window_attrs: WindowAttributes,
     init: Option<Box<dyn FnOnce() -> S>>,
@@ -319,61 +305,9 @@ struct Runner<S> {
     cursor_visible: bool,
     pixelated_offscreen: bool,
     fps_limiter: FpsLimiter,
-    #[cfg(windows)]
-    monitor_probe: Option<CachedMonitorProbe>,
     request_redraw: bool,
     lazy: bool,
     graphics_error: Option<String>,
-}
-
-#[cfg(windows)]
-impl<S> Runner<S> {
-    fn refresh_monitor_fps(&mut self) {
-        let probe_is_fresh = self
-            .monitor_probe
-            .as_ref()
-            .is_some_and(|probe| probe.checked_at.elapsed() < MONITOR_PROBE_INTERVAL);
-        if probe_is_fresh {
-            return;
-        }
-
-        let window = get_backend().window.clone();
-        let state = refresh::probe(window.as_deref());
-        let began_failure = state.native_error.is_some()
-            && self
-                .monitor_probe
-                .as_ref()
-                .is_none_or(|probe| probe.state.native_error.is_none());
-        let pacing_changed = self
-            .monitor_probe
-            .as_ref()
-            .is_none_or(|probe| !probe.state.pacing_eq(&state));
-
-        self.fps_limiter
-            .update(state.refresh.map(|refresh| refresh.hz));
-
-        if began_failure {
-            let fallback = match state.refresh {
-                Some(refresh::MonitorRefresh {
-                    source: refresh::MonitorFpsSource::WinitFallback,
-                    ..
-                }) => "using winit fallback",
-                _ => "winit fallback unavailable",
-            };
-            log::warn!(
-                "Windows active refresh query failed; {fallback}: {}",
-                state.native_error.as_deref().unwrap_or("unknown error")
-            );
-        }
-        if pacing_changed {
-            log_frame_pacing(&self.fps_limiter, self.vsync, &state);
-        }
-
-        self.monitor_probe = Some(CachedMonitorProbe {
-            state,
-            checked_at: Instant::now(),
-        });
-    }
 }
 
 impl<S> ApplicationHandler for Runner<S> {
@@ -439,10 +373,6 @@ impl<S> ApplicationHandler for Runner<S> {
             bck.window = Some(win);
             bck.pixelated = self.pixelated_offscreen;
         }
-        #[cfg(windows)]
-        {
-            self.monitor_probe = None;
-        }
         if let Some(init_cb) = self.init.take() {
             self.state = Some(init_cb());
         }
@@ -454,14 +384,8 @@ impl<S> ApplicationHandler for Runner<S> {
             return;
         }
 
-        #[cfg(windows)]
-        self.refresh_monitor_fps();
-
-        #[cfg(not(windows))]
-        {
-            let monitor_hz = monitor_fps();
-            self.fps_limiter.update(monitor_hz);
-        }
+        let monitor_hz = monitor_fps();
+        self.fps_limiter.update(monitor_hz);
 
         // if necessary sleep until the next frame
         self.fps_limiter.tick();
@@ -642,8 +566,6 @@ where
         cursor_visible,
         pixelated_offscreen,
         fps_limiter,
-        #[cfg(windows)]
-        monitor_probe: None,
         request_redraw: true,
         lazy: false,
         graphics_error: None,
@@ -991,50 +913,14 @@ fn physical_key_cast(wkey: PhysicalKey) -> KeyCode {
     }
 }
 
-#[cfg(not(windows))]
 #[inline(always)]
 fn monitor_fps() -> Option<f64> {
     let bck = get_backend();
     let win = bck.window.as_ref()?;
-    let fullscreen = win.fullscreen();
-    let mon = win.current_monitor()?;
-    get_native_os_monitor_fps(&mon, fullscreen).or_else(|| {
-        mon.refresh_rate_millihertz()
-            .map(|milli| (milli as f64) / 1_000.0)
-    })
-}
-
-#[cfg(windows)]
-fn log_frame_pacing(limiter: &FpsLimiter, vsync: bool, state: &refresh::MonitorProbe) {
-    let target = match limiter.mode() {
-        LimitMode::Auto => "auto".to_string(),
-        LimitMode::Target(period) => format!("{:.3} Hz", period.as_secs_f64().recip()),
-        LimitMode::Disabled => "off".to_string(),
+    let millihertz = match win.fullscreen() {
+        Some(Fullscreen::Exclusive(mode)) => mode.refresh_rate_millihertz(),
+        _ => win.current_monitor()?.refresh_rate_millihertz()?,
     };
-    let monitor = state
-        .refresh
-        .map(|refresh| format!("{:.3} Hz", refresh.hz))
-        .unwrap_or_else(|| "unavailable".to_string());
-    let source = state
-        .refresh
-        .map(|refresh| refresh.source.as_str())
-        .unwrap_or("unavailable");
-    let effective = limiter
-        .period()
-        .map(|period| format!("{:.3} Hz", period.as_secs_f64().recip()))
-        .unwrap_or_else(|| "off".to_string());
 
-    log::info!(
-        "Frame pacing: target={target}, monitor={monitor}, source={source}, effective={effective}, vsync={vsync}, fullscreen={}",
-        state.window_mode.as_str()
-    );
-}
-
-#[cfg(not(windows))]
-#[inline(always)]
-fn get_native_os_monitor_fps(
-    _monitor: &MonitorHandle,
-    _fullscreen: Option<Fullscreen>,
-) -> Option<f64> {
-    None
+    (millihertz > 1_000).then_some(f64::from(millihertz) / 1_000.0)
 }

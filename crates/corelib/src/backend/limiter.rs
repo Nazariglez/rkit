@@ -54,16 +54,6 @@ impl FpsLimiter {
         self.interval.tick();
     }
 
-    #[inline]
-    pub fn mode(&self) -> LimitMode {
-        self.mode
-    }
-
-    #[inline]
-    pub fn period(&self) -> Option<Duration> {
-        self.mode.is_enabled().then(|| self.interval.period())
-    }
-
     #[inline(always)]
     pub fn update(&mut self, monitor_hz: Option<f64>) {
         self.update_mode(self.mode, monitor_hz);
