@@ -224,7 +224,7 @@ impl<S> Runner<S> {
                 }
                 MouseWheel { delta } => {
                     let mut bck = get_mut_backend();
-                    bck.mouse_state.wheel_delta = delta;
+                    bck.mouse_state.wheel_delta += delta;
                     bck.mouse_state.scrolling = true;
                 }
                 KeyUp { key } => {

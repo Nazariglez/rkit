@@ -1,6 +1,6 @@
 use crate::{
     draw::{BaseCam2D, Camera2D, Draw2D},
-    math::{Mat3, Mat4, Vec2, Vec3Swizzles, vec2, vec3},
+    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, vec2, vec3},
 };
 use bevy_ecs::prelude::*;
 use corelib::math::{orthographic, vec4};
@@ -8,9 +8,9 @@ use rustc_hash::FxHashMap;
 use taffy::prelude::*;
 
 use super::{
-    components::{UINode, UIRender},
+    components::{UINode, UIRender, UIScroll},
     ctx::{NodeContext, UINodeType, measure},
-    style::UIStyle,
+    style::{UIOverflow, UIStyle},
     widgets::{UIImage, UIRichText, UIText},
 };
 
@@ -375,12 +375,31 @@ where
             .collect()
     }
 
+    fn graph_slice(&self, from: Option<Entity>) -> Option<&[UINodeGraph]> {
+        let Some(from) = from else {
+            return Some(&self.graph);
+        };
+        let start = self
+            .graph
+            .iter()
+            .position(|event| matches!(event, UINodeGraph::Begin(entity) if *entity == from))?;
+        let end = self.graph[start..]
+            .iter()
+            .position(|event| matches!(event, UINodeGraph::End(entity) if *entity == from))?
+            + start;
+        Some(&self.graph[start..=end])
+    }
+
     /// Updates the style of a node in the layout tree
-    pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle) {
+    pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle, scroll: bool) {
         self.tree
-            .set_style(node.node_id, style.as_taffy_style())
+            .set_style(node.node_id, style.as_taffy_style(scroll))
             .unwrap();
         self.dirty_layout = true;
+    }
+
+    pub(super) fn scroll_height(&self, node: &UINode) -> f32 {
+        self.tree.layout(node.node_id).unwrap().scroll_height()
     }
 
     /// Updates a node's size and position based on the computed layout
@@ -415,6 +434,31 @@ fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree
     }
 }
 
+fn clip_state(world: &World, entity: Entity) -> Option<(Mat3, Vec2, UIOverflow)> {
+    let node = world.get::<UINode>(entity)?;
+    if !node.is_visible() {
+        return None;
+    }
+    let style = world.get::<UIStyle>(entity)?;
+    let overflow = style.effective_overflow(world.get::<UIScroll>(entity).is_some());
+    (!matches!(overflow, UIOverflow::Visible)).then_some((
+        node.global_transform,
+        node.size(),
+        overflow,
+    ))
+}
+
+fn push_clip(draw: &mut Draw2D, transform: Mat3, size: Vec2, overflow: UIOverflow) {
+    draw.push_matrix(transform);
+    let rect = Rect::new(Vec2::ZERO, size);
+    match overflow {
+        UIOverflow::Visible => {}
+        UIOverflow::Clip => draw.push_clip(rect),
+        UIOverflow::Rounded(radius) => draw.push_rounded_clip(rect, radius),
+    }
+    draw.pop_matrix();
+}
+
 /// Draws the entire UI layout
 pub fn draw_ui_layout<T>(draw: &mut Draw2D, world: &mut World)
 where
@@ -423,68 +467,69 @@ where
     draw_ui_layout_from::<T>(draw, world, None)
 }
 
-/// Draws a portion of the UI layout starting from a specific entity
 pub fn draw_ui_layout_from<T>(draw: &mut Draw2D, world: &mut World, from: Option<Entity>)
 where
     T: Component,
 {
     world.resource_scope(|world: &mut World, layout: Mut<UILayout<T>>| {
-        // is form is none draw all the graph
-        let mut rendering = from.is_none();
+        let Some(graph) = layout.graph_slice(from) else {
+            return;
+        };
 
-        for ng in &layout.graph {
-            match ng {
+        let mut ancestors = Vec::new();
+        if let Some(from) = from {
+            let mut parent = layout.parent(from);
+            while let Some(entity) = parent {
+                ancestors.push(entity);
+                parent = layout.parent(entity);
+            }
+            ancestors.reverse();
+        }
+
+        let mut seeded_clips = 0;
+        for entity in ancestors {
+            if let Some((transform, size, overflow)) = clip_state(world, entity) {
+                push_clip(draw, transform, size, overflow);
+                seeded_clips += 1;
+            }
+        }
+
+        for event in graph {
+            match event {
+                UINodeGraph::Begin(_) => {}
                 UINodeGraph::Node(entity) => {
-                    // skip the entitiy if is not inside the graph we want
-                    if !rendering {
+                    let Some(node) = world.get::<UINode>(*entity).copied() else {
                         continue;
-                    }
-
-                    // if the node continas a render component then render
-                    if let (Some(render), Some(node)) =
-                        (world.get::<UIRender>(*entity), world.get::<UINode>(*entity))
-                    {
-                        // store current values
-                        let last_alpha = draw.alpha();
-
-                        // set layout's node values
-                        draw.set_alpha(last_alpha * node.global_alpha);
-                        draw.push_matrix(node.global_transform);
-
-                        // draw if necessary
-                        if draw.alpha() > 0.0 {
-                            render.render(draw, world, *entity);
-                        }
-
-                        // restore old values
-                        draw.pop_matrix();
-                        draw.set_alpha(last_alpha);
                     };
-                }
-                UINodeGraph::Begin(entity) => {
-                    // skip if we're already rendering
-                    if rendering {
-                        continue;
+                    let last_alpha = draw.alpha();
+                    draw.set_alpha(last_alpha * node.global_alpha);
+                    draw.push_matrix(node.global_transform);
+                    if node.is_visible()
+                        && let Some(render) = world.get::<UIRender>(*entity)
+                    {
+                        render.render(draw, world, *entity);
                     }
-
-                    // start rendering if we reached the node we want
-                    rendering = from.is_some_and(|e| &e == entity);
+                    if let Some((_, size, overflow)) = clip_state(world, *entity) {
+                        let rect = Rect::new(Vec2::ZERO, size);
+                        match overflow {
+                            UIOverflow::Visible => {}
+                            UIOverflow::Clip => draw.push_clip(rect),
+                            UIOverflow::Rounded(radius) => draw.push_rounded_clip(rect, radius),
+                        }
+                    }
+                    draw.pop_matrix();
+                    draw.set_alpha(last_alpha);
                 }
                 UINodeGraph::End(entity) => {
-                    // skip if we're not rendering
-                    if !rendering {
-                        continue;
-                    }
-
-                    // stop rendering if we reached the end of the node's children
-                    if let Some(e) = from
-                        && &e == entity
-                    {
-                        // rendering = false;
-                        break;
+                    if clip_state(world, *entity).is_some() {
+                        draw.pop_clip();
                     }
                 }
             }
+        }
+
+        for _ in 0..seeded_clips {
+            draw.pop_clip();
         }
     });
 }

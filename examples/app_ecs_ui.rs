@@ -34,7 +34,7 @@ fn main() -> Result<(), String> {
         .add_plugin(MainPlugins::default())
         .add_plugin(UILayoutPlugin::<MainLayout>::default())
         .on_setup(setup_system)
-        .on_pre_update(update_layout_system)
+        .on_pre_update(update_layout_system.before(UILayoutSysSet))
         .on_update((alpha_system, rotation_system, highlight_system, drag_system))
         .on_render(draw_system)
         .run()

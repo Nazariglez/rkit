@@ -93,10 +93,17 @@ fn listen_mouse_enter(win: &mut WebWindow) {
 
 fn listen_wheel(win: &mut WebWindow) {
     let events = win.events.clone();
+    let canvas = win.canvas.clone();
     let wheel_evt = canvas_add_event_listener(&win.canvas, "wheel", move |e: WheelEvent| {
         e.stop_propagation();
         e.prevent_default();
-        let delta = vec2(e.delta_x() as _, e.delta_y() as _) * -1.0;
+        let scale = match e.delta_mode() {
+            0 => Vec2::ONE,
+            1 => Vec2::splat(50.0),
+            2 => vec2(canvas.client_width() as f32, canvas.client_height() as f32),
+            _ => Vec2::ONE,
+        };
+        let delta = -vec2(e.delta_x() as f32, e.delta_y() as f32) * scale;
         events.borrow_mut().push(Event::MouseWheel { delta });
     })
     .unwrap();

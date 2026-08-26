@@ -4,11 +4,20 @@ use taffy::prelude::TaffyZero;
 use taffy::style as tstyle;
 use taffy::style::Style as TStyle;
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum UIOverflow {
+    #[default]
+    Visible,
+    Clip,
+    Rounded(f32),
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct UIStyle {
     pub display: Display,
     pub mode: Mode,
     pub opacity: f32,
+    pub overflow: UIOverflow,
 
     pub flex_direction: FlexDirection,
     pub flex_grow: f32,
@@ -73,6 +82,18 @@ impl UIStyle {
     #[inline]
     pub fn opacity(mut self, alpha: f32) -> Self {
         self.opacity = alpha;
+        self
+    }
+
+    #[inline]
+    pub fn overflow_clip(mut self) -> Self {
+        self.overflow = UIOverflow::Clip;
+        self
+    }
+
+    #[inline]
+    pub fn overflow_rounded(mut self, radius: f32) -> Self {
+        self.overflow = UIOverflow::Rounded(radius);
         self
     }
 
@@ -599,8 +620,15 @@ impl UIStyle {
         self
     }
 
-    pub(super) fn as_taffy_style(&self) -> TStyle {
-        taffy_style_from(self)
+    pub(super) fn effective_overflow(&self, scroll: bool) -> UIOverflow {
+        match self.overflow {
+            UIOverflow::Visible if scroll => UIOverflow::Clip,
+            overflow => overflow,
+        }
+    }
+
+    pub(super) fn as_taffy_style(&self, scroll: bool) -> TStyle {
+        taffy_style_from(self, scroll)
     }
 }
 
@@ -610,6 +638,7 @@ impl Default for UIStyle {
             display: Display::Flex,
             mode: Mode::Relative,
             opacity: 1.0,
+            overflow: UIOverflow::Visible,
             flex_direction: FlexDirection::Row,
             flex_grow: 0.0,
             flex_shrink: 1.0,
@@ -774,7 +803,23 @@ fn dimension_from(unit: Unit) -> tstyle::Dimension {
     }
 }
 
-pub(super) fn taffy_style_from(style: &UIStyle) -> TStyle {
+pub(super) fn taffy_style_from(style: &UIStyle, scroll: bool) -> TStyle {
+    let overflow = match style.effective_overflow(scroll) {
+        UIOverflow::Visible => tstyle::Overflow::Visible,
+        UIOverflow::Clip | UIOverflow::Rounded(_) => tstyle::Overflow::Clip,
+    };
+    let overflow = if scroll {
+        geom::Point {
+            x: tstyle::Overflow::Clip,
+            y: tstyle::Overflow::Scroll,
+        }
+    } else {
+        geom::Point {
+            x: overflow,
+            y: overflow,
+        }
+    };
+
     TStyle {
         display: match style.display {
             Display::Flex => tstyle::Display::Flex,
@@ -782,6 +827,7 @@ pub(super) fn taffy_style_from(style: &UIStyle) -> TStyle {
             Display::None => tstyle::Display::None,
         },
         box_sizing: tstyle::BoxSizing::BorderBox,
+        overflow,
         position: match style.mode {
             Mode::Relative => tstyle::Position::Relative,
             Mode::Absolute => tstyle::Position::Absolute,

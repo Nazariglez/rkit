@@ -442,7 +442,7 @@ impl<S> ApplicationHandler for Runner<S> {
                         vec2(delta.x, delta.y)
                     }
                 };
-                bck.mouse_state.wheel_delta = value;
+                bck.mouse_state.wheel_delta += value;
                 bck.mouse_state.scrolling = true;
                 self.request_redraw = true;
             }

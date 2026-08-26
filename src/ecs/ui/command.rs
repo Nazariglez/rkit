@@ -8,7 +8,11 @@ use taffy::prelude::*;
 
 use super::ctx::UINodeType;
 use super::plugin::update_layout_system;
-use super::{components::UINode, layout::UILayout, style::UIStyle};
+use super::{
+    components::{UINode, UIScroll},
+    layout::UILayout,
+    style::UIStyle,
+};
 
 type BuilderCb = dyn FnOnce(&mut World, &mut FxHashMap<Entity, NodeId>) + Send;
 
@@ -69,14 +73,18 @@ where
         let layout = self.layout;
         self.bundles.as_mut().unwrap().push(Box::new(
             move |world: &mut World, ids: &mut FxHashMap<Entity, NodeId>| {
-                let (style, typ) = world
-                    .entity_mut(entity)
-                    .insert((layout, bundle))
-                    .insert_if_new(UIStyle::default())
-                    .insert_if_new(UINodeType::Container)
-                    .get_components::<(&UIStyle, &UINodeType)>()
-                    .map(|(style, typ)| (style.as_taffy_style(), *typ))
-                    .unwrap();
+                let (style, typ) = {
+                    let mut entity_mut = world.entity_mut(entity);
+                    entity_mut
+                        .insert((layout, bundle))
+                        .insert_if_new(UIStyle::default())
+                        .insert_if_new(UINodeType::Container);
+                    let has_scroll = entity_mut.contains::<UIScroll>();
+                    entity_mut
+                        .get_components::<(&UIStyle, &UINodeType)>()
+                        .map(|(style, typ)| (style.as_taffy_style(has_scroll), *typ))
+                        .unwrap()
+                };
 
                 let mut layout = world
                     .get_resource_mut::<UILayout<T>>()

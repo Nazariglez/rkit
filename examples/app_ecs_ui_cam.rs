@@ -29,7 +29,8 @@ fn main() -> Result<(), String> {
         .add_plugin(MainPlugins::default())
         .add_plugin(UILayoutPlugin::<MainLayout>::default())
         .on_setup(setup_system)
-        .on_update((update_system, highlight_system).chain())
+        .on_pre_update(update_system.before(UILayoutSysSet))
+        .on_update(highlight_system)
         .on_render(draw_system)
         .run()
 }

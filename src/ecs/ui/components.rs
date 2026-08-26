@@ -206,9 +206,7 @@ pub struct UIPointer {
     pub(super) clicked: MouseButtonSet,
     pub(super) scrolling: Option<Vec2>,
     pub(super) dragging: MouseButtonMap<UIDragEvent>,
-
-    pub(super) parent_inverse_transform: Mat3,
-    pub(super) inverse_transform: Mat3,
+    pub(super) ancestor_eligible: bool,
 }
 
 impl UIPointer {
@@ -250,6 +248,50 @@ impl UIPointer {
 
     pub fn dragging(&self, btn: MouseButton) -> Option<UIDragEvent> {
         self.dragging.get(&btn).cloned()
+    }
+}
+
+#[derive(Component, Default, Clone, Copy, Debug)]
+#[require(UIPointer)]
+pub struct UIScroll {
+    offset: f32,
+    max_offset: f32,
+}
+
+impl UIScroll {
+    pub fn vertical() -> Self {
+        Self::default()
+    }
+
+    pub fn offset(&self) -> f32 {
+        self.offset
+    }
+
+    pub fn set_offset(&mut self, offset: f32) {
+        if offset.is_finite() {
+            self.offset = offset.clamp(0.0, self.max_offset);
+        }
+    }
+
+    pub fn scroll_to(&mut self, offset: f32) {
+        self.set_offset(offset);
+    }
+
+    pub fn max_offset(&self) -> f32 {
+        self.max_offset
+    }
+
+    pub(super) fn set_max_offset(&mut self, max_offset: f32) {
+        self.max_offset = if max_offset.is_finite() {
+            max_offset.max(0.0)
+        } else {
+            0.0
+        };
+        self.offset = self.offset.clamp(0.0, self.max_offset);
+    }
+
+    pub(super) fn apply_wheel(&mut self, delta: f32) {
+        self.set_offset(self.offset - delta);
     }
 }
 
