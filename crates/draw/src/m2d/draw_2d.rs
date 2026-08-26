@@ -261,6 +261,10 @@ impl Draw2D {
                 return;
             }
         };
+        if let Err(error) = self.enable_rounded_clipping() {
+            self.record_error(error);
+            return;
+        }
         self.recording_started = true;
 
         let Some(RoundedGeometry {
@@ -289,10 +293,6 @@ impl Draw2D {
             self.record_error("Draw2D rounded clip nesting exceeds the stencil depth limit");
             return;
         };
-        if let Err(error) = self.enable_rounded_clipping() {
-            self.record_error(error);
-            return;
-        }
         let Ok(count) = u32::try_from(indices.len()) else {
             self.record_error("Rounded clip index count exceeds the supported range");
             return;
@@ -783,7 +783,7 @@ impl AsRenderer for Draw2D {
         if let Some(color) = self.clear_color {
             pass.clear_color(color.as_linear());
         }
-        if has_masks {
+        if self.uses_rounded_clip {
             pass.clear_stencil(0);
         }
 

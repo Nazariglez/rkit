@@ -13,7 +13,7 @@ use corelib::{
     },
     math::Mat4,
 };
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use utils::drop_signal::DropSignal;
@@ -83,7 +83,7 @@ impl CachedBindGroup {
 
 pub(crate) struct ContentPipeline {
     base: PipelineContext,
-    clipped: Result<RenderPipeline, String>,
+    clipped: OnceCell<Result<RenderPipeline, String>>,
 }
 
 impl ContentPipeline {
@@ -92,7 +92,29 @@ impl ContentPipeline {
     }
 
     pub(crate) fn clipped(&self) -> Result<&RenderPipeline, String> {
-        self.clipped.as_ref().map_err(Clone::clone)
+        self.clipped
+            .get_or_init(|| {
+                if self.base.pipeline.uses_stencil() {
+                    return Err(
+                        "A stencil-owning Draw2D pipeline cannot be used inside a rounded clip"
+                            .to_string(),
+                    );
+                }
+                gfx::create_stencil_variant(
+                    &self.base.pipeline,
+                    Stencil {
+                        stencil_fail: StencilAction::Keep,
+                        depth_fail: StencilAction::Keep,
+                        pass: StencilAction::Keep,
+                        compare: CompareMode::Equal,
+                        read_mask: 0xff,
+                        write_mask: 0x00,
+                        reference: 0,
+                    },
+                )
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -110,7 +132,7 @@ pub(crate) struct Painter2D {
     pub ebo: Buffer,
     pub dummy_sprite_bg: Option<BindGroup>,
     sprites_cache: FxHashMap<(BindGroupLayoutId, SpriteId), CachedBindGroup>,
-    masks: Result<MaskPipelines, String>,
+    masks: OnceCell<Result<MaskPipelines, String>>,
 }
 
 impl Default for Painter2D {
@@ -141,7 +163,7 @@ impl Default for Painter2D {
             ebo,
             dummy_sprite_bg: None,
             sprites_cache: Default::default(),
-            masks: create_mask_pipelines(),
+            masks: OnceCell::new(),
         };
 
         painter.set_pipeline(
@@ -290,6 +312,7 @@ impl Painter2D {
 
     pub(crate) fn mask_pipelines(&self) -> Result<(&RenderPipeline, &RenderPipeline), String> {
         self.masks
+            .get_or_init(create_mask_pipelines)
             .as_ref()
             .map(|masks| (&masks.push, &masks.pop))
             .map_err(Clone::clone)
@@ -301,23 +324,10 @@ impl Painter2D {
 }
 
 fn register_pipeline(base: PipelineContext) -> Arc<ContentPipeline> {
-    let clipped = if base.pipeline.uses_stencil() {
-        Err("A stencil-owning Draw2D pipeline cannot be used inside a rounded clip".to_string())
-    } else {
-        gfx::create_stencil_variant(
-            &base.pipeline,
-            Stencil {
-                stencil_fail: StencilAction::Keep,
-                depth_fail: StencilAction::Keep,
-                pass: StencilAction::Keep,
-                compare: CompareMode::Equal,
-                read_mask: 0xff,
-                write_mask: 0x00,
-                reference: 0,
-            },
-        )
-    };
-    Arc::new(ContentPipeline { base, clipped })
+    Arc::new(ContentPipeline {
+        base,
+        clipped: OnceCell::new(),
+    })
 }
 
 fn create_mask_pipelines() -> Result<MaskPipelines, String> {
