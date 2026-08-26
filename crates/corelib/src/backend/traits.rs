@@ -2,7 +2,7 @@ use crate::{
     gfx::{
         BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, GpuStats, Limits, RenderPipeline,
         RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
-        SamplerDescriptor, Texture, TextureData, TextureDescriptor,
+        SamplerDescriptor, Stencil, Texture, TextureData, TextureDescriptor,
     },
     input::{KeyboardState, MouseState},
     math::{UVec2, Vec2},
@@ -51,6 +51,11 @@ pub(crate) trait GfxBackendImpl {
     fn create_render_pipeline(
         &mut self,
         desc: RenderPipelineDescriptor,
+    ) -> Result<RenderPipeline, String>;
+    fn create_stencil_variant(
+        &mut self,
+        base: &RenderPipeline,
+        stencil: Stencil,
     ) -> Result<RenderPipeline, String>;
     fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String>;
     fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String>;

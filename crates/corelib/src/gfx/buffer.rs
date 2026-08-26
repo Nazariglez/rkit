@@ -42,7 +42,7 @@ impl VertexLayout {
         self
     }
 
-    pub fn with_attr(mut self, location: u64, format: VertexFormat) -> Self {
+    pub fn with_attr(mut self, location: u32, format: VertexFormat) -> Self {
         debug_assert!(
             self.attributes.len() < MAX_VERTEX_ATTRIBUTES,
             "Cannot set more than {MAX_VERTEX_ATTRIBUTES} attributes in VertexLayout"
@@ -61,7 +61,7 @@ pub enum VertexStepMode {
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct VertexAttribute {
-    pub location: u64,
+    pub location: u32,
     pub format: VertexFormat,
 }
 

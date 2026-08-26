@@ -1,5 +1,6 @@
 pub mod batch;
 mod camera;
+mod clip;
 mod draw_2d;
 mod images;
 mod mat3_stack;

@@ -1,11 +1,14 @@
 use crate::{
-    BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D, get_2d_painter,
-    get_mut_2d_painter,
+    BaseCam2D, Circle2D, Ellipse2D, Pattern2D, Polygon2D, Star2D, get_mut_2d_painter,
     m2d::{
+        clip::{
+            ClipFrame, ClipKind, Coverage, GeometryRange, MaskState, RoundedGeometry, project_rect,
+            rounded_geometry,
+        },
         images::Image2D,
         mat3_stack::Mat3Stack,
         nine_slice::NineSlice2D,
-        painter::DrawPipelineId,
+        painter::{ContentPipeline, DrawPipelineId},
         shapes::{Line2D, Path2D, Rectangle2D, Triangle2D},
         text::{RichText2D, Text2D},
     },
@@ -15,13 +18,16 @@ use crate::{
 use arrayvec::ArrayVec;
 use corelib::{
     gfx::{
-        self, AsRenderer, BindGroup, Color, RenderPipeline, RenderTexture, Renderer,
-        consts::MAX_BIND_GROUPS_PER_PIPELINE,
+        self, AsRenderer, BindGroup, BindGroupId, Buffer, Color, PipelineId, RenderCommand,
+        RenderPass, RenderPipeline, RenderTexture, Renderer, consts::MAX_BIND_GROUPS_PER_PIPELINE,
     },
-    math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, orthographic, vec2, vec3, vec4},
+    math::{Mat3, Mat4, Rect, Vec2, orthographic, vec2, vec3, vec4},
 };
 use smallvec::SmallVec;
-use std::ops::{Deref, DerefMut, Range};
+use std::{
+    ops::{Deref, DerefMut, Range},
+    sync::Arc,
+};
 
 // TODO Cached elements is a must
 
@@ -52,43 +58,44 @@ impl AsBindGroups for &[BindGroup] {
     }
 }
 
+#[derive(Clone)]
+enum DrawOp {
+    Batch(BatchInfo),
+    MaskPush(MaskState),
+    MaskPop(MaskState),
+}
+
+#[derive(Clone, PartialEq)]
+struct BatchKey {
+    pipeline: PipelineId,
+    bind_groups: ArrayVec<BindGroupId, MAX_BIND_GROUPS_PER_PIPELINE>,
+    coverage: Coverage,
+    stencil_reference: Option<u8>,
+}
+
+#[derive(Clone)]
 struct BatchInfo {
+    key: BatchKey,
     vbo_range: Range<u64>,
     ebo_range: Range<u64>,
     start_idx: usize,
     end_idx: usize,
-    pipeline: RenderPipeline,
+    content: Arc<ContentPipeline>,
     bind_groups: ArrayVec<BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
 }
 
-impl Clone for BatchInfo {
-    fn clone(&self) -> Self {
-        Self {
-            vbo_range: self.vbo_range.clone(),
-            ebo_range: self.ebo_range.clone(),
-            start_idx: self.start_idx,
-            end_idx: self.end_idx,
-            pipeline: self.pipeline.clone(),
-            bind_groups: self.bind_groups.clone(),
-        }
-    }
-}
-
 impl BatchInfo {
-    fn is_compatible(&self, other: &Self) -> bool {
-        if self.pipeline != other.pipeline {
-            return false;
+    fn pipeline(&self, clipped: bool) -> Result<&RenderPipeline, String> {
+        if clipped {
+            self.content.clipped()
+        } else {
+            Ok(self.content.base())
         }
-
-        if self.bind_groups != other.bind_groups {
-            return false;
-        }
-
-        true
     }
 
-    fn count(&self) -> usize {
-        self.end_idx - self.start_idx
+    fn count(&self) -> Result<u32, String> {
+        u32::try_from(self.end_idx - self.start_idx)
+            .map_err(|_| "Draw batch index count exceeds the supported range".to_string())
     }
 }
 
@@ -168,8 +175,13 @@ pub struct Draw2D {
 
     matrix_stack: Mat3Stack,
 
-    indices_offset: usize,
-    batches: SmallVec<BatchInfo, STACK_ALLOCATED_QUADS>,
+    indices_offset: u32,
+    operations: SmallVec<DrawOp, STACK_ALLOCATED_QUADS>,
+    clip_stack: SmallVec<ClipFrame, 8>,
+    recording_error: Option<String>,
+    recording_started: bool,
+    uses_rounded_clip: bool,
+    has_stencil_content: bool,
     vertices: SmallVec<f32, { STACK_ALLOCATED_QUADS * 12 }>,
     indices: SmallVec<u32, { STACK_ALLOCATED_QUADS * 6 }>,
 
@@ -210,6 +222,151 @@ impl Draw2D {
         self.alpha
     }
 
+    pub fn push_clip(&mut self, rect: Rect) {
+        if self.recording_error.is_some() {
+            return;
+        }
+        let coverage = match project_rect(rect, self.matrix(), self.projection) {
+            Ok(coverage) => self.current_coverage().intersect(coverage),
+            Err(error) => {
+                self.record_error(error);
+                return;
+            }
+        };
+        self.recording_started = true;
+        self.clip_stack.push(ClipFrame {
+            coverage,
+            stencil_depth: self.current_stencil_depth(),
+            kind: ClipKind::Rect,
+        });
+    }
+
+    pub fn push_rounded_clip(&mut self, rect: Rect, radius: f32) {
+        if self.recording_error.is_some() {
+            return;
+        }
+        if self.has_stencil_content {
+            self.record_error(
+                "Draw2D rounded clips cannot be combined with a stencil-owning pipeline",
+            );
+            return;
+        }
+
+        let parent_coverage = self.current_coverage();
+        let parent_depth = self.current_stencil_depth();
+        let geometry = match rounded_geometry(rect, radius, self.matrix(), self.projection) {
+            Ok(geometry) => geometry,
+            Err(error) => {
+                self.record_error(error);
+                return;
+            }
+        };
+        self.recording_started = true;
+
+        let Some(RoundedGeometry {
+            vertices,
+            indices,
+            bounds,
+        }) = geometry
+        else {
+            self.clip_stack.push(ClipFrame {
+                coverage: Coverage::Empty,
+                stencil_depth: parent_depth,
+                kind: ClipKind::Rounded(None),
+            });
+            return;
+        };
+        let coverage = parent_coverage.intersect(Coverage::Rect(bounds));
+        let Coverage::Rect(coverage_rect) = coverage else {
+            self.clip_stack.push(ClipFrame {
+                coverage: Coverage::Empty,
+                stencil_depth: parent_depth,
+                kind: ClipKind::Rounded(None),
+            });
+            return;
+        };
+        let Some(child_depth) = parent_depth.checked_add(1) else {
+            self.record_error("Draw2D rounded clip nesting exceeds the stencil depth limit");
+            return;
+        };
+        if let Err(error) = self.enable_rounded_clipping() {
+            self.record_error(error);
+            return;
+        }
+        let Ok(count) = u32::try_from(indices.len()) else {
+            self.record_error("Rounded clip index count exceeds the supported range");
+            return;
+        };
+
+        let vbo_start = self.vertices.len() as u64 * 4;
+        let ebo_start = self.indices.len() as u64 * 4;
+        let state = MaskState {
+            geometry: GeometryRange {
+                vbo: vbo_start..vbo_start + vertices.len() as u64 * 4,
+                ebo: ebo_start..ebo_start + indices.len() as u64 * 4,
+                count,
+            },
+            coverage: coverage_rect,
+            parent_depth,
+            child_depth,
+        };
+        self.vertices.extend_from_slice(&vertices);
+        self.indices.extend_from_slice(&indices);
+        self.indices_offset = 0;
+        self.operations.push(DrawOp::MaskPush(state.clone()));
+        self.clip_stack.push(ClipFrame {
+            coverage,
+            stencil_depth: child_depth,
+            kind: ClipKind::Rounded(Some(state)),
+        });
+    }
+
+    pub fn pop_clip(&mut self) {
+        if self.recording_error.is_some() {
+            return;
+        }
+        let Some(frame) = self.clip_stack.pop() else {
+            self.record_error("Draw2D clip stack underflow");
+            return;
+        };
+        self.recording_started = true;
+        if let ClipKind::Rounded(Some(mask)) = frame.kind {
+            self.operations.push(DrawOp::MaskPop(mask));
+            self.indices_offset = 0;
+        }
+    }
+
+    fn current_coverage(&self) -> Coverage {
+        self.clip_stack
+            .last()
+            .map_or(Coverage::Full, |frame| frame.coverage)
+    }
+
+    fn current_stencil_depth(&self) -> u8 {
+        self.clip_stack
+            .last()
+            .map_or(0, |frame| frame.stencil_depth)
+    }
+
+    fn record_error(&mut self, error: impl Into<String>) {
+        if self.recording_error.is_none() {
+            self.recording_error = Some(error.into());
+        }
+    }
+
+    fn enable_rounded_clipping(&mut self) -> Result<(), String> {
+        if self.uses_rounded_clip {
+            return Ok(());
+        }
+        for operation in &self.operations {
+            if let DrawOp::Batch(batch) = operation {
+                batch.content.clipped()?;
+            }
+        }
+        self.uses_rounded_clip = true;
+        Ok(())
+    }
+
     #[inline]
     pub fn add_element<T>(&mut self, element: &T)
     where
@@ -220,100 +377,143 @@ impl Draw2D {
     }
 
     pub fn add_to_batch<'a>(&'a mut self, info: DrawingInfo<'a>) {
-        let start_idx = self.indices.len();
-        let end_idx = start_idx + info.indices.len();
-        let mut painter = get_mut_2d_painter();
-        let PipelineContext {
-            pipeline,
-            mut groups,
-            vertex_offset,
-            x_pos,
-            y_pos,
-            alpha_pos,
-        } = painter
-            .pipelines
-            .get(&info.pipeline)
-            .ok_or_else(|| format!("Missing pipeline '{:?}'", info.pipeline))
-            .unwrap()
-            .clone();
+        if self.recording_error.is_some() {
+            return;
+        }
+        self.recording_started = true;
 
-        // assign in spot 1 the texture/sampler binding group
-        if let Some(sp) = info.sprite {
-            let bind_group = painter.cached_bind_group_for(&pipeline, sp);
-            if groups.len() > 1 {
-                groups[1] = bind_group;
-            } else {
-                groups.push(bind_group);
+        let coverage = self.current_coverage();
+        if coverage == Coverage::Empty {
+            return;
+        }
+        let stencil_depth = self.current_stencil_depth();
+
+        let mut painter = get_mut_2d_painter();
+        let resolved = match painter.resolve_pipeline(info.pipeline, info.sprite) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                self.record_error(error);
+                return;
+            }
+        };
+        if self.uses_rounded_clip
+            && let Err(error) = resolved.content.clipped()
+        {
+            self.record_error(error);
+            return;
+        }
+        if resolved.uses_stencil {
+            self.has_stencil_content = true;
+            if self.uses_rounded_clip {
+                self.record_error(
+                    "Draw2D rounded clips cannot be combined with a stencil-owning pipeline",
+                );
+                return;
             }
         }
 
-        if matches!(info.pipeline, DrawPipelineId::Text) {
-            groups.push(get_mut_text_system().bind_group(&pipeline).clone());
+        let text_group = matches!(info.pipeline, DrawPipelineId::Text).then(|| {
+            get_mut_text_system()
+                .bind_group(resolved.content.base())
+                .clone()
+        });
+        let mut bind_groups = resolved
+            .groups
+            .iter()
+            .map(|group| group.id())
+            .collect::<ArrayVec<_, MAX_BIND_GROUPS_PER_PIPELINE>>();
+        if let Some(group) = &text_group {
+            bind_groups.push(group.id());
+        }
+        let key = BatchKey {
+            pipeline: resolved.content.base().id(),
+            bind_groups,
+            coverage,
+            stencil_reference: self.uses_rounded_clip.then_some(stencil_depth),
+        };
+        let new_batch = match self.operations.last() {
+            Some(DrawOp::Batch(last)) => last.key != key,
+            _ => true,
+        };
+        let batch_resources = new_batch.then(|| {
+            let mut groups = resolved
+                .groups
+                .iter()
+                .map(|group| (*group).clone())
+                .collect::<ArrayVec<_, MAX_BIND_GROUPS_PER_PIPELINE>>();
+            if let Some(group) = text_group {
+                groups.push(group);
+            }
+            (Arc::clone(resolved.content), groups)
+        });
+        let vertex_offset = resolved.vertex_offset;
+        let x_pos = resolved.x_pos;
+        let y_pos = resolved.y_pos;
+        let alpha_pos = resolved.alpha_pos;
+        drop(resolved);
+        drop(painter);
+
+        let indices_offset = if new_batch { 0 } else { self.indices_offset };
+        let vertex_count = info.vertices.len() / vertex_offset;
+        let Ok(vertex_count) = u32::try_from(vertex_count) else {
+            self.record_error("Draw batch vertex count exceeds the supported range");
+            return;
+        };
+        let Some(next_indices_offset) = indices_offset.checked_add(vertex_count) else {
+            self.record_error("Draw batch vertex offset exceeds the supported range");
+            return;
+        };
+        let index_overflow = info
+            .indices
+            .iter()
+            .any(|index| index.checked_add(indices_offset).is_none());
+        if index_overflow {
+            self.record_error("Draw batch index exceeds the supported range");
+            return;
         }
 
-        let vbo_start = self.vertices.len() as u64 * 4;
-        let ebo_start = self.indices.len() as u64 * 4;
-
-        let batch = BatchInfo {
-            vbo_range: vbo_start..vbo_start,
-            ebo_range: ebo_start..ebo_start,
-            start_idx,
-            end_idx,
-            pipeline,
-            bind_groups: groups,
-        };
-
-        let new_batch = match self.batches.last() {
-            None => true,
-            Some(last) => !last.is_compatible(&batch),
-        };
-
-        if new_batch {
+        let start_idx = self.indices.len();
+        let end_idx = start_idx + info.indices.len();
+        if let Some((content, bind_groups)) = batch_resources {
             self.indices_offset = 0;
-            self.batches.push(batch);
+            self.operations.push(DrawOp::Batch(BatchInfo {
+                key,
+                vbo_range: self.vertices.len() as u64 * 4..self.vertices.len() as u64 * 4,
+                ebo_range: self.indices.len() as u64 * 4..self.indices.len() as u64 * 4,
+                start_idx,
+                end_idx,
+                content,
+                bind_groups,
+            }));
             self.stats.batches += 1;
         }
 
-        let current = self.batches.last_mut().unwrap();
+        let DrawOp::Batch(current) = self.operations.last_mut().unwrap() else {
+            unreachable!();
+        };
         current.end_idx = end_idx;
+        current.vbo_range.end += info.vertices.len() as u64 * 4;
+        current.ebo_range.end += info.indices.len() as u64 * 4;
 
-        let vbo_count = info.vertices.len() as u64 * 4; // f32=4bytes
-        let ebo_count = info.indices.len() as u64 * 4; // u32=4bytes
-        current.vbo_range.end += vbo_count;
-        current.ebo_range.end += ebo_count;
-
-        // the indices must use an offset
-        self.indices.extend(
-            info.indices
-                .iter()
-                .map(|idx| idx + self.indices_offset as u32),
-        );
-
-        self.indices_offset += info.vertices.len() / vertex_offset;
+        self.indices
+            .extend(info.indices.iter().map(|index| index + indices_offset));
+        self.indices_offset = next_indices_offset;
 
         let matrix = self.matrix() * info.transform;
-        info.vertices
-            .chunks_exact_mut(vertex_offset)
-            .for_each(|chunk| {
-                debug_assert!(chunk.len() >= 2);
+        for vertex in info.vertices.chunks_exact_mut(vertex_offset) {
+            let position = matrix * vec3(vertex[x_pos], vertex[y_pos], 1.0);
+            let (x, y) = if self.round_pixels {
+                (position.x.round(), position.y.round())
+            } else {
+                (position.x, position.y)
+            };
+            vertex[x_pos] = x;
+            vertex[y_pos] = y;
 
-                let x = chunk[x_pos];
-                let y = chunk[y_pos];
-
-                let xyz = matrix * vec3(x, y, 1.0);
-                let (x, y) = if self.round_pixels {
-                    (xyz.x.round(), xyz.y.round())
-                } else {
-                    (xyz.x, xyz.y)
-                };
-                chunk[x_pos] = x;
-                chunk[y_pos] = y;
-
-                if let Some(a_pos) = alpha_pos {
-                    let alpha = chunk[a_pos] * self.alpha;
-                    chunk[a_pos] = alpha;
-                }
-            });
+            if let Some(alpha_pos) = alpha_pos {
+                vertex[alpha_pos] *= self.alpha;
+            }
+        }
         self.vertices.extend_from_slice(info.vertices);
     }
 
@@ -325,21 +525,20 @@ impl Draw2D {
     // - Transform
     #[inline]
     pub fn set_projection(&mut self, projection: Mat4) {
-        debug_assert!(
-            self.batches.is_empty(),
-            "The Draw2D projection must be set before any drawing."
-        );
+        if self.recording_started {
+            self.record_error("Draw2D projection cannot change after recording has started");
+            return;
+        }
         self.projection = projection;
         self.inverse_projection = self.projection.inverse();
     }
 
     #[inline]
     pub fn set_size(&mut self, size: Vec2) {
-        debug_assert!(
-            self.batches.is_empty(),
-            "The Draw2D size must be set before any drawing."
-        );
-
+        if self.recording_started {
+            self.record_error("Draw2D size cannot change after recording has started");
+            return;
+        }
         if self.size != size {
             self.size = size;
             self.set_projection(orthographic(0.0, size.x, size.y, 0.0, 0.0, 1.0));
@@ -352,26 +551,14 @@ impl Draw2D {
     }
 
     pub fn set_camera(&mut self, cam: &dyn BaseCam2D) {
-        debug_assert!(
-            self.batches.is_empty(),
-            "The Camera2D must be set before any drawing."
-        );
-
+        if self.recording_started {
+            self.record_error("Draw2D camera cannot change after recording has started");
+            return;
+        }
         self.size = cam.size();
-
-        // projection
         self.projection = cam.projection();
         self.inverse_projection = cam.inverse_projection();
-
-        debug_assert!(
-            self.matrix_stack.is_empty(),
-            "The Camera2D must be set before push any transformation"
-        );
-
-        // transform
         self.matrix_stack.set_matrix(cam.transform());
-
-        // do not assign inverse_transform, it will be calculated and cached when needed
         self.inverse_transform = None;
     }
 
@@ -548,58 +735,162 @@ pub trait Element2D {
 
 impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
-        let painter = get_2d_painter();
-
-        let ubo_transform = &painter.ubo;
-        let vbo = &painter.vbo;
-        let ebo = &painter.ebo;
-
-        // TODO check dirty transform flag to avoid update all the time this
-        gfx::write_buffer(ubo_transform)
-            .with_data(self.projection.as_ref())
-            .build()
-            .unwrap();
-
-        gfx::write_buffer(vbo)
-            .with_data(&self.vertices)
-            .build()
-            .unwrap();
-
-        gfx::write_buffer(ebo)
-            .with_data(&self.indices)
-            .build()
-            .unwrap();
-
-        let mut cleared = false;
-        let mut renderer = Renderer::new();
-
-        if self.batches.is_empty()
-            && let Some(color) = self.clear_color
+        if let Some(error) = &self.recording_error {
+            return Err(error.clone());
+        }
+        if self.uses_rounded_clip
+            && let Some(target) = target
+            && !target.has_depth()
         {
+            return Err(
+                "Draw2D rounded clips require a render texture created with with_depth(true)"
+                    .to_string(),
+            );
+        }
+        if self.operations.is_empty() {
+            let Some(color) = self.clear_color else {
+                return Ok(());
+            };
+            let mut renderer = Renderer::new();
             renderer.begin_pass().clear_color(color.as_linear());
-            cleared = true;
+            return self.flush(&renderer, target);
         }
 
-        self.batches.iter().for_each(|b| {
-            let pass = renderer.begin_pass();
+        let has_masks = self
+            .operations
+            .iter()
+            .any(|operation| !matches!(operation, DrawOp::Batch(_)));
+        let painter = get_mut_2d_painter();
+        let ubo_transform = painter.ubo.clone();
+        let vbo = painter.vbo.clone();
+        let ebo = painter.ebo.clone();
+        let mask_pipelines = if has_masks {
+            let (push, pop) = painter.mask_pipelines()?;
+            Some((push.clone(), pop.clone()))
+        } else {
+            None
+        };
+        drop(painter);
 
-            // clear only once
-            if !cleared && let Some(color) = self.clear_color {
-                pass.clear_color(color.as_linear());
-                cleared = true;
+        gfx::write_buffer(&ubo_transform)
+            .with_data(self.projection.as_ref())
+            .build()?;
+        gfx::write_buffer(&vbo).with_data(&self.vertices).build()?;
+        gfx::write_buffer(&ebo).with_data(&self.indices).build()?;
+
+        let mut renderer = Renderer::new();
+        let mut pass = RenderPass::new();
+        if let Some(color) = self.clear_color {
+            pass.clear_color(color.as_linear());
+        }
+        if has_masks {
+            pass.clear_stencil(0);
+        }
+
+        let mut pass_uses_depth_stencil = None;
+        for operation in &self.operations {
+            let operation_uses_depth_stencil = match operation {
+                DrawOp::Batch(batch) => {
+                    batch.pipeline(self.uses_rounded_clip)?.uses_depth_stencil()
+                }
+                DrawOp::MaskPush(_) | DrawOp::MaskPop(_) => true,
+            };
+            if pass_uses_depth_stencil
+                .is_some_and(|current| current != operation_uses_depth_stencil)
+            {
+                renderer.add_pass(pass);
+                pass = RenderPass::new();
             }
+            pass_uses_depth_stencil = Some(operation_uses_depth_stencil);
+            append_operation(
+                &mut pass,
+                operation,
+                &vbo,
+                &ebo,
+                mask_pipelines.as_ref(),
+                self.uses_rounded_clip,
+            )?;
+        }
 
-            let binds: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
-                b.bind_groups.iter().collect();
-
-            pass.pipeline(&b.pipeline)
-                .buffers_with_offset(&[(vbo, b.vbo_range.clone()), (ebo, b.ebo_range.clone())])
-                .bindings(&binds);
-
-            let count = b.count() as u32;
-            pass.draw(0..count);
-        });
+        if let Some((_, pop_pipeline)) = mask_pipelines.as_ref() {
+            for frame in self.clip_stack.iter().rev() {
+                let ClipKind::Rounded(Some(mask)) = &frame.kind else {
+                    continue;
+                };
+                let command = pass.begin_command();
+                command
+                    .pipeline(pop_pipeline)
+                    .buffers_with_offset(&[
+                        (&vbo, mask.geometry.vbo.clone()),
+                        (&ebo, mask.geometry.ebo.clone()),
+                    ])
+                    .stencil_reference(mask.child_depth)
+                    .draw(0..mask.geometry.count);
+                apply_coverage(command, Coverage::Rect(mask.coverage));
+            }
+        }
+        renderer.add_pass(pass);
 
         self.flush(&renderer, target)
+    }
+}
+
+fn append_operation<'a>(
+    pass: &mut RenderPass<'a>,
+    operation: &'a DrawOp,
+    vbo: &'a Buffer,
+    ebo: &'a Buffer,
+    mask_pipelines: Option<&'a (RenderPipeline, RenderPipeline)>,
+    clipped: bool,
+) -> Result<(), String> {
+    let command = pass.begin_command();
+    match operation {
+        DrawOp::Batch(batch) => {
+            let bindings: ArrayVec<&BindGroup, MAX_BIND_GROUPS_PER_PIPELINE> =
+                batch.bind_groups.iter().collect();
+            command
+                .pipeline(batch.pipeline(clipped)?)
+                .buffers_with_offset(&[
+                    (vbo, batch.vbo_range.clone()),
+                    (ebo, batch.ebo_range.clone()),
+                ])
+                .bindings(&bindings);
+            apply_coverage(command, batch.key.coverage);
+            if let Some(reference) = batch.key.stencil_reference {
+                command.stencil_reference(reference);
+            }
+            command.draw(0..batch.count()?);
+        }
+        DrawOp::MaskPush(mask) => {
+            let (push_pipeline, _) = mask_pipelines.unwrap();
+            command
+                .pipeline(push_pipeline)
+                .buffers_with_offset(&[
+                    (vbo, mask.geometry.vbo.clone()),
+                    (ebo, mask.geometry.ebo.clone()),
+                ])
+                .stencil_reference(mask.parent_depth)
+                .draw(0..mask.geometry.count);
+            apply_coverage(command, Coverage::Rect(mask.coverage));
+        }
+        DrawOp::MaskPop(mask) => {
+            let (_, pop_pipeline) = mask_pipelines.unwrap();
+            command
+                .pipeline(pop_pipeline)
+                .buffers_with_offset(&[
+                    (vbo, mask.geometry.vbo.clone()),
+                    (ebo, mask.geometry.ebo.clone()),
+                ])
+                .stencil_reference(mask.child_depth)
+                .draw(0..mask.geometry.count);
+            apply_coverage(command, Coverage::Rect(mask.coverage));
+        }
+    }
+    Ok(())
+}
+
+fn apply_coverage(command: &mut RenderCommand<'_>, coverage: Coverage) {
+    if let Coverage::Rect(rect) = coverage {
+        command.normalized_scissors(rect.min.x, rect.min.y, rect.max.x, rect.max.y);
     }
 }

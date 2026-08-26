@@ -42,6 +42,14 @@ impl GfxBackendImpl for HeadlessGfx {
         unreachable!()
     }
 
+    fn create_stencil_variant(
+        &mut self,
+        _base: &crate::gfx::RenderPipeline,
+        _stencil: crate::gfx::Stencil,
+    ) -> Result<crate::gfx::RenderPipeline, String> {
+        unreachable!()
+    }
+
     fn create_buffer(
         &mut self,
         _desc: crate::gfx::BufferDescriptor,

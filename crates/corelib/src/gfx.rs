@@ -45,6 +45,16 @@ pub fn create_render_pipeline(shader: &str) -> RenderPipelineBuilder<'_> {
     RenderPipelineBuilder::new(shader)
 }
 
+#[doc(hidden)]
+pub fn create_stencil_variant(
+    base: &RenderPipeline,
+    stencil: Stencil,
+) -> Result<RenderPipeline, String> {
+    get_mut_backend()
+        .gfx()
+        .create_stencil_variant(base, stencil)
+}
+
 #[inline]
 pub fn create_vertex_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> {
     BufferBuilder::new(BufferUsage::Vertex, data)

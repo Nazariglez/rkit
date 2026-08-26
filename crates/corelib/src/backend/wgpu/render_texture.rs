@@ -31,6 +31,10 @@ impl RenderTexture {
         &self.texture
     }
 
+    pub fn has_depth(&self) -> bool {
+        self.depth_texture.is_some()
+    }
+
     pub fn into_inner(self) -> Texture {
         let Self { texture, .. } = self;
         texture

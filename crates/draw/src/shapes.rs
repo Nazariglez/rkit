@@ -41,6 +41,24 @@ impl ShapeTessellator {
         (geometry.vertices.concat(), geometry.indices)
     }
 
+    pub(crate) fn fill_positions(
+        &mut self,
+        path: &Path,
+        options: &FillOptions,
+    ) -> Result<(Vec<[f32; 2]>, Vec<u32>), String> {
+        let mut geometry: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+        self.fill
+            .tessellate_path(
+                path,
+                options,
+                &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
+                    vertex.position().to_array()
+                }),
+            )
+            .map_err(|error| format!("Failed to tessellate clip mask: {error}"))?;
+        Ok((geometry.vertices, geometry.indices))
+    }
+
     pub(crate) fn stroke_lyon_path(
         &mut self,
         path: &Path,

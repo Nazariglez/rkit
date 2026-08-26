@@ -237,7 +237,13 @@ fn rectangle(x: f32, y: f32, width: f32, height: f32) -> Path {
     builder.build()
 }
 
-fn rounded_rect(x: f32, y: f32, width: f32, height: f32, corner: (f32, f32, f32, f32)) -> Path {
+pub(crate) fn rounded_rect(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    corner: (f32, f32, f32, f32),
+) -> Path {
     let (tl, tr, bl, br) = corner;
 
     let mut builder = Path::builder();
