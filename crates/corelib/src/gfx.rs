@@ -25,6 +25,11 @@ pub use texture::*;
 
 // - Gfx
 #[inline]
+pub fn frame_size() -> crate::math::UVec2 {
+    get_mut_backend().gfx().frame_size()
+}
+
+#[inline]
 pub fn render_to_frame<R>(renderer: &R) -> Result<(), String>
 where
     R: AsRenderer,

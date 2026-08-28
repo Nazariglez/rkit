@@ -173,7 +173,8 @@ fn render(mut state: ResMut<State>, targets: Res<Targets>, custom: Res<CustomPip
         .color(Color::rgb(0.12, 0.35, 0.65));
     draw.text("Move this text through every curved corner")
         .position(vec2(85.0, 245.0) + state.offset)
-        .size(30.0);
+        .size(30.0)
+        .resolution(1.0);
     draw.rect(vec2(205.0, 125.0) + state.offset, vec2(390.0, 70.0))
         .color(Color::rgb(0.7, 0.2, 0.8))
         .pipeline(&custom.0);

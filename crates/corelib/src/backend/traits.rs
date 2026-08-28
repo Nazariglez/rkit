@@ -42,6 +42,7 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
 }
 
 pub(crate) trait GfxBackendImpl {
+    fn frame_size(&self) -> UVec2;
     fn prepare_frame(&mut self) -> Result<(), String>;
     fn present_frame(&mut self);
 

@@ -6,8 +6,8 @@ use corelib::gfx::{
 use corelib::math::{UVec2, Vec2, uvec2, vec2};
 use cosmic_text::fontdb::Source;
 use cosmic_text::{
-    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, ShapeLine, Shaping, Stretch, Style,
-    SwashCache, SwashContent, Weight, Wrap,
+    Attrs, Buffer, CacheKey, Family, FontSystem, LayoutGlyph, Metrics, ShapeLine, Shaping, Stretch,
+    Style, SwashCache, SwashContent, Weight, Wrap,
 };
 use etagere::{BucketedAtlasAllocator, size2};
 use markup::MarkupMode;
@@ -98,10 +98,9 @@ pub(crate) struct TextLayout {
     pub(crate) size: Vec2,
     pub(crate) lines: Vec<rich::RichTextLine>,
     items: Vec<LayoutItem>,
-    resolution: f32,
     pixelated: bool,
+    strike_scale: f32,
     outline_width: u16,
-    outline_radius: f32,
 }
 
 impl Default for TextLayout {
@@ -110,10 +109,9 @@ impl Default for TextLayout {
             size: Vec2::ZERO,
             lines: Vec::new(),
             items: Vec::new(),
-            resolution: 1.0,
             pixelated: false,
+            strike_scale: 1.0,
             outline_width: 0,
-            outline_radius: 0.0,
         }
     }
 }
@@ -123,10 +121,9 @@ impl TextLayout {
         self.size = Vec2::ZERO;
         self.lines.clear();
         self.items.clear();
-        self.resolution = 1.0;
         self.pixelated = false;
+        self.strike_scale = 1.0;
         self.outline_width = 0;
-        self.outline_radius = 0.0;
     }
 }
 
@@ -136,8 +133,8 @@ enum LayoutItem {
 }
 
 struct PlacedGlyph {
-    key: CacheKey,
-    pos: Vec2,
+    glyph: LayoutGlyph,
+    origin: Vec2,
     color: Color,
 }
 
@@ -146,6 +143,17 @@ struct PlacedIcon {
     pos: Vec2,
     size: Vec2,
     color: Color,
+}
+
+enum RasterItem {
+    Glyph {
+        key: CacheKey,
+        pos: Vec2,
+        scale: f32,
+        outline_radius: u16,
+        color: Color,
+    },
+    Icon(usize),
 }
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
@@ -162,7 +170,6 @@ pub(crate) struct TextInfo<'a> {
     pub(crate) wrap_width: Option<f32>,
     pub(crate) font_size: f32,
     pub(crate) line_height: Option<f32>,
-    pub(crate) resolution: f32,
     pub(crate) h_align: HAlign,
     pub(crate) color_tags: bool,
     pub(crate) default_color: Color,
@@ -178,7 +185,6 @@ pub fn text_metrics(text: &str) -> TextMetricsBuilder<'_> {
             wrap_width: None,
             font_size: 14.0,
             line_height: None,
-            resolution: 1.0,
             h_align: Default::default(),
             color_tags: false,
             default_color: Color::WHITE,
@@ -216,11 +222,6 @@ impl<'a> TextMetricsBuilder<'a> {
 
     pub fn line_height(mut self, height: f32) -> Self {
         self.info.line_height = Some(height);
-        self
-    }
-
-    pub fn resolution(mut self, scale: f32) -> Self {
-        self.info.resolution = scale;
         self
     }
 
@@ -280,6 +281,7 @@ pub struct TextSystem {
     temp_outline_buff: Vec<u8>,
     temp_layout: TextLayout,
     temp_line_items: Vec<std::ops::Range<usize>>,
+    temp_raster_items: Vec<RasterItem>,
 }
 
 impl TextSystem {
@@ -343,6 +345,7 @@ impl TextSystem {
             temp_outline_buff: vec![],
             temp_layout: TextLayout::default(),
             temp_line_items: Vec::new(),
+            temp_raster_items: Vec::new(),
         };
 
         #[cfg(feature = "default-font")]
@@ -500,7 +503,7 @@ impl TextSystem {
                 .stretch(font.stretch),
             None => Attrs::new(),
         };
-        let (font_size, resolution, base_line_height) =
+        let (font_size, strike_scale, base_line_height) =
             validate_layout_metrics(text, pixelated, ppem, res_ppem, line_height_pem)?;
         self.buffer.set_metrics(
             &mut self.font_system,
@@ -609,13 +612,9 @@ impl TextSystem {
                             color: span.color,
                         }));
                     } else {
-                        let physical = glyph.physical((0.0, 0.0), resolution);
                         layout.items.push(LayoutItem::Glyph(PlacedGlyph {
-                            key: physical.cache_key,
-                            pos: vec2(
-                                physical.x as f32 / resolution - min_x,
-                                physical.y as f32 / resolution + baseline,
-                            ),
+                            glyph: glyph.clone(),
+                            origin: vec2(-min_x, baseline),
                             color: span.color,
                         }));
                     }
@@ -643,28 +642,90 @@ impl TextSystem {
             };
             for item in &mut layout.items[item_range.clone()] {
                 match item {
-                    LayoutItem::Glyph(glyph) => glyph.pos.x += offset,
+                    LayoutItem::Glyph(glyph) => glyph.origin.x += offset,
                     LayoutItem::Icon(icon) => icon.pos.x += offset,
                 }
             }
         }
-        let outline_radius = outline_radius(text.outline_width, resolution, pixelated);
-        let outline_pad = outline_radius * 2.0;
+        let outline_pad = f32::from(text.outline_width) * 2.0;
         let size = vec2(content_width + outline_pad, line_top + outline_pad);
         validate_finite(size.x, "Text layout width")?;
         validate_finite(size.y, "Text layout height")?;
         layout.size = size;
-        layout.resolution = resolution;
         layout.pixelated = pixelated;
+        layout.strike_scale = strike_scale;
         layout.outline_width = text.outline_width;
-        layout.outline_radius = outline_radius;
         Ok(())
     }
 
-    pub(crate) fn ensure_layout(&mut self, layout: &TextLayout) -> Result<(), String> {
+    pub(crate) fn automatic_resolution(scale: f32) -> f32 {
+        const QUARTER_OCTAVE: f32 = 1.189_207_1;
+        const SQRT_2: f32 = std::f32::consts::SQRT_2;
+        const BUCKETS: [f32; 9] = [
+            1.0,
+            QUARTER_OCTAVE,
+            SQRT_2,
+            QUARTER_OCTAVE * SQRT_2,
+            2.0,
+            2.0 * QUARTER_OCTAVE,
+            2.0 * SQRT_2,
+            2.0 * QUARTER_OCTAVE * SQRT_2,
+            4.0,
+        ];
+        BUCKETS
+            .into_iter()
+            .find(|bucket| *bucket >= scale)
+            .unwrap_or(4.0)
+    }
+
+    pub(crate) fn prepare_layout(
+        &mut self,
+        layout: &TextLayout,
+        resolution: f32,
+        quads: &mut Vec<QuadData>,
+    ) -> Result<(), String> {
+        validate_positive(resolution, "Text resolution")?;
+        let scale = resolution * layout.strike_scale;
+        validate_positive(scale, "Text effective resolution")?;
+        let physical_outline = (f32::from(layout.outline_width) * scale).ceil();
+        if physical_outline > u16::MAX as f32 {
+            return Err("Text outline width exceeds glyph cache limits".into());
+        }
+        let outline_radius = physical_outline as u16;
+
+        let mut items = std::mem::take(&mut self.temp_raster_items);
+        items.clear();
+        items.reserve(layout.items.len());
+        for (index, item) in layout.items.iter().enumerate() {
+            match item {
+                LayoutItem::Glyph(glyph) => {
+                    let physical = glyph.glyph.physical((0.0, 0.0), scale);
+                    items.push(RasterItem::Glyph {
+                        key: physical.cache_key,
+                        pos: glyph.origin
+                            + vec2(physical.x as f32, physical.y as f32) / scale
+                            + Vec2::splat(f32::from(layout.outline_width)),
+                        scale,
+                        outline_radius,
+                        color: glyph.color,
+                    });
+                }
+                LayoutItem::Icon(_) => items.push(RasterItem::Icon(index)),
+            }
+        }
+
+        let result = self
+            .ensure_raster(layout, &items)
+            .map(|()| self.resolve_raster(layout, &items, quads));
+        items.clear();
+        self.temp_raster_items = items;
+        result
+    }
+
+    fn ensure_raster(&mut self, layout: &TextLayout, items: &[RasterItem]) -> Result<(), String> {
         let mut resets = [false; TextAtlas::COUNT];
         loop {
-            match self.ensure_sources(layout)? {
+            match self.ensure_sources(layout, items)? {
                 ProcessResult::Ready => return self.flush_pending_icons(),
                 ProcessResult::Full(atlas) => {
                     if self.grow_atlas(atlas)? {
@@ -683,50 +744,68 @@ impl TextSystem {
         }
     }
 
-    pub(crate) fn resolve_layout(&self, layout: &TextLayout, quads: &mut Vec<QuadData>) {
+    fn resolve_raster(&self, layout: &TextLayout, items: &[RasterItem], quads: &mut Vec<QuadData>) {
         quads.clear();
-        quads.reserve(layout.items.len());
-        for item in &layout.items {
+        quads.reserve(items.len());
+        for item in items {
             match item {
-                LayoutItem::Glyph(glyph) => self.resolve_glyph(layout, glyph, quads),
-                LayoutItem::Icon(icon) => self.resolve_icon(icon, quads),
+                RasterItem::Glyph { .. } => self.resolve_glyph(layout, item, quads),
+                RasterItem::Icon(index) => {
+                    let LayoutItem::Icon(icon) = &layout.items[*index] else {
+                        continue;
+                    };
+                    self.resolve_icon(icon, Vec2::splat(f32::from(layout.outline_width)), quads);
+                }
             }
         }
     }
 
-    fn resolve_glyph(&self, layout: &TextLayout, glyph: &PlacedGlyph, quads: &mut Vec<QuadData>) {
-        let normal_key = GlyphCacheKey {
-            key: glyph.key,
-            outline: 0,
+    fn resolve_glyph(&self, layout: &TextLayout, item: &RasterItem, quads: &mut Vec<QuadData>) {
+        let RasterItem::Glyph {
+            key,
+            pos,
+            scale,
+            outline_radius,
+            color,
+        } = item
+        else {
+            return;
         };
+        let key = *key;
+        let pos = *pos;
+        let scale = *scale;
+        let outline_radius = *outline_radius;
+        let color = *color;
+        let normal_key = GlyphCacheKey { key, outline: 0 };
         let Some(info) = self.cache.get(&normal_key) else {
             return;
         };
         let Some(atlas) = info.atlas else { return };
         let atlas_size = self.atlas(atlas).texture.size();
         let atlas_glyph_size = info.size.as_vec2();
-        let mut size = atlas_glyph_size / layout.resolution;
+        let mut size = atlas_glyph_size / scale;
         if layout.pixelated {
             size = size.round();
         }
-        let mut xy =
-            glyph.pos + info.pos.as_vec2() / layout.resolution + Vec2::splat(layout.outline_radius);
+        let mut xy = pos + info.pos.as_vec2() / scale;
         if layout.pixelated {
             xy = xy.round();
         }
-        let outline = if layout.outline_width > 0 {
-            let key = GlyphCacheKey {
-                key: glyph.key,
-                outline: layout.outline_width,
+        let outline = if outline_radius > 0 {
+            let outline_key = GlyphCacheKey {
+                key,
+                outline: outline_radius,
             };
-            self.cache.get(&key).map(|info| {
+            self.cache.get(&outline_key).map(|info| {
                 let texture_size = self.mask.texture.size();
                 let outline_size = info.size.as_vec2();
+                let logical_width = f32::from(layout.outline_width);
+                let surplus = (f32::from(outline_radius) - logical_width * scale).max(0.0);
                 OutlineQuad {
-                    xy: xy - Vec2::splat(layout.outline_radius),
-                    size: size + Vec2::splat(layout.outline_radius * 2.0),
-                    uvs1: info.atlas_pos / texture_size,
-                    uvs2: (info.atlas_pos + outline_size) / texture_size,
+                    xy: xy - Vec2::splat(logical_width),
+                    size: size + Vec2::splat(logical_width * 2.0),
+                    uvs1: (info.atlas_pos + surplus) / texture_size,
+                    uvs2: (info.atlas_pos + outline_size - surplus) / texture_size,
                     source: TextSource::mask(layout.pixelated),
                 }
             })
@@ -739,13 +818,13 @@ impl TextSystem {
             uvs1: info.atlas_pos / atlas_size,
             uvs2: (info.atlas_pos + atlas_glyph_size) / atlas_size,
             source: atlas.source(layout.pixelated),
-            color: glyph.color,
+            color,
             pixelated: layout.pixelated,
             outline,
         });
     }
 
-    fn resolve_icon(&self, icon: &PlacedIcon, quads: &mut Vec<QuadData>) {
+    fn resolve_icon(&self, icon: &PlacedIcon, offset: Vec2, quads: &mut Vec<QuadData>) {
         let key = IconCacheKey::from(&icon.icon);
         let Some(info) = self.icon_cache.get(&key) else {
             return;
@@ -754,7 +833,7 @@ impl TextSystem {
         let source_size = icon.icon.source_size().as_vec2();
         let inner = info.outer_pos + Vec2::ONE;
         quads.push(QuadData {
-            xy: icon.pos,
+            xy: icon.pos + offset,
             size: icon.size,
             uvs1: inner / texture_size,
             uvs2: (inner + source_size) / texture_size,
@@ -863,15 +942,26 @@ impl TextSystem {
         Ok(())
     }
 
-    fn ensure_sources(&mut self, layout: &TextLayout) -> Result<ProcessResult, String> {
-        for item in &layout.items {
+    fn ensure_sources(
+        &mut self,
+        layout: &TextLayout,
+        items: &[RasterItem],
+    ) -> Result<ProcessResult, String> {
+        for item in items {
             match item {
-                LayoutItem::Glyph(glyph) => {
-                    if let Some(full) = self.ensure_glyph(glyph.key, layout.outline_width)? {
+                RasterItem::Glyph {
+                    key,
+                    outline_radius,
+                    ..
+                } => {
+                    if let Some(full) = self.ensure_glyph(*key, *outline_radius)? {
                         return Ok(ProcessResult::Full(full));
                     }
                 }
-                LayoutItem::Icon(icon) => {
+                RasterItem::Icon(index) => {
+                    let LayoutItem::Icon(icon) = &layout.items[*index] else {
+                        continue;
+                    };
                     if let Some(full) = self.ensure_icon(&icon.icon)? {
                         return Ok(ProcessResult::Full(full));
                     }
@@ -1039,7 +1129,6 @@ fn validate_layout_metrics(
 ) -> Result<(f32, f32, f32), String> {
     if text.strict_metrics {
         validate_positive(text.font_size, "Text size")?;
-        validate_positive(text.resolution, "Text resolution")?;
         if let Some(height) = text.line_height {
             validate_positive(height, "Text line height")?;
         }
@@ -1048,7 +1137,6 @@ fn validate_layout_metrics(
         }
     }
     validate_finite(text.font_size, "Text size")?;
-    validate_finite(text.resolution, "Text resolution")?;
     if let Some(height) = text.line_height {
         validate_finite(height, "Text line height")?;
     }
@@ -1060,7 +1148,7 @@ fn validate_layout_metrics(
 
     let font_size = text.font_size * ppem;
     validate_positive(font_size, "Text effective font size")?;
-    let resolution = if pixelated {
+    let strike_scale = if pixelated {
         validate_positive(res_ppem, "Text pixel font resolution")?;
         if res_ppem > usize::MAX as f32 {
             return Err("Text pixel font resolution is out of range".into());
@@ -1075,11 +1163,11 @@ fn validate_layout_metrics(
         }
         let snapped_size = (closest_multiple_of(rounded_size as usize, base) as f32).max(res_ppem);
         validate_positive(snapped_size, "Text snapped pixel font size")?;
-        text.resolution * snapped_size / font_size
+        snapped_size / font_size
     } else {
-        text.resolution
+        1.0
     };
-    validate_positive(resolution, "Text effective resolution")?;
+    validate_positive(strike_scale, "Text font strike scale")?;
 
     let line_height = text.line_height.unwrap_or(font_size * line_height_pem);
     if text.line_height.is_some() {
@@ -1087,7 +1175,7 @@ fn validate_layout_metrics(
     } else {
         validate_positive(line_height, "Text effective line height")?;
     }
-    Ok((font_size, resolution, line_height))
+    Ok((font_size, strike_scale, line_height))
 }
 
 fn validate_finite(value: f32, name: &str) -> Result<(), String> {
@@ -1444,11 +1532,6 @@ struct GlyphInfo {
     size: Pos<u16>,
     atlas_pos: Vec2,
     atlas: Option<TextAtlas>,
-}
-
-fn outline_radius(width: u16, resolution: f32, pixelated: bool) -> f32 {
-    let radius = f32::from(width) / resolution;
-    if pixelated { radius.round() } else { radius }
 }
 
 #[derive(Copy, Clone, Debug)]

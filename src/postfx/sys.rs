@@ -1,5 +1,4 @@
 use crate::{
-    app::window_size,
     gfx::{
         self, AsRenderer, BindGroup, BlendMode, Color, RenderPipeline, RenderTexture,
         RenderTextureId, Renderer, Sampler, SamplerId, TextureFilter,
@@ -9,7 +8,6 @@ use crate::{
     utils::FastCache,
 };
 use atomic_refcell::AtomicRefCell;
-use corelib::app::window_dpi_scale;
 use once_cell::sync::Lazy;
 use std::num::NonZeroUsize;
 
@@ -183,10 +181,7 @@ impl PostProcessSys {
         }
 
         // effect
-        let size = target
-            .map(|rt| rt.size())
-            .unwrap_or_else(|| window_size() * window_dpi_scale())
-            .as_uvec2();
+        let size = target.map_or_else(gfx::frame_size, |rt| rt.size().as_uvec2());
 
         let can_render = size.x > 0 && size.y > 0;
         if !can_render {
@@ -360,7 +355,7 @@ impl PostProcessSys {
     }
 
     pub fn check_and_get_pfx_frame(&mut self) -> Result<Option<&RenderTexture>, String> {
-        let size = (window_size() * window_dpi_scale()).as_uvec2();
+        let size = gfx::frame_size();
         let can_render = size.x > 0 && size.y > 0;
         if !can_render {
             // on win_os minimized wwindows report 0 size

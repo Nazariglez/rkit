@@ -1,8 +1,8 @@
 use std::io::Read;
 
 use draw::{
-    Draw2D, RenderSprite, Sprite, Transform2D, create_draw_2d, create_render_sprite, create_sprite,
-    text_mask_atlas,
+    RenderSprite, Sprite, Transform2D, create_draw_2d, create_draw_2d_for, create_render_sprite,
+    create_sprite, text_mask_atlas,
 };
 use rkit::{
     gfx::{self, Color, TextureFilter, TextureFormat},
@@ -76,7 +76,7 @@ fn setup(mut cmds: Commands) {
 fn render(state: Res<State>) {
     let px = 8.0;
     let word = "test hola";
-    let mut rt_draw = Draw2D::new(state.rt.render_texture.size());
+    let mut rt_draw = create_draw_2d_for(&state.rt.render_texture);
     rt_draw.clear(Color::TRANSPARENT);
     rt_draw.push_matrix(Mat3::from_scale(Vec2::splat(RES)));
     rt_draw.image(&state.tex);
@@ -86,7 +86,7 @@ fn render(state: Res<State>) {
         .size(px);
     gfx::render_to_texture(&state.rt.render_texture, &rt_draw).unwrap();
 
-    let mut rrt_draw = Draw2D::new(state.rrt.render_texture.size());
+    let mut rrt_draw = create_draw_2d_for(&state.rrt.render_texture);
     rrt_draw.clear(Color::TRANSPARENT);
     rrt_draw.push_matrix(Mat3::from_scale(Vec2::splat(RES)));
     rrt_draw.image(&state.rtex);

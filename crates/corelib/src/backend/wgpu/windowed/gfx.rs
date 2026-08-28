@@ -351,6 +351,13 @@ unsafe impl Send for GfxBackend {}
 unsafe impl Sync for GfxBackend {}
 
 impl GfxBackendImpl for GfxBackend {
+    fn frame_size(&self) -> UVec2 {
+        self.offscreen
+            .as_ref()
+            .map(|surface| surface.texture.size().as_uvec2())
+            .unwrap_or(UVec2::ZERO)
+    }
+
     fn prepare_frame(&mut self) -> Result<(), String> {
         let can_render = self.surface.config.width > 0 && self.surface.config.height > 0;
         if !can_render {

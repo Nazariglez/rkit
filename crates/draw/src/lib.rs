@@ -13,7 +13,10 @@ pub use sprite::*;
 
 pub use text::*;
 
-use corelib::{app::window_size, gfx::Texture};
+use corelib::{
+    app::window_size,
+    gfx::{self, RenderTexture, Texture},
+};
 
 // -- Draw API
 #[inline]
@@ -52,7 +55,12 @@ pub fn remove_pipeline_2d(id: &DrawPipelineId) -> Option<PipelineContext> {
 
 #[inline]
 pub fn create_draw_2d() -> Draw2D {
-    Draw2D::new(window_size())
+    Draw2D::with_target_extent(window_size(), gfx::frame_size())
+}
+
+#[inline]
+pub fn create_draw_2d_for(target: &RenderTexture) -> Draw2D {
+    Draw2D::with_target_extent(target.size(), target.size().as_uvec2())
 }
 
 #[inline]

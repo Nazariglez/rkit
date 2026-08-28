@@ -21,7 +21,7 @@ use corelib::{
         self, AsRenderer, BindGroup, BindGroupId, Buffer, Color, PipelineId, RenderCommand,
         RenderPass, RenderPipeline, RenderTexture, Renderer, consts::MAX_BIND_GROUPS_PER_PIPELINE,
     },
-    math::{Mat3, Mat4, Rect, Vec2, orthographic, vec2, vec3, vec4},
+    math::{Mat3, Mat4, Rect, UVec2, Vec2, orthographic, vec2, vec3, vec4},
 };
 use smallvec::SmallVec;
 use std::{
@@ -165,6 +165,8 @@ pub struct Draw2D {
     round_pixels: bool,
 
     size: Vec2,
+    target_extent: UVec2,
+    uses_target_dependent_text: bool,
 
     projection: Mat4,
     inverse_projection: Mat4,
@@ -191,10 +193,15 @@ pub struct Draw2D {
 
 impl Draw2D {
     pub fn new(size: Vec2) -> Self {
+        Self::with_target_extent(size, size.as_uvec2())
+    }
+
+    pub(crate) fn with_target_extent(size: Vec2, target_extent: UVec2) -> Self {
         let projection = orthographic(0.0, size.x, size.y, 0.0, 0.0, 1.0);
         let inverse_projection = projection.inverse();
         Self {
             size,
+            target_extent,
             projection,
             inverse_projection,
             alpha: 1.0,
@@ -348,10 +355,52 @@ impl Draw2D {
             .map_or(0, |frame| frame.stencil_depth)
     }
 
-    fn record_error(&mut self, error: impl Into<String>) {
+    pub(crate) fn record_error(&mut self, error: impl Into<String>) {
         if self.recording_error.is_none() {
             self.recording_error = Some(error.into());
         }
+    }
+
+    pub(crate) fn target_resolution(&mut self, element_transform: Mat3) -> Result<f32, String> {
+        self.uses_target_dependent_text = true;
+        if self.target_extent.x == 0 || self.target_extent.y == 0 {
+            return Err("Draw2D automatic text requires a non-zero target extent".into());
+        }
+
+        let matrix = self.matrix() * element_transform;
+        let project = |point: Vec2| -> Result<(Vec2, f32), String> {
+            let point = matrix * vec3(point.x, point.y, 1.0);
+            let clip = self.projection * vec4(point.x, point.y, point.z, 1.0);
+            if !clip.is_finite() || clip.w.abs() <= f32::EPSILON {
+                return Err("Draw2D automatic text produced an invalid projected transform".into());
+            }
+            let half_extent = self.target_extent.as_vec2() * 0.5;
+            Ok((vec2(clip.x, clip.y) / clip.w * half_extent, clip.w))
+        };
+        let (origin, origin_w) = project(Vec2::ZERO)?;
+        let (x, x_w) = project(Vec2::X)?;
+        let (y, y_w) = project(Vec2::Y)?;
+        let w_scale = origin_w.abs().max(x_w.abs()).max(y_w.abs()).max(1.0);
+        let perspective = (origin_w - x_w).abs() > f32::EPSILON * w_scale
+            || (origin_w - y_w).abs() > f32::EPSILON * w_scale;
+        if perspective {
+            return Err(
+                "Draw2D automatic text does not support perspective projection; specify resolution explicitly"
+                    .into(),
+            );
+        }
+
+        let a = x - origin;
+        let b = y - origin;
+        let aa = a.dot(a);
+        let bb = b.dot(b);
+        let ab = a.dot(b);
+        let lambda = 0.5 * (aa + bb + (aa - bb).hypot(2.0 * ab));
+        let scale = lambda.sqrt();
+        if !scale.is_finite() || scale <= 0.0 {
+            return Err("Draw2D automatic text requires a finite, non-degenerate transform".into());
+        }
+        Ok(scale)
     }
 
     fn enable_rounded_clipping(&mut self) -> Result<(), String> {
@@ -714,7 +763,7 @@ impl Draw2D {
     }
 
     pub fn clone_transform(&self) -> Self {
-        let mut draw = Draw2D::new(self.size);
+        let mut draw = Self::with_target_extent(self.size, self.target_extent);
         draw.set_projection(self.projection);
         draw.matrix_stack = self.matrix_stack.clone();
         draw
@@ -737,6 +786,13 @@ impl AsRenderer for Draw2D {
     fn render(&self, target: Option<&RenderTexture>) -> Result<(), String> {
         if let Some(error) = &self.recording_error {
             return Err(error.clone());
+        }
+        let actual_extent = target.map_or_else(gfx::frame_size, |target| target.size().as_uvec2());
+        if self.uses_target_dependent_text && self.target_extent != actual_extent {
+            return Err(format!(
+                "Draw2D automatic text was recorded for a {}x{} target but submitted to {}x{}; create Draw2D for the destination",
+                self.target_extent.x, self.target_extent.y, actual_extent.x, actual_extent.y
+            ));
         }
         if self.uses_rounded_clip
             && let Some(target) = target

@@ -128,7 +128,7 @@ pub fn rich_text(text: &str) -> RichTextBuilder<'_> {
         line_height: None,
         max_width: None,
         color: Color::WHITE,
-        resolution: 1.0,
+        resolution: None,
         h_align: HAlign::Left,
     }
 }
@@ -145,7 +145,7 @@ pub struct RichTextBuilder<'a> {
     line_height: Option<f32>,
     max_width: Option<f32>,
     color: Color,
-    resolution: f32,
+    resolution: Option<f32>,
     h_align: HAlign,
 }
 
@@ -181,7 +181,7 @@ impl<'a> RichTextBuilder<'a> {
     }
 
     pub fn resolution(mut self, resolution: f32) -> Self {
-        self.resolution = resolution;
+        self.resolution = Some(resolution);
         self
     }
 
@@ -208,7 +208,6 @@ impl<'a> RichTextBuilder<'a> {
             wrap_width: self.max_width,
             font_size: self.size,
             line_height: self.line_height,
-            resolution: self.resolution,
             h_align: self.h_align,
             color_tags: true,
             default_color: self.color,
@@ -223,16 +222,17 @@ impl<'a> RichTextBuilder<'a> {
         let mut system = get_mut_text_system();
         let mut layout = TextLayout::default();
         system.layout_markup(&info, markup, &mut layout)?;
-        system.ensure_layout(&layout)?;
-        Ok(RichTextLayout { layout })
+        Ok(RichTextLayout {
+            layout,
+            resolution: self.resolution,
+        })
     }
 }
 
-/// An atlas-safe semantic layout snapshot with final bounds and line geometry.
-/// Its retained glyph keys and icon sources are re-resolved after atlas changes; changing text,
-/// icons, font, size, line height, width, color, alignment, or resolution requires relayout.
+/// A target-independent semantic layout snapshot with final bounds and line geometry.
 pub struct RichTextLayout {
     pub(crate) layout: TextLayout,
+    pub(crate) resolution: Option<f32>,
 }
 
 impl RichTextLayout {

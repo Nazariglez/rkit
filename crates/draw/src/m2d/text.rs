@@ -1,4 +1,6 @@
-use crate::text::{Font, HAlign, QuadData, RichTextLayout, TextInfo, get_mut_text_system};
+use crate::text::{
+    Font, HAlign, QuadData, RichTextLayout, TextInfo, TextSystem, get_mut_text_system,
+};
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Transform2D};
 use corelib::gfx::{
     self, BindGroupLayout, BindingType, BlendMode, Buffer, Color, VertexFormat, VertexLayout,
@@ -192,7 +194,7 @@ pub struct Text2D<'a> {
     line_height: Option<f32>,
     max_width: Option<f32>,
     h_align: HAlign,
-    res: f32,
+    resolution_override: Option<f32>,
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
     color_tags: bool,
@@ -218,7 +220,7 @@ impl<'a> Text2D<'a> {
             line_height: None,
             max_width: None,
             h_align: HAlign::default(),
-            res: 1.0,
+            resolution_override: None,
             shadow_color: Color::BLACK,
             shadow_offset: None,
             color_tags: false,
@@ -280,8 +282,8 @@ impl<'a> Text2D<'a> {
         self
     }
 
-    pub fn resolution(&mut self, res: f32) -> &mut Self {
-        self.res = res;
+    pub fn resolution(&mut self, resolution: f32) -> &mut Self {
+        self.resolution_override = Some(resolution);
         self
     }
 
@@ -320,7 +322,7 @@ struct TextBatchPass {
     solid_color: Option<Color>,
     outline: bool,
     rgba_as_mask: bool,
-    transform: Transform2D,
+    transform: corelib::math::Mat3,
     pip: DrawPipelineId,
 }
 
@@ -332,7 +334,6 @@ impl Element2D for Text2D<'_> {
             wrap_width: self.max_width,
             font_size: self.size,
             line_height: self.line_height,
-            resolution: self.res,
             h_align: self.h_align,
             color_tags: self.color_tags,
             default_color: self.color,
@@ -340,36 +341,54 @@ impl Element2D for Text2D<'_> {
             strict_metrics: false,
         };
         TEMP_QUADS.with_borrow_mut(|quads| {
-            let size = {
-                let mut system = get_mut_text_system();
-                let mut layout = system.take_layout();
-                system.layout_text(&info, &mut layout).unwrap();
-                system.ensure_layout(&layout).unwrap();
-                system.resolve_layout(&layout, quads);
-                let size = layout.size;
+            let mut system = get_mut_text_system();
+            let mut layout = system.take_layout();
+            if let Err(error) = system.layout_text(&info, &mut layout) {
                 system.recycle_layout(layout);
-                size
+                drop(system);
+                draw.record_error(error);
+                return;
+            }
+
+            let size = layout.size;
+            let transform = finalized_text_transform(size, self.transform);
+            let resolution = match self.resolution_override {
+                Some(resolution) => resolution,
+                None => match draw.target_resolution(
+                    transform * corelib::math::Mat3::from_translation(self.position),
+                ) {
+                    Ok(resolution) => TextSystem::automatic_resolution(resolution),
+                    Err(error) => {
+                        system.recycle_layout(layout);
+                        drop(system);
+                        draw.record_error(error);
+                        return;
+                    }
+                },
             };
-            set_text_bounds(
-                draw,
-                self.position,
-                size,
-                self.transform.unwrap_or_default(),
-            );
+            let prepared = system.prepare_layout(&layout, resolution, quads);
+            system.recycle_layout(layout);
+            drop(system);
+            if let Err(error) = prepared {
+                draw.record_error(error);
+                return;
+            }
+
+            set_text_bounds(draw, self.position, size, transform);
             if quads.is_empty() {
                 return;
             }
             let outlined = self.outline_width > 0;
             if self.shadow_offset.is_some() {
                 if outlined {
-                    add_text_to_batch(self, quads, size, TextPass::ShadowOutline, draw);
+                    add_text_to_batch(self, quads, transform, TextPass::ShadowOutline, draw);
                 }
-                add_text_to_batch(self, quads, size, TextPass::ShadowFill, draw);
+                add_text_to_batch(self, quads, transform, TextPass::ShadowFill, draw);
             }
             if outlined {
-                add_text_to_batch(self, quads, size, TextPass::Outline, draw);
+                add_text_to_batch(self, quads, transform, TextPass::Outline, draw);
             }
-            add_text_to_batch(self, quads, size, TextPass::Fill, draw);
+            add_text_to_batch(self, quads, transform, TextPass::Fill, draw);
         });
     }
 }
@@ -379,6 +398,7 @@ pub struct RichText2D<'a> {
     layout: &'a RichTextLayout,
     position: Vec2,
     alpha: f32,
+    resolution_override: Option<f32>,
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
 
@@ -392,6 +412,7 @@ impl<'a> RichText2D<'a> {
             layout,
             position: Vec2::ZERO,
             alpha: 1.0,
+            resolution_override: None,
             shadow_color: Color::BLACK,
             shadow_offset: None,
             transform: None,
@@ -405,6 +426,11 @@ impl<'a> RichText2D<'a> {
 
     pub fn alpha(&mut self, alpha: f32) -> &mut Self {
         self.alpha = alpha;
+        self
+    }
+
+    pub fn resolution(&mut self, resolution: f32) -> &mut Self {
+        self.resolution_override = Some(resolution);
         self
     }
 
@@ -422,19 +448,34 @@ impl<'a> RichText2D<'a> {
 impl Element2D for RichText2D<'_> {
     fn process(&self, draw: &mut Draw2D) {
         let size = self.layout.size();
-        let transform = self.transform.unwrap_or_default();
-        set_text_bounds(draw, self.position, size, transform);
+        let transform = finalized_text_transform(size, self.transform);
+        let fixed_resolution = self.resolution_override.or(self.layout.resolution);
+        let resolution = match fixed_resolution {
+            Some(resolution) => resolution,
+            None => match draw
+                .target_resolution(transform * corelib::math::Mat3::from_translation(self.position))
+            {
+                Ok(resolution) => TextSystem::automatic_resolution(resolution),
+                Err(error) => {
+                    draw.record_error(error);
+                    return;
+                }
+            },
+        };
 
         TEMP_QUADS.with_borrow_mut(|quads| {
             let mut system = get_mut_text_system();
-            system.ensure_layout(&self.layout.layout).unwrap();
-            system.resolve_layout(&self.layout.layout, quads);
+            let prepared = system.prepare_layout(&self.layout.layout, resolution, quads);
             drop(system);
+            if let Err(error) = prepared {
+                draw.record_error(error);
+                return;
+            }
 
+            set_text_bounds(draw, self.position, size, transform);
             if let Some(offset) = self.shadow_offset {
                 add_quads_to_batch(
                     quads,
-                    size,
                     TextBatchPass {
                         position: self.position + offset,
                         alpha: self.alpha,
@@ -449,7 +490,6 @@ impl Element2D for RichText2D<'_> {
             }
             add_quads_to_batch(
                 quads,
-                size,
                 TextBatchPass {
                     position: self.position,
                     alpha: self.alpha,
@@ -468,7 +508,7 @@ impl Element2D for RichText2D<'_> {
 fn add_text_to_batch(
     element: &Text2D,
     quads: &[QuadData],
-    size: Vec2,
+    transform: corelib::math::Mat3,
     pass: TextPass,
     draw: &mut Draw2D,
 ) {
@@ -487,21 +527,20 @@ fn add_text_to_batch(
 
     add_quads_to_batch(
         quads,
-        size,
         TextBatchPass {
             position: element.position + offset,
             alpha: element.alpha,
             solid_color,
             outline,
             rgba_as_mask: false,
-            transform: element.transform.unwrap_or_default(),
+            transform,
             pip: element.pip,
         },
         draw,
     );
 }
 
-fn add_quads_to_batch(quads: &[QuadData], size: Vec2, pass: TextBatchPass, draw: &mut Draw2D) {
+fn add_quads_to_batch(quads: &[QuadData], pass: TextBatchPass, draw: &mut Draw2D) {
     TEMP_VERTICES.with_borrow_mut(|vertices| {
         TEMP_INDICES.with_borrow_mut(|indices| {
             vertices.clear();
@@ -547,7 +586,7 @@ fn add_quads_to_batch(quads: &[QuadData], size: Vec2, pass: TextBatchPass, draw:
                     quad.pixelated,
                 );
             }
-            submit_text_batch(draw, vertices, indices, size, pass.transform, pass.pip);
+            submit_text_batch(draw, vertices, indices, pass.transform, pass.pip);
         });
     });
 }
@@ -592,26 +631,28 @@ fn submit_text_batch(
     draw: &mut Draw2D,
     vertices: &mut Vec<f32>,
     indices: &mut Vec<u32>,
-    size: Vec2,
-    mut transform: Transform2D,
+    transform: corelib::math::Mat3,
     pipeline: DrawPipelineId,
 ) {
     if vertices.is_empty() {
         return;
     }
-    transform.set_size(size);
     draw.add_to_batch(DrawingInfo {
         pipeline,
         vertices,
         indices,
-        transform: transform.updated_mat3(),
+        transform,
         sprite: None,
     });
 }
 
-fn set_text_bounds(draw: &mut Draw2D, position: Vec2, size: Vec2, mut transform: Transform2D) {
+fn finalized_text_transform(size: Vec2, transform: Option<Transform2D>) -> corelib::math::Mat3 {
+    let mut transform = transform.unwrap_or_default();
     transform.set_size(size);
-    let matrix = transform.updated_mat3();
+    transform.updated_mat3()
+}
+
+fn set_text_bounds(draw: &mut Draw2D, position: Vec2, size: Vec2, matrix: corelib::math::Mat3) {
     let mut min = Vec2::splat(f32::INFINITY);
     let mut max = Vec2::splat(f32::NEG_INFINITY);
     for corner in [

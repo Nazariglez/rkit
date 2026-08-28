@@ -17,6 +17,10 @@ pub(crate) static BACKEND: Lazy<AtomicRefCell<HeadlessBackend>> =
 pub(crate) struct HeadlessGfx;
 
 impl GfxBackendImpl for HeadlessGfx {
+    fn frame_size(&self) -> glam::UVec2 {
+        glam::UVec2::ZERO
+    }
+
     fn prepare_frame(&mut self) -> Result<(), String> {
         Ok(())
     }

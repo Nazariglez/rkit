@@ -1,6 +1,6 @@
 use rkit::{
     app::window_size,
-    draw::{self, Draw2D, RenderSprite, create_draw_2d},
+    draw::{self, RenderSprite, create_draw_2d, create_draw_2d_for},
     gfx::{self, AsRenderer, Color},
     math::Vec2,
 };
@@ -32,7 +32,7 @@ fn update(s: &mut State) {
 
     // First, draw text to the render sprite
     {
-        let mut render_draw = Draw2D::new(Vec2::new(400.0, 300.0));
+        let mut render_draw = create_draw_2d_for(&s.render_sprite.render_texture);
         render_draw.clear(Color::new(0.05, 0.05, 0.05, 1.0)); // Dark background for contrast
 
         // Example 1: Regular text on render texture (old behavior)
