@@ -1,4 +1,7 @@
-use super::{HAlign, TextAtlas, TextInfo, TextLayout, get_mut_text_system, markup};
+use super::{
+    HAlign, TextAtlas, TextInfo, TextLayout, TextMarkupPolicy, TextSourceId, TextStyles, document,
+    get_mut_text_system, markup,
+};
 use crate::Sprite;
 use corelib::{
     gfx::{Color, TextureFilter},
@@ -78,7 +81,7 @@ impl TextIcons {
         let mut registry = Self::default();
         for (id, sprite) in icons {
             let id = id.into();
-            if !is_icon_id(&id) {
+            if !is_markup_id(&id) {
                 return Err(format!("Invalid text icon ID '{id}'"));
             }
             if registry.icons.contains_key(&id) {
@@ -107,7 +110,7 @@ impl TextIcons {
     }
 }
 
-pub(crate) fn is_icon_id(id: &str) -> bool {
+pub(crate) fn is_markup_id(id: &str) -> bool {
     let bytes = id.as_bytes();
     let Some((&first, rest)) = bytes.split_first() else {
         return false;
@@ -123,6 +126,9 @@ pub fn rich_text(text: &str) -> RichTextBuilder<'_> {
     RichTextBuilder {
         text,
         icons: None,
+        styles: None,
+        source_id: TextSourceId::DEFAULT,
+        markup_policy: None,
         font: None,
         size: 14.0,
         line_height: None,
@@ -140,6 +146,9 @@ pub fn rich_text(text: &str) -> RichTextBuilder<'_> {
 pub struct RichTextBuilder<'a> {
     text: &'a str,
     icons: Option<&'a TextIcons>,
+    styles: Option<&'a TextStyles>,
+    source_id: TextSourceId,
+    markup_policy: Option<TextMarkupPolicy>,
     font: Option<&'a super::Font>,
     size: f32,
     line_height: Option<f32>,
@@ -152,6 +161,21 @@ pub struct RichTextBuilder<'a> {
 impl<'a> RichTextBuilder<'a> {
     pub fn icons(mut self, icons: &'a TextIcons) -> Self {
         self.icons = Some(icons);
+        self
+    }
+
+    pub fn styles(mut self, styles: &'a TextStyles) -> Self {
+        self.styles = Some(styles);
+        self
+    }
+
+    pub fn source_id(mut self, source_id: TextSourceId) -> Self {
+        self.source_id = source_id;
+        self
+    }
+
+    pub fn markup_policy(mut self, policy: TextMarkupPolicy) -> Self {
+        self.markup_policy = Some(policy);
         self
     }
 
@@ -214,17 +238,34 @@ impl<'a> RichTextBuilder<'a> {
             outline_width: 0,
             strict_metrics: true,
         };
-        let mode = match self.icons {
-            Some(icons) => markup::MarkupMode::Rich(icons),
-            None => markup::MarkupMode::Colors,
+        let extended = self.styles.is_some() || self.markup_policy.is_some();
+        let mode = if extended {
+            markup::MarkupMode::Extended {
+                icons: self.icons,
+                styles: self.styles,
+                source_id: self.source_id,
+            }
+        } else {
+            match self.icons {
+                Some(icons) => markup::MarkupMode::Rich(icons),
+                None => markup::MarkupMode::Colors,
+            }
         };
-        let markup = markup::parse(self.text, self.color, mode, self.max_width.is_some());
+        let mut document = markup::parse(self.text, self.color, mode, self.max_width.is_some());
+        let diagnostics = std::mem::take(&mut document.diagnostics);
+        if self.markup_policy == Some(TextMarkupPolicy::Strict)
+            && let Some(error) = document::strict_error(&diagnostics)
+        {
+            return Err(error);
+        }
+        let shaping = super::shaping::prepare(document, self.max_width.is_some())?;
         let mut system = get_mut_text_system();
         let mut layout = TextLayout::default();
-        system.layout_markup(&info, markup, &mut layout)?;
+        system.layout_markup(&info, shaping, &mut layout)?;
         Ok(RichTextLayout {
             layout,
             resolution: self.resolution,
+            diagnostics,
         })
     }
 }
@@ -233,6 +274,7 @@ impl<'a> RichTextBuilder<'a> {
 pub struct RichTextLayout {
     pub(crate) layout: TextLayout,
     pub(crate) resolution: Option<f32>,
+    diagnostics: Vec<super::TextDiagnostic>,
 }
 
 impl RichTextLayout {
@@ -246,6 +288,10 @@ impl RichTextLayout {
 
     pub fn lines(&self) -> &[RichTextLine] {
         &self.layout.lines
+    }
+
+    pub fn diagnostics(&self) -> &[super::TextDiagnostic] {
+        &self.diagnostics
     }
 }
 

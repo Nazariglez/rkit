@@ -1,57 +1,84 @@
+use super::document::{
+    DiagnosticSink, InlineObject, SemanticDocument, SourceMap, SourceMapKind, SourceMapSegment,
+    StyleRun, TextDiagnosticCode, TextDiagnosticSeverity, TextSourceId,
+};
 use super::rich::RegisteredIcon;
-use super::{Color, TextIcons};
+use super::style::{TextStyle, TextStyles};
+use super::{Color, Font, TextIcons};
 use corelib::math::UVec2;
 use std::{borrow::Cow, ops::Range};
+use unicode_segmentation::UnicodeSegmentation;
 
 const COLOR_TAG_OPEN: &str = "[color:#";
 const COLOR_TAG_CLOSE: &str = "[/color]";
+const STYLE_TAG_OPEN: &str = "[style:";
+const STYLE_TAG_CLOSE: &str = "[/style]";
 const ICON_TAG_OPEN: &str = "[icon:";
-const OBJECT_REPLACEMENT: char = '\u{FFFC}';
-const ZERO_WIDTH_SPACE: char = '\u{200B}';
 const MAX_ICON_TAG_LEN: usize = 108;
+const MAX_EXTENDED_TAG_LEN: usize = 256;
+const MAX_NESTING: usize = 64;
 
 pub(crate) enum MarkupMode<'a> {
     Colors,
     Rich(&'a TextIcons),
+    Extended {
+        icons: Option<&'a TextIcons>,
+        styles: Option<&'a TextStyles>,
+        source_id: TextSourceId,
+    },
 }
 
-pub(crate) struct Markup<'a> {
-    pub(crate) text: Cow<'a, str>,
-    pub(crate) spans: Vec<MarkupSpan>,
-    pub(crate) objects: Vec<InlineObject>,
+#[derive(Clone)]
+struct RunStyle {
+    color: Color,
+    font: Option<Font>,
+    size: Option<f32>,
+    line_height: Option<f32>,
 }
 
-pub(crate) struct MarkupSpan {
-    pub(crate) range: Range<usize>,
-    pub(crate) color: Color,
-    pub(crate) object: Option<usize>,
-}
-
-pub(crate) struct InlineObject {
-    pub(crate) icon: RegisteredIcon,
-    pub(crate) height: Option<f32>,
-    pub(crate) color: Color,
+impl RunStyle {
+    fn patched(&self, patch: &TextStyle) -> Self {
+        Self {
+            color: patch.color.unwrap_or(self.color),
+            font: patch.font.clone().or_else(|| self.font.clone()),
+            size: patch.size.or(self.size),
+            line_height: patch.line_height.or(self.line_height),
+        }
+    }
 }
 
 enum Token<'a> {
-    Text(&'a str, Color),
-    Icon(RegisteredIcon, Option<f32>, Color),
+    Text(&'a str, RunStyle, Range<usize>),
+    OwnedText(String, RunStyle, Range<usize>),
+    Icon(RegisteredIcon, Option<f32>, RunStyle, Range<usize>),
 }
 
-pub(crate) fn plain(input: &str, color: Color, wrap: bool) -> Markup<'_> {
-    let text = add_wrap_hints(input, wrap);
-    let spans = (!text.is_empty())
-        .then(|| MarkupSpan {
-            range: 0..text.len(),
+pub(crate) fn plain(input: &str, color: Color, _wrap: bool) -> SemanticDocument<'_> {
+    let runs = (!input.is_empty())
+        .then(|| StyleRun {
+            range: 0..input.len(),
             color,
-            object: None,
+            font: None,
+            size: None,
+            line_height: None,
         })
         .into_iter()
         .collect();
-    Markup {
-        text,
-        spans,
+    SemanticDocument {
+        text: Cow::Borrowed(input),
+        runs,
         objects: Vec::new(),
+        source_map: SourceMap {
+            segments: (!input.is_empty())
+                .then(|| SourceMapSegment {
+                    source: 0..input.len(),
+                    semantic: 0..input.len(),
+                    kind: SourceMapKind::Copied,
+                })
+                .into_iter()
+                .collect(),
+        },
+        diagnostics: Vec::new(),
     }
 }
 
@@ -60,7 +87,23 @@ pub(crate) fn parse(
     default_color: Color,
     mode: MarkupMode<'_>,
     wrap: bool,
-) -> Markup<'static> {
+) -> SemanticDocument<'static> {
+    match mode {
+        MarkupMode::Extended {
+            icons,
+            styles,
+            source_id,
+        } => parse_extended(input, default_color, icons, styles, source_id, wrap),
+        mode => parse_legacy(input, default_color, mode, wrap),
+    }
+}
+
+fn parse_legacy(
+    input: &str,
+    default_color: Color,
+    mode: MarkupMode<'_>,
+    wrap: bool,
+) -> SemanticDocument<'static> {
     let mut tokens = Vec::new();
     let mut colors = vec![default_color];
     let mut cursor = 0;
@@ -75,7 +118,13 @@ pub(crate) fn parse(
                 push_text(
                     &mut tokens,
                     &input[text_start..tag_start],
-                    *colors.last().unwrap(),
+                    RunStyle {
+                        color: *colors.last().unwrap(),
+                        font: None,
+                        size: None,
+                        line_height: None,
+                    },
+                    text_start..tag_start,
                 );
                 colors.push(color);
                 cursor = tag_start + COLOR_TAG_OPEN.len() + consumed;
@@ -89,7 +138,13 @@ pub(crate) fn parse(
             push_text(
                 &mut tokens,
                 &input[text_start..tag_start],
-                *colors.last().unwrap(),
+                RunStyle {
+                    color: *colors.last().unwrap(),
+                    font: None,
+                    size: None,
+                    line_height: None,
+                },
+                text_start..tag_start,
             );
             if colors.len() > 1 {
                 colors.pop();
@@ -106,13 +161,7 @@ pub(crate) fn parse(
             cursor = tag_start + 1;
             continue;
         }
-        let Some(tag_end) = remaining
-            .as_bytes()
-            .iter()
-            .take(MAX_ICON_TAG_LEN)
-            .position(|byte| *byte == b']')
-            .map(|offset| tag_start + offset + 1)
-        else {
+        let Some(tag_end) = bounded_tag_end(input, tag_start, MAX_ICON_TAG_LEN) else {
             debug_warn("Malformed text icon tag");
             break;
         };
@@ -132,88 +181,463 @@ pub(crate) fn parse(
             cursor = tag_end;
             continue;
         }
+        let style = RunStyle {
+            color: *colors.last().unwrap(),
+            font: None,
+            size: None,
+            line_height: None,
+        };
         push_text(
             &mut tokens,
             &input[text_start..tag_start],
-            *colors.last().unwrap(),
+            style.clone(),
+            text_start..tag_start,
         );
-        tokens.push(Token::Icon(icon.clone(), height, *colors.last().unwrap()));
+        tokens.push(Token::Icon(icon.clone(), height, style, tag_start..tag_end));
         cursor = tag_end;
         text_start = cursor;
     }
-    push_text(&mut tokens, &input[text_start..], *colors.last().unwrap());
-    normalize(tokens, wrap)
+    push_text(
+        &mut tokens,
+        &input[text_start..],
+        RunStyle {
+            color: *colors.last().unwrap(),
+            font: None,
+            size: None,
+            line_height: None,
+        },
+        text_start..input.len(),
+    );
+    normalize(tokens, wrap, Vec::new())
 }
 
-fn push_text<'a>(tokens: &mut Vec<Token<'a>>, text: &'a str, color: Color) {
+#[derive(Clone)]
+enum EventKind {
+    OpenColor(Color),
+    CloseColor,
+    OpenStyle(TextStyle),
+    CloseStyle,
+    Icon(RegisteredIcon, Option<f32>),
+    Escape,
+}
+
+impl EventKind {
+    fn range_name(&self) -> Option<&'static str> {
+        match self {
+            Self::OpenColor(_) | Self::CloseColor => Some("color"),
+            Self::OpenStyle(_) | Self::CloseStyle => Some("style"),
+            _ => None,
+        }
+    }
+
+    fn is_open(&self) -> bool {
+        matches!(self, Self::OpenColor(_) | Self::OpenStyle(_))
+    }
+
+    fn is_close(&self) -> bool {
+        matches!(self, Self::CloseColor | Self::CloseStyle)
+    }
+}
+
+struct Event {
+    range: Range<usize>,
+    kind: EventKind,
+    active: bool,
+}
+
+fn parse_extended(
+    input: &str,
+    default_color: Color,
+    icons: Option<&TextIcons>,
+    styles: Option<&TextStyles>,
+    source_id: TextSourceId,
+    wrap: bool,
+) -> SemanticDocument<'static> {
+    let mut sink = DiagnosticSink::default();
+    let mut events = scan_extended(input, icons, styles, source_id, &mut sink);
+    match_ranges(&mut events, source_id, &mut sink);
+
+    let mut tokens = Vec::new();
+    let mut stack = Vec::new();
+    let mut style = RunStyle {
+        color: default_color,
+        font: None,
+        size: None,
+        line_height: None,
+    };
+    let mut cursor = 0;
+    for event in events.into_iter().filter(|event| event.active) {
+        let range = event.range;
+        push_text(
+            &mut tokens,
+            &input[cursor..range.start],
+            style.clone(),
+            cursor..range.start,
+        );
+        match event.kind {
+            EventKind::OpenColor(color) => {
+                stack.push(style.clone());
+                style.color = color;
+            }
+            EventKind::OpenStyle(patch) => {
+                stack.push(style.clone());
+                style = style.patched(&patch);
+            }
+            EventKind::CloseColor | EventKind::CloseStyle => {
+                style = stack
+                    .pop()
+                    .ok_or_else(|| "matched text range lost its opening state")
+                    .unwrap();
+            }
+            EventKind::Icon(icon, height) => {
+                tokens.push(Token::Icon(icon, height, style.clone(), range.clone()));
+            }
+            EventKind::Escape => {
+                tokens.push(Token::OwnedText("[".into(), style.clone(), range.clone()))
+            }
+        }
+        cursor = range.end;
+    }
+    push_text(&mut tokens, &input[cursor..], style, cursor..input.len());
+    normalize(tokens, wrap, sink.finish())
+}
+
+fn scan_extended(
+    input: &str,
+    icons: Option<&TextIcons>,
+    styles: Option<&TextStyles>,
+    source_id: TextSourceId,
+    sink: &mut DiagnosticSink,
+) -> Vec<Event> {
+    let mut boundaries = vec![false; input.len() + 1];
+    boundaries[input.len()] = true;
+    for (index, _) in input.grapheme_indices(true) {
+        boundaries[index] = true;
+    }
+
+    let mut events = Vec::new();
+    let mut cursor = 0;
+    while let Some(offset) = input[cursor..].find('[') {
+        let start = cursor + offset;
+        if input[start..].starts_with("[[") {
+            events.push(Event {
+                range: start..start + 2,
+                kind: EventKind::Escape,
+                active: true,
+            });
+            cursor = start + 2;
+            continue;
+        }
+
+        let remaining = &input[start..];
+        let reserved = remaining.starts_with("[color")
+            || remaining.starts_with("[/color")
+            || remaining.starts_with("[style")
+            || remaining.starts_with("[/style")
+            || remaining.starts_with("[icon");
+        let Some(end) = bounded_tag_end(input, start, MAX_EXTENDED_TAG_LEN) else {
+            if reserved {
+                let mut end = input.len().min(start + MAX_EXTENDED_TAG_LEN);
+                while end > start && !input.is_char_boundary(end) {
+                    end -= 1;
+                }
+                diagnostic(
+                    sink,
+                    TextDiagnosticCode::TagLengthLimitExceeded,
+                    source_id,
+                    start..end,
+                );
+            }
+            cursor = start + 1;
+            continue;
+        };
+        let tag = &input[start..end];
+        let kind = if let Some(body) = tag
+            .strip_prefix(COLOR_TAG_OPEN)
+            .and_then(|tag| tag.strip_suffix(']'))
+        {
+            Some(EventKind::OpenColor(parse_hex_color(body)))
+        } else if tag == COLOR_TAG_CLOSE {
+            Some(EventKind::CloseColor)
+        } else if let Some(id) = tag
+            .strip_prefix(STYLE_TAG_OPEN)
+            .and_then(|tag| tag.strip_suffix(']'))
+        {
+            if !super::rich::is_markup_id(id) {
+                diagnostic(
+                    sink,
+                    TextDiagnosticCode::InvalidIdentifier,
+                    source_id,
+                    start..end,
+                );
+                None
+            } else if let Some(style) = styles.and_then(|styles| styles.get(id)) {
+                Some(EventKind::OpenStyle(style.clone()))
+            } else {
+                diagnostic(
+                    sink,
+                    TextDiagnosticCode::UnknownStyleId,
+                    source_id,
+                    start..end,
+                );
+                None
+            }
+        } else if tag == STYLE_TAG_CLOSE {
+            Some(EventKind::CloseStyle)
+        } else if tag.starts_with(ICON_TAG_OPEN) {
+            match parse_icon_tag(tag) {
+                Some((id, height)) => match icons.and_then(|icons| icons.registered(id)) {
+                    Some(icon)
+                        if !height.is_some_and(|height| {
+                            !icon_size_is_finite(height, icon.source_size())
+                        }) =>
+                    {
+                        Some(EventKind::Icon(icon.clone(), height))
+                    }
+                    Some(_) => {
+                        diagnostic(
+                            sink,
+                            TextDiagnosticCode::MalformedTag,
+                            source_id,
+                            start..end,
+                        );
+                        None
+                    }
+                    None => {
+                        diagnostic(
+                            sink,
+                            TextDiagnosticCode::UnknownIconId,
+                            source_id,
+                            start..end,
+                        );
+                        None
+                    }
+                },
+                None => {
+                    diagnostic(
+                        sink,
+                        TextDiagnosticCode::MalformedTag,
+                        source_id,
+                        start..end,
+                    );
+                    None
+                }
+            }
+        } else {
+            if reserved {
+                diagnostic(
+                    sink,
+                    TextDiagnosticCode::MalformedTag,
+                    source_id,
+                    start..end,
+                );
+            }
+            None
+        };
+
+        if let Some(kind) = kind {
+            if !boundaries[start] || !boundaries[end] {
+                diagnostic(
+                    sink,
+                    TextDiagnosticCode::GraphemeBoundary,
+                    source_id,
+                    start..end,
+                );
+            } else {
+                let active = !kind.is_open() && !kind.is_close();
+                events.push(Event {
+                    range: start..end,
+                    kind,
+                    active,
+                });
+            }
+        }
+        cursor = end;
+    }
+    events
+}
+
+fn match_ranges(events: &mut [Event], source_id: TextSourceId, sink: &mut DiagnosticSink) {
+    let mut stack: Vec<usize> = Vec::new();
+    let mut overflow_depth = 0_usize;
+    for index in 0..events.len() {
+        if events[index].kind.is_open() {
+            if overflow_depth > 0 || stack.len() == MAX_NESTING {
+                diagnostic(
+                    sink,
+                    TextDiagnosticCode::NestingLimitExceeded,
+                    source_id,
+                    events[index].range.clone(),
+                );
+                overflow_depth = overflow_depth.saturating_add(1);
+            } else {
+                stack.push(index);
+            }
+            continue;
+        }
+        if !events[index].kind.is_close() {
+            continue;
+        }
+        if overflow_depth > 0 {
+            overflow_depth -= 1;
+            continue;
+        }
+        let name = events[index].kind.range_name().unwrap();
+        let Some(&open_index) = stack.last() else {
+            diagnostic(
+                sink,
+                TextDiagnosticCode::UnmatchedClosingTag,
+                source_id,
+                events[index].range.clone(),
+            );
+            continue;
+        };
+        if events[open_index].kind.range_name() == Some(name) {
+            stack.pop();
+            events[open_index].active = true;
+            events[index].active = true;
+            continue;
+        }
+        if let Some(position) = stack
+            .iter()
+            .rposition(|open| events[*open].kind.range_name() == Some(name))
+        {
+            let related = events[open_index].range.clone();
+            sink.push(
+                TextDiagnosticCode::CrossedRange,
+                TextDiagnosticSeverity::Error,
+                source_id,
+                events[index].range.clone(),
+                Some(related),
+            );
+            stack.truncate(position);
+        } else {
+            let related = events[open_index].range.clone();
+            sink.push(
+                TextDiagnosticCode::MismatchedClosingTag,
+                TextDiagnosticSeverity::Error,
+                source_id,
+                events[index].range.clone(),
+                Some(related),
+            );
+        }
+    }
+    for open in stack {
+        diagnostic(
+            sink,
+            TextDiagnosticCode::UnclosedRange,
+            source_id,
+            events[open].range.clone(),
+        );
+    }
+}
+
+fn diagnostic(
+    sink: &mut DiagnosticSink,
+    code: TextDiagnosticCode,
+    source_id: TextSourceId,
+    range: Range<usize>,
+) {
+    sink.push(code, TextDiagnosticSeverity::Error, source_id, range, None);
+}
+
+fn push_text<'a>(
+    tokens: &mut Vec<Token<'a>>,
+    text: &'a str,
+    style: RunStyle,
+    source: Range<usize>,
+) {
     if !text.is_empty() {
-        tokens.push(Token::Text(text, color));
+        tokens.push(Token::Text(text, style, source));
     }
 }
 
-pub(crate) fn add_wrap_hints(text: &str, wrap: bool) -> Cow<'_, str> {
-    if !wrap || !text.as_bytes().contains(&b' ') {
-        return Cow::Borrowed(text);
-    }
-    let mut normalized = String::with_capacity(text.len());
-    append_text(&mut normalized, text, true);
-    Cow::Owned(normalized)
-}
-
-fn normalize(tokens: Vec<Token<'_>>, wrap: bool) -> Markup<'static> {
+fn normalize(
+    tokens: Vec<Token<'_>>,
+    _wrap: bool,
+    diagnostics: Vec<super::TextDiagnostic>,
+) -> SemanticDocument<'static> {
     let mut text = String::new();
-    let mut spans: Vec<MarkupSpan> = Vec::new();
+    let mut runs: Vec<StyleRun> = Vec::new();
     let mut objects = Vec::new();
+    let mut segments = Vec::new();
     for token in tokens {
         let start = text.len();
-        let (color, object) = match token {
-            Token::Text(span_text, color) => {
-                append_text(&mut text, &span_text, wrap);
-                (color, None)
+        let (style, source, kind) = match token {
+            Token::Text(span_text, style, source) => {
+                text.push_str(span_text);
+                (style, source, SourceMapKind::Copied)
             }
-            Token::Icon(icon, height, color) => {
+            Token::OwnedText(span_text, style, source) => {
+                text.push_str(&span_text);
+                (style, source, SourceMapKind::EscapedOpen)
+            }
+            Token::Icon(icon, height, style, source) => {
                 let object = objects.len();
                 objects.push(InlineObject {
+                    at: start,
+                    source: source.clone(),
                     icon,
                     height,
-                    color,
+                    color: style.color,
+                    font: style.font.clone(),
+                    size: style.size,
+                    line_height: style.line_height,
                 });
-                text.push(OBJECT_REPLACEMENT);
-                (color, Some(object))
+                segments.push(SourceMapSegment {
+                    source,
+                    semantic: start..start,
+                    kind: SourceMapKind::InlineObject(object),
+                });
+                continue;
             }
         };
         if start == text.len() {
             continue;
         }
-        if let Some(span) = spans.last_mut()
-            && span.object.is_none()
-            && object.is_none()
-            && span.color == color
-            && span.range.end == start
+        segments.push(SourceMapSegment {
+            source,
+            semantic: start..text.len(),
+            kind,
+        });
+        if let Some(run) = runs.last_mut()
+            && run.color == style.color
+            && same_font(&run.font, &style.font)
+            && run.size == style.size
+            && run.line_height == style.line_height
+            && run.range.end == start
         {
-            span.range.end = text.len();
+            run.range.end = text.len();
         } else {
-            spans.push(MarkupSpan {
+            runs.push(StyleRun {
                 range: start..text.len(),
-                color,
-                object,
+                color: style.color,
+                font: style.font,
+                size: style.size,
+                line_height: style.line_height,
             });
         }
     }
-    Markup {
+    SemanticDocument {
         text: Cow::Owned(text),
-        spans,
+        runs,
         objects,
+        source_map: SourceMap { segments },
+        diagnostics,
     }
 }
 
-fn append_text(output: &mut String, text: &str, wrap: bool) {
-    for character in text.chars() {
-        output.push(character);
-        if wrap && character == ' ' {
-            output.push(ZERO_WIDTH_SPACE);
-        }
-    }
+fn same_font(left: &Option<Font>, right: &Option<Font>) -> bool {
+    left.as_ref().map(Font::id) == right.as_ref().map(Font::id)
+}
+
+fn bounded_tag_end(input: &str, start: usize, limit: usize) -> Option<usize> {
+    input[start..]
+        .as_bytes()
+        .iter()
+        .take(limit)
+        .position(|byte| *byte == b']')
+        .map(|offset| start + offset + 1)
 }
 
 fn parse_icon_tag(tag: &str) -> Option<(&str, Option<f32>)> {
@@ -222,7 +646,7 @@ fn parse_icon_tag(tag: &str) -> Option<(&str, Option<f32>)> {
         Some((id, size)) => (id, Some(parse_icon_size(size)?)),
         None => (body, None),
     };
-    if !super::rich::is_icon_id(id) || body.matches(" size=").count() > 1 {
+    if !super::rich::is_markup_id(id) || body.matches(" size=").count() > 1 {
         return None;
     }
     Some((id, height))
@@ -267,13 +691,11 @@ fn debug_warn(message: &str) {
 #[cfg(not(debug_assertions))]
 fn debug_warn(_: &str) {}
 
-#[inline]
 fn try_parse_open_tag(s: &str) -> Option<(Color, usize)> {
     let close_bracket = s.find(']')?;
     Some((parse_hex_color(&s[..close_bracket]), close_bracket + 1))
 }
 
-#[inline]
 fn parse_hex_color(hex: &str) -> Color {
     let mut value: u32 = 0;
     for &byte in hex.as_bytes().iter().take(8) {
@@ -324,9 +746,9 @@ mod tests {
     fn plain_text_is_one_span() {
         let markup = parse("Hello 世界", Color::WHITE, MarkupMode::Colors, false);
         assert_eq!(markup.text, "Hello 世界");
-        assert_eq!(markup.spans.len(), 1);
-        assert_eq!(markup.spans[0].color, Color::WHITE);
-        assert_eq!(&markup.text[markup.spans[0].range.clone()], "Hello 世界");
+        assert_eq!(markup.runs.len(), 1);
+        assert_eq!(markup.runs[0].color, Color::WHITE);
+        assert_eq!(&markup.text[markup.runs[0].range.clone()], "Hello 世界");
     }
 
     #[test]
@@ -338,7 +760,7 @@ mod tests {
             false,
         );
         assert_eq!(markup.text, "red");
-        assert_eq!(markup.spans[0].color, Color::hex(0xFF000080));
+        assert_eq!(markup.runs[0].color, Color::hex(0xFF000080));
         assert_eq!(parse_hex_color("X"), Color::hex(0x000000FF));
     }
 
@@ -351,10 +773,10 @@ mod tests {
             false,
         );
         assert_eq!(markup.text, "red green back");
-        assert_eq!(markup.spans.len(), 3);
-        assert_eq!(markup.spans[0].color, Color::hex(0xFF0000FF));
-        assert_eq!(markup.spans[1].color, Color::hex(0x00FF00FF));
-        assert_eq!(markup.spans[2].color, Color::hex(0xFF0000FF));
+        assert_eq!(markup.runs.len(), 3);
+        assert_eq!(markup.runs[0].color, Color::hex(0xFF0000FF));
+        assert_eq!(markup.runs[1].color, Color::hex(0x00FF00FF));
+        assert_eq!(markup.runs[2].color, Color::hex(0xFF0000FF));
     }
 
     #[test]

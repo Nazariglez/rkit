@@ -116,12 +116,13 @@ pub fn set_default_font(font: &Font) {
     get_mut_text_system().set_default_font(font);
 }
 
+#[deprecated(note = "text masks use separate internal sampling atlases")]
 #[inline]
 pub fn text_mask_atlas() -> Texture {
-    get_text_system().mask.texture.texture().clone()
+    get_text_system().mask_atlas_texture()
 }
 
 #[inline]
 pub fn text_color_atlas() -> Texture {
-    get_text_system().rgba_linear.texture.texture().clone()
+    get_text_system().color_atlas_texture()
 }

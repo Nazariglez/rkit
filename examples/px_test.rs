@@ -2,7 +2,7 @@ use std::io::Read;
 
 use draw::{
     RenderSprite, Sprite, Transform2D, create_draw_2d, create_draw_2d_for, create_render_sprite,
-    create_sprite, text_mask_atlas,
+    create_sprite,
 };
 use rkit::{
     gfx::{self, Color, TextureFilter, TextureFormat},
@@ -119,27 +119,6 @@ fn render(state: Res<State>) {
     draw.image(&state.rrt.sprite)
         .translate(vec2(100.0, 48.0))
         .scale(Vec2::splat(1.0 / RES));
-    draw.pop_matrix();
-
-    let atlas = create_sprite()
-        .from_texture(&text_mask_atlas())
-        .with_filter(TextureFilter::Nearest)
-        .with_format(TextureFormat::R8UNorm)
-        .build()
-        .unwrap();
-
-    let atlas_pos = vec2(10.0, 340.0);
-    draw.push_matrix(
-        Transform2D::builder()
-            .set_translation(atlas_pos)
-            .set_scale(Vec2::splat(2.0))
-            .build()
-            .as_mat3(),
-    );
-    draw.image(&atlas);
-    draw.rect(-Vec2::ONE, atlas.size() - Vec2::ONE)
-        .alpha(0.1)
-        .stroke(1.0);
     draw.pop_matrix();
 
     gfx::render_to_frame(&draw).unwrap();

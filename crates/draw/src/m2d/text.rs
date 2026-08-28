@@ -7,10 +7,7 @@ use corelib::gfx::{
 };
 use corelib::math::{IntoVec2, Rect, Vec2, bvec2, vec2, vec3};
 use macros::Drawable2D;
-use std::{borrow::Cow, cell::RefCell};
-
-#[cfg(all(target_arch = "wasm32", feature = "webgl"))]
-use corelib::app::is_window_pixelated;
+use std::cell::RefCell;
 
 thread_local! {
     static TEMP_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(vec![]) };
@@ -58,10 +55,12 @@ var s_linear: sampler;
 @group(1) @binding(1)
 var s_nearest: sampler;
 @group(1) @binding(2)
-var t_mask: texture_2d<f32>;
+var t_mask_linear: texture_2d<f32>;
 @group(1) @binding(3)
-var t_rgba_linear: texture_2d<f32>;
+var t_mask_nearest: texture_2d<f32>;
 @group(1) @binding(4)
+var t_rgba_linear: texture_2d<f32>;
+@group(1) @binding(5)
 var t_rgba_nearest: texture_2d<f32>;
 
 // srg to linear
@@ -75,14 +74,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
 const SELECT_TEXTURE_SAMPLER: &str = r#"
     if (in.tex == 0.0) {
-        let mask = textureSampleLevel(t_mask, s_linear, in.uvs, 0.0);
+        let mask = textureSampleLevel(t_mask_linear, s_linear, in.uvs, 0.0);
         return vec4(in_color.rgb, mask.r * in_color.a);
     }
     if (in.tex == 1.0) {
-        let mask = textureSampleLevel(t_mask, s_nearest, in.uvs, 0.0);
+        let mask = textureSampleLevel(t_mask_nearest, s_nearest, in.uvs, 0.0);
         return vec4(in_color.rgb, mask.r * in_color.a);
     }
     if (in.tex == 2.0) {
@@ -98,43 +96,6 @@ const SELECT_TEXTURE_SAMPLER: &str = r#"
     let rgba = textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0);
     return vec4(in_color.rgb, rgba.a * in_color.a);
 "#;
-
-#[cfg(all(target_arch = "wasm32", feature = "webgl"))]
-const SELECT_TEXTURE_SAMPLER_WEBGL: &str = r#"
-    if (in.tex == 0.0 || in.tex == 1.0) {
-        let mask = textureSampleLevel(t_mask, {{MASK_SAMPLER}}, in.uvs, 0.0);
-        return vec4(in_color.rgb, mask.r * in_color.a);
-    }
-    if (in.tex == 2.0) {
-        return textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0) * in_color;
-    }
-    if (in.tex == 3.0) {
-        return textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0) * in_color;
-    }
-    if (in.tex == 4.0) {
-        let rgba = textureSampleLevel(t_rgba_linear, s_linear, in.uvs, 0.0);
-        return vec4(in_color.rgb, rgba.a * in_color.a);
-    }
-    let rgba = textureSampleLevel(t_rgba_nearest, s_nearest, in.uvs, 0.0);
-    return vec4(in_color.rgb, rgba.a * in_color.a);
-"#;
-
-fn select_texture_sampler() -> Cow<'static, str> {
-    #[cfg(any(not(target_arch = "wasm32"), not(feature = "webgl")))]
-    {
-        Cow::Borrowed(SELECT_TEXTURE_SAMPLER)
-    }
-
-    #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
-    {
-        let sampler = if is_window_pixelated() {
-            "s_nearest"
-        } else {
-            "s_linear"
-        };
-        Cow::Owned(SELECT_TEXTURE_SAMPLER_WEBGL.replace("{{MASK_SAMPLER}}", sampler))
-    }
-}
 
 pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
     let shader = SHADER
@@ -142,7 +103,7 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
             "{{SRGB_TO_LINEAR}}",
             include_str!("../resources/to_linear.wgsl"),
         )
-        .replace("{{SELECT_TEXTURE_AND_SAMPLER}}", &select_texture_sampler());
+        .replace("{{SELECT_TEXTURE_AND_SAMPLER}}", SELECT_TEXTURE_SAMPLER);
 
     let pip = gfx::create_render_pipeline(&shader)
         .with_label("Draw2D text default pipeline")
@@ -162,7 +123,8 @@ pub fn create_text_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineCon
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true))
                 .with_entry(BindingType::texture(2).with_fragment_visibility(true))
                 .with_entry(BindingType::texture(3).with_fragment_visibility(true))
-                .with_entry(BindingType::texture(4).with_fragment_visibility(true)),
+                .with_entry(BindingType::texture(4).with_fragment_visibility(true))
+                .with_entry(BindingType::texture(5).with_fragment_visibility(true)),
         )
         .with_blend_mode(BlendMode::NORMAL)
         .build()?;
