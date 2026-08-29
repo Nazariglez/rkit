@@ -3,7 +3,7 @@ use super::document::{
     TextSourceId,
 };
 use super::rich::TextIconAlign;
-use super::{Color, TextIcons, TextStyles};
+use super::{Color, TextEffects, TextIcons, TextStyles};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -12,6 +12,12 @@ const COLOR_TAG_CLOSE: &str = "[/color]";
 const STYLE_TAG_OPEN: &str = "[style:";
 const STYLE_TAG_CLOSE: &str = "[/style]";
 const ICON_TAG_OPEN: &str = "[icon:";
+const UNDERLINE_TAG_OPEN: &str = "[u]";
+const UNDERLINE_TAG_CLOSE: &str = "[/u]";
+const STRIKETHROUGH_TAG_OPEN: &str = "[s]";
+const STRIKETHROUGH_TAG_CLOSE: &str = "[/s]";
+const EFFECT_TAG_OPEN: &str = "[effect:";
+const EFFECT_TAG_CLOSE: &str = "[/effect]";
 const MAX_ICON_TAG_LEN: usize = 108;
 const MAX_EXTENDED_TAG_LEN: usize = 256;
 const MAX_NESTING: usize = 64;
@@ -22,12 +28,13 @@ pub(crate) enum MarkupMode<'a> {
     Extended {
         icons: Option<&'a TextIcons>,
         styles: Option<&'a TextStyles>,
+        effects: Option<&'a TextEffects>,
         source_id: TextSourceId,
     },
 }
 
 pub(crate) fn plain(input: &str, color: Color, _wrap: bool) -> SemanticDocument<'_> {
-    let mut resolver = SemanticResolver::new(color, None, None);
+    let mut resolver = SemanticResolver::new(color, None, None, None);
     resolver.text(
         input,
         SourceSpan {
@@ -49,8 +56,9 @@ pub(crate) fn parse(
         MarkupMode::Extended {
             icons,
             styles,
+            effects,
             source_id,
-        } => parse_extended(input, default_color, icons, styles, source_id),
+        } => parse_extended(input, default_color, icons, styles, effects, source_id),
         mode => parse_legacy(input, default_color, mode),
     }
 }
@@ -65,7 +73,7 @@ fn parse_legacy(
         _ => None,
     };
     let rich = icons.is_some();
-    let mut resolver = SemanticResolver::new(default_color, icons, None);
+    let mut resolver = SemanticResolver::new(default_color, icons, None, None);
     let mut colors = 0_usize;
     let mut cursor = 0;
     let mut text_start = 0;
@@ -164,6 +172,12 @@ enum EventKind {
     CloseColor,
     OpenStyle(String),
     CloseStyle,
+    OpenUnderline,
+    CloseUnderline,
+    OpenStrikethrough,
+    CloseStrikethrough,
+    OpenEffect(String),
+    CloseEffect,
     Icon(String, IconOptions),
     Escape,
 }
@@ -173,16 +187,33 @@ impl EventKind {
         match self {
             Self::OpenColor(_) | Self::CloseColor => Some("color"),
             Self::OpenStyle(_) | Self::CloseStyle => Some("style"),
+            Self::OpenUnderline | Self::CloseUnderline => Some("u"),
+            Self::OpenStrikethrough | Self::CloseStrikethrough => Some("s"),
+            Self::OpenEffect(_) | Self::CloseEffect => Some("effect"),
             _ => None,
         }
     }
 
     fn is_open(&self) -> bool {
-        matches!(self, Self::OpenColor(_) | Self::OpenStyle(_))
+        matches!(
+            self,
+            Self::OpenColor(_)
+                | Self::OpenStyle(_)
+                | Self::OpenUnderline
+                | Self::OpenStrikethrough
+                | Self::OpenEffect(_)
+        )
     }
 
     fn is_close(&self) -> bool {
-        matches!(self, Self::CloseColor | Self::CloseStyle)
+        matches!(
+            self,
+            Self::CloseColor
+                | Self::CloseStyle
+                | Self::CloseUnderline
+                | Self::CloseStrikethrough
+                | Self::CloseEffect
+        )
     }
 }
 
@@ -197,9 +228,10 @@ fn parse_extended(
     default_color: Color,
     icons: Option<&TextIcons>,
     styles: Option<&TextStyles>,
+    effects: Option<&TextEffects>,
     source_id: TextSourceId,
 ) -> SemanticDocument<'static> {
-    let mut resolver = SemanticResolver::new(default_color, icons, styles);
+    let mut resolver = SemanticResolver::new(default_color, icons, styles, effects);
     resolver.set_source(source_id);
     let mut events = scan_extended(input, source_id, &mut resolver);
     match_ranges(&mut events, source_id, &mut resolver);
@@ -231,7 +263,42 @@ fn parse_extended(
                 }
                 active_scopes.push(active);
             }
-            EventKind::CloseColor | EventKind::CloseStyle => {
+            EventKind::OpenUnderline => {
+                resolver.push_underline();
+                active_scopes.push(true);
+            }
+            EventKind::OpenStrikethrough => {
+                resolver.push_strikethrough();
+                active_scopes.push(true);
+            }
+            EventKind::OpenEffect(id) => {
+                let valid = super::rich::is_markup_id(&id);
+                let active = valid && resolver.push_effect(&id).is_ok();
+                if !active {
+                    resolver.diagnostic(
+                        if valid {
+                            TextDiagnosticCode::UnknownEffectId
+                        } else {
+                            TextDiagnosticCode::InvalidIdentifier
+                        },
+                        source.clone(),
+                        None,
+                    );
+                    resolver.text(&input[range.clone()], source, SourceMapKind::Copied);
+                }
+                active_scopes.push(active);
+            }
+            EventKind::CloseEffect => {
+                if active_scopes.pop().unwrap_or(false) {
+                    resolver.pop_effect().expect("matched effect scope");
+                } else {
+                    resolver.text(&input[range.clone()], source, SourceMapKind::Copied);
+                }
+            }
+            EventKind::CloseColor
+            | EventKind::CloseStyle
+            | EventKind::CloseUnderline
+            | EventKind::CloseStrikethrough => {
                 if active_scopes.pop().unwrap_or(false) {
                     resolver.pop_style().expect("matched markup scope");
                 } else {
@@ -288,7 +355,13 @@ fn scan_extended(
             || remaining.starts_with("[/color")
             || remaining.starts_with("[style")
             || remaining.starts_with("[/style")
-            || remaining.starts_with("[icon");
+            || remaining.starts_with("[icon")
+            || remaining.starts_with(UNDERLINE_TAG_OPEN)
+            || remaining.starts_with(UNDERLINE_TAG_CLOSE)
+            || remaining.starts_with(STRIKETHROUGH_TAG_OPEN)
+            || remaining.starts_with(STRIKETHROUGH_TAG_CLOSE)
+            || remaining.starts_with(EFFECT_TAG_OPEN)
+            || remaining.starts_with(EFFECT_TAG_CLOSE);
         let Some(end) = bounded_tag_end(input, start, MAX_EXTENDED_TAG_LEN) else {
             if reserved {
                 let mut end = input.len().min(start + MAX_EXTENDED_TAG_LEN);
@@ -322,6 +395,21 @@ fn scan_extended(
             Some(EventKind::OpenStyle(id.to_owned()))
         } else if tag == STYLE_TAG_CLOSE {
             Some(EventKind::CloseStyle)
+        } else if tag == UNDERLINE_TAG_OPEN {
+            Some(EventKind::OpenUnderline)
+        } else if tag == UNDERLINE_TAG_CLOSE {
+            Some(EventKind::CloseUnderline)
+        } else if tag == STRIKETHROUGH_TAG_OPEN {
+            Some(EventKind::OpenStrikethrough)
+        } else if tag == STRIKETHROUGH_TAG_CLOSE {
+            Some(EventKind::CloseStrikethrough)
+        } else if let Some(id) = tag
+            .strip_prefix(EFFECT_TAG_OPEN)
+            .and_then(|tag| tag.strip_suffix(']'))
+        {
+            Some(EventKind::OpenEffect(id.to_owned()))
+        } else if tag == EFFECT_TAG_CLOSE {
+            Some(EventKind::CloseEffect)
         } else if tag.starts_with(ICON_TAG_OPEN) {
             parse_extended_icon(tag).map(|(id, options)| EventKind::Icon(id.to_owned(), options))
         } else {

@@ -8,6 +8,8 @@ pub struct TextStyle {
     pub(crate) size: Option<f32>,
     pub(crate) line_height: Option<f32>,
     pub(crate) color: Option<Color>,
+    pub(crate) underline: Option<bool>,
+    pub(crate) strikethrough: Option<bool>,
 }
 
 impl TextStyle {
@@ -17,6 +19,8 @@ impl TextStyle {
             size: None,
             line_height: None,
             color: None,
+            underline: None,
+            strikethrough: None,
         }
     }
 
@@ -37,6 +41,16 @@ impl TextStyle {
 
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
+        self
+    }
+
+    pub fn underline(mut self, enabled: bool) -> Self {
+        self.underline = Some(enabled);
+        self
+    }
+
+    pub fn strikethrough(mut self, enabled: bool) -> Self {
+        self.strikethrough = Some(enabled);
         self
     }
 }

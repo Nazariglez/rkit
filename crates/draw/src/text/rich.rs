@@ -1,11 +1,11 @@
 use super::{
-    HAlign, TextAtlas, TextInfo, TextLayout, TextMarkupPolicy, TextSourceId, TextStyles, document,
-    get_mut_text_system, markup,
+    HAlign, TextAtlas, TextEffects, TextInfo, TextLayout, TextMarkupPolicy, TextSourceId,
+    TextStyles, document, get_mut_text_system, markup,
 };
 use crate::Sprite;
 use corelib::{
     gfx::{Color, TextureFilter},
-    math::{UVec2, Vec2, uvec2},
+    math::{Rect, UVec2, Vec2, uvec2},
 };
 use rustc_hash::FxHashMap;
 
@@ -172,6 +172,7 @@ impl From<String> for RichTextIcon {
 struct RichConfig<'a> {
     icons: Option<&'a TextIcons>,
     styles: Option<&'a TextStyles>,
+    effects: Option<&'a TextEffects>,
     font: Option<&'a super::Font>,
     size: f32,
     line_height: Option<f32>,
@@ -186,6 +187,7 @@ impl Default for RichConfig<'_> {
         Self {
             icons: None,
             styles: None,
+            effects: None,
             font: None,
             size: 14.0,
             line_height: None,
@@ -221,6 +223,10 @@ macro_rules! config_setters {
         }
         pub fn styles(mut self, styles: &'a TextStyles) -> Self {
             self.config.styles = Some(styles);
+            self
+        }
+        pub fn effects(mut self, effects: &'a TextEffects) -> Self {
+            self.config.effects = Some(effects);
             self
         }
         pub fn font(mut self, font: &'a super::Font) -> Self {
@@ -276,11 +282,14 @@ impl<'a> RichTextBuilder<'a> {
     }
 
     pub fn layout(self) -> Result<RichTextLayout, String> {
-        let extended = self.config.styles.is_some() || self.markup_policy.is_some();
+        let extended = self.config.styles.is_some()
+            || self.config.effects.is_some()
+            || self.markup_policy.is_some();
         let mode = if extended {
             markup::MarkupMode::Extended {
                 icons: self.config.icons,
                 styles: self.config.styles,
+                effects: self.config.effects,
                 source_id: self.source_id,
             }
         } else {
@@ -326,6 +335,7 @@ impl<'a> RichDocumentBuilder<'a> {
             self.config.color,
             self.config.icons,
             self.config.styles,
+            self.config.effects,
         )?;
         compile_document(document, &self.config, false)
     }
@@ -336,8 +346,8 @@ fn compile_document(
     config: &RichConfig<'_>,
     strict: bool,
 ) -> Result<RichTextLayout, String> {
-    let diagnostics = std::mem::take(&mut document.diagnostics);
-    let shaping = super::shaping::prepare(document, config.max_width.is_some())?;
+    let mut diagnostics = std::mem::take(&mut document.diagnostics);
+    let shaping = super::shaping::prepare(document, config.max_width.is_some(), &mut diagnostics)?;
     let info = TextInfo {
         font: config.font,
         text: "",
@@ -352,7 +362,8 @@ fn compile_document(
     };
     let mut system = get_mut_text_system();
     let mut layout = TextLayout::default();
-    system.layout_document(&info, shaping, &mut layout)?;
+    system.layout_document(&info, shaping, &mut layout, &mut diagnostics)?;
+    let diagnostics = diagnostics.finish();
     if strict && let Some(error) = document::strict_error(&diagnostics) {
         return Err(error);
     }
@@ -361,6 +372,67 @@ fn compile_document(
         resolution: config.resolution,
         diagnostics,
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum RichTextAtomKind {
+    Text,
+    Space,
+    Icon,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum TextAffinity {
+    Leading,
+    Trailing,
+}
+
+#[derive(Clone, Debug)]
+pub struct RichTextHit {
+    source_id: TextSourceId,
+    range: std::ops::Range<usize>,
+    line_index: usize,
+    kind: RichTextAtomKind,
+    bounds: Rect,
+    affinity: TextAffinity,
+    reveal_index: usize,
+    rtl: bool,
+}
+
+impl RichTextHit {
+    pub fn source_id(&self) -> TextSourceId {
+        self.source_id
+    }
+
+    pub fn range(&self) -> &std::ops::Range<usize> {
+        &self.range
+    }
+
+    pub fn line_index(&self) -> usize {
+        self.line_index
+    }
+
+    pub fn kind(&self) -> RichTextAtomKind {
+        self.kind
+    }
+
+    pub fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    pub fn affinity(&self) -> TextAffinity {
+        self.affinity
+    }
+
+    pub fn reveal_index(&self) -> usize {
+        self.reveal_index
+    }
+
+    pub fn is_rtl(&self) -> bool {
+        self.rtl
+    }
 }
 
 pub struct RichTextLayout {
@@ -384,6 +456,33 @@ impl RichTextLayout {
 
     pub fn diagnostics(&self) -> &[super::TextDiagnostic] {
         &self.diagnostics
+    }
+
+    pub fn reveal_units(&self) -> usize {
+        self.layout.atoms.atom_count()
+    }
+
+    pub fn hit_test(&self, point: Vec2) -> Option<RichTextHit> {
+        let hit = self.layout.atoms.hit(point)?;
+        let kind = match hit.kind {
+            super::layout::AtomKind::Text => RichTextAtomKind::Text,
+            super::layout::AtomKind::Space => RichTextAtomKind::Space,
+            super::layout::AtomKind::Icon => RichTextAtomKind::Icon,
+        };
+        Some(RichTextHit {
+            source_id: hit.source.id,
+            range: hit.source.range,
+            line_index: hit.line,
+            kind,
+            bounds: hit.bounds,
+            affinity: if hit.leading {
+                TextAffinity::Leading
+            } else {
+                TextAffinity::Trailing
+            },
+            reveal_index: hit.logical_index,
+            rtl: hit.rtl,
+        })
     }
 }
 

@@ -1,7 +1,8 @@
 use super::{
     Font,
     document::{
-        InlineObject, ResolvedStyle, ResolvedStyleId, SemanticDocument, SourceMapKind, SourceSpan,
+        DiagnosticSink, InlineObject, ResolvedStyle, ResolvedStyleId, SemanticDocument,
+        SourceMapKind, SourceSpan, TextDiagnosticCode,
     },
     rich::{RegisteredIcon, TextIconAlign},
 };
@@ -19,6 +20,7 @@ pub(crate) struct ShapingInput {
     pub(crate) spans: Vec<ShapingSpan>,
     pub(crate) objects: Vec<InlineObject>,
     pub(crate) map: Vec<ShapingMapSegment>,
+    pub(crate) effects: Vec<std::sync::Arc<super::effect::EffectCallback>>,
 }
 
 pub(crate) struct ResolvedInlineObject {
@@ -34,6 +36,21 @@ pub(crate) struct ShapingMapSegment {
     shaping: Range<usize>,
     semantic: Range<usize>,
     source: SourceSpan,
+    owner: ShapingOwner,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ShapingOwner {
+    Text,
+    Object(usize),
+    WrapHint,
+    FormattingControl,
+}
+
+pub(crate) struct MappedCluster {
+    pub(crate) source: SourceSpan,
+    pub(crate) semantic: Range<usize>,
+    pub(crate) owner: ShapingOwner,
 }
 
 pub(crate) struct ShapingSpan {
@@ -42,14 +59,33 @@ pub(crate) struct ShapingSpan {
     pub(crate) font: Option<Font>,
     pub(crate) size: Option<f32>,
     pub(crate) line_height: Option<f32>,
+    pub(crate) underline: bool,
+    pub(crate) strikethrough: bool,
     pub(crate) style: ResolvedStyleId,
     pub(crate) semantic: Range<usize>,
     pub(crate) source: SourceSpan,
-    pub(crate) object: Option<usize>,
+    pub(crate) owner: ShapingOwner,
+    pub(crate) effects: Vec<u32>,
 }
 
-pub(crate) fn prepare(document: SemanticDocument<'_>, wrap: bool) -> Result<ShapingInput, String> {
-    validate_source_map(&document)?;
+pub(crate) fn prepare(
+    document: SemanticDocument<'_>,
+    wrap: bool,
+    diagnostics: &mut DiagnosticSink,
+) -> Result<ShapingInput, String> {
+    if let Err(error) = validate_source_map(&document) {
+        let source = document
+            .source_map
+            .segments
+            .first()
+            .map(|segment| segment.source.clone())
+            .unwrap_or(SourceSpan {
+                id: super::TextSourceId::DEFAULT,
+                range: 0..0,
+            });
+        diagnostics.error(TextDiagnosticCode::CoordinateMappingFailure, &source, None);
+        return Err(error);
+    }
     let mut text = String::with_capacity(document.text.len() + document.objects.len() * 3);
     let mut spans = Vec::new();
     let mut object_index = 0;
@@ -93,6 +129,11 @@ pub(crate) fn prepare(document: SemanticDocument<'_>, wrap: bool) -> Result<Shap
                 shaping: start..text.len(),
                 semantic: semantic.clone(),
                 source: source.clone(),
+                owner: if is_bidi_formatting_control(character) {
+                    ShapingOwner::FormattingControl
+                } else {
+                    ShapingOwner::Text
+                },
             },
         );
         push_span(
@@ -100,9 +141,14 @@ pub(crate) fn prepare(document: SemanticDocument<'_>, wrap: bool) -> Result<Shap
             start..text.len(),
             style,
             run.style,
+            &run.effects,
             semantic.clone(),
             source.clone(),
-            None,
+            if is_bidi_formatting_control(character) {
+                ShapingOwner::FormattingControl
+            } else {
+                ShapingOwner::Text
+            },
         );
         if wrap && character == ' ' {
             let start = text.len();
@@ -117,6 +163,7 @@ pub(crate) fn prepare(document: SemanticDocument<'_>, wrap: bool) -> Result<Shap
                     shaping: start..text.len(),
                     semantic: semantic.end..semantic.end,
                     source: boundary.clone(),
+                    owner: ShapingOwner::WrapHint,
                 },
             );
             push_span(
@@ -124,9 +171,10 @@ pub(crate) fn prepare(document: SemanticDocument<'_>, wrap: bool) -> Result<Shap
                 start..text.len(),
                 style,
                 run.style,
+                &run.effects,
                 semantic.end..semantic.end,
                 boundary,
-                None,
+                ShapingOwner::WrapHint,
             );
         }
     }
@@ -149,6 +197,7 @@ pub(crate) fn prepare(document: SemanticDocument<'_>, wrap: bool) -> Result<Shap
         spans,
         objects: document.objects,
         map,
+        effects: document.effects,
     })
 }
 
@@ -173,6 +222,7 @@ fn append_objects(
                 shaping: start..text.len(),
                 semantic: object.at..object.at,
                 source: object.source.clone(),
+                owner: ShapingOwner::Object(*object_index),
             },
         );
         push_span(
@@ -180,9 +230,10 @@ fn append_objects(
             start..text.len(),
             style,
             object.style,
+            &object.effects,
             object.at..object.at,
             object.source.clone(),
-            Some(*object_index),
+            ShapingOwner::Object(*object_index),
         );
         *object_index = object_index
             .checked_add(1)
@@ -196,14 +247,16 @@ fn push_span(
     range: Range<usize>,
     resolved: &ResolvedStyle,
     style: ResolvedStyleId,
+    effects: &[u32],
     semantic: Range<usize>,
     source: SourceSpan,
-    object: Option<usize>,
+    owner: ShapingOwner,
 ) {
     if let Some(span) = spans.last_mut()
-        && span.object.is_none()
-        && object.is_none()
+        && span.owner == owner
+        && matches!(owner, ShapingOwner::Text | ShapingOwner::FormattingControl)
         && span.style == style
+        && span.effects == effects
         && span.range.end == range.start
         && span.semantic.end == semantic.start
         && span.source.id == source.id
@@ -219,19 +272,24 @@ fn push_span(
             font: resolved.font.clone(),
             size: resolved.size,
             line_height: resolved.line_height,
+            underline: resolved.underline,
+            strikethrough: resolved.strikethrough,
             style,
             semantic,
             source,
-            object,
+            owner,
+            effects: effects.to_vec(),
         });
     }
 }
 
 fn push_map(map: &mut Vec<ShapingMapSegment>, segment: ShapingMapSegment) {
     if let Some(previous) = map.last_mut() {
-        let previous_copied = previous.shaping.len() == previous.semantic.len()
+        let previous_copied = previous.owner == ShapingOwner::Text
+            && previous.shaping.len() == previous.semantic.len()
             && previous.semantic.len() == previous.source.range.len();
-        let segment_copied = segment.shaping.len() == segment.semantic.len()
+        let segment_copied = segment.owner == ShapingOwner::Text
+            && segment.shaping.len() == segment.semantic.len()
             && segment.semantic.len() == segment.source.range.len();
         if previous_copied
             && segment_copied
@@ -251,27 +309,87 @@ fn push_map(map: &mut Vec<ShapingMapSegment>, segment: ShapingMapSegment) {
 
 pub(crate) fn map_range(
     map: &[ShapingMapSegment],
+    spans: &[ShapingSpan],
     shaping: Range<usize>,
-) -> Result<(SourceSpan, Range<usize>), String> {
-    let first = map.partition_point(|segment| segment.shaping.end <= shaping.start);
-    let mut matches = map[first..]
+    diagnostics: &mut DiagnosticSink,
+) -> Result<MappedCluster, String> {
+    let first_index = map.partition_point(|segment| segment.shaping.end <= shaping.start);
+    let matches: Vec<_> = map[first_index..]
         .iter()
-        .take_while(|segment| segment.shaping.start < shaping.end);
-    let first = matches
-        .next()
-        .ok_or_else(|| "Shaping range has no semantic owner".to_string())?;
+        .take_while(|segment| segment.shaping.start < shaping.end)
+        .collect();
+    let Some(first) = matches
+        .iter()
+        .copied()
+        .find(|segment| {
+            !matches!(
+                segment.owner,
+                ShapingOwner::WrapHint | ShapingOwner::FormattingControl
+            )
+        })
+        .or_else(|| matches.first().copied())
+    else {
+        let source = SourceSpan {
+            id: super::TextSourceId::DEFAULT,
+            range: shaping.clone(),
+        };
+        diagnostics.error(TextDiagnosticCode::CoordinateMappingFailure, &source, None);
+        return Err("Shaping range has no semantic owner".into());
+    };
     let (mut source, mut semantic) = mapped_overlap(first, &shaping);
-    for segment in matches {
+    let mut expanded = false;
+    for segment in matches.iter().copied().filter(|segment| {
+        !matches!(
+            segment.owner,
+            ShapingOwner::WrapHint | ShapingOwner::FormattingControl
+        )
+    }) {
         let (next_source, next_semantic) = mapped_overlap(segment, &shaping);
-        if source.id != next_source.id {
-            return Err("Shaping cluster spans multiple source IDs".into());
+        expanded |= segment.shaping.start > shaping.start || segment.shaping.end < shaping.end;
+        if source.id == next_source.id {
+            source.range.start = source.range.start.min(next_source.range.start);
+            source.range.end = source.range.end.max(next_source.range.end);
+        } else {
+            diagnostics.error(
+                TextDiagnosticCode::ClusterBoundaryExpanded,
+                &source,
+                Some(next_source.range),
+            );
         }
-        source.range.start = source.range.start.min(next_source.range.start);
-        source.range.end = source.range.end.max(next_source.range.end);
         semantic.start = semantic.start.min(next_semantic.start);
         semantic.end = semantic.end.max(next_semantic.end);
     }
-    Ok((source, semantic))
+    if expanded {
+        diagnostics.error(TextDiagnosticCode::ClusterBoundaryExpanded, &source, None);
+    }
+
+    let first_span = spans
+        .iter()
+        .find(|span| span.range.contains(&shaping.start) || span.range.start == shaping.start)
+        .or_else(|| {
+            spans
+                .iter()
+                .find(|span| span.range.start < shaping.end && span.range.end > shaping.start)
+        });
+    if let Some(first_span) = first_span
+        && spans.iter().any(|span| {
+            span.range.start < shaping.end
+                && span.range.end > shaping.start
+                && span.style != first_span.style
+                && !matches!(
+                    span.owner,
+                    ShapingOwner::WrapHint | ShapingOwner::FormattingControl
+                )
+        })
+    {
+        diagnostics.error(TextDiagnosticCode::ClusterStyleConflict, &source, None);
+    }
+
+    Ok(MappedCluster {
+        source,
+        semantic,
+        owner: first.owner,
+    })
 }
 
 fn mapped_overlap(
@@ -395,7 +513,7 @@ pub(crate) fn patch_shape(
                 let semantic = spans
                     .get(span_index)
                     .ok_or_else(|| "Text glyph metadata is out of bounds".to_string())?;
-                let Some(index) = semantic.object else {
+                let ShapingOwner::Object(index) = semantic.owner else {
                     continue;
                 };
                 let object = objects

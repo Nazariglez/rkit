@@ -1,5 +1,6 @@
 use crate::text::{
-    Font, HAlign, QuadData, RichTextLayout, TextInfo, TextSystem, get_mut_text_system,
+    Font, HAlign, QuadData, RichTextLayout, TextInfo, TextPrepareScratch, TextSystem,
+    get_mut_text_system,
 };
 use crate::{Draw2D, DrawPipelineId, DrawingInfo, Element2D, PipelineContext, Transform2D};
 use corelib::gfx::{
@@ -7,12 +8,55 @@ use corelib::gfx::{
 };
 use corelib::math::{IntoVec2, Rect, Vec2, bvec2, vec2, vec3};
 use macros::Drawable2D;
-use std::cell::RefCell;
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+};
+
+#[derive(Default)]
+struct TextDrawScratch {
+    prepare: TextPrepareScratch,
+    quads: Vec<QuadData>,
+    vertices: Vec<f32>,
+    indices: Vec<u32>,
+}
 
 thread_local! {
-    static TEMP_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(vec![]) };
-    static TEMP_INDICES: RefCell<Vec<u32>> = const { RefCell::new(vec![]) };
-    static TEMP_QUADS: RefCell<Vec<QuadData>> = const { RefCell::new(vec![]) };
+    static TEXT_SCRATCH: RefCell<Vec<TextDrawScratch>> = const { RefCell::new(Vec::new()) };
+}
+
+struct ScratchLease(Option<TextDrawScratch>);
+
+impl ScratchLease {
+    fn take() -> Self {
+        Self(Some(
+            TEXT_SCRATCH.with(|pool| pool.borrow_mut().pop().unwrap_or_default()),
+        ))
+    }
+}
+
+impl Deref for ScratchLease {
+    type Target = TextDrawScratch;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().unwrap()
+    }
+}
+
+impl DerefMut for ScratchLease {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.as_mut().unwrap()
+    }
+}
+
+impl Drop for ScratchLease {
+    fn drop(&mut self) {
+        let mut scratch = self.0.take().unwrap();
+        scratch.quads.clear();
+        scratch.vertices.clear();
+        scratch.indices.clear();
+        TEXT_SCRATCH.with(|pool| pool.borrow_mut().push(scratch));
+    }
 }
 
 // language=wgsl
@@ -75,6 +119,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 "#;
 
 const SELECT_TEXTURE_SAMPLER: &str = r#"
+    if (in.tex == 6.0) {
+        return in_color;
+    }
     if (in.tex == 0.0) {
         let mask = textureSampleLevel(t_mask_linear, s_linear, in.uvs, 0.0);
         return vec4(in_color.rgb, mask.r * in_color.a);
@@ -302,56 +349,65 @@ impl Element2D for Text2D<'_> {
             outline_width: self.outline_width,
             strict_metrics: false,
         };
-        TEMP_QUADS.with_borrow_mut(|quads| {
-            let mut system = get_mut_text_system();
-            let mut layout = system.take_layout();
-            if let Err(error) = system.layout_text(&info, &mut layout) {
-                system.recycle_layout(layout);
-                drop(system);
-                draw.record_error(error);
-                return;
-            }
-
-            let size = layout.size;
-            let transform = finalized_text_transform(size, self.transform);
-            let resolution = match self.resolution_override {
-                Some(resolution) => resolution,
-                None => match draw.target_resolution(
-                    transform * corelib::math::Mat3::from_translation(self.position),
-                ) {
-                    Ok(resolution) => TextSystem::automatic_resolution(resolution),
-                    Err(error) => {
-                        system.recycle_layout(layout);
-                        drop(system);
-                        draw.record_error(error);
-                        return;
-                    }
-                },
-            };
-            let prepared = system.prepare_layout(&layout, resolution, quads);
+        let mut scratch = ScratchLease::take();
+        let mut system = get_mut_text_system();
+        let mut layout = system.take_layout();
+        if let Err(error) = system.layout_text(&info, &mut layout) {
             system.recycle_layout(layout);
             drop(system);
-            if let Err(error) = prepared {
-                draw.record_error(error);
-                return;
-            }
+            draw.record_error(error);
+            return;
+        }
 
-            set_text_bounds(draw, self.position, size, transform);
-            if quads.is_empty() {
-                return;
-            }
-            let outlined = self.outline_width > 0;
-            if self.shadow_offset.is_some() {
-                if outlined {
-                    add_text_to_batch(self, quads, transform, TextPass::ShadowOutline, draw);
+        let size = layout.size;
+        let transform = finalized_text_transform(size, self.transform);
+        let resolution = match self.resolution_override {
+            Some(resolution) => resolution,
+            None => match draw
+                .target_resolution(transform * corelib::math::Mat3::from_translation(self.position))
+            {
+                Ok(resolution) => TextSystem::automatic_resolution(resolution),
+                Err(error) => {
+                    system.recycle_layout(layout);
+                    drop(system);
+                    draw.record_error(error);
+                    return;
                 }
-                add_text_to_batch(self, quads, transform, TextPass::ShadowFill, draw);
-            }
+            },
+        };
+        let scratch = &mut *scratch;
+        let prepared = layout
+            .run_effects(0.0, 0, None, &mut scratch.prepare)
+            .and_then(|()| {
+                system.prepare_layout(
+                    &layout,
+                    resolution,
+                    &mut scratch.prepare,
+                    &mut scratch.quads,
+                )
+            });
+        system.recycle_layout(layout);
+        drop(system);
+        if let Err(error) = prepared {
+            draw.record_error(error);
+            return;
+        }
+
+        set_text_bounds(draw, self.position, size, transform);
+        if scratch.quads.is_empty() {
+            return;
+        }
+        let outlined = self.outline_width > 0;
+        if self.shadow_offset.is_some() {
             if outlined {
-                add_text_to_batch(self, quads, transform, TextPass::Outline, draw);
+                add_text_to_batch(self, transform, TextPass::ShadowOutline, scratch, draw);
             }
-            add_text_to_batch(self, quads, transform, TextPass::Fill, draw);
-        });
+            add_text_to_batch(self, transform, TextPass::ShadowFill, scratch, draw);
+        }
+        if outlined {
+            add_text_to_batch(self, transform, TextPass::Outline, scratch, draw);
+        }
+        add_text_to_batch(self, transform, TextPass::Fill, scratch, draw);
     }
 }
 
@@ -363,6 +419,9 @@ pub struct RichText2D<'a> {
     resolution_override: Option<f32>,
     shadow_color: Color,
     shadow_offset: Option<Vec2>,
+    reveal: Option<usize>,
+    effect_time: f32,
+    effect_seed: u64,
 
     #[transform_2d]
     transform: Option<Transform2D>,
@@ -377,6 +436,9 @@ impl<'a> RichText2D<'a> {
             resolution_override: None,
             shadow_color: Color::BLACK,
             shadow_offset: None,
+            reveal: None,
+            effect_time: 0.0,
+            effect_seed: 0,
             transform: None,
         }
     }
@@ -405,6 +467,21 @@ impl<'a> RichText2D<'a> {
         self.shadow_offset = Some(offset.into_vec2());
         self
     }
+
+    pub fn reveal(&mut self, units: usize) -> &mut Self {
+        self.reveal = Some(units);
+        self
+    }
+
+    pub fn effect_time(&mut self, time: f32) -> &mut Self {
+        self.effect_time = time;
+        self
+    }
+
+    pub fn effect_seed(&mut self, seed: u64) -> &mut Self {
+        self.effect_seed = seed;
+        self
+    }
 }
 
 impl Element2D for RichText2D<'_> {
@@ -425,53 +502,75 @@ impl Element2D for RichText2D<'_> {
             },
         };
 
-        TEMP_QUADS.with_borrow_mut(|quads| {
-            let mut system = get_mut_text_system();
-            let prepared = system.prepare_layout(&self.layout.layout, resolution, quads);
-            drop(system);
-            if let Err(error) = prepared {
+        let mut scratch = ScratchLease::take();
+        let scratch = &mut *scratch;
+        let prepared = self.layout.layout.run_effects(
+            self.effect_time,
+            self.effect_seed,
+            self.reveal,
+            &mut scratch.prepare,
+        );
+        if let Err(error) = prepared {
+            draw.record_error(error);
+            return;
+        }
+        let mut system = get_mut_text_system();
+        let prepared = system.prepare_layout(
+            &self.layout.layout,
+            resolution,
+            &mut scratch.prepare,
+            &mut scratch.quads,
+        );
+        drop(system);
+        if let Err(error) = prepared {
+            draw.record_error(error);
+            return;
+        }
+
+        let bounds = match effect_text_bounds(scratch, self.position, size, transform) {
+            Ok(bounds) => bounds,
+            Err(error) => {
                 draw.record_error(error);
                 return;
             }
-
-            set_text_bounds(draw, self.position, size, transform);
-            if let Some(offset) = self.shadow_offset {
-                add_quads_to_batch(
-                    quads,
-                    TextBatchPass {
-                        position: self.position + offset,
-                        alpha: self.alpha,
-                        solid_color: Some(self.shadow_color),
-                        outline: false,
-                        rgba_as_mask: true,
-                        transform,
-                        pip: DrawPipelineId::Text,
-                    },
-                    draw,
-                );
-            }
+        };
+        draw.last_text_bounds = bounds;
+        if let Some(offset) = self.shadow_offset {
             add_quads_to_batch(
-                quads,
                 TextBatchPass {
-                    position: self.position,
+                    position: self.position + offset,
                     alpha: self.alpha,
-                    solid_color: None,
+                    solid_color: Some(self.shadow_color),
                     outline: false,
-                    rgba_as_mask: false,
+                    rgba_as_mask: true,
                     transform,
                     pip: DrawPipelineId::Text,
                 },
+                scratch,
                 draw,
             );
-        });
+        }
+        add_quads_to_batch(
+            TextBatchPass {
+                position: self.position,
+                alpha: self.alpha,
+                solid_color: None,
+                outline: false,
+                rgba_as_mask: false,
+                transform,
+                pip: DrawPipelineId::Text,
+            },
+            scratch,
+            draw,
+        );
     }
 }
 
 fn add_text_to_batch(
     element: &Text2D,
-    quads: &[QuadData],
     transform: corelib::math::Mat3,
     pass: TextPass,
+    scratch: &mut TextDrawScratch,
     draw: &mut Draw2D,
 ) {
     let is_shadow = matches!(pass, TextPass::ShadowOutline | TextPass::ShadowFill);
@@ -488,7 +587,6 @@ fn add_text_to_batch(
     };
 
     add_quads_to_batch(
-        quads,
         TextBatchPass {
             position: element.position + offset,
             alpha: element.alpha,
@@ -498,59 +596,72 @@ fn add_text_to_batch(
             transform,
             pip: element.pip,
         },
+        scratch,
         draw,
     );
 }
 
-fn add_quads_to_batch(quads: &[QuadData], pass: TextBatchPass, draw: &mut Draw2D) {
-    TEMP_VERTICES.with_borrow_mut(|vertices| {
-        TEMP_INDICES.with_borrow_mut(|indices| {
-            vertices.clear();
-            indices.clear();
+fn add_quads_to_batch(pass: TextBatchPass, scratch: &mut TextDrawScratch, draw: &mut Draw2D) {
+    scratch.vertices.clear();
+    scratch.indices.clear();
 
-            for quad in quads {
-                let (xy, quad_size, uvs1, uvs2, source) = if pass.outline {
-                    let Some(outline) = &quad.outline else {
-                        continue;
-                    };
-                    (
-                        outline.xy + pass.position,
-                        outline.size,
-                        outline.uvs1,
-                        outline.uvs2,
-                        outline.source,
-                    )
-                } else {
-                    (
-                        quad.xy + pass.position,
-                        quad.size,
-                        quad.uvs1,
-                        quad.uvs2,
-                        quad.source,
-                    )
-                };
-                let source = if pass.rgba_as_mask {
-                    source.as_mask()
-                } else {
-                    source
-                };
-                let color = pass.solid_color.unwrap_or(quad.color);
-                let color = color.with_alpha(color.a * pass.alpha);
-                push_quad(
-                    vertices,
-                    indices,
-                    xy,
-                    quad_size,
-                    uvs1,
-                    uvs2,
-                    source,
-                    color,
-                    quad.pixelated,
-                );
-            }
-            submit_text_batch(draw, vertices, indices, pass.transform, pass.pip);
-        });
-    });
+    for quad in &scratch.quads {
+        let Some(state) = scratch.prepare.state(quad.atom) else {
+            continue;
+        };
+        let (xy, quad_size, uvs1, uvs2, source) = if pass.outline {
+            let Some(outline) = &quad.outline else {
+                continue;
+            };
+            (
+                outline.xy + pass.position,
+                outline.size,
+                outline.uvs1,
+                outline.uvs2,
+                outline.source,
+            )
+        } else {
+            (
+                quad.xy + pass.position,
+                quad.size,
+                quad.uvs1,
+                quad.uvs2,
+                quad.source,
+            )
+        };
+        if pass.rgba_as_mask && source == crate::text::TextSource::Solid {
+            continue;
+        }
+        let source = if pass.rgba_as_mask {
+            source.as_mask()
+        } else {
+            source
+        };
+        let color = match pass.solid_color {
+            Some(color) => color.with_alpha(color.a * state.alpha * pass.alpha),
+            None => quad.color.with_alpha(quad.color.a * pass.alpha),
+        };
+        push_quad(
+            &mut scratch.vertices,
+            &mut scratch.indices,
+            xy,
+            quad_size,
+            uvs1,
+            uvs2,
+            source,
+            color,
+            quad.pixelated,
+            state,
+            pass.position,
+        );
+    }
+    submit_text_batch(
+        draw,
+        &mut scratch.vertices,
+        &mut scratch.indices,
+        pass.transform,
+        pass.pip,
+    );
 }
 
 fn push_quad(
@@ -563,11 +674,15 @@ fn push_quad(
     source: crate::text::TextSource,
     color: Color,
     pixelated: bool,
+    state: crate::text::PreparedAtom,
+    effect_origin: Vec2,
 ) {
     let xy = if pixelated { xy.round() } else { xy };
     let size = if pixelated { size.round() } else { size };
-    let Vec2 { x: x1, y: y1 } = xy;
-    let Vec2 { x: x2, y: y2 } = xy + size;
+    let top_left = effect_point(xy, state, effect_origin);
+    let top_right = effect_point(xy + vec2(size.x, 0.0), state, effect_origin);
+    let bottom_left = effect_point(xy + vec2(0.0, size.y), state, effect_origin);
+    let bottom_right = effect_point(xy + size, state, effect_origin);
     let Vec2 { x: u1, y: v1 } = uvs1;
     let Vec2 { x: u2, y: v2 } = uvs2;
     let source = source.selector();
@@ -575,10 +690,10 @@ fn push_quad(
 
     #[rustfmt::skip]
     let quad = [
-        x1, y1, u1, v1, source, color.r, color.g, color.b, color.a,
-        x2, y1, u2, v1, source, color.r, color.g, color.b, color.a,
-        x1, y2, u1, v2, source, color.r, color.g, color.b, color.a,
-        x2, y2, u2, v2, source, color.r, color.g, color.b, color.a,
+        top_left.x, top_left.y, u1, v1, source, color.r, color.g, color.b, color.a,
+        top_right.x, top_right.y, u2, v1, source, color.r, color.g, color.b, color.a,
+        bottom_left.x, bottom_left.y, u1, v2, source, color.r, color.g, color.b, color.a,
+        bottom_right.x, bottom_right.y, u2, v2, source, color.r, color.g, color.b, color.a,
     ];
     #[rustfmt::skip]
     let quad_indices = [
@@ -606,6 +721,58 @@ fn submit_text_batch(
         transform,
         sprite: None,
     });
+}
+
+fn effect_point(point: Vec2, state: crate::text::PreparedAtom, origin: Vec2) -> Vec2 {
+    let center = state.center + origin;
+    let point = (point - center) * state.scale;
+    let (sin, cos) = state.rotation.sin_cos();
+    vec2(point.x * cos - point.y * sin, point.x * sin + point.y * cos) + center + state.translation
+}
+
+fn effect_text_bounds(
+    scratch: &TextDrawScratch,
+    position: Vec2,
+    size: Vec2,
+    matrix: corelib::math::Mat3,
+) -> Result<Rect, String> {
+    if scratch.quads.len() > u32::MAX as usize / 4 {
+        return Err("Text geometry exceeds index limits".into());
+    }
+    let mut min = Vec2::splat(f32::INFINITY);
+    let mut max = Vec2::splat(f32::NEG_INFINITY);
+    let mut add = |point: Vec2| -> Result<(), String> {
+        let point = matrix * vec3(point.x, point.y, 1.0);
+        if ![point.x, point.y].into_iter().all(f32::is_finite) {
+            return Err("Text effect produced non-finite geometry".into());
+        }
+        let point = vec2(point.x, point.y);
+        min = min.min(point);
+        max = max.max(point);
+        Ok(())
+    };
+    for corner in [
+        position,
+        position + vec2(size.x, 0.0),
+        position + vec2(0.0, size.y),
+        position + size,
+    ] {
+        add(corner)?;
+    }
+    for quad in &scratch.quads {
+        let Some(state) = scratch.prepare.state(quad.atom) else {
+            return Err("Text prepared atom is missing".into());
+        };
+        for corner in [
+            quad.xy + position,
+            quad.xy + position + vec2(quad.size.x, 0.0),
+            quad.xy + position + vec2(0.0, quad.size.y),
+            quad.xy + position + quad.size,
+        ] {
+            add(effect_point(corner, state, position))?;
+        }
+    }
+    Ok(Rect::from_min_max(min, max))
 }
 
 fn finalized_text_transform(size: Vec2, transform: Option<Transform2D>) -> corelib::math::Mat3 {

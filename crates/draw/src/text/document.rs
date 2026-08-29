@@ -1,9 +1,11 @@
 use super::{
-    Color, Font, TextIcons, TextStyles,
+    Color, Font, TextEffects, TextIcons, TextStyles,
+    effect::EffectCallback,
     rich::{RegisteredIcon, RichTextIcon, TextIconAlign, is_markup_id},
     style::TextStyle,
 };
-use std::{borrow::Cow, ops::Range};
+use std::{borrow::Cow, ops::Range, sync::Arc};
+use unicode_segmentation::UnicodeSegmentation;
 
 const DIAGNOSTIC_LIMIT: usize = 64;
 
@@ -13,7 +15,8 @@ pub(crate) struct SemanticDocument<'a> {
     pub(crate) runs: Vec<StyleRun>,
     pub(crate) objects: Vec<InlineObject>,
     pub(crate) source_map: SourceMap,
-    pub(crate) diagnostics: Vec<TextDiagnostic>,
+    pub(crate) diagnostics: DiagnosticSink,
+    pub(crate) effects: Vec<Arc<EffectCallback>>,
 }
 
 #[derive(Clone)]
@@ -22,6 +25,8 @@ pub(crate) struct ResolvedStyle {
     pub(crate) font: Option<Font>,
     pub(crate) size: Option<f32>,
     pub(crate) line_height: Option<f32>,
+    pub(crate) underline: bool,
+    pub(crate) strikethrough: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,6 +35,7 @@ pub(crate) struct ResolvedStyleId(pub(crate) usize);
 pub(crate) struct StyleRun {
     pub(crate) range: Range<usize>,
     pub(crate) style: ResolvedStyleId,
+    pub(crate) effects: Vec<u32>,
 }
 
 #[derive(Clone, Copy)]
@@ -44,6 +50,7 @@ pub(crate) struct InlineObject {
     pub(crate) icon: RegisteredIcon,
     pub(crate) options: IconOptions,
     pub(crate) style: ResolvedStyleId,
+    pub(crate) effects: Vec<u32>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,6 +107,7 @@ pub enum TextDiagnosticSeverity {
 pub enum TextDiagnosticCode {
     UnknownIconId,
     UnknownStyleId,
+    UnknownEffectId,
     InvalidIdentifier,
     MalformedTag,
     UnmatchedClosingTag,
@@ -184,6 +192,21 @@ impl DiagnosticSink {
     pub(crate) fn finish(self) -> Vec<TextDiagnostic> {
         self.diagnostics
     }
+
+    pub(crate) fn error(
+        &mut self,
+        code: TextDiagnosticCode,
+        source: &SourceSpan,
+        related_range: Option<Range<usize>>,
+    ) {
+        self.push(
+            code,
+            TextDiagnosticSeverity::Error,
+            source.id,
+            source.range.clone(),
+            related_range,
+        );
+    }
 }
 
 /// Owned rich content whose text is always literal.
@@ -203,6 +226,8 @@ enum DocumentOp {
     LeaveSource,
     EnterStyle(String),
     LeaveStyle,
+    EnterEffect(String),
+    LeaveEffect,
     Icon(RichTextIcon),
 }
 
@@ -266,6 +291,20 @@ impl RichTextDocument {
         self
     }
 
+    pub fn effect<I, F>(&mut self, id: I, write: F) -> &mut Self
+    where
+        I: Into<String>,
+        F: FnOnce(&mut RichTextDocument),
+    {
+        let mut body = Self::new();
+        write(&mut body);
+        self.ops.push(DocumentOp::EnterEffect(id.into()));
+        self.ops.append(&mut body.ops);
+        self.ops.push(DocumentOp::LeaveEffect);
+        self.content += body.content;
+        self
+    }
+
     /// Appends one unresolved Sprite icon occurrence.
     pub fn icon<I>(&mut self, icon: I) -> &mut Self
     where
@@ -283,6 +322,8 @@ struct ComputedStyle {
     font: Option<Font>,
     size: Option<f32>,
     line_height: Option<f32>,
+    underline: bool,
+    strikethrough: bool,
 }
 
 impl ComputedStyle {
@@ -292,6 +333,8 @@ impl ComputedStyle {
             font: patch.font.clone().or_else(|| self.font.clone()),
             size: patch.size.or(self.size),
             line_height: patch.line_height.or(self.line_height),
+            underline: patch.underline.unwrap_or(self.underline),
+            strikethrough: patch.strikethrough.unwrap_or(self.strikethrough),
         }
     }
 }
@@ -309,6 +352,9 @@ pub(crate) struct SemanticResolver<'a> {
     source: TextSourceId,
     source_stack: Vec<TextSourceId>,
     diagnostics: DiagnosticSink,
+    effects: Option<&'a TextEffects>,
+    effect_callbacks: Vec<Arc<EffectCallback>>,
+    effect_stack: Vec<u32>,
 }
 
 impl<'a> SemanticResolver<'a> {
@@ -316,6 +362,7 @@ impl<'a> SemanticResolver<'a> {
         color: Color,
         icons: Option<&'a TextIcons>,
         styles: Option<&'a TextStyles>,
+        effects: Option<&'a TextEffects>,
     ) -> Self {
         Self {
             icons,
@@ -330,11 +377,16 @@ impl<'a> SemanticResolver<'a> {
                 font: None,
                 size: None,
                 line_height: None,
+                underline: false,
+                strikethrough: false,
             },
             style_stack: Vec::new(),
             source: TextSourceId::DEFAULT,
             source_stack: Vec::new(),
             diagnostics: DiagnosticSink::default(),
+            effects,
+            effect_callbacks: Vec::new(),
+            effect_stack: Vec::new(),
         }
     }
 
@@ -358,6 +410,16 @@ impl<'a> SemanticResolver<'a> {
     pub(crate) fn push_color(&mut self, color: Color) {
         self.style_stack.push(self.style.clone());
         self.style.color = color;
+    }
+
+    pub(crate) fn push_underline(&mut self) {
+        self.style_stack.push(self.style.clone());
+        self.style.underline = true;
+    }
+
+    pub(crate) fn push_strikethrough(&mut self) {
+        self.style_stack.push(self.style.clone());
+        self.style.strikethrough = true;
     }
 
     pub(crate) fn push_style(&mut self, id: &str) -> Result<(), String> {
@@ -385,6 +447,28 @@ impl<'a> SemanticResolver<'a> {
         true
     }
 
+    pub(crate) fn push_effect(&mut self, id: &str) -> Result<(), String> {
+        if !is_markup_id(id) {
+            return Err(format!("Invalid text effect ID '{id}'"));
+        }
+        let effect = self
+            .effects
+            .and_then(|effects| effects.get(id))
+            .ok_or_else(|| format!("Unknown text effect ID '{id}'"))?;
+        let index = u32::try_from(self.effect_callbacks.len())
+            .map_err(|_| "Text effect occurrence count exceeds limits")?;
+        self.effect_callbacks.push(effect.0.clone());
+        self.effect_stack.push(index);
+        Ok(())
+    }
+
+    pub(crate) fn pop_effect(&mut self) -> Result<(), String> {
+        self.effect_stack
+            .pop()
+            .ok_or_else(|| "Text effect scope is unbalanced".to_string())?;
+        Ok(())
+    }
+
     pub(crate) fn pop_style(&mut self) -> Result<(), String> {
         self.style = self
             .style_stack
@@ -399,6 +483,8 @@ impl<'a> SemanticResolver<'a> {
             font: self.style.font.clone(),
             size: self.style.size,
             line_height: self.style.line_height,
+            underline: self.style.underline,
+            strikethrough: self.style.strikethrough,
         };
         if let Some(index) = self
             .resolved_styles
@@ -422,6 +508,7 @@ impl<'a> SemanticResolver<'a> {
         self.runs.push(StyleRun {
             range: start..self.text.len(),
             style,
+            effects: self.effect_stack.clone(),
         });
         self.source_map.segments.push(SourceMapSegment {
             source,
@@ -480,6 +567,7 @@ impl<'a> SemanticResolver<'a> {
             icon,
             options,
             style,
+            effects: self.effect_stack.clone(),
         });
         self.source_map.segments.push(SourceMapSegment {
             source,
@@ -512,7 +600,8 @@ impl<'a> SemanticResolver<'a> {
             runs: self.runs,
             objects: self.objects,
             source_map: self.source_map,
-            diagnostics: self.diagnostics.finish(),
+            diagnostics: self.diagnostics,
+            effects: self.effect_callbacks,
         }
     }
 }
@@ -522,6 +611,7 @@ fn merge_runs(runs: &mut Vec<StyleRun>, styles: &[ResolvedStyle]) {
     for run in runs.drain(..) {
         if let Some(previous) = merged.last_mut()
             && previous.range.end == run.range.start
+            && previous.effects == run.effects
             && same_style(&styles[previous.style.0], &styles[run.style.0])
         {
             previous.range.end = run.range.end;
@@ -537,6 +627,8 @@ fn same_style(left: &ResolvedStyle, right: &ResolvedStyle) -> bool {
         && left.font.as_ref().map(Font::id) == right.font.as_ref().map(Font::id)
         && left.size == right.size
         && left.line_height == right.line_height
+        && left.underline == right.underline
+        && left.strikethrough == right.strikethrough
 }
 
 pub(crate) fn resolve_document(
@@ -544,8 +636,10 @@ pub(crate) fn resolve_document(
     color: Color,
     icons: Option<&TextIcons>,
     styles: Option<&TextStyles>,
+    effects: Option<&TextEffects>,
 ) -> Result<SemanticDocument<'static>, String> {
-    let mut resolver = SemanticResolver::new(color, icons, styles);
+    let mut resolver = SemanticResolver::new(color, icons, styles, effects);
+    let mut boundaries = Vec::new();
     for op in &document.ops {
         match op {
             DocumentOp::Text(text) => {
@@ -559,10 +653,30 @@ pub(crate) fn resolve_document(
                     SourceMapKind::Copied,
                 );
             }
-            DocumentOp::EnterSource(source) => resolver.push_source(*source),
-            DocumentOp::LeaveSource => resolver.pop_source()?,
-            DocumentOp::EnterStyle(id) => resolver.push_style(id)?,
-            DocumentOp::LeaveStyle => resolver.pop_style()?,
+            DocumentOp::EnterSource(source) => {
+                boundaries.push(resolver.text.len());
+                resolver.push_source(*source);
+            }
+            DocumentOp::LeaveSource => {
+                boundaries.push(resolver.text.len());
+                resolver.pop_source()?;
+            }
+            DocumentOp::EnterStyle(id) => {
+                boundaries.push(resolver.text.len());
+                resolver.push_style(id)?;
+            }
+            DocumentOp::LeaveStyle => {
+                boundaries.push(resolver.text.len());
+                resolver.pop_style()?;
+            }
+            DocumentOp::EnterEffect(id) => {
+                boundaries.push(resolver.text.len());
+                resolver.push_effect(id)?;
+            }
+            DocumentOp::LeaveEffect => {
+                boundaries.push(resolver.text.len());
+                resolver.pop_effect()?;
+            }
             DocumentOp::Icon(icon) => {
                 let at = resolver.text.len();
                 resolver.icon(
@@ -578,6 +692,18 @@ pub(crate) fn resolve_document(
                 )?;
             }
         }
+    }
+    let grapheme_boundaries: Vec<_> = resolver
+        .text
+        .grapheme_indices(true)
+        .map(|(index, _)| index)
+        .chain(std::iter::once(resolver.text.len()))
+        .collect();
+    if boundaries
+        .into_iter()
+        .any(|boundary| grapheme_boundaries.binary_search(&boundary).is_err())
+    {
+        return Err("Rich text document scope splits a grapheme cluster".into());
     }
     Ok(resolver.finish())
 }
