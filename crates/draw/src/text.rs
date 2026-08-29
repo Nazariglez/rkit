@@ -24,12 +24,16 @@ mod shaping;
 mod style;
 
 pub use document::{
-    TextDiagnostic, TextDiagnosticCode, TextDiagnosticSeverity, TextMarkupPolicy, TextSourceId,
+    RichTextDocument, TextDiagnostic, TextDiagnosticCode, TextDiagnosticSeverity, TextMarkupPolicy,
+    TextSourceId,
 };
 use icon_baker::{IconBake, IconBaker};
 use layout::{AtomKind, LayoutAtoms, LineGeometry, LogicalBounds, NewAtom};
 use rich::{PixelRect, RegisteredIcon};
-pub use rich::{RichTextBuilder, RichTextLayout, RichTextLine, TextIcons, rich_text};
+pub use rich::{
+    RichDocumentBuilder, RichTextBuilder, RichTextIcon, RichTextLayout, RichTextLine,
+    TextIconAlign, TextIcons, rich_document, rich_text,
+};
 pub use style::{TextStyle, TextStyles};
 use utils::helpers::closest_multiple_of;
 
@@ -520,10 +524,10 @@ impl TextSystem {
             markup::plain(text.text, text.default_color, text.wrap_width.is_some())
         };
         let shaping = shaping::prepare(document, text.wrap_width.is_some())?;
-        self.layout_markup(text, shaping, layout)
+        self.layout_document(text, shaping, layout)
     }
 
-    pub(crate) fn layout_markup(
+    pub(crate) fn layout_document(
         &mut self,
         text: &TextInfo,
         markup: shaping::ShapingInput,
@@ -573,17 +577,39 @@ impl TextSystem {
             .objects
             .into_iter()
             .map(|object| {
-                let height = object.height.or(object.size).unwrap_or(text.font_size);
+                let style = markup
+                    .styles
+                    .get(object.style.0)
+                    .ok_or_else(|| "Text icon has an invalid resolved style".to_string())?;
+                let height = object
+                    .options
+                    .height
+                    .or(style.size)
+                    .unwrap_or(text.font_size);
+                let object_font = style.font.as_ref().or(font);
+                let logical_line_height = style.line_height.or(text.line_height);
+                let style_size = style.size.unwrap_or(text.font_size);
+                let (_, _, line_height) =
+                    validate_style_metrics(object_font, style_size, logical_line_height)?;
                 let source_size = object.icon.source_size();
-                let width = height * source_size.x as f32 / source_size.y as f32;
-                if !height.is_finite() || height <= 0.0 || !width.is_finite() || width <= 0.0 {
+                let ratio = source_size.x as f32 / source_size.y as f32;
+                let width = height * ratio;
+                if !height.is_finite()
+                    || height <= 0.0
+                    || !ratio.is_finite()
+                    || ratio <= 0.0
+                    || !width.is_finite()
+                    || width <= 0.0
+                {
                     return Err("Text icon has an invalid logical size".to_string());
                 }
-                Ok(PlacedIcon {
+                Ok(shaping::ResolvedInlineObject {
                     icon: object.icon,
-                    pos: Vec2::ZERO,
                     size: vec2(width, height),
-                    color: object.color,
+                    align: object.options.align,
+                    line_height,
+                    style: object.style,
+                    source: object.source,
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -660,15 +686,23 @@ impl TextSystem {
                     .flat_map(|glyph| [glyph.x, glyph.x + glyph.w])
                     .reduce(f32::min)
                     .unwrap_or(0.0);
-                let tallest_icon = layout_line
+                let mut baseline_icon = 0.0_f32;
+                let mut non_baseline_icon = 0.0_f32;
+                for icon in layout_line
                     .glyphs
                     .iter()
                     .filter_map(|glyph| glyph.metadata.checked_sub(1))
                     .filter_map(|index| markup.spans.get(index))
                     .filter_map(|span| span.object)
                     .filter_map(|index| objects.get(index))
-                    .map(|icon| icon.size.y)
-                    .fold(0.0_f32, f32::max);
+                {
+                    match icon.align {
+                        rich::TextIconAlign::Baseline => {
+                            baseline_icon = baseline_icon.max(icon.size.y)
+                        }
+                        _ => non_baseline_icon = non_baseline_icon.max(icon.size.y),
+                    }
+                }
                 let tallest_run = layout_line
                     .glyphs
                     .iter()
@@ -676,9 +710,14 @@ impl TextSystem {
                     .filter_map(|index| span_profiles.get(index))
                     .map(|profile| profile.2)
                     .fold(base_line_height, f32::max);
-                let text_height = layout_line.max_ascent + layout_line.max_descent;
-                let height = tallest_run.max(tallest_icon).max(text_height);
-                let baseline = line_top + (height - text_height) * 0.5 + layout_line.max_ascent;
+                let text_ascent = layout_line.max_ascent;
+                let text_descent = layout_line.max_descent;
+                let base_ascent = text_ascent.max(baseline_icon);
+                let content_height = base_ascent + text_descent;
+                let height = tallest_run.max(content_height).max(non_baseline_icon);
+                let baseline = line_top + (height - content_height) * 0.5 + base_ascent;
+                let mut content_top = baseline - text_ascent;
+                let mut content_bottom = baseline + text_descent;
                 for glyph in &layout_line.glyphs {
                     if shaping::is_bidi_control_cluster(line_text, glyph.start, glyph.end) {
                         continue;
@@ -700,9 +739,20 @@ impl TextSystem {
                         let icon = objects
                             .get(index)
                             .ok_or_else(|| "Text icon metadata is out of bounds".to_string())?;
+                        if source_range != icon.source {
+                            return Err("Text icon source identity changed during shaping".into());
+                        }
+                        let y = match icon.align {
+                            rich::TextIconAlign::Middle => line_top + (height - icon.size.y) * 0.5,
+                            rich::TextIconAlign::Baseline => baseline - icon.size.y,
+                            rich::TextIconAlign::Top => line_top,
+                            rich::TextIconAlign::Bottom => line_top + height - icon.size.y,
+                        };
+                        content_top = content_top.min(y);
+                        content_bottom = content_bottom.max(y + icon.size.y);
                         layout.items.push(LayoutItem::Icon(PlacedIcon {
                             icon: icon.icon.clone(),
-                            pos: vec2(glyph.x - min_x, line_top + (height - icon.size.y) * 0.5),
+                            pos: vec2(glyph.x - min_x, y),
                             size: icon.size,
                             color: span.color,
                         }));
@@ -713,12 +763,12 @@ impl TextSystem {
                             semantic: semantic_range,
                             shaping: shaping_range,
                             line: line_index,
-                            style: span_index,
+                            style: icon.style,
                             bidi_level: glyph.level.number(),
                             advance: glyph.w,
                             bounds: LogicalBounds {
                                 x: glyph.x - min_x,
-                                y: line_top + (height - icon.size.y) * 0.5,
+                                y,
                                 width: icon.size.x,
                                 height: icon.size.y,
                             },
@@ -751,7 +801,7 @@ impl TextSystem {
                             semantic: semantic_range,
                             shaping: shaping_range,
                             line: line_index,
-                            style: span_index,
+                            style: span.style,
                             bidi_level: glyph.level.number(),
                             advance: glyph.w,
                             bounds: LogicalBounds {
@@ -770,8 +820,8 @@ impl TextSystem {
                     width: size.x,
                     height,
                     baseline,
-                    ascent: layout_line.max_ascent,
-                    descent: layout_line.max_descent,
+                    ascent: baseline - content_top,
+                    descent: content_bottom - baseline,
                     visual_atoms: visual_start..layout.atoms.atom_count(),
                     x_offset: 0.0,
                     rtl: layout_line

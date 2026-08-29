@@ -1,12 +1,10 @@
 use super::document::{
-    DiagnosticSink, InlineObject, SemanticDocument, SourceMap, SourceMapKind, SourceMapSegment,
-    StyleRun, TextDiagnosticCode, TextDiagnosticSeverity, TextSourceId,
+    IconOptions, SemanticDocument, SemanticResolver, SourceMapKind, SourceSpan, TextDiagnosticCode,
+    TextSourceId,
 };
-use super::rich::RegisteredIcon;
-use super::style::{TextStyle, TextStyles};
-use super::{Color, Font, TextIcons};
-use corelib::math::UVec2;
-use std::{borrow::Cow, ops::Range};
+use super::rich::TextIconAlign;
+use super::{Color, TextIcons, TextStyles};
+use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 const COLOR_TAG_OPEN: &str = "[color:#";
@@ -28,73 +26,32 @@ pub(crate) enum MarkupMode<'a> {
     },
 }
 
-#[derive(Clone)]
-struct RunStyle {
-    color: Color,
-    font: Option<Font>,
-    size: Option<f32>,
-    line_height: Option<f32>,
-}
-
-impl RunStyle {
-    fn patched(&self, patch: &TextStyle) -> Self {
-        Self {
-            color: patch.color.unwrap_or(self.color),
-            font: patch.font.clone().or_else(|| self.font.clone()),
-            size: patch.size.or(self.size),
-            line_height: patch.line_height.or(self.line_height),
-        }
-    }
-}
-
-enum Token<'a> {
-    Text(&'a str, RunStyle, Range<usize>),
-    OwnedText(String, RunStyle, Range<usize>),
-    Icon(RegisteredIcon, Option<f32>, RunStyle, Range<usize>),
-}
-
 pub(crate) fn plain(input: &str, color: Color, _wrap: bool) -> SemanticDocument<'_> {
-    let runs = (!input.is_empty())
-        .then(|| StyleRun {
+    let mut resolver = SemanticResolver::new(color, None, None);
+    resolver.text(
+        input,
+        SourceSpan {
+            id: TextSourceId::DEFAULT,
             range: 0..input.len(),
-            color,
-            font: None,
-            size: None,
-            line_height: None,
-        })
-        .into_iter()
-        .collect();
-    SemanticDocument {
-        text: Cow::Borrowed(input),
-        runs,
-        objects: Vec::new(),
-        source_map: SourceMap {
-            segments: (!input.is_empty())
-                .then(|| SourceMapSegment {
-                    source: 0..input.len(),
-                    semantic: 0..input.len(),
-                    kind: SourceMapKind::Copied,
-                })
-                .into_iter()
-                .collect(),
         },
-        diagnostics: Vec::new(),
-    }
+        SourceMapKind::Copied,
+    );
+    resolver.finish()
 }
 
 pub(crate) fn parse(
     input: &str,
     default_color: Color,
     mode: MarkupMode<'_>,
-    wrap: bool,
+    _wrap: bool,
 ) -> SemanticDocument<'static> {
     match mode {
         MarkupMode::Extended {
             icons,
             styles,
             source_id,
-        } => parse_extended(input, default_color, icons, styles, source_id, wrap),
-        mode => parse_legacy(input, default_color, mode, wrap),
+        } => parse_extended(input, default_color, icons, styles, source_id),
+        mode => parse_legacy(input, default_color, mode),
     }
 }
 
@@ -102,10 +59,14 @@ fn parse_legacy(
     input: &str,
     default_color: Color,
     mode: MarkupMode<'_>,
-    wrap: bool,
 ) -> SemanticDocument<'static> {
-    let mut tokens = Vec::new();
-    let mut colors = vec![default_color];
+    let icons = match mode {
+        MarkupMode::Rich(icons) => Some(icons),
+        _ => None,
+    };
+    let rich = icons.is_some();
+    let mut resolver = SemanticResolver::new(default_color, icons, None);
+    let mut colors = 0_usize;
     let mut cursor = 0;
     let mut text_start = 0;
 
@@ -115,18 +76,14 @@ fn parse_legacy(
         if remaining.starts_with(COLOR_TAG_OPEN) {
             let after_prefix = &remaining[COLOR_TAG_OPEN.len()..];
             if let Some((color, consumed)) = try_parse_open_tag(after_prefix) {
-                push_text(
-                    &mut tokens,
-                    &input[text_start..tag_start],
-                    RunStyle {
-                        color: *colors.last().unwrap(),
-                        font: None,
-                        size: None,
-                        line_height: None,
-                    },
+                append_markup_text(
+                    &mut resolver,
+                    input,
                     text_start..tag_start,
+                    TextSourceId::DEFAULT,
                 );
-                colors.push(color);
+                resolver.push_color(color);
+                colors += 1;
                 cursor = tag_start + COLOR_TAG_OPEN.len() + consumed;
                 text_start = cursor;
             } else {
@@ -135,28 +92,24 @@ fn parse_legacy(
             continue;
         }
         if remaining.starts_with(COLOR_TAG_CLOSE) {
-            push_text(
-                &mut tokens,
-                &input[text_start..tag_start],
-                RunStyle {
-                    color: *colors.last().unwrap(),
-                    font: None,
-                    size: None,
-                    line_height: None,
-                },
+            append_markup_text(
+                &mut resolver,
+                input,
                 text_start..tag_start,
+                TextSourceId::DEFAULT,
             );
-            if colors.len() > 1 {
-                colors.pop();
+            if colors > 0 {
+                resolver.pop_style().expect("tracked color scope");
+                colors -= 1;
             }
             cursor = tag_start + COLOR_TAG_CLOSE.len();
             text_start = cursor;
             continue;
         }
-        let MarkupMode::Rich(icons) = mode else {
+        if !rich {
             cursor = tag_start + 1;
             continue;
-        };
+        }
         if !remaining.starts_with(ICON_TAG_OPEN) {
             cursor = tag_start + 1;
             continue;
@@ -166,58 +119,52 @@ fn parse_legacy(
             break;
         };
         let tag = &input[tag_start..tag_end];
-        let Some((id, height)) = parse_icon_tag(tag) else {
+        let Some((id, height)) = parse_legacy_icon(tag) else {
             debug_warn("Malformed text icon tag");
             cursor = tag_end;
             continue;
         };
-        let Some(icon) = icons.registered(id) else {
-            debug_warn("Unknown text icon");
-            cursor = tag_end;
-            continue;
+        let source = SourceSpan {
+            id: TextSourceId::DEFAULT,
+            range: tag_start..tag_end,
         };
-        if height.is_some_and(|height| !icon_size_is_finite(height, icon.source_size())) {
-            debug_warn("Invalid text icon size");
+        let options = IconOptions {
+            height,
+            align: TextIconAlign::Middle,
+        };
+        if resolver.validate_icon(id, options).is_err() {
+            debug_warn("Unknown or invalid text icon");
             cursor = tag_end;
             continue;
         }
-        let style = RunStyle {
-            color: *colors.last().unwrap(),
-            font: None,
-            size: None,
-            line_height: None,
-        };
-        push_text(
-            &mut tokens,
-            &input[text_start..tag_start],
-            style.clone(),
+        append_markup_text(
+            &mut resolver,
+            input,
             text_start..tag_start,
+            TextSourceId::DEFAULT,
         );
-        tokens.push(Token::Icon(icon.clone(), height, style, tag_start..tag_end));
+        resolver
+            .icon(id, options, source)
+            .expect("validated legacy icon");
         cursor = tag_end;
         text_start = cursor;
     }
-    push_text(
-        &mut tokens,
-        &input[text_start..],
-        RunStyle {
-            color: *colors.last().unwrap(),
-            font: None,
-            size: None,
-            line_height: None,
-        },
+    append_markup_text(
+        &mut resolver,
+        input,
         text_start..input.len(),
+        TextSourceId::DEFAULT,
     );
-    normalize(tokens, wrap, Vec::new())
+    resolver.finish()
 }
 
 #[derive(Clone)]
 enum EventKind {
     OpenColor(Color),
     CloseColor,
-    OpenStyle(TextStyle),
+    OpenStyle(String),
     CloseStyle,
-    Icon(RegisteredIcon, Option<f32>),
+    Icon(String, IconOptions),
     Escape,
 }
 
@@ -251,63 +198,71 @@ fn parse_extended(
     icons: Option<&TextIcons>,
     styles: Option<&TextStyles>,
     source_id: TextSourceId,
-    wrap: bool,
 ) -> SemanticDocument<'static> {
-    let mut sink = DiagnosticSink::default();
-    let mut events = scan_extended(input, icons, styles, source_id, &mut sink);
-    match_ranges(&mut events, source_id, &mut sink);
+    let mut resolver = SemanticResolver::new(default_color, icons, styles);
+    resolver.set_source(source_id);
+    let mut events = scan_extended(input, source_id, &mut resolver);
+    match_ranges(&mut events, source_id, &mut resolver);
 
-    let mut tokens = Vec::new();
-    let mut stack = Vec::new();
-    let mut style = RunStyle {
-        color: default_color,
-        font: None,
-        size: None,
-        line_height: None,
-    };
     let mut cursor = 0;
+    let mut active_scopes = Vec::new();
     for event in events.into_iter().filter(|event| event.active) {
         let range = event.range;
-        push_text(
-            &mut tokens,
-            &input[cursor..range.start],
-            style.clone(),
-            cursor..range.start,
-        );
+        append_markup_text(&mut resolver, input, cursor..range.start, source_id);
+        let source = SourceSpan {
+            id: source_id,
+            range: range.clone(),
+        };
         match event.kind {
             EventKind::OpenColor(color) => {
-                stack.push(style.clone());
-                style.color = color;
+                resolver.push_color(color);
+                active_scopes.push(true);
             }
-            EventKind::OpenStyle(patch) => {
-                stack.push(style.clone());
-                style = style.patched(&patch);
+            EventKind::OpenStyle(id) => {
+                let active = super::rich::is_markup_id(&id) && resolver.try_push_style(&id);
+                if !active {
+                    let code = if super::rich::is_markup_id(&id) {
+                        TextDiagnosticCode::UnknownStyleId
+                    } else {
+                        TextDiagnosticCode::InvalidIdentifier
+                    };
+                    resolver.diagnostic(code, source.clone(), None);
+                    resolver.text(&input[range.clone()], source, SourceMapKind::Copied);
+                }
+                active_scopes.push(active);
             }
             EventKind::CloseColor | EventKind::CloseStyle => {
-                style = stack
-                    .pop()
-                    .ok_or_else(|| "matched text range lost its opening state")
-                    .unwrap();
+                if active_scopes.pop().unwrap_or(false) {
+                    resolver.pop_style().expect("matched markup scope");
+                } else {
+                    resolver.text(&input[range.clone()], source, SourceMapKind::Copied);
+                }
             }
-            EventKind::Icon(icon, height) => {
-                tokens.push(Token::Icon(icon, height, style.clone(), range.clone()));
+            EventKind::Icon(id, options) => {
+                if let Err(error) = resolver.icon(&id, options, source.clone()) {
+                    let code = if !super::rich::is_markup_id(&id) {
+                        TextDiagnosticCode::InvalidIdentifier
+                    } else if error.contains("size") {
+                        TextDiagnosticCode::MalformedTag
+                    } else {
+                        TextDiagnosticCode::UnknownIconId
+                    };
+                    resolver.diagnostic(code, source.clone(), None);
+                    resolver.text(&input[range.clone()], source, SourceMapKind::Copied);
+                }
             }
-            EventKind::Escape => {
-                tokens.push(Token::OwnedText("[".into(), style.clone(), range.clone()))
-            }
+            EventKind::Escape => resolver.text("[", source, SourceMapKind::EscapedOpen),
         }
         cursor = range.end;
     }
-    push_text(&mut tokens, &input[cursor..], style, cursor..input.len());
-    normalize(tokens, wrap, sink.finish())
+    append_markup_text(&mut resolver, input, cursor..input.len(), source_id);
+    resolver.finish()
 }
 
 fn scan_extended(
     input: &str,
-    icons: Option<&TextIcons>,
-    styles: Option<&TextStyles>,
     source_id: TextSourceId,
-    sink: &mut DiagnosticSink,
+    resolver: &mut SemanticResolver<'_>,
 ) -> Vec<Event> {
     let mut boundaries = vec![false; input.len() + 1];
     boundaries[input.len()] = true;
@@ -328,7 +283,6 @@ fn scan_extended(
             cursor = start + 2;
             continue;
         }
-
         let remaining = &input[start..];
         let reserved = remaining.starts_with("[color")
             || remaining.starts_with("[/color")
@@ -341,11 +295,13 @@ fn scan_extended(
                 while end > start && !input.is_char_boundary(end) {
                     end -= 1;
                 }
-                diagnostic(
-                    sink,
+                resolver.diagnostic(
                     TextDiagnosticCode::TagLengthLimitExceeded,
-                    source_id,
-                    start..end,
+                    SourceSpan {
+                        id: source_id,
+                        range: start..end,
+                    },
+                    None,
                 );
             }
             cursor = start + 1;
@@ -363,85 +319,24 @@ fn scan_extended(
             .strip_prefix(STYLE_TAG_OPEN)
             .and_then(|tag| tag.strip_suffix(']'))
         {
-            if !super::rich::is_markup_id(id) {
-                diagnostic(
-                    sink,
-                    TextDiagnosticCode::InvalidIdentifier,
-                    source_id,
-                    start..end,
-                );
-                None
-            } else if let Some(style) = styles.and_then(|styles| styles.get(id)) {
-                Some(EventKind::OpenStyle(style.clone()))
-            } else {
-                diagnostic(
-                    sink,
-                    TextDiagnosticCode::UnknownStyleId,
-                    source_id,
-                    start..end,
-                );
-                None
-            }
+            Some(EventKind::OpenStyle(id.to_owned()))
         } else if tag == STYLE_TAG_CLOSE {
             Some(EventKind::CloseStyle)
         } else if tag.starts_with(ICON_TAG_OPEN) {
-            match parse_icon_tag(tag) {
-                Some((id, height)) => match icons.and_then(|icons| icons.registered(id)) {
-                    Some(icon)
-                        if !height.is_some_and(|height| {
-                            !icon_size_is_finite(height, icon.source_size())
-                        }) =>
-                    {
-                        Some(EventKind::Icon(icon.clone(), height))
-                    }
-                    Some(_) => {
-                        diagnostic(
-                            sink,
-                            TextDiagnosticCode::MalformedTag,
-                            source_id,
-                            start..end,
-                        );
-                        None
-                    }
-                    None => {
-                        diagnostic(
-                            sink,
-                            TextDiagnosticCode::UnknownIconId,
-                            source_id,
-                            start..end,
-                        );
-                        None
-                    }
-                },
-                None => {
-                    diagnostic(
-                        sink,
-                        TextDiagnosticCode::MalformedTag,
-                        source_id,
-                        start..end,
-                    );
-                    None
-                }
-            }
+            parse_extended_icon(tag).map(|(id, options)| EventKind::Icon(id.to_owned(), options))
         } else {
-            if reserved {
-                diagnostic(
-                    sink,
-                    TextDiagnosticCode::MalformedTag,
-                    source_id,
-                    start..end,
-                );
-            }
             None
         };
 
         if let Some(kind) = kind {
             if !boundaries[start] || !boundaries[end] {
-                diagnostic(
-                    sink,
+                resolver.diagnostic(
                     TextDiagnosticCode::GraphemeBoundary,
-                    source_id,
-                    start..end,
+                    SourceSpan {
+                        id: source_id,
+                        range: start..end,
+                    },
+                    None,
                 );
             } else {
                 let active = !kind.is_open() && !kind.is_close();
@@ -451,23 +346,36 @@ fn scan_extended(
                     active,
                 });
             }
+        } else if reserved {
+            resolver.diagnostic(
+                TextDiagnosticCode::MalformedTag,
+                SourceSpan {
+                    id: source_id,
+                    range: start..end,
+                },
+                None,
+            );
         }
         cursor = end;
     }
     events
 }
 
-fn match_ranges(events: &mut [Event], source_id: TextSourceId, sink: &mut DiagnosticSink) {
+fn match_ranges(
+    events: &mut [Event],
+    source_id: TextSourceId,
+    resolver: &mut SemanticResolver<'_>,
+) {
     let mut stack: Vec<usize> = Vec::new();
     let mut overflow_depth = 0_usize;
     for index in 0..events.len() {
         if events[index].kind.is_open() {
             if overflow_depth > 0 || stack.len() == MAX_NESTING {
-                diagnostic(
-                    sink,
+                diagnose_event(
+                    resolver,
                     TextDiagnosticCode::NestingLimitExceeded,
                     source_id,
-                    events[index].range.clone(),
+                    &events[index],
                 );
                 overflow_depth = overflow_depth.saturating_add(1);
             } else {
@@ -484,11 +392,11 @@ fn match_ranges(events: &mut [Event], source_id: TextSourceId, sink: &mut Diagno
         }
         let name = events[index].kind.range_name().unwrap();
         let Some(&open_index) = stack.last() else {
-            diagnostic(
-                sink,
+            diagnose_event(
+                resolver,
                 TextDiagnosticCode::UnmatchedClosingTag,
                 source_id,
-                events[index].range.clone(),
+                &events[index],
             );
             continue;
         };
@@ -498,137 +406,65 @@ fn match_ranges(events: &mut [Event], source_id: TextSourceId, sink: &mut Diagno
             events[index].active = true;
             continue;
         }
-        if let Some(position) = stack
+        let related = events[open_index].range.clone();
+        let code = if let Some(position) = stack
             .iter()
             .rposition(|open| events[*open].kind.range_name() == Some(name))
         {
-            let related = events[open_index].range.clone();
-            sink.push(
-                TextDiagnosticCode::CrossedRange,
-                TextDiagnosticSeverity::Error,
-                source_id,
-                events[index].range.clone(),
-                Some(related),
-            );
             stack.truncate(position);
+            TextDiagnosticCode::CrossedRange
         } else {
-            let related = events[open_index].range.clone();
-            sink.push(
-                TextDiagnosticCode::MismatchedClosingTag,
-                TextDiagnosticSeverity::Error,
-                source_id,
-                events[index].range.clone(),
-                Some(related),
-            );
-        }
+            TextDiagnosticCode::MismatchedClosingTag
+        };
+        resolver.diagnostic(
+            code,
+            SourceSpan {
+                id: source_id,
+                range: events[index].range.clone(),
+            },
+            Some(related),
+        );
     }
     for open in stack {
-        diagnostic(
-            sink,
+        diagnose_event(
+            resolver,
             TextDiagnosticCode::UnclosedRange,
             source_id,
-            events[open].range.clone(),
+            &events[open],
         );
     }
 }
 
-fn diagnostic(
-    sink: &mut DiagnosticSink,
+fn diagnose_event(
+    resolver: &mut SemanticResolver<'_>,
     code: TextDiagnosticCode,
     source_id: TextSourceId,
+    event: &Event,
+) {
+    resolver.diagnostic(
+        code,
+        SourceSpan {
+            id: source_id,
+            range: event.range.clone(),
+        },
+        None,
+    );
+}
+
+fn append_markup_text(
+    resolver: &mut SemanticResolver<'_>,
+    input: &str,
     range: Range<usize>,
+    source_id: TextSourceId,
 ) {
-    sink.push(code, TextDiagnosticSeverity::Error, source_id, range, None);
-}
-
-fn push_text<'a>(
-    tokens: &mut Vec<Token<'a>>,
-    text: &'a str,
-    style: RunStyle,
-    source: Range<usize>,
-) {
-    if !text.is_empty() {
-        tokens.push(Token::Text(text, style, source));
-    }
-}
-
-fn normalize(
-    tokens: Vec<Token<'_>>,
-    _wrap: bool,
-    diagnostics: Vec<super::TextDiagnostic>,
-) -> SemanticDocument<'static> {
-    let mut text = String::new();
-    let mut runs: Vec<StyleRun> = Vec::new();
-    let mut objects = Vec::new();
-    let mut segments = Vec::new();
-    for token in tokens {
-        let start = text.len();
-        let (style, source, kind) = match token {
-            Token::Text(span_text, style, source) => {
-                text.push_str(span_text);
-                (style, source, SourceMapKind::Copied)
-            }
-            Token::OwnedText(span_text, style, source) => {
-                text.push_str(&span_text);
-                (style, source, SourceMapKind::EscapedOpen)
-            }
-            Token::Icon(icon, height, style, source) => {
-                let object = objects.len();
-                objects.push(InlineObject {
-                    at: start,
-                    source: source.clone(),
-                    icon,
-                    height,
-                    color: style.color,
-                    font: style.font.clone(),
-                    size: style.size,
-                    line_height: style.line_height,
-                });
-                segments.push(SourceMapSegment {
-                    source,
-                    semantic: start..start,
-                    kind: SourceMapKind::InlineObject(object),
-                });
-                continue;
-            }
-        };
-        if start == text.len() {
-            continue;
-        }
-        segments.push(SourceMapSegment {
-            source,
-            semantic: start..text.len(),
-            kind,
-        });
-        if let Some(run) = runs.last_mut()
-            && run.color == style.color
-            && same_font(&run.font, &style.font)
-            && run.size == style.size
-            && run.line_height == style.line_height
-            && run.range.end == start
-        {
-            run.range.end = text.len();
-        } else {
-            runs.push(StyleRun {
-                range: start..text.len(),
-                color: style.color,
-                font: style.font,
-                size: style.size,
-                line_height: style.line_height,
-            });
-        }
-    }
-    SemanticDocument {
-        text: Cow::Owned(text),
-        runs,
-        objects,
-        source_map: SourceMap { segments },
-        diagnostics,
-    }
-}
-
-fn same_font(left: &Option<Font>, right: &Option<Font>) -> bool {
-    left.as_ref().map(Font::id) == right.as_ref().map(Font::id)
+    resolver.text(
+        &input[range.clone()],
+        SourceSpan {
+            id: source_id,
+            range,
+        },
+        SourceMapKind::Copied,
+    );
 }
 
 fn bounded_tag_end(input: &str, start: usize, limit: usize) -> Option<usize> {
@@ -640,7 +476,7 @@ fn bounded_tag_end(input: &str, start: usize, limit: usize) -> Option<usize> {
         .map(|offset| start + offset + 1)
 }
 
-fn parse_icon_tag(tag: &str) -> Option<(&str, Option<f32>)> {
+fn parse_legacy_icon(tag: &str) -> Option<(&str, Option<f32>)> {
     let body = tag.strip_prefix(ICON_TAG_OPEN)?.strip_suffix(']')?;
     let (id, height) = match body.split_once(" size=") {
         Some((id, size)) => (id, Some(parse_icon_size(size)?)),
@@ -650,6 +486,41 @@ fn parse_icon_tag(tag: &str) -> Option<(&str, Option<f32>)> {
         return None;
     }
     Some((id, height))
+}
+
+fn parse_extended_icon(tag: &str) -> Option<(&str, IconOptions)> {
+    let body = tag.strip_prefix(ICON_TAG_OPEN)?.strip_suffix(']')?;
+    let mut parts = body.split(' ');
+    let id = parts.next()?;
+    if !super::rich::is_markup_id(id) {
+        return None;
+    }
+    let mut height = None;
+    let mut align = TextIconAlign::Middle;
+    if let Some(part) = parts.next() {
+        if let Some(size) = part.strip_prefix("size=") {
+            height = Some(parse_icon_size(size)?);
+            if let Some(part) = parts.next() {
+                align = parse_align(part.strip_prefix("align=")?)?;
+            }
+        } else {
+            align = parse_align(part.strip_prefix("align=")?)?;
+        }
+    }
+    parts
+        .next()
+        .is_none()
+        .then_some((id, IconOptions { height, align }))
+}
+
+fn parse_align(value: &str) -> Option<TextIconAlign> {
+    match value {
+        "middle" => Some(TextIconAlign::Middle),
+        "baseline" => Some(TextIconAlign::Baseline),
+        "top" => Some(TextIconAlign::Top),
+        "bottom" => Some(TextIconAlign::Bottom),
+        _ => None,
+    }
 }
 
 fn parse_icon_size(value: &str) -> Option<f32> {
@@ -677,10 +548,6 @@ fn parse_icon_size(value: &str) -> Option<f32> {
     }
     let size = value.parse::<f32>().ok()?;
     (size.is_finite() && size > 0.0).then_some(size)
-}
-
-fn icon_size_is_finite(height: f32, size: UVec2) -> bool {
-    (height * size.x as f32 / size.y as f32).is_finite()
 }
 
 #[cfg(debug_assertions)]
@@ -747,7 +614,7 @@ mod tests {
         let markup = parse("Hello 世界", Color::WHITE, MarkupMode::Colors, false);
         assert_eq!(markup.text, "Hello 世界");
         assert_eq!(markup.runs.len(), 1);
-        assert_eq!(markup.runs[0].color, Color::WHITE);
+        assert_eq!(markup.styles[markup.runs[0].style.0].color, Color::WHITE);
         assert_eq!(&markup.text[markup.runs[0].range.clone()], "Hello 世界");
     }
 
@@ -760,7 +627,10 @@ mod tests {
             false,
         );
         assert_eq!(markup.text, "red");
-        assert_eq!(markup.runs[0].color, Color::hex(0xFF000080));
+        assert_eq!(
+            markup.styles[markup.runs[0].style.0].color,
+            Color::hex(0xFF000080)
+        );
         assert_eq!(parse_hex_color("X"), Color::hex(0x000000FF));
     }
 
@@ -774,9 +644,18 @@ mod tests {
         );
         assert_eq!(markup.text, "red green back");
         assert_eq!(markup.runs.len(), 3);
-        assert_eq!(markup.runs[0].color, Color::hex(0xFF0000FF));
-        assert_eq!(markup.runs[1].color, Color::hex(0x00FF00FF));
-        assert_eq!(markup.runs[2].color, Color::hex(0xFF0000FF));
+        assert_eq!(
+            markup.styles[markup.runs[0].style.0].color,
+            Color::hex(0xFF0000FF)
+        );
+        assert_eq!(
+            markup.styles[markup.runs[1].style.0].color,
+            Color::hex(0x00FF00FF)
+        );
+        assert_eq!(
+            markup.styles[markup.runs[2].style.0].color,
+            Color::hex(0xFF0000FF)
+        );
     }
 
     #[test]

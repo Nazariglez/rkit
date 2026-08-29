@@ -1,3 +1,4 @@
+use super::document::{ResolvedStyleId, SourceSpan};
 use std::ops::Range;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -17,7 +18,7 @@ pub(crate) struct LogicalBounds {
 pub(crate) struct LayoutAtom {
     kind: AtomKind,
     items: Range<usize>,
-    source: Range<usize>,
+    source: SourceSpan,
     semantic: Range<usize>,
     shaping: Range<usize>,
     line: u32,
@@ -31,11 +32,11 @@ pub(crate) struct LayoutAtom {
 pub(crate) struct NewAtom {
     pub(crate) kind: AtomKind,
     pub(crate) item: usize,
-    pub(crate) source: Range<usize>,
+    pub(crate) source: SourceSpan,
     pub(crate) semantic: Range<usize>,
     pub(crate) shaping: Range<usize>,
     pub(crate) line: usize,
-    pub(crate) style: usize,
+    pub(crate) style: ResolvedStyleId,
     pub(crate) bidi_level: u8,
     pub(crate) advance: f32,
     pub(crate) bounds: LogicalBounds,
@@ -70,7 +71,7 @@ impl LayoutAtoms {
     pub(crate) fn push(&mut self, new: NewAtom) -> Result<(), String> {
         let line = u32::try_from(new.line).map_err(|_| "Text line count exceeds layout limits")?;
         let style =
-            u32::try_from(new.style).map_err(|_| "Text style count exceeds layout limits")?;
+            u32::try_from(new.style.0).map_err(|_| "Text style count exceeds layout limits")?;
         if let Some(atom) = self.atoms.last_mut()
             && atom.kind == new.kind
             && atom.line == line
@@ -157,7 +158,7 @@ impl LayoutAtoms {
             }
         }
         for atom in &self.atoms {
-            if atom.source.start > atom.source.end
+            if atom.source.range.start > atom.source.range.end
                 || atom.semantic.start > atom.semantic.end
                 || atom.semantic.end > semantic_len
                 || atom.shaping.start > atom.shaping.end

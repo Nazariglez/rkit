@@ -34,13 +34,11 @@ impl RegisteredIcon {
                 "Text icon '{id}' frame must be a positive pixel-aligned rectangle"
             ));
         }
-
         let end = frame.origin + frame.size;
         let texture_size = sprite.texture().size();
         if end.x > texture_size.x || end.y > texture_size.y {
             return Err(format!("Text icon '{id}' frame exceeds its source texture"));
         }
-
         let atlas = match (sprite.sampler().min_filter(), sprite.sampler().mag_filter()) {
             (TextureFilter::Linear, TextureFilter::Linear) => TextAtlas::RgbaLinear,
             (TextureFilter::Nearest, TextureFilter::Nearest) => TextAtlas::RgbaNearest,
@@ -50,7 +48,6 @@ impl RegisteredIcon {
                 ));
             }
         };
-
         Ok(Self {
             sprite,
             frame: PixelRect {
@@ -72,7 +69,6 @@ pub struct TextIcons {
 }
 
 impl TextIcons {
-    /// Creates an owned Sprite registry. Markup IDs are identifiers, not paths.
     pub fn new<K, I>(icons: I) -> Result<Self, String>
     where
         K: Into<String>,
@@ -122,33 +118,60 @@ pub(crate) fn is_markup_id(id: &str) -> bool {
         .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-pub fn rich_text(text: &str) -> RichTextBuilder<'_> {
-    RichTextBuilder {
-        text,
-        icons: None,
-        styles: None,
-        source_id: TextSourceId::DEFAULT,
-        markup_policy: None,
-        font: None,
-        size: 14.0,
-        line_height: None,
-        max_width: None,
-        color: Color::WHITE,
-        resolution: None,
-        h_align: HAlign::Left,
+/// Vertical placement of a Sprite icon within its final line box.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum TextIconAlign {
+    #[default]
+    Middle,
+    Baseline,
+    Top,
+    Bottom,
+}
+
+/// An unresolved programmatic Sprite icon occurrence.
+#[derive(Clone, Debug)]
+pub struct RichTextIcon {
+    pub(crate) id: String,
+    pub(crate) height: Option<f32>,
+    pub(crate) align: TextIconAlign,
+}
+
+impl RichTextIcon {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            height: None,
+            align: TextIconAlign::Middle,
+        }
+    }
+
+    pub fn size(mut self, size: f32) -> Self {
+        self.height = Some(size);
+        self
+    }
+
+    pub fn align(mut self, align: TextIconAlign) -> Self {
+        self.align = align;
+        self
     }
 }
 
-/// Builds an owned rich-text snapshot from borrowed markup, fonts, and icon registry data.
-/// The snapshot retains used icon sources, so the registry and markup may be dropped afterward.
-/// Shadows are configured when drawing; outlines are unsupported. Changing layout properties
-/// requires rebuilding the snapshot.
-pub struct RichTextBuilder<'a> {
-    text: &'a str,
+impl From<&str> for RichTextIcon {
+    fn from(id: &str) -> Self {
+        Self::new(id)
+    }
+}
+
+impl From<String> for RichTextIcon {
+    fn from(id: String) -> Self {
+        Self::new(id)
+    }
+}
+
+struct RichConfig<'a> {
     icons: Option<&'a TextIcons>,
     styles: Option<&'a TextStyles>,
-    source_id: TextSourceId,
-    markup_policy: Option<TextMarkupPolicy>,
     font: Option<&'a super::Font>,
     size: f32,
     line_height: Option<f32>,
@@ -158,16 +181,89 @@ pub struct RichTextBuilder<'a> {
     h_align: HAlign,
 }
 
-impl<'a> RichTextBuilder<'a> {
-    pub fn icons(mut self, icons: &'a TextIcons) -> Self {
-        self.icons = Some(icons);
-        self
+impl Default for RichConfig<'_> {
+    fn default() -> Self {
+        Self {
+            icons: None,
+            styles: None,
+            font: None,
+            size: 14.0,
+            line_height: None,
+            max_width: None,
+            color: Color::WHITE,
+            resolution: None,
+            h_align: HAlign::Left,
+        }
     }
+}
 
-    pub fn styles(mut self, styles: &'a TextStyles) -> Self {
-        self.styles = Some(styles);
-        self
+pub fn rich_text(text: &str) -> RichTextBuilder<'_> {
+    RichTextBuilder {
+        text,
+        source_id: TextSourceId::DEFAULT,
+        markup_policy: None,
+        config: RichConfig::default(),
     }
+}
+
+pub struct RichTextBuilder<'a> {
+    text: &'a str,
+    source_id: TextSourceId,
+    markup_policy: Option<TextMarkupPolicy>,
+    config: RichConfig<'a>,
+}
+
+macro_rules! config_setters {
+    () => {
+        pub fn icons(mut self, icons: &'a TextIcons) -> Self {
+            self.config.icons = Some(icons);
+            self
+        }
+        pub fn styles(mut self, styles: &'a TextStyles) -> Self {
+            self.config.styles = Some(styles);
+            self
+        }
+        pub fn font(mut self, font: &'a super::Font) -> Self {
+            self.config.font = Some(font);
+            self
+        }
+        pub fn size(mut self, size: f32) -> Self {
+            self.config.size = size;
+            self
+        }
+        pub fn line_height(mut self, height: f32) -> Self {
+            self.config.line_height = Some(height);
+            self
+        }
+        pub fn max_width(mut self, width: f32) -> Self {
+            self.config.max_width = Some(width);
+            self
+        }
+        pub fn color(mut self, color: Color) -> Self {
+            self.config.color = color;
+            self
+        }
+        pub fn resolution(mut self, resolution: f32) -> Self {
+            self.config.resolution = Some(resolution);
+            self
+        }
+        pub fn h_align_left(mut self) -> Self {
+            self.config.h_align = HAlign::Left;
+            self
+        }
+        pub fn h_align_center(mut self) -> Self {
+            self.config.h_align = HAlign::Center;
+            self
+        }
+        pub fn h_align_right(mut self) -> Self {
+            self.config.h_align = HAlign::Right;
+            self
+        }
+    };
+}
+
+impl<'a> RichTextBuilder<'a> {
+    config_setters!();
 
     pub fn source_id(mut self, source_id: TextSourceId) -> Self {
         self.source_id = source_id;
@@ -179,98 +275,94 @@ impl<'a> RichTextBuilder<'a> {
         self
     }
 
-    pub fn font(mut self, font: &'a super::Font) -> Self {
-        self.font = Some(font);
-        self
-    }
-
-    pub fn size(mut self, size: f32) -> Self {
-        self.size = size;
-        self
-    }
-
-    pub fn line_height(mut self, height: f32) -> Self {
-        self.line_height = Some(height);
-        self
-    }
-
-    pub fn max_width(mut self, width: f32) -> Self {
-        self.max_width = Some(width);
-        self
-    }
-
-    pub fn color(mut self, color: Color) -> Self {
-        self.color = color;
-        self
-    }
-
-    pub fn resolution(mut self, resolution: f32) -> Self {
-        self.resolution = Some(resolution);
-        self
-    }
-
-    pub fn h_align_left(mut self) -> Self {
-        self.h_align = HAlign::Left;
-        self
-    }
-
-    pub fn h_align_center(mut self) -> Self {
-        self.h_align = HAlign::Center;
-        self
-    }
-
-    pub fn h_align_right(mut self) -> Self {
-        self.h_align = HAlign::Right;
-        self
-    }
-
-    /// Builds an owned layout snapshot. Changing text, registry, or style requires a new layout.
     pub fn layout(self) -> Result<RichTextLayout, String> {
-        let info = TextInfo {
-            font: self.font,
-            text: self.text,
-            wrap_width: self.max_width,
-            font_size: self.size,
-            line_height: self.line_height,
-            h_align: self.h_align,
-            color_tags: true,
-            default_color: self.color,
-            outline_width: 0,
-            strict_metrics: true,
-        };
-        let extended = self.styles.is_some() || self.markup_policy.is_some();
+        let extended = self.config.styles.is_some() || self.markup_policy.is_some();
         let mode = if extended {
             markup::MarkupMode::Extended {
-                icons: self.icons,
-                styles: self.styles,
+                icons: self.config.icons,
+                styles: self.config.styles,
                 source_id: self.source_id,
             }
         } else {
-            match self.icons {
+            match self.config.icons {
                 Some(icons) => markup::MarkupMode::Rich(icons),
                 None => markup::MarkupMode::Colors,
             }
         };
-        let mut document = markup::parse(self.text, self.color, mode, self.max_width.is_some());
-        let diagnostics = std::mem::take(&mut document.diagnostics);
-        if self.markup_policy == Some(TextMarkupPolicy::Strict)
-            && let Some(error) = document::strict_error(&diagnostics)
-        {
-            return Err(error);
-        }
-        let shaping = super::shaping::prepare(document, self.max_width.is_some())?;
-        let mut system = get_mut_text_system();
-        let mut layout = TextLayout::default();
-        system.layout_markup(&info, shaping, &mut layout)?;
-        Ok(RichTextLayout {
-            layout,
-            resolution: self.resolution,
-            diagnostics,
-        })
+        let document = markup::parse(
+            self.text,
+            self.config.color,
+            mode,
+            self.config.max_width.is_some(),
+        );
+        compile_document(
+            document,
+            &self.config,
+            self.markup_policy == Some(TextMarkupPolicy::Strict),
+        )
     }
 }
 
-/// A target-independent semantic layout snapshot with final bounds and line geometry.
+/// Builds an owned layout snapshot from a literal programmatic document.
+pub fn rich_document(document: &document::RichTextDocument) -> RichDocumentBuilder<'_> {
+    RichDocumentBuilder {
+        document,
+        config: RichConfig::default(),
+    }
+}
+
+/// Configures layout of an owned literal rich-text document.
+pub struct RichDocumentBuilder<'a> {
+    document: &'a document::RichTextDocument,
+    config: RichConfig<'a>,
+}
+
+impl<'a> RichDocumentBuilder<'a> {
+    config_setters!();
+
+    pub fn layout(self) -> Result<RichTextLayout, String> {
+        let document = document::resolve_document(
+            self.document,
+            self.config.color,
+            self.config.icons,
+            self.config.styles,
+        )?;
+        compile_document(document, &self.config, false)
+    }
+}
+
+fn compile_document(
+    mut document: document::SemanticDocument<'_>,
+    config: &RichConfig<'_>,
+    strict: bool,
+) -> Result<RichTextLayout, String> {
+    let diagnostics = std::mem::take(&mut document.diagnostics);
+    let shaping = super::shaping::prepare(document, config.max_width.is_some())?;
+    let info = TextInfo {
+        font: config.font,
+        text: "",
+        wrap_width: config.max_width,
+        font_size: config.size,
+        line_height: config.line_height,
+        h_align: config.h_align,
+        color_tags: true,
+        default_color: config.color,
+        outline_width: 0,
+        strict_metrics: true,
+    };
+    let mut system = get_mut_text_system();
+    let mut layout = TextLayout::default();
+    system.layout_document(&info, shaping, &mut layout)?;
+    if strict && let Some(error) = document::strict_error(&diagnostics) {
+        return Err(error);
+    }
+    Ok(RichTextLayout {
+        layout,
+        resolution: config.resolution,
+        diagnostics,
+    })
+}
+
 pub struct RichTextLayout {
     pub(crate) layout: TextLayout,
     pub(crate) resolution: Option<f32>,
@@ -295,7 +387,6 @@ impl RichTextLayout {
     }
 }
 
-/// Final immutable geometry for one rich-text line in its owning layout snapshot.
 #[derive(Copy, Clone, Debug)]
 pub struct RichTextLine {
     pub(crate) offset_y: f32,

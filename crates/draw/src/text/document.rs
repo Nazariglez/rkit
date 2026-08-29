@@ -1,33 +1,55 @@
-use super::{Color, Font, rich::RegisteredIcon};
+use super::{
+    Color, Font, TextIcons, TextStyles,
+    rich::{RegisteredIcon, RichTextIcon, TextIconAlign, is_markup_id},
+    style::TextStyle,
+};
 use std::{borrow::Cow, ops::Range};
 
 const DIAGNOSTIC_LIMIT: usize = 64;
 
 pub(crate) struct SemanticDocument<'a> {
     pub(crate) text: Cow<'a, str>,
+    pub(crate) styles: Vec<ResolvedStyle>,
     pub(crate) runs: Vec<StyleRun>,
     pub(crate) objects: Vec<InlineObject>,
     pub(crate) source_map: SourceMap,
     pub(crate) diagnostics: Vec<TextDiagnostic>,
 }
 
-pub(crate) struct StyleRun {
-    pub(crate) range: Range<usize>,
+#[derive(Clone)]
+pub(crate) struct ResolvedStyle {
     pub(crate) color: Color,
     pub(crate) font: Option<Font>,
     pub(crate) size: Option<f32>,
     pub(crate) line_height: Option<f32>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ResolvedStyleId(pub(crate) usize);
+
+pub(crate) struct StyleRun {
+    pub(crate) range: Range<usize>,
+    pub(crate) style: ResolvedStyleId,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct IconOptions {
+    pub(crate) height: Option<f32>,
+    pub(crate) align: TextIconAlign,
+}
+
 pub(crate) struct InlineObject {
     pub(crate) at: usize,
-    pub(crate) source: Range<usize>,
+    pub(crate) source: SourceSpan,
     pub(crate) icon: RegisteredIcon,
-    pub(crate) height: Option<f32>,
-    pub(crate) color: Color,
-    pub(crate) font: Option<Font>,
-    pub(crate) size: Option<f32>,
-    pub(crate) line_height: Option<f32>,
+    pub(crate) options: IconOptions,
+    pub(crate) style: ResolvedStyleId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SourceSpan {
+    pub(crate) id: TextSourceId,
+    pub(crate) range: Range<usize>,
 }
 
 #[derive(Default)]
@@ -36,7 +58,7 @@ pub(crate) struct SourceMap {
 }
 
 pub(crate) struct SourceMapSegment {
-    pub(crate) source: Range<usize>,
+    pub(crate) source: SourceSpan,
     pub(crate) semantic: Range<usize>,
     pub(crate) kind: SourceMapKind,
 }
@@ -162,6 +184,402 @@ impl DiagnosticSink {
     pub(crate) fn finish(self) -> Vec<TextDiagnostic> {
         self.diagnostics
     }
+}
+
+/// Owned rich content whose text is always literal.
+///
+/// Named styles and icons are resolved only when the document is laid out. Source and style
+/// scopes are balanced by their closures, and completed layouts do not borrow the document.
+#[derive(Default)]
+pub struct RichTextDocument {
+    ops: Vec<DocumentOp>,
+    content: usize,
+}
+
+#[derive(Clone)]
+enum DocumentOp {
+    Text(String),
+    EnterSource(TextSourceId),
+    LeaveSource,
+    EnterStyle(String),
+    LeaveStyle,
+    Icon(RichTextIcon),
+}
+
+impl RichTextDocument {
+    pub const fn new() -> Self {
+        Self {
+            ops: Vec::new(),
+            content: 0,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.ops.clear();
+        self.content = 0;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.content == 0
+    }
+
+    /// Appends copied literal text without parsing markup or escape syntax.
+    pub fn text(&mut self, text: &str) -> &mut Self {
+        if text.is_empty() {
+            return self;
+        }
+        if let Some(DocumentOp::Text(current)) = self.ops.last_mut() {
+            current.push_str(text);
+        } else {
+            self.ops.push(DocumentOp::Text(text.to_owned()));
+        }
+        self.content += text.len();
+        self
+    }
+
+    /// Appends content associated with a source ID.
+    pub fn source<F>(&mut self, source_id: TextSourceId, write: F) -> &mut Self
+    where
+        F: FnOnce(&mut RichTextDocument),
+    {
+        let mut body = Self::new();
+        write(&mut body);
+        self.ops.push(DocumentOp::EnterSource(source_id));
+        self.ops.append(&mut body.ops);
+        self.ops.push(DocumentOp::LeaveSource);
+        self.content += body.content;
+        self
+    }
+
+    /// Appends content using a named style resolved during layout.
+    pub fn style<I, F>(&mut self, id: I, write: F) -> &mut Self
+    where
+        I: Into<String>,
+        F: FnOnce(&mut RichTextDocument),
+    {
+        let mut body = Self::new();
+        write(&mut body);
+        self.ops.push(DocumentOp::EnterStyle(id.into()));
+        self.ops.append(&mut body.ops);
+        self.ops.push(DocumentOp::LeaveStyle);
+        self.content += body.content;
+        self
+    }
+
+    /// Appends one unresolved Sprite icon occurrence.
+    pub fn icon<I>(&mut self, icon: I) -> &mut Self
+    where
+        I: Into<RichTextIcon>,
+    {
+        self.ops.push(DocumentOp::Icon(icon.into()));
+        self.content += 1;
+        self
+    }
+}
+
+#[derive(Clone)]
+struct ComputedStyle {
+    color: Color,
+    font: Option<Font>,
+    size: Option<f32>,
+    line_height: Option<f32>,
+}
+
+impl ComputedStyle {
+    fn patched(&self, patch: &TextStyle) -> Self {
+        Self {
+            color: patch.color.unwrap_or(self.color),
+            font: patch.font.clone().or_else(|| self.font.clone()),
+            size: patch.size.or(self.size),
+            line_height: patch.line_height.or(self.line_height),
+        }
+    }
+}
+
+pub(crate) struct SemanticResolver<'a> {
+    icons: Option<&'a TextIcons>,
+    styles: Option<&'a TextStyles>,
+    text: String,
+    resolved_styles: Vec<ResolvedStyle>,
+    runs: Vec<StyleRun>,
+    objects: Vec<InlineObject>,
+    source_map: SourceMap,
+    style: ComputedStyle,
+    style_stack: Vec<ComputedStyle>,
+    source: TextSourceId,
+    source_stack: Vec<TextSourceId>,
+    diagnostics: DiagnosticSink,
+}
+
+impl<'a> SemanticResolver<'a> {
+    pub(crate) fn new(
+        color: Color,
+        icons: Option<&'a TextIcons>,
+        styles: Option<&'a TextStyles>,
+    ) -> Self {
+        Self {
+            icons,
+            styles,
+            text: String::new(),
+            resolved_styles: Vec::new(),
+            runs: Vec::new(),
+            objects: Vec::new(),
+            source_map: SourceMap::default(),
+            style: ComputedStyle {
+                color,
+                font: None,
+                size: None,
+                line_height: None,
+            },
+            style_stack: Vec::new(),
+            source: TextSourceId::DEFAULT,
+            source_stack: Vec::new(),
+            diagnostics: DiagnosticSink::default(),
+        }
+    }
+
+    pub(crate) fn set_source(&mut self, source: TextSourceId) {
+        self.source = source;
+    }
+
+    pub(crate) fn push_source(&mut self, source: TextSourceId) {
+        self.source_stack.push(self.source);
+        self.source = source;
+    }
+
+    pub(crate) fn pop_source(&mut self) -> Result<(), String> {
+        self.source = self
+            .source_stack
+            .pop()
+            .ok_or_else(|| "Text source scope is unbalanced".to_string())?;
+        Ok(())
+    }
+
+    pub(crate) fn push_color(&mut self, color: Color) {
+        self.style_stack.push(self.style.clone());
+        self.style.color = color;
+    }
+
+    pub(crate) fn push_style(&mut self, id: &str) -> Result<(), String> {
+        if !is_markup_id(id) {
+            return Err(format!("Invalid text style ID '{id}'"));
+        }
+        let style = self
+            .styles
+            .ok_or_else(|| {
+                "Rich text document references a style without a style registry".to_string()
+            })?
+            .get(id)
+            .ok_or_else(|| format!("Unknown text style ID '{id}'"))?;
+        self.style_stack.push(self.style.clone());
+        self.style = self.style.patched(style);
+        Ok(())
+    }
+
+    pub(crate) fn try_push_style(&mut self, id: &str) -> bool {
+        let Some(style) = self.styles.and_then(|styles| styles.get(id)) else {
+            return false;
+        };
+        self.style_stack.push(self.style.clone());
+        self.style = self.style.patched(style);
+        true
+    }
+
+    pub(crate) fn pop_style(&mut self) -> Result<(), String> {
+        self.style = self
+            .style_stack
+            .pop()
+            .ok_or_else(|| "Text style scope is unbalanced".to_string())?;
+        Ok(())
+    }
+
+    fn style_id(&mut self) -> ResolvedStyleId {
+        let resolved = ResolvedStyle {
+            color: self.style.color,
+            font: self.style.font.clone(),
+            size: self.style.size,
+            line_height: self.style.line_height,
+        };
+        if let Some(index) = self
+            .resolved_styles
+            .iter()
+            .position(|style| same_style(style, &resolved))
+        {
+            return ResolvedStyleId(index);
+        }
+        let id = ResolvedStyleId(self.resolved_styles.len());
+        self.resolved_styles.push(resolved);
+        id
+    }
+
+    pub(crate) fn text(&mut self, text: &str, source: SourceSpan, kind: SourceMapKind) {
+        if text.is_empty() {
+            return;
+        }
+        let start = self.text.len();
+        self.text.push_str(text);
+        let style = self.style_id();
+        self.runs.push(StyleRun {
+            range: start..self.text.len(),
+            style,
+        });
+        self.source_map.segments.push(SourceMapSegment {
+            source,
+            semantic: start..self.text.len(),
+            kind,
+        });
+    }
+
+    fn resolve_icon(&self, id: &str, options: IconOptions) -> Result<RegisteredIcon, String> {
+        if !is_markup_id(id) {
+            return Err(format!("Invalid text icon ID '{id}'"));
+        }
+        if options
+            .height
+            .is_some_and(|height| !height.is_finite() || height <= 0.0)
+        {
+            return Err(format!(
+                "Text icon '{id}' size must be finite and greater than zero"
+            ));
+        }
+        let icon = self
+            .icons
+            .ok_or_else(|| {
+                "Rich text document references an icon without an icon registry".to_string()
+            })?
+            .registered(id)
+            .ok_or_else(|| format!("Unknown text icon ID '{id}'"))?;
+        if let Some(height) = options.height {
+            let size = icon.source_size();
+            let ratio = size.x as f32 / size.y as f32;
+            let width = height * ratio;
+            if !ratio.is_finite() || ratio <= 0.0 || !width.is_finite() || width <= 0.0 {
+                return Err(format!("Text icon '{id}' size produces an invalid width"));
+            }
+        }
+        Ok(icon.clone())
+    }
+
+    pub(crate) fn validate_icon(&self, id: &str, options: IconOptions) -> Result<(), String> {
+        self.resolve_icon(id, options).map(|_| ())
+    }
+
+    pub(crate) fn icon(
+        &mut self,
+        id: &str,
+        options: IconOptions,
+        source: SourceSpan,
+    ) -> Result<(), String> {
+        let icon = self.resolve_icon(id, options)?;
+        let style = self.style_id();
+        let object = self.objects.len();
+        let at = self.text.len();
+        self.objects.push(InlineObject {
+            at,
+            source: source.clone(),
+            icon,
+            options,
+            style,
+        });
+        self.source_map.segments.push(SourceMapSegment {
+            source,
+            semantic: at..at,
+            kind: SourceMapKind::InlineObject(object),
+        });
+        Ok(())
+    }
+
+    pub(crate) fn diagnostic(
+        &mut self,
+        code: TextDiagnosticCode,
+        source: SourceSpan,
+        related_range: Option<Range<usize>>,
+    ) {
+        self.diagnostics.push(
+            code,
+            TextDiagnosticSeverity::Error,
+            source.id,
+            source.range,
+            related_range,
+        );
+    }
+
+    pub(crate) fn finish(mut self) -> SemanticDocument<'static> {
+        merge_runs(&mut self.runs, &self.resolved_styles);
+        SemanticDocument {
+            text: Cow::Owned(self.text),
+            styles: self.resolved_styles,
+            runs: self.runs,
+            objects: self.objects,
+            source_map: self.source_map,
+            diagnostics: self.diagnostics.finish(),
+        }
+    }
+}
+
+fn merge_runs(runs: &mut Vec<StyleRun>, styles: &[ResolvedStyle]) {
+    let mut merged: Vec<StyleRun> = Vec::with_capacity(runs.len());
+    for run in runs.drain(..) {
+        if let Some(previous) = merged.last_mut()
+            && previous.range.end == run.range.start
+            && same_style(&styles[previous.style.0], &styles[run.style.0])
+        {
+            previous.range.end = run.range.end;
+        } else {
+            merged.push(run);
+        }
+    }
+    *runs = merged;
+}
+
+fn same_style(left: &ResolvedStyle, right: &ResolvedStyle) -> bool {
+    left.color == right.color
+        && left.font.as_ref().map(Font::id) == right.font.as_ref().map(Font::id)
+        && left.size == right.size
+        && left.line_height == right.line_height
+}
+
+pub(crate) fn resolve_document(
+    document: &RichTextDocument,
+    color: Color,
+    icons: Option<&TextIcons>,
+    styles: Option<&TextStyles>,
+) -> Result<SemanticDocument<'static>, String> {
+    let mut resolver = SemanticResolver::new(color, icons, styles);
+    for op in &document.ops {
+        match op {
+            DocumentOp::Text(text) => {
+                let start = resolver.text.len();
+                resolver.text(
+                    text,
+                    SourceSpan {
+                        id: resolver.source,
+                        range: start..start + text.len(),
+                    },
+                    SourceMapKind::Copied,
+                );
+            }
+            DocumentOp::EnterSource(source) => resolver.push_source(*source),
+            DocumentOp::LeaveSource => resolver.pop_source()?,
+            DocumentOp::EnterStyle(id) => resolver.push_style(id)?,
+            DocumentOp::LeaveStyle => resolver.pop_style()?,
+            DocumentOp::Icon(icon) => {
+                let at = resolver.text.len();
+                resolver.icon(
+                    &icon.id,
+                    IconOptions {
+                        height: icon.height,
+                        align: icon.align,
+                    },
+                    SourceSpan {
+                        id: resolver.source,
+                        range: at..at,
+                    },
+                )?;
+            }
+        }
+    }
+    Ok(resolver.finish())
 }
 
 pub(crate) fn strict_error(diagnostics: &[TextDiagnostic]) -> Option<String> {
