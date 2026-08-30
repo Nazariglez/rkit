@@ -32,6 +32,7 @@ pub(crate) struct LayoutAtom {
     pub(crate) kind: AtomKind,
     pub(crate) source: SourceSpan,
     pub(crate) semantic: Range<usize>,
+    content: Range<usize>,
     shaping: Range<usize>,
     pub(crate) line: u32,
     pub(crate) visual_order: u32,
@@ -47,6 +48,7 @@ pub(crate) struct NewAtom {
     pub(crate) kind: AtomKind,
     pub(crate) source: SourceSpan,
     pub(crate) semantic: Range<usize>,
+    pub(crate) content: Range<usize>,
     pub(crate) shaping: Range<usize>,
     pub(crate) line: usize,
     pub(crate) style: ResolvedStyleId,
@@ -136,6 +138,7 @@ impl LayoutAtoms {
             kind: new.kind,
             source: new.source,
             semantic: new.semantic,
+            content: new.content,
             shaping: new.shaping,
             line,
             visual_order,
@@ -207,6 +210,7 @@ impl LayoutAtoms {
             if atom.source.range.start > atom.source.range.end
                 || atom.semantic.start > atom.semantic.end
                 || atom.semantic.end > semantic_len
+                || atom.content.start > atom.content.end
                 || atom.shaping.start > atom.shaping.end
                 || !atom.advance.is_finite()
                 || ![
@@ -225,8 +229,9 @@ impl LayoutAtoms {
         Ok(())
     }
 
-    pub(crate) fn line(&self, id: AtomId) -> Option<usize> {
-        self.atoms.get(id.index()).map(|atom| atom.line as usize)
+    pub(crate) fn line_offset(&self, id: AtomId) -> Option<f32> {
+        let line = self.atoms.get(id.index())?.line as usize;
+        self.lines.get(line).map(|line| line.x_offset)
     }
 
     pub(crate) fn logical(&self, index: usize) -> Option<&LayoutAtom> {
@@ -242,6 +247,30 @@ impl LayoutAtoms {
 
     pub(crate) fn logical_color(&self, index: usize) -> Option<Color> {
         self.logical(index).map(|atom| atom.color)
+    }
+
+    pub(crate) fn effect_range(
+        &self,
+        content: Range<usize>,
+    ) -> Result<Option<Range<usize>>, String> {
+        let mut range: Option<Range<usize>> = None;
+        for index in 0..self.logical_order.len() {
+            let atom = self
+                .logical(index)
+                .ok_or_else(|| "Text logical atom is missing".to_string())?;
+            if atom.content.start < content.start || atom.content.start >= content.end {
+                continue;
+            }
+            if let Some(range) = &mut range {
+                if range.end != index {
+                    return Err("Text effect occurrence is not contiguous".into());
+                }
+                range.end += 1;
+            } else {
+                range = Some(index..index + 1);
+            }
+        }
+        Ok(range)
     }
 
     pub(crate) fn hit(&self, point: Vec2) -> Option<AtomHit> {

@@ -64,7 +64,7 @@ fn init() -> State {
     );
     assert_eq!(invalid.diagnostics()[0].source_id(), TextSourceId::new(7));
     assert!(
-        text::rich_text("value [ and [u]future[/u]")
+        text::rich_text("value [ and [future]literal[/future]")
             .styles(&styles)
             .markup_policy(TextMarkupPolicy::Strict)
             .layout()

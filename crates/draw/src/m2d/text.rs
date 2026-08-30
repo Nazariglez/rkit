@@ -759,7 +759,7 @@ fn effect_text_bounds(
     ] {
         add(corner)?;
     }
-    for quad in &scratch.quads {
+    for quad in &scratch.prepare.bounds_quads {
         let Some(state) = scratch.prepare.state(quad.atom) else {
             return Err("Text prepared atom is missing".into());
         };

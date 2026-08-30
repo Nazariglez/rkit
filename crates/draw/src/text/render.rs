@@ -1,6 +1,5 @@
-use super::{RegisteredIcon, layout::AtomId};
+use super::{RegisteredIcon, layout::AtomId, shaping::GlyphSource};
 use corelib::math::Vec2;
-use cosmic_text::LayoutGlyph;
 
 #[derive(Default)]
 pub(super) struct TextRenderPlan {
@@ -28,16 +27,12 @@ impl TextRenderPlan {
         self.items.iter()
     }
 
-    pub(super) fn offset_line(
-        &mut self,
-        atoms: &super::layout::LayoutAtoms,
-        line: usize,
-        offset: f32,
-    ) {
+    pub(super) fn apply_line_offsets(&mut self, atoms: &super::layout::LayoutAtoms) {
         for item in &mut self.items {
-            if atoms.line(item.atom()) == Some(line) {
-                item.offset_x(offset);
-            }
+            let Some(offset) = atoms.line_offset(item.atom()) else {
+                continue;
+            };
+            item.offset_x(offset);
         }
     }
 }
@@ -68,7 +63,7 @@ impl RenderItem {
 
 pub(super) struct PlacedGlyph {
     pub(super) atom: AtomId,
-    pub(super) glyph: LayoutGlyph,
+    pub(super) source: GlyphSource,
     pub(super) origin: Vec2,
     pub(super) pixelated: bool,
     pub(super) strike_scale: f32,

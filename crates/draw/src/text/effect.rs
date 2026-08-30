@@ -129,8 +129,8 @@ impl TextEffectRun<'_> {
         self.states.is_empty()
     }
 
-    pub fn items_mut(&mut self) -> TextEffectItems<'_> {
-        TextEffectItems {
+    pub fn items_mut(&mut self) -> impl ExactSizeIterator<Item = TextEffectItem<'_>> + '_ {
+        EffectItems {
             text: self.text,
             atoms: self.atoms,
             start: self.start,
@@ -141,7 +141,7 @@ impl TextEffectRun<'_> {
     }
 }
 
-pub struct TextEffectItems<'a> {
+struct EffectItems<'a> {
     text: &'a str,
     atoms: &'a LayoutAtoms,
     start: usize,
@@ -150,7 +150,7 @@ pub struct TextEffectItems<'a> {
     states: std::slice::IterMut<'a, PreparedAtom>,
 }
 
-impl<'a> Iterator for TextEffectItems<'a> {
+impl<'a> Iterator for EffectItems<'a> {
     type Item = TextEffectItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -165,6 +165,16 @@ impl<'a> Iterator for TextEffectItems<'a> {
             index,
             count: self.count,
         })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.states.size_hint()
+    }
+}
+
+impl ExactSizeIterator for EffectItems<'_> {
+    fn len(&self) -> usize {
+        self.states.len()
     }
 }
 

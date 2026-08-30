@@ -298,12 +298,7 @@ impl<'a> RichTextBuilder<'a> {
                 None => markup::MarkupMode::Colors,
             }
         };
-        let document = markup::parse(
-            self.text,
-            self.config.color,
-            mode,
-            self.config.max_width.is_some(),
-        );
+        let document = markup::parse(self.text, self.config.color, mode);
         compile_document(
             document,
             &self.config,
@@ -389,7 +384,7 @@ pub enum TextAffinity {
     Trailing,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RichTextHit {
     source_id: TextSourceId,
     range: std::ops::Range<usize>,

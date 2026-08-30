@@ -5,10 +5,7 @@ use corelib::gfx::{
 };
 use corelib::math::{UVec2, Vec2, uvec2, vec2};
 use cosmic_text::fontdb::Source;
-use cosmic_text::{
-    Attrs, Buffer, CacheKey, Family, FontSystem, Hinting, Metrics, Shaping, Stretch, Style,
-    SwashCache, SwashContent, UnderlineStyle, Weight, Wrap,
-};
+use cosmic_text::{Buffer, FontSystem, Stretch, Style, SwashCache, SwashContent, Weight};
 use etagere::{BucketedAtlasAllocator, size2};
 use markup::MarkupMode;
 use once_cell::sync::Lazy;
@@ -30,17 +27,16 @@ pub use document::{
     TextSourceId,
 };
 pub(crate) use effect::PreparedAtom;
-pub use effect::{TextEffect, TextEffectItem, TextEffectItems, TextEffectRun, TextEffects};
+pub use effect::{TextEffect, TextEffectItem, TextEffectRun, TextEffects};
 use icon_baker::{IconBake, IconBaker};
-use layout::{AtomKind, LayoutAtoms, LineGeometry, LogicalBounds, NewAtom};
-use render::{PlacedGlyph, PlacedIcon, PlacedSolid, RenderItem, TextRenderPlan};
+use layout::LayoutAtoms;
+use render::{PlacedIcon, RenderItem, TextRenderPlan};
 use rich::{PixelRect, RegisteredIcon};
 pub use rich::{
     RichDocumentBuilder, RichTextAtomKind, RichTextBuilder, RichTextHit, RichTextIcon,
     RichTextLayout, RichTextLine, TextAffinity, TextIconAlign, TextIcons, rich_document, rich_text,
 };
 pub use style::{TextStyle, TextStyles};
-use utils::helpers::closest_multiple_of;
 
 pub(crate) static TEXT_SYSTEM: Lazy<AtomicRefCell<TextSystem>> =
     Lazy::new(|| AtomicRefCell::new(TextSystem::new().unwrap()));
@@ -205,10 +201,11 @@ impl TextLayout {
     }
 }
 
+#[derive(Clone)]
 enum RasterItem {
     Glyph {
         atom: usize,
-        key: CacheKey,
+        key: shaping::GlyphCacheKey,
         pos: Vec2,
         scale: f32,
         outline_radius: u16,
@@ -242,6 +239,8 @@ impl RasterItem {
 #[derive(Default)]
 pub(crate) struct TextPrepareScratch {
     items: Vec<RasterItem>,
+    bounds_items: Vec<RasterItem>,
+    pub(crate) bounds_quads: Vec<QuadData>,
     states: Vec<effect::PreparedAtom>,
 }
 
@@ -350,7 +349,7 @@ impl<'a> TextMetricsBuilder<'a> {
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 struct GlyphCacheKey {
-    key: CacheKey,
+    key: shaping::GlyphCacheKey,
     outline: u16,
     pixelated: bool,
 }
@@ -374,60 +373,6 @@ pub struct TextSystem {
     // reusable buffer used to avoid per glyph allocations
     temp_outline_buff: Vec<u8>,
     temp_layout: TextLayout,
-}
-
-fn record_effect_atoms(
-    occurrences: &mut [Vec<layout::AtomId>],
-    effects: &[u32],
-    atom: layout::AtomId,
-) -> Result<(), String> {
-    for occurrence in effects {
-        let atoms = occurrences
-            .get_mut(*occurrence as usize)
-            .ok_or_else(|| "Text effect occurrence is out of bounds".to_string())?;
-        if atoms.last().copied() != Some(atom) {
-            atoms.push(atom);
-        }
-    }
-    Ok(())
-}
-
-fn push_decorations(
-    plan: &mut TextRenderPlan,
-    atom: layout::AtomId,
-    x: f32,
-    width: f32,
-    baseline: f32,
-    font_size: f32,
-    underline: bool,
-    strikethrough: bool,
-    pixelated: bool,
-    decoration: Option<&cosmic_text::DecorationSpan>,
-) {
-    if width <= 0.0 {
-        return;
-    }
-    let metrics = decoration.map(|decoration| &decoration.data);
-    if underline {
-        let offset = metrics.map_or(-0.125, |data| data.underline_metrics.offset);
-        let thickness = metrics.map_or(1.0 / 14.0, |data| data.underline_metrics.thickness);
-        plan.push(RenderItem::Solid(PlacedSolid {
-            atom,
-            pos: vec2(x, baseline - offset * font_size),
-            size: vec2(width, thickness * font_size),
-            pixelated,
-        }));
-    }
-    if strikethrough {
-        let offset = metrics.map_or(0.3, |data| data.strikethrough_metrics.offset);
-        let thickness = metrics.map_or(1.0 / 14.0, |data| data.strikethrough_metrics.thickness);
-        plan.push(RenderItem::Solid(PlacedSolid {
-            atom,
-            pos: vec2(x, baseline - offset * font_size),
-            size: vec2(width, thickness * font_size),
-            pixelated,
-        }));
-    }
 }
 
 impl TextSystem {
@@ -472,10 +417,9 @@ impl TextSystem {
         let mut font_system = FontSystem::new();
         let swash = SwashCache::new();
 
-        let buffer = Buffer::new(&mut font_system, Metrics::new(1.0, 1.0));
+        let buffer = shaping::new_buffer(&mut font_system);
 
-        #[allow(unused_mut)]
-        let mut sys = Self {
+        let sys = Self {
             atlases: [mask_linear, mask_nearest, rgba_linear, rgba_nearest],
             linear_sampler,
             nearest_sampler,
@@ -497,14 +441,17 @@ impl TextSystem {
 
         #[cfg(feature = "default-font")]
         {
+            let mut sys = sys;
             let font = sys.create_font(
                 include_bytes!("./resources/arcade-legacy/arcade-legacy.ttf"),
                 true,
                 None,
             )?;
             sys.default_font = Some(font);
+            Ok(sys)
         }
 
+        #[cfg(not(feature = "default-font"))]
         Ok(sys)
     }
 
@@ -634,14 +581,9 @@ impl TextSystem {
         layout: &mut TextLayout,
     ) -> Result<(), String> {
         let mut document = if text.color_tags {
-            markup::parse(
-                text.text,
-                text.default_color,
-                MarkupMode::Colors,
-                text.wrap_width.is_some(),
-            )
+            markup::parse(text.text, text.default_color, MarkupMode::Colors)
         } else {
-            markup::plain(text.text, text.default_color, text.wrap_width.is_some())
+            markup::plain(text.text, text.default_color)
         };
         let mut diagnostics = std::mem::take(&mut document.diagnostics);
         let shaping = shaping::prepare(document, text.wrap_width.is_some(), &mut diagnostics)?;
@@ -655,422 +597,15 @@ impl TextSystem {
         layout: &mut TextLayout,
         diagnostics: &mut document::DiagnosticSink,
     ) -> Result<(), String> {
-        layout.clear();
-        layout.semantic_text.push_str(&markup.semantic_text);
-        let font = text.font.or(self.default_font.as_ref());
-        let (pixelated, ppem, res_ppem, line_height_pem) = font
-            .map(|font| {
-                (
-                    font.is_pixelated(),
-                    font.px_per_em,
-                    font.res_ppem,
-                    font.line_height_pem,
-                )
-            })
-            .unwrap_or((false, 1.0, 1.0, 1.0));
-        let attrs = font_attrs(font);
-        let (font_size, _strike_scale, base_line_height) =
-            validate_layout_metrics(text, pixelated, ppem, res_ppem, line_height_pem)?;
-        self.buffer
-            .set_metrics(Metrics::new(font_size, base_line_height));
-        self.buffer.set_size(text.wrap_width, None);
-
-        let mut span_profiles = Vec::with_capacity(markup.spans.len());
-        let mut spans = Vec::with_capacity(markup.spans.len());
-        for (index, span) in markup.spans.iter().enumerate() {
-            let span_font = span.font.as_ref().or(font);
-            let logical_size = span.size.unwrap_or(text.font_size);
-            let logical_line_height = span.line_height.or(text.line_height);
-            let (span_size, span_scale, span_line_height) =
-                validate_style_metrics(span_font, logical_size, logical_line_height)?;
-            let span_pixelated = span_font.is_some_and(Font::is_pixelated);
-            let underline = if span.underline {
-                UnderlineStyle::Single
-            } else {
-                UnderlineStyle::None
-            };
-            let mut span_attrs = font_attrs(span_font)
-                .metrics(Metrics::new(span_size, span_line_height))
-                .underline(underline);
-            if span.strikethrough {
-                span_attrs = span_attrs.strikethrough();
-            }
-            let span_attrs = span_attrs.metadata(index + 1);
-            span_profiles.push((span_pixelated, span_scale, span_line_height));
-            spans.push((&markup.text[span.range.clone()], span_attrs));
-        }
-        self.buffer
-            .set_rich_text(spans, &attrs, Shaping::Advanced, None);
-        self.buffer.shape_until_scroll(&mut self.font_system, false);
-
-        let objects: Vec<_> = markup
-            .objects
-            .into_iter()
-            .map(|object| {
-                let style = markup
-                    .styles
-                    .get(object.style.0)
-                    .ok_or_else(|| "Text icon has an invalid resolved style".to_string())?;
-                let height = object
-                    .options
-                    .height
-                    .or(style.size)
-                    .unwrap_or(text.font_size);
-                let object_font = style.font.as_ref().or(font);
-                let logical_line_height = style.line_height.or(text.line_height);
-                let style_size = style.size.unwrap_or(text.font_size);
-                let (_, _, line_height) =
-                    validate_style_metrics(object_font, style_size, logical_line_height)?;
-                let source_size = object.icon.source_size();
-                let ratio = source_size.x as f32 / source_size.y as f32;
-                let width = height * ratio;
-                if !height.is_finite()
-                    || height <= 0.0
-                    || !ratio.is_finite()
-                    || ratio <= 0.0
-                    || !width.is_finite()
-                    || width <= 0.0
-                {
-                    return Err("Text icon has an invalid logical size".to_string());
-                }
-                Ok(shaping::ResolvedInlineObject {
-                    icon: object.icon,
-                    size: vec2(width, height),
-                    align: object.options.align,
-                    line_height,
-                    style: object.style,
-                    source: object.source,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut seen = vec![0_u8; objects.len()];
-        let mut line_top = 0.0;
-        let mut content_width = 0.0_f32;
-        let mut effect_atoms = vec![Vec::new(); markup.effects.len()];
-        let mut line_base = 0_usize;
-
-        for buffer_line in &self.buffer.lines {
-            let line_text = buffer_line.text();
-            let current_line_base = line_base;
-            line_base = line_base
-                .checked_add(line_text.len())
-                .and_then(|base| base.checked_add(buffer_line.ending().as_str().len()))
-                .ok_or_else(|| "Text shaping coordinate overflowed".to_string())?;
-            let Some(shape) = buffer_line.shape_opt() else {
-                continue;
-            };
-            let has_bidi_controls = line_text.chars().any(shaping::is_bidi_formatting_control);
-            let shape = if objects.is_empty() && !has_bidi_controls {
-                std::borrow::Cow::Borrowed(shape)
-            } else {
-                let mut shape = shape.clone();
-                shaping::patch_shape(line_text, &mut shape, &markup.spans, &objects, &mut seen)?;
-                std::borrow::Cow::Owned(shape)
-            };
-            let layout_lines = shape.layout(
-                font_size,
-                text.wrap_width,
-                Wrap::WordOrGlyph,
-                None,
-                None,
-                Hinting::Disabled,
-            );
-            if layout_lines.is_empty() {
-                let height = buffer_line
-                    .attrs_list()
-                    .defaults()
-                    .metrics_opt
-                    .map(Metrics::from)
-                    .map(|metrics| metrics.line_height.max(metrics.font_size))
-                    .unwrap_or(base_line_height);
-                let visual = layout.atoms.atom_count();
-                layout.atoms.push_line(LineGeometry {
-                    top: line_top,
-                    width: 0.0,
-                    height,
-                    baseline: line_top,
-                    ascent: 0.0,
-                    descent: 0.0,
-                    visual_atoms: visual..visual,
-                    x_offset: 0.0,
-                    rtl: false,
-                });
-                layout.lines.push(rich::RichTextLine {
-                    offset_y: line_top,
-                    size: vec2(0.0, height),
-                });
-                line_top += height;
-                continue;
-            }
-            for layout_line in layout_lines {
-                let line_index = layout.lines.len();
-                let visual_start = layout.atoms.atom_count();
-                let min_x = layout_line
-                    .glyphs
-                    .iter()
-                    .filter(|glyph| {
-                        !shaping::is_bidi_control_cluster(line_text, glyph.start, glyph.end)
-                    })
-                    .flat_map(|glyph| [glyph.x, glyph.x + glyph.w])
-                    .reduce(f32::min)
-                    .unwrap_or(0.0);
-                let mut baseline_icon = 0.0_f32;
-                let mut non_baseline_icon = 0.0_f32;
-                for icon in layout_line
-                    .glyphs
-                    .iter()
-                    .filter_map(|glyph| glyph.metadata.checked_sub(1))
-                    .filter_map(|index| markup.spans.get(index))
-                    .filter_map(|span| match span.owner {
-                        shaping::ShapingOwner::Object(index) => Some(index),
-                        _ => None,
-                    })
-                    .filter_map(|index| objects.get(index))
-                {
-                    match icon.align {
-                        rich::TextIconAlign::Baseline => {
-                            baseline_icon = baseline_icon.max(icon.size.y)
-                        }
-                        _ => non_baseline_icon = non_baseline_icon.max(icon.size.y),
-                    }
-                }
-                let tallest_run = layout_line
-                    .glyphs
-                    .iter()
-                    .filter_map(|glyph| glyph.metadata.checked_sub(1))
-                    .filter_map(|index| span_profiles.get(index))
-                    .map(|profile| profile.2)
-                    .fold(base_line_height, f32::max);
-                let text_ascent = layout_line.max_ascent;
-                let text_descent = layout_line.max_descent;
-                let base_ascent = text_ascent.max(baseline_icon);
-                let content_height = base_ascent + text_descent;
-                let height = tallest_run.max(content_height).max(non_baseline_icon);
-                let baseline = line_top + (height - content_height) * 0.5 + base_ascent;
-                let mut content_top = baseline - text_ascent;
-                let mut content_bottom = baseline + text_descent;
-                for (glyph_index, glyph) in layout_line.glyphs.iter().enumerate() {
-                    if shaping::is_bidi_control_cluster(line_text, glyph.start, glyph.end) {
-                        continue;
-                    }
-                    let span_index = glyph
-                        .metadata
-                        .checked_sub(1)
-                        .ok_or_else(|| "Text glyph is missing semantic metadata".to_string())?;
-                    let shaping_range =
-                        current_line_base + glyph.start..current_line_base + glyph.end;
-                    let mapped = shaping::map_range(
-                        &markup.map,
-                        &markup.spans,
-                        shaping_range.clone(),
-                        diagnostics,
-                    )?;
-                    if matches!(
-                        mapped.owner,
-                        shaping::ShapingOwner::WrapHint | shaping::ShapingOwner::FormattingControl
-                    ) {
-                        continue;
-                    }
-                    let span_index = if matches!(mapped.owner, shaping::ShapingOwner::Text) {
-                        markup
-                            .spans
-                            .iter()
-                            .position(|span| {
-                                matches!(span.owner, shaping::ShapingOwner::Text)
-                                    && span.semantic.contains(&mapped.semantic.start)
-                            })
-                            .unwrap_or(span_index)
-                    } else {
-                        span_index
-                    };
-                    let span = markup
-                        .spans
-                        .get(span_index)
-                        .ok_or_else(|| "Text glyph metadata is out of bounds".to_string())?;
-                    let source_range = mapped.source;
-                    let semantic_range = mapped.semantic;
-                    let (pixelated, strike_scale, _) = span_profiles
-                        .get(span_index)
-                        .copied()
-                        .ok_or_else(|| "Text glyph style is out of bounds".to_string())?;
-                    let decoration = layout_line
-                        .decorations
-                        .iter()
-                        .find(|decoration| decoration.glyph_range.contains(&glyph_index));
-                    if let shaping::ShapingOwner::Object(index) = mapped.owner {
-                        let icon = objects
-                            .get(index)
-                            .ok_or_else(|| "Text icon metadata is out of bounds".to_string())?;
-                        if source_range != icon.source {
-                            return Err("Text icon source identity changed during shaping".into());
-                        }
-                        let y = match icon.align {
-                            rich::TextIconAlign::Middle => line_top + (height - icon.size.y) * 0.5,
-                            rich::TextIconAlign::Baseline => baseline - icon.size.y,
-                            rich::TextIconAlign::Top => line_top,
-                            rich::TextIconAlign::Bottom => line_top + height - icon.size.y,
-                        };
-                        content_top = content_top.min(y);
-                        content_bottom = content_bottom.max(y + icon.size.y);
-                        let atom = layout.atoms.push(NewAtom {
-                            kind: AtomKind::Icon,
-                            source: source_range,
-                            semantic: semantic_range,
-                            shaping: shaping_range,
-                            line: line_index,
-                            style: icon.style,
-                            bidi_level: glyph.level.number(),
-                            advance: glyph.w,
-                            bounds: LogicalBounds {
-                                x: glyph.x - min_x,
-                                y,
-                                width: icon.size.x,
-                                height: icon.size.y,
-                            },
-                            color: span.color,
-                        })?;
-                        record_effect_atoms(&mut effect_atoms, &span.effects, atom)?;
-                        layout.plan.push(RenderItem::Icon(PlacedIcon {
-                            atom,
-                            icon: icon.icon.clone(),
-                            pos: vec2(glyph.x - min_x, y),
-                            size: icon.size,
-                        }));
-                        push_decorations(
-                            &mut layout.plan,
-                            atom,
-                            glyph.x - min_x,
-                            icon.size.x,
-                            baseline,
-                            glyph.font_size,
-                            span.underline,
-                            span.strikethrough,
-                            pixelated,
-                            decoration,
-                        );
-                    } else {
-                        let kind = if line_text
-                            .get(glyph.start..glyph.end)
-                            .is_some_and(|cluster| cluster.chars().all(char::is_whitespace))
-                        {
-                            AtomKind::Space
-                        } else {
-                            AtomKind::Text
-                        };
-                        let atom = layout.atoms.push(NewAtom {
-                            kind,
-                            source: source_range,
-                            semantic: semantic_range,
-                            shaping: shaping_range,
-                            line: line_index,
-                            style: span.style,
-                            bidi_level: glyph.level.number(),
-                            advance: glyph.w,
-                            bounds: LogicalBounds {
-                                x: glyph.x - min_x,
-                                y: line_top,
-                                width: glyph.w,
-                                height,
-                            },
-                            color: span.color,
-                        })?;
-                        record_effect_atoms(&mut effect_atoms, &span.effects, atom)?;
-                        layout.plan.push(RenderItem::Glyph(PlacedGlyph {
-                            atom,
-                            glyph: glyph.clone(),
-                            origin: vec2(-min_x, baseline),
-                            pixelated,
-                            strike_scale,
-                        }));
-                        push_decorations(
-                            &mut layout.plan,
-                            atom,
-                            glyph.x - min_x,
-                            glyph.w,
-                            baseline,
-                            glyph.font_size,
-                            span.underline,
-                            span.strikethrough,
-                            pixelated,
-                            decoration,
-                        );
-                    }
-                }
-                let size = vec2(layout_line.w, height);
-                content_width = content_width.max(size.x);
-                layout.atoms.push_line(LineGeometry {
-                    top: line_top,
-                    width: size.x,
-                    height,
-                    baseline,
-                    ascent: baseline - content_top,
-                    descent: content_bottom - baseline,
-                    visual_atoms: visual_start..layout.atoms.atom_count(),
-                    x_offset: 0.0,
-                    rtl: layout_line
-                        .glyphs
-                        .first()
-                        .is_some_and(|glyph| glyph.level.is_rtl()),
-                });
-                layout.lines.push(rich::RichTextLine {
-                    offset_y: line_top,
-                    size,
-                });
-                line_top += height;
-            }
-        }
-        if seen.iter().any(|count| *count != 1) {
-            return Err("Text icon placeholder did not produce exactly one glyph".into());
-        }
-        validate_finite(content_width, "Text layout width")?;
-        validate_finite(line_top, "Text layout height")?;
-        for (line_index, line) in layout.lines.iter().enumerate() {
-            let offset = match text.h_align {
-                HAlign::Left => 0.0,
-                HAlign::Center => (content_width - line.size.x) * 0.5,
-                HAlign::Right => content_width - line.size.x,
-            };
-            layout.plan.offset_line(&layout.atoms, line_index, offset);
-            layout.atoms.set_line_offset(line_index, offset)?;
-        }
-        layout.atoms.finish(layout.semantic_text.len())?;
-        for (callback, atoms) in markup.effects.into_iter().zip(effect_atoms) {
-            let Some(first) = atoms.first().and_then(|id| layout.atoms.logical_index(*id)) else {
-                continue;
-            };
-            let Some(last) = atoms.last().and_then(|id| layout.atoms.logical_index(*id)) else {
-                continue;
-            };
-            let end = last
-                .checked_add(1)
-                .ok_or_else(|| "Text effect atom range overflowed".to_string())?;
-            if end - first != atoms.len() {
-                return Err("Text effect occurrence is not contiguous".into());
-            }
-            let callback_index = match layout
-                .effect_callbacks
-                .iter()
-                .position(|stored| std::sync::Arc::ptr_eq(stored, &callback))
-            {
-                Some(index) => index,
-                None => {
-                    let index = layout.effect_callbacks.len();
-                    layout.effect_callbacks.push(callback);
-                    index
-                }
-            };
-            layout.effects.push(effect::EffectOccurrence {
-                callback: callback_index,
-                atoms: first..end,
-            });
-        }
-        let outline_pad = f32::from(text.outline_width) * 2.0;
-        let size = vec2(content_width + outline_pad, line_top + outline_pad);
-        validate_finite(size.x, "Text layout width")?;
-        validate_finite(size.y, "Text layout height")?;
-        layout.size = size;
-        layout.outline_width = text.outline_width;
-        Ok(())
+        shaping::layout(
+            &mut self.font_system,
+            &mut self.buffer,
+            self.default_font.as_ref(),
+            text,
+            markup,
+            layout,
+            diagnostics,
+        )
     }
 
     pub(crate) fn automatic_resolution(scale: f32) -> f32 {
@@ -1101,9 +636,11 @@ impl TextSystem {
         quads: &mut Vec<QuadData>,
     ) -> Result<(), String> {
         validate_positive(resolution, "Text resolution")?;
-        let items = &mut scratch.items;
+        let (items, bounds_items) = (&mut scratch.items, &mut scratch.bounds_items);
         items.clear();
         items.reserve(layout.plan.len());
+        bounds_items.clear();
+        bounds_items.reserve(layout.plan.len());
         for (index, item) in layout.plan.iter().enumerate() {
             let atom = layout
                 .atoms
@@ -1114,9 +651,6 @@ impl TextSystem {
                 .get(atom)
                 .copied()
                 .ok_or_else(|| "Text prepared atom is missing".to_string())?;
-            if state.hidden {
-                continue;
-            }
             let color = state.color.with_alpha(state.color.a * state.alpha);
             match item {
                 RenderItem::Glyph(glyph) => {
@@ -1126,20 +660,30 @@ impl TextSystem {
                     if physical_outline > u16::MAX as f32 {
                         return Err("Text outline width exceeds glyph cache limits".into());
                     }
-                    let physical = glyph.glyph.physical((0.0, 0.0), scale);
-                    items.push(RasterItem::Glyph {
+                    let physical = glyph.source.physical(scale);
+                    let item = RasterItem::Glyph {
                         atom,
-                        key: physical.cache_key,
+                        key: physical.key,
                         pos: glyph.origin
-                            + vec2(physical.x as f32, physical.y as f32) / scale
+                            + physical.offset / scale
                             + Vec2::splat(f32::from(layout.outline_width)),
                         scale,
                         outline_radius: physical_outline as u16,
                         color,
                         pixelated: glyph.pixelated,
-                    });
+                    };
+                    bounds_items.push(item.clone());
+                    if !state.hidden {
+                        items.push(item);
+                    }
                 }
-                RenderItem::Icon(_) => items.push(RasterItem::Icon { index, color, atom }),
+                RenderItem::Icon(_) => {
+                    let item = RasterItem::Icon { index, color, atom };
+                    bounds_items.push(item.clone());
+                    if !state.hidden {
+                        items.push(item);
+                    }
+                }
                 RenderItem::Solid(solid) => {
                     let min_size = Vec2::splat(1.0 / resolution);
                     let mut pos = solid.pos;
@@ -1148,18 +692,23 @@ impl TextSystem {
                         pos = (pos * resolution).round() / resolution;
                         size = (size * resolution).round().max(Vec2::ONE) / resolution;
                     }
-                    items.push(RasterItem::Solid {
+                    let item = RasterItem::Solid {
                         atom,
                         pos,
                         size,
                         color,
                         pixelated: solid.pixelated,
-                    });
+                    };
+                    bounds_items.push(item.clone());
+                    if !state.hidden {
+                        items.push(item);
+                    }
                 }
             }
         }
 
-        self.ensure_raster(layout, items)?;
+        self.ensure_raster(layout, bounds_items)?;
+        self.resolve_raster(layout, bounds_items, &mut scratch.bounds_quads);
         self.resolve_raster(layout, items, quads);
         Ok(())
     }
@@ -1370,9 +919,7 @@ impl TextSystem {
             .map(|(key, glyph)| (*key, glyph.clone()))
             .collect();
         for (key, glyph) in glyphs {
-            let image = self
-                .swash
-                .get_image_uncached(&mut self.font_system, key.key)
+            let image = shaping::glyph_image(&mut self.swash, &mut self.font_system, key.key)
                 .ok_or_else(|| "Cannot restore a cached text glyph".to_string())?;
             let offset = glyph.atlas_pos.as_uvec2();
             if key.outline > 0 {
@@ -1458,7 +1005,7 @@ impl TextSystem {
 
     fn ensure_glyph(
         &mut self,
-        key: CacheKey,
+        key: shaping::GlyphCacheKey,
         outline_width: u16,
         pixelated: bool,
     ) -> Result<Option<TextAtlas>, String> {
@@ -1475,7 +1022,8 @@ impl TextSystem {
                 pixelated,
             };
             if !self.cache.contains_key(&outline_key)
-                && let Some(image) = self.swash.get_image_uncached(&mut self.font_system, key)
+                && let Some(image) =
+                    shaping::glyph_image(&mut self.swash, &mut self.font_system, key)
                 && image.placement.width > 0
                 && image.placement.height > 0
                 && image.content == SwashContent::Mask
@@ -1508,7 +1056,7 @@ impl TextSystem {
         if normal_cached {
             return Ok(None);
         }
-        let Some(image) = self.swash.get_image_uncached(&mut self.font_system, key) else {
+        let Some(image) = shaping::glyph_image(&mut self.swash, &mut self.font_system, key) else {
             return Ok(None);
         };
         if image.placement.width == 0 || image.placement.height == 0 {
@@ -1616,105 +1164,6 @@ impl TextSystem {
         }
         Ok(())
     }
-}
-
-fn font_attrs(font: Option<&Font>) -> Attrs<'_> {
-    match font {
-        Some(font) => Attrs::new()
-            .family(Family::Name(&font.family))
-            .weight(font.weight)
-            .style(font.style)
-            .stretch(font.stretch),
-        None => Attrs::new(),
-    }
-}
-
-fn validate_style_metrics(
-    font: Option<&Font>,
-    logical_size: f32,
-    logical_line_height: Option<f32>,
-) -> Result<(f32, f32, f32), String> {
-    let (pixelated, ppem, res_ppem, line_height_pem) = font
-        .map(|font| {
-            (
-                font.is_pixelated(),
-                font.px_per_em,
-                font.res_ppem,
-                font.line_height_pem,
-            )
-        })
-        .unwrap_or((false, 1.0, 1.0, 1.0));
-    let info = TextInfo {
-        font,
-        text: "",
-        wrap_width: None,
-        font_size: logical_size,
-        line_height: logical_line_height,
-        h_align: HAlign::Left,
-        color_tags: false,
-        default_color: Color::WHITE,
-        outline_width: 0,
-        strict_metrics: true,
-    };
-    validate_layout_metrics(&info, pixelated, ppem, res_ppem, line_height_pem)
-}
-
-fn validate_layout_metrics(
-    text: &TextInfo,
-    pixelated: bool,
-    ppem: f32,
-    res_ppem: f32,
-    line_height_pem: f32,
-) -> Result<(f32, f32, f32), String> {
-    if text.strict_metrics {
-        validate_positive(text.font_size, "Text size")?;
-        if let Some(height) = text.line_height {
-            validate_positive(height, "Text line height")?;
-        }
-        if let Some(width) = text.wrap_width {
-            validate_positive(width, "Text maximum width")?;
-        }
-    }
-    validate_finite(text.font_size, "Text size")?;
-    if let Some(height) = text.line_height {
-        validate_finite(height, "Text line height")?;
-    }
-    if let Some(width) = text.wrap_width {
-        validate_finite(width, "Text maximum width")?;
-    }
-    validate_positive(ppem, "Text font pixel scale")?;
-    validate_positive(line_height_pem, "Text font line-height scale")?;
-
-    let font_size = text.font_size * ppem;
-    validate_positive(font_size, "Text effective font size")?;
-    let strike_scale = if pixelated {
-        validate_positive(res_ppem, "Text pixel font resolution")?;
-        if res_ppem > usize::MAX as f32 {
-            return Err("Text pixel font resolution is out of range".into());
-        }
-        let base = res_ppem as usize;
-        if base == 0 {
-            return Err("Text pixel font resolution is out of range".into());
-        }
-        let rounded_size = font_size.round();
-        if rounded_size > usize::MAX as f32 {
-            return Err("Text effective font size is out of range".into());
-        }
-        let snapped_size = (closest_multiple_of(rounded_size as usize, base) as f32).max(res_ppem);
-        validate_positive(snapped_size, "Text snapped pixel font size")?;
-        snapped_size / font_size
-    } else {
-        1.0
-    };
-    validate_positive(strike_scale, "Text font strike scale")?;
-
-    let line_height = text.line_height.unwrap_or(font_size * line_height_pem);
-    if text.line_height.is_some() {
-        validate_finite(line_height, "Text effective line height")?;
-    } else {
-        validate_positive(line_height, "Text effective line height")?;
-    }
-    Ok((font_size, strike_scale, line_height))
 }
 
 fn validate_finite(value: f32, name: &str) -> Result<(), String> {

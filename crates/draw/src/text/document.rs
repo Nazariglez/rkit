@@ -16,7 +16,7 @@ pub(crate) struct SemanticDocument<'a> {
     pub(crate) objects: Vec<InlineObject>,
     pub(crate) source_map: SourceMap,
     pub(crate) diagnostics: DiagnosticSink,
-    pub(crate) effects: Vec<Arc<EffectCallback>>,
+    pub(crate) effects: SemanticEffects,
 }
 
 #[derive(Clone)]
@@ -34,8 +34,22 @@ pub(crate) struct ResolvedStyleId(pub(crate) usize);
 
 pub(crate) struct StyleRun {
     pub(crate) range: Range<usize>,
+    pub(crate) content: Range<usize>,
     pub(crate) style: ResolvedStyleId,
-    pub(crate) effects: Vec<u32>,
+    pub(crate) effect_membership: Range<usize>,
+}
+
+pub(crate) struct SemanticEffects {
+    pub(crate) callbacks: Vec<Arc<EffectCallback>>,
+    pub(crate) occurrences: Vec<SemanticEffectOccurrence>,
+    pub(crate) memberships: Vec<u32>,
+}
+
+pub(crate) struct SemanticEffectOccurrence {
+    pub(crate) effect: u32,
+    pub(crate) content: Range<usize>,
+    pub(crate) depth: u16,
+    pub(crate) order: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -50,7 +64,8 @@ pub(crate) struct InlineObject {
     pub(crate) icon: RegisteredIcon,
     pub(crate) options: IconOptions,
     pub(crate) style: ResolvedStyleId,
-    pub(crate) effects: Vec<u32>,
+    pub(crate) content: Range<usize>,
+    pub(crate) effect_membership: Range<usize>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -353,8 +368,9 @@ pub(crate) struct SemanticResolver<'a> {
     source_stack: Vec<TextSourceId>,
     diagnostics: DiagnosticSink,
     effects: Option<&'a TextEffects>,
-    effect_callbacks: Vec<Arc<EffectCallback>>,
+    semantic_effects: SemanticEffects,
     effect_stack: Vec<u32>,
+    content: usize,
 }
 
 impl<'a> SemanticResolver<'a> {
@@ -385,8 +401,13 @@ impl<'a> SemanticResolver<'a> {
             source_stack: Vec::new(),
             diagnostics: DiagnosticSink::default(),
             effects,
-            effect_callbacks: Vec::new(),
+            semantic_effects: SemanticEffects {
+                callbacks: Vec::new(),
+                occurrences: Vec::new(),
+                memberships: Vec::new(),
+            },
             effect_stack: Vec::new(),
+            content: 0,
         }
     }
 
@@ -455,17 +476,47 @@ impl<'a> SemanticResolver<'a> {
             .effects
             .and_then(|effects| effects.get(id))
             .ok_or_else(|| format!("Unknown text effect ID '{id}'"))?;
-        let index = u32::try_from(self.effect_callbacks.len())
+        let callback = match self
+            .semantic_effects
+            .callbacks
+            .iter()
+            .position(|stored| Arc::ptr_eq(stored, &effect.0))
+        {
+            Some(index) => index,
+            None => {
+                self.semantic_effects.callbacks.push(effect.0.clone());
+                self.semantic_effects.callbacks.len() - 1
+            }
+        };
+        let effect =
+            u32::try_from(callback).map_err(|_| "Text effect definition count exceeds limits")?;
+        let index = u32::try_from(self.semantic_effects.occurrences.len())
             .map_err(|_| "Text effect occurrence count exceeds limits")?;
-        self.effect_callbacks.push(effect.0.clone());
+        let depth = u16::try_from(self.effect_stack.len())
+            .map_err(|_| "Text effect nesting exceeds limits")?;
+        self.semantic_effects
+            .occurrences
+            .push(SemanticEffectOccurrence {
+                effect,
+                content: self.content..self.content,
+                depth,
+                order: index,
+            });
         self.effect_stack.push(index);
         Ok(())
     }
 
     pub(crate) fn pop_effect(&mut self) -> Result<(), String> {
-        self.effect_stack
+        let index = self
+            .effect_stack
             .pop()
             .ok_or_else(|| "Text effect scope is unbalanced".to_string())?;
+        let occurrence = self
+            .semantic_effects
+            .occurrences
+            .get_mut(index as usize)
+            .ok_or_else(|| "Text effect occurrence is out of bounds".to_string())?;
+        occurrence.content.end = self.content;
         Ok(())
     }
 
@@ -503,12 +554,16 @@ impl<'a> SemanticResolver<'a> {
             return;
         }
         let start = self.text.len();
+        let content = self.content..self.content + text.len();
         self.text.push_str(text);
+        self.content = content.end;
         let style = self.style_id();
+        let effects = self.effect_membership();
         self.runs.push(StyleRun {
             range: start..self.text.len(),
+            content,
             style,
-            effects: self.effect_stack.clone(),
+            effect_membership: effects,
         });
         self.source_map.segments.push(SourceMapSegment {
             source,
@@ -561,13 +616,17 @@ impl<'a> SemanticResolver<'a> {
         let style = self.style_id();
         let object = self.objects.len();
         let at = self.text.len();
+        let content = self.content..self.content + 1;
+        self.content = content.end;
+        let effects = self.effect_membership();
         self.objects.push(InlineObject {
             at,
             source: source.clone(),
             icon,
             options,
             style,
-            effects: self.effect_stack.clone(),
+            content,
+            effect_membership: effects,
         });
         self.source_map.segments.push(SourceMapSegment {
             source,
@@ -592,8 +651,20 @@ impl<'a> SemanticResolver<'a> {
         );
     }
 
+    fn effect_membership(&mut self) -> Range<usize> {
+        let start = self.semantic_effects.memberships.len();
+        self.semantic_effects
+            .memberships
+            .extend(self.effect_stack.iter().copied());
+        start..self.semantic_effects.memberships.len()
+    }
+
     pub(crate) fn finish(mut self) -> SemanticDocument<'static> {
-        merge_runs(&mut self.runs, &self.resolved_styles);
+        merge_runs(
+            &mut self.runs,
+            &self.resolved_styles,
+            &self.semantic_effects.memberships,
+        );
         SemanticDocument {
             text: Cow::Owned(self.text),
             styles: self.resolved_styles,
@@ -601,20 +672,22 @@ impl<'a> SemanticResolver<'a> {
             objects: self.objects,
             source_map: self.source_map,
             diagnostics: self.diagnostics,
-            effects: self.effect_callbacks,
+            effects: self.semantic_effects,
         }
     }
 }
 
-fn merge_runs(runs: &mut Vec<StyleRun>, styles: &[ResolvedStyle]) {
+fn merge_runs(runs: &mut Vec<StyleRun>, styles: &[ResolvedStyle], memberships: &[u32]) {
     let mut merged: Vec<StyleRun> = Vec::with_capacity(runs.len());
     for run in runs.drain(..) {
         if let Some(previous) = merged.last_mut()
             && previous.range.end == run.range.start
-            && previous.effects == run.effects
+            && memberships[previous.effect_membership.clone()]
+                == memberships[run.effect_membership.clone()]
             && same_style(&styles[previous.style.0], &styles[run.style.0])
         {
             previous.range.end = run.range.end;
+            previous.content.end = run.content.end;
         } else {
             merged.push(run);
         }

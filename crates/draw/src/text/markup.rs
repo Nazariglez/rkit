@@ -33,7 +33,7 @@ pub(crate) enum MarkupMode<'a> {
     },
 }
 
-pub(crate) fn plain(input: &str, color: Color, _wrap: bool) -> SemanticDocument<'_> {
+pub(crate) fn plain(input: &str, color: Color) -> SemanticDocument<'_> {
     let mut resolver = SemanticResolver::new(color, None, None, None);
     resolver.text(
         input,
@@ -50,7 +50,6 @@ pub(crate) fn parse(
     input: &str,
     default_color: Color,
     mode: MarkupMode<'_>,
-    _wrap: bool,
 ) -> SemanticDocument<'static> {
     match mode {
         MarkupMode::Extended {
@@ -78,12 +77,16 @@ fn parse_legacy(
     let mut cursor = 0;
     let mut text_start = 0;
 
-    while let Some(offset) = input[cursor..].find('[') {
-        let tag_start = cursor + offset;
-        let remaining = &input[tag_start..];
-        if remaining.starts_with(COLOR_TAG_OPEN) {
-            let after_prefix = &remaining[COLOR_TAG_OPEN.len()..];
-            if let Some((color, consumed)) = try_parse_open_tag(after_prefix) {
+    for candidate in scan_candidates(input, ScanPolicy::Legacy) {
+        let tag_start = candidate.range.start;
+        if tag_start < cursor {
+            continue;
+        }
+        match candidate.kind {
+            CandidateKind::ColorOpen if let Some(tag_end) = candidate.tag_end => {
+                let tag = &input[tag_start..tag_end];
+                let after_prefix = &tag[COLOR_TAG_OPEN.len()..];
+                let color = parse_hex_color(&after_prefix[..after_prefix.len() - 1]);
                 append_markup_text(
                     &mut resolver,
                     input,
@@ -92,70 +95,69 @@ fn parse_legacy(
                 );
                 resolver.push_color(color);
                 colors += 1;
-                cursor = tag_start + COLOR_TAG_OPEN.len() + consumed;
+                cursor = tag_end;
                 text_start = cursor;
-            } else {
-                cursor = tag_start + 1;
             }
-            continue;
-        }
-        if remaining.starts_with(COLOR_TAG_CLOSE) {
-            append_markup_text(
-                &mut resolver,
-                input,
-                text_start..tag_start,
-                TextSourceId::DEFAULT,
-            );
-            if colors > 0 {
-                resolver.pop_style().expect("tracked color scope");
-                colors -= 1;
+            CandidateKind::ColorClose => {
+                append_markup_text(
+                    &mut resolver,
+                    input,
+                    text_start..tag_start,
+                    TextSourceId::DEFAULT,
+                );
+                if colors > 0 {
+                    resolver.pop_style().expect("tracked color scope");
+                    colors -= 1;
+                }
+                cursor = candidate.range.end;
+                text_start = cursor;
             }
-            cursor = tag_start + COLOR_TAG_CLOSE.len();
-            text_start = cursor;
-            continue;
+            CandidateKind::Icon(icon) if rich => {
+                let Some(tag_end) = candidate
+                    .tag_end
+                    .filter(|end| *end - tag_start <= MAX_ICON_TAG_LEN)
+                else {
+                    debug_warn("Malformed text icon tag");
+                    break;
+                };
+                cursor = tag_end;
+                let Some(icon) = icon else {
+                    debug_warn("Malformed text icon tag");
+                    continue;
+                };
+                let Some(height) = icon.legacy_height else {
+                    debug_warn("Malformed text icon tag");
+                    continue;
+                };
+                if !icon.id.valid {
+                    debug_warn("Unknown or invalid text icon");
+                    continue;
+                }
+                let source = SourceSpan {
+                    id: TextSourceId::DEFAULT,
+                    range: tag_start..tag_end,
+                };
+                let options = IconOptions {
+                    height,
+                    align: TextIconAlign::Middle,
+                };
+                if resolver.validate_icon(icon.id.value, options).is_err() {
+                    debug_warn("Unknown or invalid text icon");
+                    continue;
+                }
+                append_markup_text(
+                    &mut resolver,
+                    input,
+                    text_start..tag_start,
+                    TextSourceId::DEFAULT,
+                );
+                resolver
+                    .icon(icon.id.value, options, source)
+                    .expect("validated legacy icon");
+                text_start = cursor;
+            }
+            _ => {}
         }
-        if !rich {
-            cursor = tag_start + 1;
-            continue;
-        }
-        if !remaining.starts_with(ICON_TAG_OPEN) {
-            cursor = tag_start + 1;
-            continue;
-        }
-        let Some(tag_end) = bounded_tag_end(input, tag_start, MAX_ICON_TAG_LEN) else {
-            debug_warn("Malformed text icon tag");
-            break;
-        };
-        let tag = &input[tag_start..tag_end];
-        let Some((id, height)) = parse_legacy_icon(tag) else {
-            debug_warn("Malformed text icon tag");
-            cursor = tag_end;
-            continue;
-        };
-        let source = SourceSpan {
-            id: TextSourceId::DEFAULT,
-            range: tag_start..tag_end,
-        };
-        let options = IconOptions {
-            height,
-            align: TextIconAlign::Middle,
-        };
-        if resolver.validate_icon(id, options).is_err() {
-            debug_warn("Unknown or invalid text icon");
-            cursor = tag_end;
-            continue;
-        }
-        append_markup_text(
-            &mut resolver,
-            input,
-            text_start..tag_start,
-            TextSourceId::DEFAULT,
-        );
-        resolver
-            .icon(id, options, source)
-            .expect("validated legacy icon");
-        cursor = tag_end;
-        text_start = cursor;
     }
     append_markup_text(
         &mut resolver,
@@ -170,15 +172,24 @@ fn parse_legacy(
 enum EventKind {
     OpenColor(Color),
     CloseColor,
-    OpenStyle(String),
+    OpenStyle {
+        id: Range<usize>,
+        valid: bool,
+    },
     CloseStyle,
     OpenUnderline,
     CloseUnderline,
     OpenStrikethrough,
     CloseStrikethrough,
-    OpenEffect(String),
+    OpenEffect {
+        id: Range<usize>,
+        valid: bool,
+    },
     CloseEffect,
-    Icon(String, IconOptions),
+    Icon {
+        id: Range<usize>,
+        options: IconOptions,
+    },
     Escape,
 }
 
@@ -186,10 +197,10 @@ impl EventKind {
     fn range_name(&self) -> Option<&'static str> {
         match self {
             Self::OpenColor(_) | Self::CloseColor => Some("color"),
-            Self::OpenStyle(_) | Self::CloseStyle => Some("style"),
+            Self::OpenStyle { .. } | Self::CloseStyle => Some("style"),
             Self::OpenUnderline | Self::CloseUnderline => Some("u"),
             Self::OpenStrikethrough | Self::CloseStrikethrough => Some("s"),
-            Self::OpenEffect(_) | Self::CloseEffect => Some("effect"),
+            Self::OpenEffect { .. } | Self::CloseEffect => Some("effect"),
             _ => None,
         }
     }
@@ -198,10 +209,10 @@ impl EventKind {
         matches!(
             self,
             Self::OpenColor(_)
-                | Self::OpenStyle(_)
+                | Self::OpenStyle { .. }
                 | Self::OpenUnderline
                 | Self::OpenStrikethrough
-                | Self::OpenEffect(_)
+                | Self::OpenEffect { .. }
         )
     }
 
@@ -221,6 +232,284 @@ struct Event {
     range: Range<usize>,
     kind: EventKind,
     active: bool,
+    pair: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct Identifier<'a> {
+    value: &'a str,
+    valid: bool,
+}
+
+#[derive(Clone, Copy)]
+struct IconCandidate<'a> {
+    id: Identifier<'a>,
+    legacy_height: Option<Option<f32>>,
+    extended: Option<IconOptions>,
+}
+
+#[derive(Clone, Copy)]
+enum CandidateKind<'a> {
+    Escape,
+    ColorOpen,
+    ColorClose,
+    StyleOpen(Identifier<'a>),
+    StyleClose,
+    UnderlineOpen,
+    UnderlineClose,
+    StrikethroughOpen,
+    StrikethroughClose,
+    EffectOpen(Identifier<'a>),
+    EffectClose,
+    Icon(Option<IconCandidate<'a>>),
+    Reserved,
+    Other,
+}
+
+struct Candidate<'a> {
+    range: Range<usize>,
+    tag_end: Option<usize>,
+    kind: CandidateKind<'a>,
+}
+
+#[derive(Clone, Copy)]
+enum ScanPolicy {
+    Legacy,
+    Extended,
+}
+
+struct CandidateScanner<'a> {
+    input: &'a str,
+    cursor: usize,
+    policy: ScanPolicy,
+}
+
+impl<'a> CandidateScanner<'a> {
+    fn new(input: &'a str, policy: ScanPolicy) -> Self {
+        Self {
+            input,
+            cursor: 0,
+            policy,
+        }
+    }
+
+    fn bounded_end(&self, start: usize, limit: usize) -> Option<usize> {
+        self.input[start..]
+            .as_bytes()
+            .iter()
+            .take(limit)
+            .position(|byte| *byte == b']')
+            .map(|offset| start + offset + 1)
+    }
+
+    fn advance(&mut self, start: usize, end: Option<usize>, kind: CandidateKind<'_>) {
+        self.cursor = match (self.policy, end, kind) {
+            (ScanPolicy::Extended, Some(end), _) if end - start <= MAX_EXTENDED_TAG_LEN => end,
+            (ScanPolicy::Extended, None, kind) if !matches!(kind, CandidateKind::Other) => {
+                bounded_tag_cursor(self.input, start)
+            }
+            (
+                ScanPolicy::Legacy,
+                Some(end),
+                CandidateKind::ColorOpen | CandidateKind::ColorClose,
+            ) => end,
+            _ => start + 1,
+        };
+    }
+}
+
+impl<'a> Iterator for CandidateScanner<'a> {
+    type Item = Candidate<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let start = self.input[self.cursor..]
+            .find('[')
+            .map(|offset| self.cursor + offset)?;
+        let remaining = &self.input[start..];
+        if remaining.starts_with("[[") {
+            self.cursor = match self.policy {
+                ScanPolicy::Legacy => start + 1,
+                ScanPolicy::Extended => start + 2,
+            };
+            return Some(Candidate {
+                range: start..start + 2,
+                tag_end: Some(start + 2),
+                kind: CandidateKind::Escape,
+            });
+        }
+        let fixed = if remaining.starts_with(COLOR_TAG_CLOSE) {
+            Some(CandidateKind::ColorClose)
+        } else if remaining.starts_with(STYLE_TAG_CLOSE) {
+            Some(CandidateKind::StyleClose)
+        } else if remaining.starts_with(UNDERLINE_TAG_OPEN) {
+            Some(CandidateKind::UnderlineOpen)
+        } else if remaining.starts_with(UNDERLINE_TAG_CLOSE) {
+            Some(CandidateKind::UnderlineClose)
+        } else if remaining.starts_with(STRIKETHROUGH_TAG_OPEN) {
+            Some(CandidateKind::StrikethroughOpen)
+        } else if remaining.starts_with(STRIKETHROUGH_TAG_CLOSE) {
+            Some(CandidateKind::StrikethroughClose)
+        } else if remaining.starts_with(EFFECT_TAG_CLOSE) {
+            Some(CandidateKind::EffectClose)
+        } else {
+            None
+        };
+        if let Some(kind) = fixed {
+            let end = match kind {
+                CandidateKind::ColorClose => start + COLOR_TAG_CLOSE.len(),
+                CandidateKind::StyleClose => start + STYLE_TAG_CLOSE.len(),
+                CandidateKind::UnderlineOpen => start + UNDERLINE_TAG_OPEN.len(),
+                CandidateKind::UnderlineClose => start + UNDERLINE_TAG_CLOSE.len(),
+                CandidateKind::StrikethroughOpen => start + STRIKETHROUGH_TAG_OPEN.len(),
+                CandidateKind::StrikethroughClose => start + STRIKETHROUGH_TAG_CLOSE.len(),
+                CandidateKind::EffectClose => start + EFFECT_TAG_CLOSE.len(),
+                _ => unreachable!(),
+            };
+            self.advance(start, Some(end), kind);
+            return Some(Candidate {
+                range: start..end,
+                tag_end: Some(end),
+                kind,
+            });
+        }
+
+        let mut kind = if remaining.starts_with(COLOR_TAG_OPEN) {
+            CandidateKind::ColorOpen
+        } else if remaining.starts_with(STYLE_TAG_OPEN) {
+            CandidateKind::StyleOpen(Identifier {
+                value: "",
+                valid: false,
+            })
+        } else if remaining.starts_with(EFFECT_TAG_OPEN) {
+            CandidateKind::EffectOpen(Identifier {
+                value: "",
+                valid: false,
+            })
+        } else if remaining.starts_with(ICON_TAG_OPEN) {
+            CandidateKind::Icon(None)
+        } else if remaining.starts_with("[color")
+            || remaining.starts_with("[/color")
+            || remaining.starts_with("[style")
+            || remaining.starts_with("[/style")
+            || remaining.starts_with("[icon")
+            || malformed_effect_prefix(remaining)
+        {
+            CandidateKind::Reserved
+        } else {
+            CandidateKind::Other
+        };
+        let color = matches!(kind, CandidateKind::ColorOpen);
+        let limit = if color && matches!(self.policy, ScanPolicy::Legacy) {
+            self.input.len() - start
+        } else if matches!(kind, CandidateKind::Icon(_))
+            && matches!(self.policy, ScanPolicy::Legacy)
+        {
+            MAX_ICON_TAG_LEN
+        } else {
+            MAX_EXTENDED_TAG_LEN
+        };
+        let end = self.bounded_end(start, limit);
+        let Some(end) = end else {
+            self.advance(start, None, kind);
+            return Some(Candidate {
+                range: start..self.input.len(),
+                tag_end: None,
+                kind,
+            });
+        };
+        let tag = &self.input[start..end];
+        kind = match kind {
+            CandidateKind::StyleOpen(_) => CandidateKind::StyleOpen(identifier(
+                tag.strip_prefix(STYLE_TAG_OPEN)
+                    .and_then(|id| id.strip_suffix(']'))
+                    .unwrap_or_default(),
+            )),
+            CandidateKind::EffectOpen(_) => CandidateKind::EffectOpen(identifier(
+                tag.strip_prefix(EFFECT_TAG_OPEN)
+                    .and_then(|id| id.strip_suffix(']'))
+                    .unwrap_or_default(),
+            )),
+            CandidateKind::Icon(_) => CandidateKind::Icon(parse_icon_candidate(tag)),
+            kind => kind,
+        };
+        self.advance(start, Some(end), kind);
+        Some(Candidate {
+            range: start..end,
+            tag_end: Some(end),
+            kind,
+        })
+    }
+}
+
+fn scan_candidates(input: &str, policy: ScanPolicy) -> CandidateScanner<'_> {
+    CandidateScanner::new(input, policy)
+}
+
+fn identifier_range(start: usize, prefix: &str, id: &str) -> Range<usize> {
+    let start = start + prefix.len();
+    start..start + id.len()
+}
+
+fn malformed_effect_prefix(remaining: &str) -> bool {
+    let suffix = remaining
+        .strip_prefix("[effect")
+        .or_else(|| remaining.strip_prefix("[/effect"));
+    suffix.is_some_and(|suffix| {
+        !matches!(
+            suffix.as_bytes().first(),
+            Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' | b'-')
+        )
+    })
+}
+
+fn identifier(value: &str) -> Identifier<'_> {
+    Identifier {
+        value,
+        valid: super::rich::is_markup_id(value),
+    }
+}
+
+fn parse_icon_candidate(tag: &str) -> Option<IconCandidate<'_>> {
+    let body = tag.strip_prefix(ICON_TAG_OPEN)?.strip_suffix(']')?;
+    let (id, attributes) = body
+        .split_once(' ')
+        .map_or((body, None), |(id, attributes)| (id, Some(attributes)));
+
+    let legacy_height = match attributes {
+        None => Some(None),
+        Some(attribute) => attribute
+            .strip_prefix("size=")
+            .and_then(parse_icon_size)
+            .map(Some),
+    };
+    let extended = parse_extended_icon_attributes(attributes)
+        .map(|(height, align)| IconOptions { height, align });
+    Some(IconCandidate {
+        id: identifier(id),
+        legacy_height,
+        extended,
+    })
+}
+
+fn parse_extended_icon_attributes(
+    attributes: Option<&str>,
+) -> Option<(Option<f32>, TextIconAlign)> {
+    let Some(attributes) = attributes else {
+        return Some((None, TextIconAlign::Middle));
+    };
+    let mut attributes = attributes.split(' ');
+    let first = attributes.next()?;
+    let (height, align) = if let Some(size) = first.strip_prefix("size=") {
+        let height = Some(parse_icon_size(size)?);
+        let align = match attributes.next() {
+            Some(attribute) => parse_align(attribute.strip_prefix("align=")?)?,
+            None => TextIconAlign::Middle,
+        };
+        (height, align)
+    } else {
+        (None, parse_align(first.strip_prefix("align=")?)?)
+    };
+    attributes.next().is_none().then_some((height, align))
 }
 
 fn parse_extended(
@@ -235,6 +524,7 @@ fn parse_extended(
     resolver.set_source(source_id);
     let mut events = scan_extended(input, source_id, &mut resolver);
     match_ranges(&mut events, source_id, &mut resolver);
+    validate_grapheme_boundaries(input, &mut events, source_id, &mut resolver);
 
     let mut cursor = 0;
     let mut active_scopes = Vec::new();
@@ -250,10 +540,11 @@ fn parse_extended(
                 resolver.push_color(color);
                 active_scopes.push(true);
             }
-            EventKind::OpenStyle(id) => {
-                let active = super::rich::is_markup_id(&id) && resolver.try_push_style(&id);
+            EventKind::OpenStyle { id, valid } => {
+                let id = &input[id];
+                let active = valid && resolver.try_push_style(id);
                 if !active {
-                    let code = if super::rich::is_markup_id(&id) {
+                    let code = if valid {
                         TextDiagnosticCode::UnknownStyleId
                     } else {
                         TextDiagnosticCode::InvalidIdentifier
@@ -271,9 +562,9 @@ fn parse_extended(
                 resolver.push_strikethrough();
                 active_scopes.push(true);
             }
-            EventKind::OpenEffect(id) => {
-                let valid = super::rich::is_markup_id(&id);
-                let active = valid && resolver.push_effect(&id).is_ok();
+            EventKind::OpenEffect { id, valid } => {
+                let id = &input[id];
+                let active = valid && resolver.push_effect(id).is_ok();
                 if !active {
                     resolver.diagnostic(
                         if valid {
@@ -305,11 +596,9 @@ fn parse_extended(
                     resolver.text(&input[range.clone()], source, SourceMapKind::Copied);
                 }
             }
-            EventKind::Icon(id, options) => {
-                if let Err(error) = resolver.icon(&id, options, source.clone()) {
-                    let code = if !super::rich::is_markup_id(&id) {
-                        TextDiagnosticCode::InvalidIdentifier
-                    } else if error.contains("size") {
+            EventKind::Icon { id, options } => {
+                if let Err(error) = resolver.icon(&input[id], options, source.clone()) {
+                    let code = if error.contains("size") {
                         TextDiagnosticCode::MalformedTag
                     } else {
                         TextDiagnosticCode::UnknownIconId
@@ -331,110 +620,88 @@ fn scan_extended(
     source_id: TextSourceId,
     resolver: &mut SemanticResolver<'_>,
 ) -> Vec<Event> {
-    let mut boundaries = vec![false; input.len() + 1];
-    boundaries[input.len()] = true;
-    for (index, _) in input.grapheme_indices(true) {
-        boundaries[index] = true;
-    }
-
     let mut events = Vec::new();
-    let mut cursor = 0;
-    while let Some(offset) = input[cursor..].find('[') {
-        let start = cursor + offset;
-        if input[start..].starts_with("[[") {
+    for candidate in scan_candidates(input, ScanPolicy::Extended) {
+        if matches!(candidate.kind, CandidateKind::Escape) {
             events.push(Event {
-                range: start..start + 2,
+                range: candidate.range,
                 kind: EventKind::Escape,
                 active: true,
+                pair: None,
             });
-            cursor = start + 2;
             continue;
         }
-        let remaining = &input[start..];
-        let reserved = remaining.starts_with("[color")
-            || remaining.starts_with("[/color")
-            || remaining.starts_with("[style")
-            || remaining.starts_with("[/style")
-            || remaining.starts_with("[icon")
-            || remaining.starts_with(UNDERLINE_TAG_OPEN)
-            || remaining.starts_with(UNDERLINE_TAG_CLOSE)
-            || remaining.starts_with(STRIKETHROUGH_TAG_OPEN)
-            || remaining.starts_with(STRIKETHROUGH_TAG_CLOSE)
-            || remaining.starts_with(EFFECT_TAG_OPEN)
-            || remaining.starts_with(EFFECT_TAG_CLOSE);
-        let Some(end) = bounded_tag_end(input, start, MAX_EXTENDED_TAG_LEN) else {
-            if reserved {
-                let mut end = input.len().min(start + MAX_EXTENDED_TAG_LEN);
-                while end > start && !input.is_char_boundary(end) {
-                    end -= 1;
-                }
-                resolver.diagnostic(
-                    TextDiagnosticCode::TagLengthLimitExceeded,
-                    SourceSpan {
-                        id: source_id,
-                        range: start..end,
-                    },
-                    None,
-                );
+        let start = candidate.range.start;
+        let Some(end) = candidate.tag_end else {
+            if !matches!(candidate.kind, CandidateKind::Other) {
+                diagnose_tag_limit(resolver, source_id, input, start);
             }
-            cursor = start + 1;
             continue;
         };
+        if end - start > MAX_EXTENDED_TAG_LEN {
+            diagnose_tag_limit(resolver, source_id, input, start);
+            continue;
+        }
         let tag = &input[start..end];
-        let kind = if let Some(body) = tag
-            .strip_prefix(COLOR_TAG_OPEN)
-            .and_then(|tag| tag.strip_suffix(']'))
-        {
-            Some(EventKind::OpenColor(parse_hex_color(body)))
-        } else if tag == COLOR_TAG_CLOSE {
-            Some(EventKind::CloseColor)
-        } else if let Some(id) = tag
-            .strip_prefix(STYLE_TAG_OPEN)
-            .and_then(|tag| tag.strip_suffix(']'))
-        {
-            Some(EventKind::OpenStyle(id.to_owned()))
-        } else if tag == STYLE_TAG_CLOSE {
-            Some(EventKind::CloseStyle)
-        } else if tag == UNDERLINE_TAG_OPEN {
-            Some(EventKind::OpenUnderline)
-        } else if tag == UNDERLINE_TAG_CLOSE {
-            Some(EventKind::CloseUnderline)
-        } else if tag == STRIKETHROUGH_TAG_OPEN {
-            Some(EventKind::OpenStrikethrough)
-        } else if tag == STRIKETHROUGH_TAG_CLOSE {
-            Some(EventKind::CloseStrikethrough)
-        } else if let Some(id) = tag
-            .strip_prefix(EFFECT_TAG_OPEN)
-            .and_then(|tag| tag.strip_suffix(']'))
-        {
-            Some(EventKind::OpenEffect(id.to_owned()))
-        } else if tag == EFFECT_TAG_CLOSE {
-            Some(EventKind::CloseEffect)
-        } else if tag.starts_with(ICON_TAG_OPEN) {
-            parse_extended_icon(tag).map(|(id, options)| EventKind::Icon(id.to_owned(), options))
-        } else {
-            None
+        let kind = match candidate.kind {
+            CandidateKind::ColorOpen => tag
+                .strip_prefix(COLOR_TAG_OPEN)
+                .and_then(|body| body.strip_suffix(']'))
+                .map(|body| EventKind::OpenColor(parse_hex_color(body))),
+            CandidateKind::ColorClose if tag == COLOR_TAG_CLOSE => Some(EventKind::CloseColor),
+            CandidateKind::StyleOpen(id) => Some(EventKind::OpenStyle {
+                id: identifier_range(start, STYLE_TAG_OPEN, id.value),
+                valid: id.valid,
+            }),
+            CandidateKind::StyleClose if tag == STYLE_TAG_CLOSE => Some(EventKind::CloseStyle),
+            CandidateKind::UnderlineOpen if tag == UNDERLINE_TAG_OPEN => {
+                Some(EventKind::OpenUnderline)
+            }
+            CandidateKind::UnderlineClose if tag == UNDERLINE_TAG_CLOSE => {
+                Some(EventKind::CloseUnderline)
+            }
+            CandidateKind::StrikethroughOpen if tag == STRIKETHROUGH_TAG_OPEN => {
+                Some(EventKind::OpenStrikethrough)
+            }
+            CandidateKind::StrikethroughClose if tag == STRIKETHROUGH_TAG_CLOSE => {
+                Some(EventKind::CloseStrikethrough)
+            }
+            CandidateKind::EffectOpen(id) => Some(EventKind::OpenEffect {
+                id: identifier_range(start, EFFECT_TAG_OPEN, id.value),
+                valid: id.valid,
+            }),
+            CandidateKind::EffectClose if tag == EFFECT_TAG_CLOSE => Some(EventKind::CloseEffect),
+            CandidateKind::Icon(Some(icon)) if icon.id.valid => {
+                icon.extended.map(|options| EventKind::Icon {
+                    id: identifier_range(start, ICON_TAG_OPEN, icon.id.value),
+                    options,
+                })
+            }
+            _ => None,
         };
 
         if let Some(kind) = kind {
-            if !boundaries[start] || !boundaries[end] {
-                resolver.diagnostic(
-                    TextDiagnosticCode::GraphemeBoundary,
-                    SourceSpan {
-                        id: source_id,
-                        range: start..end,
-                    },
-                    None,
-                );
-            } else {
-                let active = !kind.is_open() && !kind.is_close();
-                events.push(Event {
+            let active = !kind.is_open() && !kind.is_close();
+            events.push(Event {
+                range: start..end,
+                kind,
+                active,
+                pair: None,
+            });
+        } else if let CandidateKind::Icon(Some(icon)) = candidate.kind {
+            resolver.diagnostic(
+                if icon.id.valid {
+                    TextDiagnosticCode::MalformedTag
+                } else {
+                    TextDiagnosticCode::InvalidIdentifier
+                },
+                SourceSpan {
+                    id: source_id,
                     range: start..end,
-                    kind,
-                    active,
-                });
-            }
-        } else if reserved {
+                },
+                None,
+            );
+        } else if matches!(candidate.kind, CandidateKind::Reserved) {
             resolver.diagnostic(
                 TextDiagnosticCode::MalformedTag,
                 SourceSpan {
@@ -444,9 +711,79 @@ fn scan_extended(
                 None,
             );
         }
-        cursor = end;
     }
     events
+}
+
+fn bounded_tag_cursor(input: &str, start: usize) -> usize {
+    let mut end = input.len().min(start + MAX_EXTENDED_TAG_LEN);
+    while end > start && !input.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
+}
+
+fn diagnose_tag_limit(
+    resolver: &mut SemanticResolver<'_>,
+    source_id: TextSourceId,
+    input: &str,
+    start: usize,
+) {
+    let end = bounded_tag_cursor(input, start);
+    resolver.diagnostic(
+        TextDiagnosticCode::TagLengthLimitExceeded,
+        SourceSpan {
+            id: source_id,
+            range: start..end,
+        },
+        None,
+    );
+}
+
+fn validate_grapheme_boundaries(
+    input: &str,
+    events: &mut [Event],
+    source_id: TextSourceId,
+    resolver: &mut SemanticResolver<'_>,
+) {
+    let mut provisional = String::with_capacity(input.len());
+    let mut positions = vec![None; events.len()];
+    let mut cursor = 0;
+    for (index, event) in events.iter().enumerate().filter(|(_, event)| event.active) {
+        provisional.push_str(&input[cursor..event.range.start]);
+        let start = provisional.len();
+        if matches!(event.kind, EventKind::Escape) {
+            provisional.push('[');
+        }
+        positions[index] = Some(start..provisional.len());
+        cursor = event.range.end;
+    }
+    provisional.push_str(&input[cursor..]);
+
+    let mut boundaries = vec![false; provisional.len() + 1];
+    boundaries[provisional.len()] = true;
+    for (index, _) in provisional.grapheme_indices(true) {
+        boundaries[index] = true;
+    }
+
+    for index in 0..events.len() {
+        let Some(position) = &positions[index] else {
+            continue;
+        };
+        if !events[index].active || (boundaries[position.start] && boundaries[position.end]) {
+            continue;
+        }
+        diagnose_event(
+            resolver,
+            TextDiagnosticCode::GraphemeBoundary,
+            source_id,
+            &events[index],
+        );
+        events[index].active = false;
+        if let Some(pair) = events[index].pair {
+            events[pair].active = false;
+        }
+    }
 }
 
 fn match_ranges(
@@ -491,7 +828,9 @@ fn match_ranges(
         if events[open_index].kind.range_name() == Some(name) {
             stack.pop();
             events[open_index].active = true;
+            events[open_index].pair = Some(index);
             events[index].active = true;
+            events[index].pair = Some(open_index);
             continue;
         }
         let related = events[open_index].range.clone();
@@ -555,52 +894,6 @@ fn append_markup_text(
     );
 }
 
-fn bounded_tag_end(input: &str, start: usize, limit: usize) -> Option<usize> {
-    input[start..]
-        .as_bytes()
-        .iter()
-        .take(limit)
-        .position(|byte| *byte == b']')
-        .map(|offset| start + offset + 1)
-}
-
-fn parse_legacy_icon(tag: &str) -> Option<(&str, Option<f32>)> {
-    let body = tag.strip_prefix(ICON_TAG_OPEN)?.strip_suffix(']')?;
-    let (id, height) = match body.split_once(" size=") {
-        Some((id, size)) => (id, Some(parse_icon_size(size)?)),
-        None => (body, None),
-    };
-    if !super::rich::is_markup_id(id) || body.matches(" size=").count() > 1 {
-        return None;
-    }
-    Some((id, height))
-}
-
-fn parse_extended_icon(tag: &str) -> Option<(&str, IconOptions)> {
-    let body = tag.strip_prefix(ICON_TAG_OPEN)?.strip_suffix(']')?;
-    let mut parts = body.split(' ');
-    let id = parts.next()?;
-    if !super::rich::is_markup_id(id) {
-        return None;
-    }
-    let mut height = None;
-    let mut align = TextIconAlign::Middle;
-    if let Some(part) = parts.next() {
-        if let Some(size) = part.strip_prefix("size=") {
-            height = Some(parse_icon_size(size)?);
-            if let Some(part) = parts.next() {
-                align = parse_align(part.strip_prefix("align=")?)?;
-            }
-        } else {
-            align = parse_align(part.strip_prefix("align=")?)?;
-        }
-    }
-    parts
-        .next()
-        .is_none()
-        .then_some((id, IconOptions { height, align }))
-}
-
 fn parse_align(value: &str) -> Option<TextIconAlign> {
     match value {
         "middle" => Some(TextIconAlign::Middle),
@@ -646,11 +939,6 @@ fn debug_warn(message: &str) {
 #[cfg(not(debug_assertions))]
 fn debug_warn(_: &str) {}
 
-fn try_parse_open_tag(s: &str) -> Option<(Color, usize)> {
-    let close_bracket = s.find(']')?;
-    Some((parse_hex_color(&s[..close_bracket]), close_bracket + 1))
-}
-
 fn parse_hex_color(hex: &str) -> Color {
     let mut value: u32 = 0;
     for &byte in hex.as_bytes().iter().take(8) {
@@ -691,7 +979,7 @@ mod tests {
             "12345678901234567890123456789012",
         ] {
             let input = format!("before [icon:soul size={size}] after");
-            let markup = parse(&input, Color::WHITE, MarkupMode::Rich(&icons), false);
+            let markup = parse(&input, Color::WHITE, MarkupMode::Rich(&icons));
             assert_eq!(markup.text, input);
             assert!(markup.objects.is_empty());
         }
@@ -699,7 +987,7 @@ mod tests {
 
     #[test]
     fn plain_text_is_one_span() {
-        let markup = parse("Hello 世界", Color::WHITE, MarkupMode::Colors, false);
+        let markup = parse("Hello 世界", Color::WHITE, MarkupMode::Colors);
         assert_eq!(markup.text, "Hello 世界");
         assert_eq!(markup.runs.len(), 1);
         assert_eq!(markup.styles[markup.runs[0].style.0].color, Color::WHITE);
@@ -712,7 +1000,6 @@ mod tests {
             "[color:#FF000080]red[/color]",
             Color::WHITE,
             MarkupMode::Colors,
-            false,
         );
         assert_eq!(markup.text, "red");
         assert_eq!(
@@ -728,7 +1015,6 @@ mod tests {
             "[color:#FF0000]red [color:#00FF00]green[/color] back[/color]",
             Color::WHITE,
             MarkupMode::Colors,
-            false,
         );
         assert_eq!(markup.text, "red green back");
         assert_eq!(markup.runs.len(), 3);
@@ -748,7 +1034,7 @@ mod tests {
 
     #[test]
     fn colors_mode_keeps_icons_literal() {
-        let markup = parse("[icon:soul] text", Color::WHITE, MarkupMode::Colors, false);
+        let markup = parse("[icon:soul] text", Color::WHITE, MarkupMode::Colors);
         assert_eq!(markup.text, "[icon:soul] text");
         assert!(markup.objects.is_empty());
     }
@@ -757,7 +1043,7 @@ mod tests {
     fn malformed_icon_is_literal() {
         let icons = TextIcons::default();
         let input = "[icon:soul  size=20]";
-        let markup = parse(input, Color::WHITE, MarkupMode::Rich(&icons), false);
+        let markup = parse(input, Color::WHITE, MarkupMode::Rich(&icons));
         assert_eq!(markup.text, input);
         assert!(markup.objects.is_empty());
     }
@@ -766,7 +1052,7 @@ mod tests {
     fn unknown_icon_is_literal() {
         let icons = TextIcons::default();
         let input = "[icon:unknown]";
-        let markup = parse(input, Color::WHITE, MarkupMode::Rich(&icons), false);
+        let markup = parse(input, Color::WHITE, MarkupMode::Rich(&icons));
         assert_eq!(markup.text, input);
         assert!(markup.objects.is_empty());
     }
