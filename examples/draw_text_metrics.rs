@@ -20,8 +20,7 @@ fn draw_system(window: Res<Window>) {
 
     let metrics = text_metrics(TEXT).size(20.0).max_width(300.0).measure();
 
-    draw.rect(Vec2::ZERO, metrics.size + Vec2::splat(20.0))
-        .position(window.size() * 0.5)
+    draw.rect(window.size() * 0.5, metrics.size + Vec2::splat(20.0))
         .anchor(Vec2::splat(0.5))
         .fill_color(Color::BLACK)
         .fill()

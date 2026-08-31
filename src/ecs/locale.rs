@@ -206,8 +206,7 @@ bye = До свидания
 count = У вас { $n } сообщений.
 "#;
 
-    const FTL_BAD: &str = r#"
-hello = Hello
+    const FTL_BAD: &str = r#"hello = Hello
 @bad = nope
 "#;
 

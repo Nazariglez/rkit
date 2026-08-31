@@ -57,7 +57,7 @@ mod test {
 
     #[test]
     fn test_next_multiply() {
-        assert_eq!(next_multiple_of(144, 2), 146);
+        assert_eq!(next_multiple_of(144, 2), 144);
 
         assert_eq!(next_multiple_of(7, 8), 8);
         assert_eq!(next_multiple_of(8, 8), 8);
@@ -66,17 +66,17 @@ mod test {
         assert_eq!(next_multiple_of(16, 8), 16);
         assert_eq!(next_multiple_of(17, 8), 24);
 
-        assert_eq!(next_multiple_of(0, 10), 10);
+        assert_eq!(next_multiple_of(0, 10), 0);
         assert_eq!(next_multiple_of(9, 10), 10);
         assert_eq!(next_multiple_of(10, 10), 10);
         assert_eq!(next_multiple_of(13, 10), 20);
-        assert_eq!(next_multiple_of(21, 10), 40);
+        assert_eq!(next_multiple_of(21, 10), 30);
 
         assert_eq!(next_multiple_of(8, 9), 9);
         assert_eq!(next_multiple_of(9, 9), 9);
         assert_eq!(next_multiple_of(10, 9), 18);
         assert_eq!(next_multiple_of(17, 9), 18);
-        assert_eq!(next_multiple_of(19, 9), 36);
+        assert_eq!(next_multiple_of(19, 9), 27);
     }
 
     #[test]

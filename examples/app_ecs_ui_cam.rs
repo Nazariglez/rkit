@@ -88,7 +88,7 @@ fn draw_system(world: &mut World) {
     let mut draw = create_draw_2d();
 
     // you must apply the same camera when drawing
-    let cam = world.query::<&Cam>().single(world);
+    let cam = world.query::<&Cam>().single(world).unwrap();
     draw.set_camera(&cam.0);
 
     // clear and draw layout
