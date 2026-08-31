@@ -414,10 +414,10 @@ impl TextSystem {
 
         let cache = FxHashMap::default();
 
-        let mut font_system = FontSystem::new();
+        let font_system = FontSystem::new();
         let swash = SwashCache::new();
 
-        let buffer = shaping::new_buffer(&mut font_system);
+        let buffer = shaping::new_buffer();
 
         let sys = Self {
             atlases: [mask_linear, mask_nearest, rgba_linear, rgba_nearest],
@@ -597,6 +597,10 @@ impl TextSystem {
         layout: &mut TextLayout,
         diagnostics: &mut document::DiagnosticSink,
     ) -> Result<(), String> {
+        if text.font.is_none() && self.default_font.is_none() {
+            return Err("Text layout requires an explicit or default font".into());
+        }
+
         shaping::layout(
             &mut self.font_system,
             &mut self.buffer,

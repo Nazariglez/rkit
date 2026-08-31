@@ -44,8 +44,8 @@ impl GlyphSource {
     }
 }
 
-pub(crate) fn new_buffer(font_system: &mut FontSystem) -> Buffer {
-    Buffer::new(font_system, Metrics::new(1.0, 1.0))
+pub(crate) fn new_buffer() -> Buffer {
+    Buffer::new_empty(Metrics::new(1.0, 1.0))
 }
 
 pub(crate) fn glyph_image<'a>(
