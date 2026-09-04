@@ -18,6 +18,7 @@ pub struct Texture {
     pub(crate) size: Vec2,
     pub(crate) write: bool,
     pub(crate) format: TextureFormat,
+    pub(crate) mip_level_count: u32,
     pub(crate) revision: Arc<AtomicU32>,
 }
 
@@ -59,6 +60,11 @@ impl Texture {
     }
 
     #[inline]
+    pub fn mip_level_count(&self) -> u32 {
+        self.mip_level_count
+    }
+
+    #[inline]
     pub fn revision(&self) -> u32 {
         self.revision.load(Ordering::Relaxed)
     }
@@ -76,6 +82,7 @@ impl Debug for Texture {
             .field("size", &self.size)
             .field("write", &self.write)
             .field("format", &self.format)
+            .field("mip_level_count", &self.mip_level_count)
             .finish()
     }
 }
@@ -248,7 +255,7 @@ pub struct Sampler {
     pub(crate) wrap_z: TextureWrap,
     pub(crate) mag_filter: TextureFilter,
     pub(crate) min_filter: TextureFilter,
-    // pub(crate) mipmap_filter: Option<TextureFilter>, // TODO mipmap filter?
+    pub(crate) mipmap_filter: TextureFilter,
 }
 
 impl Sampler {
@@ -275,6 +282,10 @@ impl Sampler {
     pub fn min_filter(&self) -> TextureFilter {
         self.min_filter
     }
+
+    pub fn mipmap_filter(&self) -> TextureFilter {
+        self.mipmap_filter
+    }
 }
 
 impl Debug for Sampler {
@@ -286,6 +297,7 @@ impl Debug for Sampler {
             .field("wrap_z", &self.wrap_z)
             .field("mag_filter", &self.mag_filter)
             .field("min_filter", &self.min_filter)
+            .field("mipmap_filter", &self.mipmap_filter)
             .finish()
     }
 }

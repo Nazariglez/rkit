@@ -91,6 +91,11 @@ pub fn write_texture(tex: &Texture) -> TextureWriteBuilder<'_> {
 }
 
 #[inline]
+pub fn generate_mipmaps(texture: &Texture) -> Result<(), String> {
+    get_mut_backend().gfx().generate_mipmaps(texture)
+}
+
+#[inline]
 pub fn create_sampler<'a>() -> SamplerBuilder<'a> {
     SamplerBuilder::new()
 }

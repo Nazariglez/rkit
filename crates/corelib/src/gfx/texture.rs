@@ -22,11 +22,52 @@ pub struct TextureDescriptor<'a> {
     pub write: bool,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
-pub struct TextureData<'a> {
+#[derive(Debug, Copy, Clone)]
+pub struct TextureMipLevel<'a> {
     pub bytes: &'a [u8],
     pub width: u32,
     pub height: u32,
+}
+
+impl<'a> TextureMipLevel<'a> {
+    pub const fn new(bytes: &'a [u8], width: u32, height: u32) -> Self {
+        Self {
+            bytes,
+            width,
+            height,
+        }
+    }
+}
+
+#[deprecated(note = "use TextureMipLevel")]
+pub type TextureData<'a> = TextureMipLevel<'a>;
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum TextureUpload<'a> {
+    Single(TextureMipLevel<'a>),
+    Generate(TextureMipLevel<'a>),
+    Levels(&'a [TextureMipLevel<'a>]),
+}
+
+impl TextureUpload<'_> {
+    pub(crate) fn base(&self) -> Option<TextureMipLevel<'_>> {
+        match self {
+            Self::Single(level) | Self::Generate(level) => Some(*level),
+            Self::Levels(levels) => levels.first().copied(),
+        }
+    }
+
+    pub(crate) fn mip_level_count(&self) -> u32 {
+        match self {
+            Self::Single(_) => 1,
+            Self::Generate(level) => u32::BITS - level.width.max(level.height).leading_zeros(),
+            Self::Levels(levels) => levels.len() as u32,
+        }
+    }
+
+    pub(crate) fn generates_mipmaps(&self) -> bool {
+        matches!(self, Self::Generate(_))
+    }
 }
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -140,6 +181,63 @@ impl TextureFormat {
         )
     }
 
+    pub(crate) fn is_depth(&self) -> bool {
+        matches!(
+            self,
+            Self::Depth16
+                | Self::Depth24
+                | Self::Depth32Float
+                | Self::Depth24Stencil8
+                | Self::Depth32FloatStencil8
+        )
+    }
+
+    pub(crate) fn bytes_per_texel(&self) -> Option<u32> {
+        match self {
+            Self::R8UNorm | Self::R8INorm | Self::R8UInt | Self::R8Int => Some(1),
+            Self::Rg8UNorm | Self::Rg8INorm | Self::Rg8UInt | Self::Rg8Int => Some(2),
+            Self::Rgba8UNorm
+            | Self::Rgba8UNormSrgb
+            | Self::Rgba8INorm
+            | Self::Rgba8UInt
+            | Self::Rgba8Int
+            | Self::Bgra8UNorm
+            | Self::Bgra8UNormSrgb
+            | Self::Rg16UNorm
+            | Self::Rg16INorm
+            | Self::Rg16UInt
+            | Self::Rg16Int
+            | Self::Rg16Float
+            | Self::R32UInt
+            | Self::R32Int
+            | Self::R32Float => Some(4),
+            Self::R16UNorm | Self::R16INorm | Self::R16UInt | Self::R16Int | Self::R16Float => {
+                Some(2)
+            }
+            Self::Rgba16UNorm
+            | Self::Rgba16INorm
+            | Self::Rgba16UInt
+            | Self::Rgba16Int
+            | Self::Rgba16Float
+            | Self::Rg32UInt
+            | Self::Rg32Int
+            | Self::Rg32Float => Some(8),
+            Self::Rgba32UInt | Self::Rgba32Int | Self::Rgba32Float => Some(16),
+            Self::Depth16
+            | Self::Depth24
+            | Self::Depth32Float
+            | Self::Depth24Stencil8
+            | Self::Depth32FloatStencil8 => None,
+        }
+    }
+
+    pub(crate) fn byte_len(&self, width: u32, height: u32) -> Option<usize> {
+        let width = usize::try_from(width).ok()?;
+        let height = usize::try_from(height).ok()?;
+        let bytes_per_texel = usize::try_from(self.bytes_per_texel()?).ok()?;
+        width.checked_mul(height)?.checked_mul(bytes_per_texel)
+    }
+
     #[inline]
     pub fn channels(&self) -> u8 {
         match self {
@@ -220,5 +318,5 @@ pub struct SamplerDescriptor<'a> {
     pub wrap_z: TextureWrap,
     pub mag_filter: TextureFilter,
     pub min_filter: TextureFilter,
-    pub mipmap_filter: Option<TextureFilter>,
+    pub mipmap_filter: TextureFilter,
 }

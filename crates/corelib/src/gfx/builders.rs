@@ -3,8 +3,8 @@ use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef, BlendMode,
     Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, CullMode, DepthStencil,
     IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
-    RenderTextureDescriptor, Sampler, SamplerDescriptor, Stencil, Texture, TextureData,
-    TextureDescriptor, TextureFilter, TextureFormat, TextureWrap, VertexLayout,
+    RenderTextureDescriptor, Sampler, SamplerDescriptor, Stencil, Texture, TextureDescriptor,
+    TextureFilter, TextureFormat, TextureMipLevel, TextureUpload, TextureWrap, VertexLayout,
 };
 use glam::{UVec2, uvec2};
 use image::EncodableLayout;
@@ -269,7 +269,7 @@ impl<'a> SamplerBuilder<'a> {
 
     #[inline]
     pub fn with_mipmap_filter(mut self, filter: TextureFilter) -> Self {
-        self.desc.mipmap_filter = Some(filter);
+        self.desc.mipmap_filter = filter;
         self
     }
 
@@ -280,17 +280,11 @@ impl<'a> SamplerBuilder<'a> {
     }
 }
 
-enum TextureRawData<'a> {
-    Empty {
-        width: u32,
-        height: u32,
-    },
+enum TextureSource<'a> {
+    Empty { width: u32, height: u32 },
     Image(&'a [u8]),
-    Raw {
-        bytes: &'a [u8],
-        width: u32,
-        height: u32,
-    },
+    Raw(TextureMipLevel<'a>),
+    Mipmaps(&'a [TextureMipLevel<'a>]),
 }
 
 pub struct TextureWriteBuilder<'a> {
@@ -327,31 +321,64 @@ impl<'a> TextureWriteBuilder<'a> {
     }
 
     pub fn build(self) -> Result<(), String> {
-        let Self {
-            offset,
-            size,
-            tex,
-            data,
-        } = self;
+        let data = self
+            .data
+            .ok_or_else(|| "Texture write requires pixel data".to_string())?;
+        if !self.tex.is_writable() {
+            return Err(format!("Texture '{:?}' is not writable", self.tex.id()));
+        }
+        if self.size.x == 0 || self.size.y == 0 {
+            return Err("Texture write size must be nonzero".to_string());
+        }
+        let end = self
+            .offset
+            .checked_add(self.size)
+            .ok_or_else(|| "Texture write bounds overflow".to_string())?;
+        let bounds = uvec2(self.tex.width() as _, self.tex.height() as _);
+        if end.x > bounds.x || end.y > bounds.y {
+            return Err(format!(
+                "Texture write region {}x{} at {},{} exceeds {}x{} texture",
+                self.size.x, self.size.y, self.offset.x, self.offset.y, bounds.x, bounds.y
+            ));
+        }
+        let expected = self
+            .tex
+            .format()
+            .byte_len(self.size.x, self.size.y)
+            .ok_or_else(|| {
+                format!(
+                    "Texture format {:?} does not support pixel writes",
+                    self.tex.format()
+                )
+            })?;
+        if data.len() != expected {
+            return Err(format!(
+                "Texture write requires {expected} bytes but got {}",
+                data.len()
+            ));
+        }
         get_mut_backend()
             .gfx()
-            .write_texture(tex, offset, size, data.unwrap())
+            .write_texture(self.tex, self.offset, self.size, data)
     }
 }
 
 pub struct TextureBuilder<'a> {
     desc: TextureDescriptor<'a>,
-    data: TextureRawData<'a>,
+    source: TextureSource<'a>,
+    mipmaps: bool,
 }
 
 impl Default for TextureBuilder<'_> {
     fn default() -> Self {
-        let desc = TextureDescriptor::default();
-        let data = TextureRawData::Empty {
-            width: 1,
-            height: 1,
-        };
-        Self { desc, data }
+        Self {
+            desc: TextureDescriptor::default(),
+            source: TextureSource::Empty {
+                width: 1,
+                height: 1,
+            },
+            mipmaps: false,
+        }
     }
 }
 
@@ -361,22 +388,23 @@ impl<'a> TextureBuilder<'a> {
     }
 
     pub fn from_image(mut self, image: &'a [u8]) -> Self {
-        self.data = TextureRawData::Image(image);
+        self.source = TextureSource::Image(image);
         self
     }
 
     pub fn from_bytes(mut self, bytes: &'a [u8], width: u32, height: u32) -> Self {
-        self.data = TextureRawData::Raw {
-            bytes,
-            width,
-            height,
-        };
+        self.source = TextureSource::Raw(TextureMipLevel::new(bytes, width, height));
+        self
+    }
+
+    pub fn from_mipmaps(mut self, mipmaps: &'a [TextureMipLevel<'a>]) -> Self {
+        self.source = TextureSource::Mipmaps(mipmaps);
         self
     }
 
     pub fn with_empty_size(mut self, width: u32, height: u32) -> Self {
-        if matches!(self.data, TextureRawData::Empty { .. }) {
-            self.data = TextureRawData::Empty { width, height };
+        if matches!(self.source, TextureSource::Empty { .. }) {
+            self.source = TextureSource::Empty { width, height };
         }
         self
     }
@@ -396,58 +424,172 @@ impl<'a> TextureBuilder<'a> {
         self
     }
 
+    pub fn with_mipmaps(mut self) -> Self {
+        self.mipmaps = true;
+        self
+    }
+
     pub fn build(self) -> Result<Texture, String> {
-        let Self { desc, data } = self;
-        match data {
-            TextureRawData::Empty { width, height } => {
-                let channels = desc.format.channels();
-                let size = (width * height) * channels as u32;
-                let data = vec![0; size as _];
-                get_mut_backend().gfx().create_texture(
-                    desc,
-                    Some(TextureData {
-                        bytes: &data,
-                        width,
-                        height,
-                    }),
-                )
+        let Self {
+            desc,
+            source,
+            mipmaps,
+        } = self;
+        if mipmaps && matches!(source, TextureSource::Mipmaps(_)) {
+            return Err(texture_error(
+                desc.label,
+                "cannot combine manual and generated mipmaps",
+            ));
+        }
+
+        match source {
+            TextureSource::Empty { width, height } => {
+                validate_size(desc.label, width, height)?;
+                if desc.format.is_depth() {
+                    if mipmaps {
+                        return Err(texture_error(
+                            desc.label,
+                            "depth formats cannot generate mipmaps",
+                        ));
+                    }
+                    return get_mut_backend().gfx().create_texture(
+                        desc,
+                        TextureUpload::Single(TextureMipLevel::new(&[], width, height)),
+                    );
+                }
+                texture_byte_len(desc.format, width, height)
+                    .map_err(|message| texture_error(desc.label, &message))?;
+                create_texture(desc, TextureMipLevel::new(&[], width, height), mipmaps)
             }
-            TextureRawData::Image(bytes) => {
-                let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
-                let rgba = img.to_rgba8();
-                get_mut_backend().gfx().create_texture(
-                    desc,
-                    Some(TextureData {
-                        bytes: rgba.as_bytes(),
-                        width: rgba.width(),
-                        height: rgba.height(),
-                    }),
-                )
-            }
-            TextureRawData::Raw {
-                bytes,
-                width,
-                height,
-            } => {
-                let req_bytes = (width * height) as usize * desc.format.channels() as usize;
-                if bytes.len() != req_bytes {
-                    return Err(format!(
-                        "Texture with label '{}' requires {req_bytes} bytes but got {}",
-                        desc.label.map_or("", |s| s),
-                        bytes.len()
+            TextureSource::Image(bytes) => {
+                if !matches!(
+                    desc.format,
+                    TextureFormat::Rgba8UNorm | TextureFormat::Rgba8UNormSrgb
+                ) {
+                    return Err(texture_error(
+                        desc.label,
+                        "decoded images require Rgba8UNorm or Rgba8UNormSrgb",
                     ));
                 }
-
-                get_mut_backend().gfx().create_texture(
-                    desc,
-                    Some(TextureData {
-                        bytes,
-                        width,
-                        height,
-                    }),
-                )
+                let image = image::load_from_memory(bytes).map_err(|err| {
+                    texture_error(desc.label, &format!("could not decode image: {err}"))
+                })?;
+                let rgba = image.to_rgba8();
+                let level = TextureMipLevel::new(rgba.as_bytes(), rgba.width(), rgba.height());
+                create_texture(desc, level, mipmaps)
+            }
+            TextureSource::Raw(level) => {
+                validate_level(desc, level, 0)?;
+                create_texture(desc, level, mipmaps)
+            }
+            TextureSource::Mipmaps(levels) => {
+                validate_mipmaps(desc, levels)?;
+                get_mut_backend()
+                    .gfx()
+                    .create_texture(desc, TextureUpload::Levels(levels))
             }
         }
+    }
+}
+
+fn create_texture(
+    desc: TextureDescriptor<'_>,
+    level: TextureMipLevel<'_>,
+    mipmaps: bool,
+) -> Result<Texture, String> {
+    let upload = if mipmaps {
+        TextureUpload::Generate(level)
+    } else {
+        TextureUpload::Single(level)
+    };
+    get_mut_backend().gfx().create_texture(desc, upload)
+}
+
+fn validate_mipmaps(
+    desc: TextureDescriptor<'_>,
+    levels: &[TextureMipLevel<'_>],
+) -> Result<(), String> {
+    let Some(base) = levels.first().copied() else {
+        return Err(texture_error(desc.label, "mipmap chain cannot be empty"));
+    };
+    validate_level(desc, base, 0)?;
+
+    let mut previous = base;
+    for (index, level) in levels.iter().copied().enumerate().skip(1) {
+        if previous.width == 1 && previous.height == 1 {
+            return Err(texture_error(
+                desc.label,
+                &format!("mip {index} follows the terminal 1x1 level"),
+            ));
+        }
+        let width = (previous.width / 2).max(1);
+        let height = (previous.height / 2).max(1);
+        if level.width != width || level.height != height {
+            return Err(texture_error(
+                desc.label,
+                &format!(
+                    "mip {index} must be {width}x{height} but is {}x{}",
+                    level.width, level.height
+                ),
+            ));
+        }
+        validate_level(desc, level, index)?;
+        previous = level;
+    }
+    Ok(())
+}
+
+fn validate_level(
+    desc: TextureDescriptor<'_>,
+    level: TextureMipLevel<'_>,
+    index: usize,
+) -> Result<(), String> {
+    if level.width == 0 || level.height == 0 {
+        return Err(texture_error(
+            desc.label,
+            &format!(
+                "mip {index} dimensions must be nonzero but are {}x{}",
+                level.width, level.height
+            ),
+        ));
+    }
+    let expected = texture_byte_len(desc.format, level.width, level.height)
+        .map_err(|message| texture_error(desc.label, &format!("mip {index} {message}")))?;
+    if level.bytes.len() != expected {
+        return Err(texture_error(
+            desc.label,
+            &format!(
+                "mip {index} requires {expected} bytes but got {}",
+                level.bytes.len()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_size(label: Option<&str>, width: u32, height: u32) -> Result<(), String> {
+    if width == 0 || height == 0 {
+        return Err(texture_error(
+            label,
+            &format!("dimensions must be nonzero but are {width}x{height}"),
+        ));
+    }
+    Ok(())
+}
+
+fn texture_byte_len(format: TextureFormat, width: u32, height: u32) -> Result<usize, String> {
+    if format.bytes_per_texel().is_none() {
+        return Err(format!("format {format:?} does not support color uploads"));
+    }
+    format
+        .byte_len(width, height)
+        .ok_or_else(|| format!("byte size for {width}x{height} {format:?} overflows"))
+}
+
+fn texture_error(label: Option<&str>, message: &str) -> String {
+    match label {
+        Some(label) => format!("Texture '{label}' {message}"),
+        None => format!("Texture {message}"),
     }
 }
 

@@ -2,7 +2,7 @@ use crate::{
     gfx::{
         BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, GpuStats, Limits, RenderPipeline,
         RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
-        SamplerDescriptor, Stencil, Texture, TextureData, TextureDescriptor,
+        SamplerDescriptor, Stencil, Texture, TextureDescriptor, TextureUpload,
     },
     input::{KeyboardState, MouseState},
     math::{UVec2, Vec2},
@@ -65,8 +65,9 @@ pub(crate) trait GfxBackendImpl {
     fn create_texture(
         &mut self,
         desc: TextureDescriptor,
-        data: Option<TextureData>,
+        upload: TextureUpload,
     ) -> Result<Texture, String>;
+    fn generate_mipmaps(&mut self, texture: &Texture) -> Result<(), String>;
     fn write_texture(
         &mut self,
         texture: &Texture,

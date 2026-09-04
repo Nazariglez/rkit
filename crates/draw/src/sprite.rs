@@ -1,6 +1,6 @@
 use corelib::gfx::{
     Sampler, SamplerBuilder, SamplerId, Texture, TextureBuilder, TextureFilter, TextureFormat,
-    TextureId, TextureWrap,
+    TextureId, TextureMipLevel, TextureWrap,
 };
 use corelib::math::{Rect, Vec2, vec2};
 use utils::drop_signal::DropObserver;
@@ -102,6 +102,7 @@ pub struct SpriteBuilder<'a> {
     sampler_builder: SamplerBuilder<'a>,
     texture: Option<Texture>,
     sampler: Option<Sampler>,
+    mipmaps: bool,
 }
 
 impl<'a> SpriteBuilder<'a> {
@@ -124,13 +125,28 @@ impl<'a> SpriteBuilder<'a> {
 
     #[inline]
     pub fn from_image(mut self, image: &'a [u8]) -> Self {
+        self.texture = None;
         self.texture_builder = self.texture_builder.from_image(image);
         self
     }
 
     #[inline]
     pub fn from_bytes(mut self, bytes: &'a [u8], width: u32, height: u32) -> Self {
+        self.texture = None;
         self.texture_builder = self.texture_builder.from_bytes(bytes, width, height);
+        self
+    }
+
+    #[inline]
+    pub fn from_mipmaps(mut self, mipmaps: &'a [TextureMipLevel<'a>]) -> Self {
+        self.texture = None;
+        self.texture_builder = self.texture_builder.from_mipmaps(mipmaps);
+        self
+    }
+
+    #[inline]
+    pub fn with_mipmaps(mut self) -> Self {
+        self.mipmaps = true;
         self
     }
 
@@ -200,10 +216,18 @@ impl<'a> SpriteBuilder<'a> {
             sampler_builder,
             texture,
             sampler,
+            mipmaps,
         } = self;
         let texture = match texture {
+            None if mipmaps => texture_builder.with_mipmaps().build()?,
             None => texture_builder.build()?,
-            Some(t) => t,
+            Some(texture) => {
+                let is_complete_one_pixel_chain = texture.width() == 1.0 && texture.height() == 1.0;
+                if mipmaps && texture.mip_level_count() == 1 && !is_complete_one_pixel_chain {
+                    return Err("Sprite texture has no mipmaps; create it with TextureBuilder::with_mipmaps first".to_string());
+                }
+                texture
+            }
         };
         let sampler = match sampler {
             None => sampler_builder.build()?,

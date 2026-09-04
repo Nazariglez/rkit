@@ -10,14 +10,17 @@ use super::{
 use crate::{
     backend::{
         traits::GfxBackendImpl,
-        wgpu::pipeline::{PipelineInner, PipelineRecipe},
+        wgpu::{
+            mipmap::MipmapGenerator,
+            pipeline::{PipelineInner, PipelineRecipe},
+        },
     },
     gfx::{
         BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
         BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, MAX_BINDING_ENTRIES,
         RenderCommand, RenderPass, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
         RenderTextureDescriptor, Renderer, Sampler, SamplerDescriptor, Scissor, Stencil, Texture,
-        TextureData, TextureDescriptor, TextureFormat, TextureId,
+        TextureDescriptor, TextureFormat, TextureId, TextureMipLevel, TextureUpload,
         consts::{
             MAX_BIND_GROUPS_PER_PIPELINE, MAX_PIPELINE_COMPATIBLE_TEXTURES,
             SURFACE_DEFAULT_DEPTH_FORMAT,
@@ -339,6 +342,7 @@ pub(crate) struct GfxBackend {
 
     // used as intermediate for surface and pipeline texture formats
     offscreen: Option<OffscreenSurfaceData>,
+    mipmap_generator: MipmapGenerator,
 
     last_frame_stats: GpuStats,
     current_stats: GpuStats,
@@ -740,9 +744,7 @@ impl GfxBackendImpl for GfxBackend {
             address_mode_w: desc.wrap_z.as_wgpu(),
             mag_filter: desc.mag_filter.as_wgpu(),
             min_filter: desc.min_filter.as_wgpu(),
-            mipmap_filter: desc
-                .mipmap_filter
-                .map_or(Default::default(), |tf| tf.as_wgpu_mipmap()),
+            mipmap_filter: desc.mipmap_filter.as_wgpu_mipmap(),
             ..Default::default()
         });
         Ok(Sampler {
@@ -753,25 +755,59 @@ impl GfxBackendImpl for GfxBackend {
             wrap_z: desc.wrap_z,
             mag_filter: desc.mag_filter,
             min_filter: desc.min_filter,
-            // mipmap_filter: desc.mipmap_filter,
+            mipmap_filter: desc.mipmap_filter,
         })
     }
 
     fn create_texture(
         &mut self,
         desc: TextureDescriptor,
-        data: Option<TextureData>,
+        upload: TextureUpload,
     ) -> Result<Texture, String> {
         log::trace!("Creating Texture (label={:?})", desc.label);
+        let generates_mipmaps = upload.generates_mipmaps();
         let id = resource_id(&mut self.next_resource_id);
-        create_texture(
-            id,
+        let texture = create_texture(id, &self.ctx, desc, upload)?;
+        if generates_mipmaps {
+            self.mipmap_generator.generate(
+                &self.ctx.device,
+                &self.ctx.queue,
+                &texture.raw,
+                texture.format,
+                texture.mip_level_count,
+            );
+        }
+        Ok(texture)
+    }
+
+    fn generate_mipmaps(&mut self, texture: &Texture) -> Result<(), String> {
+        if !texture.is_writable() {
+            return Err(format!("Texture '{:?}' is not writable", texture.id()));
+        }
+        if texture.mip_level_count == 1 {
+            if texture.width() == 1.0 && texture.height() == 1.0 {
+                return Ok(());
+            }
+            return Err(format!(
+                "Texture '{:?}' has no allocated mip levels",
+                texture.id()
+            ));
+        }
+        MipmapGenerator::validate_format(
+            &self.ctx.adapter,
+            &self.ctx.device,
+            None,
+            texture.format,
+        )?;
+        self.mipmap_generator.generate(
             &self.ctx.device,
             &self.ctx.queue,
-            self.ctx.supports_view_formats,
-            desc,
-            data,
-        )
+            &texture.raw,
+            texture.format,
+            texture.mip_level_count,
+        );
+        texture.mark_written();
+        Ok(())
     }
 
     fn write_texture(
@@ -781,12 +817,19 @@ impl GfxBackendImpl for GfxBackend {
         size: UVec2,
         data: &[u8],
     ) -> Result<(), String> {
-        debug_assert!(
-            texture.write,
-            "Cannot update an immutable texture '{:?}'",
-            texture.id()
-        );
-        let channels = data.len() as u32 / (size.element_product());
+        if !texture.write {
+            return Err(format!("Texture '{:?}' is not writable", texture.id()));
+        }
+        let bytes_per_texel = texture.format.bytes_per_texel().ok_or_else(|| {
+            format!(
+                "Texture format {:?} does not support pixel writes",
+                texture.format
+            )
+        })?;
+        let bytes_per_row = size
+            .x
+            .checked_mul(bytes_per_texel)
+            .ok_or_else(|| "Texture write row size overflows".to_string())?;
         let mut copy = texture.raw.as_image_copy();
         copy.origin = Origin3d {
             x: offset.x,
@@ -798,8 +841,8 @@ impl GfxBackendImpl for GfxBackend {
             data,
             TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(size.x * channels),
-                rows_per_image: None,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(size.y),
             },
             Extent3d {
                 width: size.x,
@@ -1059,37 +1102,25 @@ impl GfxBackend {
         let color_label = format!("RenderTexture (label={:?}) inner color texture", desc.label);
         let texture = create_texture(
             resource_id(next_resource_id),
-            &self.ctx.device,
-            &self.ctx.queue,
-            self.ctx.supports_view_formats,
+            &self.ctx,
             TextureDescriptor {
                 label: Some(&color_label),
                 format,
                 write: true,
             },
-            Some(TextureData {
-                bytes: &[],
-                width: desc.width,
-                height: desc.height,
-            }),
+            TextureUpload::Single(TextureMipLevel::new(&[], desc.width, desc.height)),
         )?;
         let depth_texture = if desc.depth {
             let depth_label = format!("RenderTexture (label={:?}) inner depth texture", desc.label);
             Some(create_texture(
                 resource_id(next_resource_id),
-                &self.ctx.device,
-                &self.ctx.queue,
-                self.ctx.supports_view_formats,
+                &self.ctx,
                 TextureDescriptor {
                     label: Some(&depth_label),
                     format: SURFACE_DEFAULT_DEPTH_FORMAT,
                     write: true,
                 },
-                Some(TextureData {
-                    bytes: &[],
-                    width: desc.width,
-                    height: desc.height,
-                }),
+                TextureUpload::Single(TextureMipLevel::new(&[], desc.width, desc.height)),
             )?)
         } else {
             None
@@ -1145,6 +1176,7 @@ impl GfxBackend {
             (ctx, surface)
         };
 
+        let mipmap_generator = MipmapGenerator::new(&ctx.device);
         let mut bck = Self {
             next_resource_id,
             ctx,
@@ -1153,6 +1185,7 @@ impl GfxBackend {
             surface,
             frame: None,
             offscreen: None,
+            mipmap_generator,
             last_frame_stats: GpuStats::default(),
             current_stats: GpuStats::default(),
         };
@@ -1339,76 +1372,76 @@ fn create_surface_depth(
 ) -> Result<Texture, String> {
     create_texture(
         id,
-        &ctx.device,
-        &ctx.queue,
-        ctx.supports_view_formats,
+        ctx,
         TextureDescriptor {
             label: Some("Depth Texture for Surface"),
             format: depth_format,
             write: true,
         },
-        Some(TextureData {
-            bytes: &[],
-            width: size.x,
-            height: size.y,
-        }),
+        TextureUpload::Single(TextureMipLevel::new(&[], size.x, size.y)),
     )
 }
 
 fn create_texture(
     id: TextureId,
-    device: &wgpu::Device,
-    queue: &Queue,
-    supports_view_formats: bool,
+    ctx: &Context,
     desc: TextureDescriptor,
-    data: Option<TextureData>,
+    upload: TextureUpload,
 ) -> Result<Texture, String> {
-    let size = data.map_or(wgpu::Extent3d::default(), |d| wgpu::Extent3d {
-        width: d.width,
-        height: d.height,
-        depth_or_array_layers: 1,
-    });
-
-    let is_depth_texture = matches!(desc.format, SURFACE_DEFAULT_DEPTH_FORMAT);
-    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
-    if is_depth_texture || desc.write {
-        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
+    let Some(base) = upload.base() else {
+        let label = desc
+            .label
+            .map_or(String::new(), |label| format!(" '{label}'"));
+        return Err(format!("Texture{label} mipmap chain cannot be empty"));
+    };
+    if base.width == 0 || base.height == 0 {
+        return Err(format!(
+            "Texture {:?} dimensions must be nonzero",
+            desc.label
+        ));
+    }
+    let generates_mipmaps = upload.generates_mipmaps();
+    let usage = texture_usage(desc.format, desc.write, generates_mipmaps);
+    if generates_mipmaps {
+        MipmapGenerator::validate_format(&ctx.adapter, &ctx.device, desc.label, desc.format)?;
+    } else {
+        validate_texture_format(ctx, desc.label, desc.format, usage)?;
     }
 
-    let view_formats = desc.format.view_formats();
+    let size = wgpu::Extent3d {
+        width: base.width,
+        height: base.height,
+        depth_or_array_layers: 1,
+    };
+    let mip_level_count = upload.mip_level_count();
+    let is_depth_texture = desc.format.is_depth();
 
-    let raw = device.create_texture(&wgpu::TextureDescriptor {
+    let view_formats = desc.format.view_formats();
+    let raw = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: desc.label,
         size,
-        mip_level_count: 1,
+        mip_level_count,
         sample_count: 1,
         dimension: TextureDimension::D2,
         format: desc.format.as_wgpu(),
         usage,
-        view_formats: if supports_view_formats {
+        view_formats: if ctx.supports_view_formats {
             &view_formats
         } else {
             &[]
         },
     });
 
-    if !is_depth_texture && let Some(d) = data {
-        // TODO, get the bytes_per_row/channles from the TextureFormat instead?
-
-        let total = d.width * d.height;
-        debug_assert!(total != 0, "Depth texture width or height cannot be zero.");
-        let channels = d.bytes.len() as u32 / total;
-        if !d.bytes.is_empty() {
-            queue.write_texture(
-                raw.as_image_copy(),
-                d.bytes,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(d.width * channels),
-                    rows_per_image: Some(d.height),
-                },
-                size,
-            );
+    if !is_depth_texture {
+        match upload {
+            TextureUpload::Single(level) | TextureUpload::Generate(level) => {
+                write_texture_level(&ctx.queue, &raw, desc.format, level, 0)?;
+            }
+            TextureUpload::Levels(levels) => {
+                for (mip_level, level) in levels.iter().copied().enumerate() {
+                    write_texture_level(&ctx.queue, &raw, desc.format, level, mip_level as u32)?;
+                }
+            }
         }
     }
 
@@ -1424,8 +1457,92 @@ fn create_texture(
         size: vec2(size.width as _, size.height as _),
         write: desc.write,
         format: desc.format,
+        mip_level_count,
         revision: Arc::new(AtomicU32::new(0)),
     })
+}
+
+fn write_texture_level(
+    queue: &Queue,
+    texture: &wgpu::Texture,
+    format: TextureFormat,
+    level: TextureMipLevel<'_>,
+    mip_level: u32,
+) -> Result<(), String> {
+    if level.bytes.is_empty() {
+        return Ok(());
+    }
+    let bytes_per_texel = format
+        .bytes_per_texel()
+        .ok_or_else(|| format!("Texture format {format:?} does not support color uploads"))?;
+    let bytes_per_row = level
+        .width
+        .checked_mul(bytes_per_texel)
+        .ok_or_else(|| "Texture upload row size overflows".to_string())?;
+    let mut copy = texture.as_image_copy();
+    copy.mip_level = mip_level;
+    queue.write_texture(
+        copy,
+        level.bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(bytes_per_row),
+            rows_per_image: Some(level.height),
+        },
+        wgpu::Extent3d {
+            width: level.width,
+            height: level.height,
+            depth_or_array_layers: 1,
+        },
+    );
+    Ok(())
+}
+
+fn texture_usage(
+    format: TextureFormat,
+    writable: bool,
+    generates_mipmaps: bool,
+) -> wgpu::TextureUsages {
+    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
+    if format.is_depth() || writable || generates_mipmaps {
+        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
+    }
+    usage
+}
+
+fn validate_texture_format(
+    ctx: &Context,
+    label: Option<&str>,
+    format: TextureFormat,
+    usage: wgpu::TextureUsages,
+) -> Result<(), String> {
+    let label = label.map_or(String::new(), |label| format!(" '{label}'"));
+    let raw_format = format.as_wgpu();
+    if !ctx
+        .device
+        .features()
+        .contains(raw_format.required_features())
+    {
+        return Err(format!(
+            "Texture{label} format {format:?} is not enabled on the active device"
+        ));
+    }
+
+    let adapter_features = ctx.adapter.get_texture_format_features(raw_format);
+    let guaranteed_features = raw_format.guaranteed_format_features(ctx.device.features());
+    if adapter_features.allowed_usages.contains(usage)
+        && guaranteed_features.allowed_usages.contains(usage)
+    {
+        return Ok(());
+    }
+    let operations = if usage.contains(wgpu::TextureUsages::RENDER_ATTACHMENT) {
+        "sampling, uploads, and rendering"
+    } else {
+        "sampling and uploads"
+    };
+    Err(format!(
+        "Texture{label} format {format:?} does not support {operations}"
+    ))
 }
 
 impl Color {

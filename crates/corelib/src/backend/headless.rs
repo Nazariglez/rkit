@@ -87,8 +87,12 @@ impl GfxBackendImpl for HeadlessGfx {
     fn create_texture(
         &mut self,
         _desc: crate::gfx::TextureDescriptor,
-        _data: Option<crate::gfx::TextureData>,
+        _upload: crate::gfx::TextureUpload,
     ) -> Result<super::gfx::Texture, String> {
+        unreachable!()
+    }
+
+    fn generate_mipmaps(&mut self, _texture: &super::gfx::Texture) -> Result<(), String> {
         unreachable!()
     }
 

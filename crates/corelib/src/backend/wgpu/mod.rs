@@ -1,5 +1,7 @@
 mod bind_group;
 mod buffer;
+#[cfg(windowed)]
+mod mipmap;
 mod pipeline;
 mod render_texture;
 mod texture;
