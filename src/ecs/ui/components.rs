@@ -6,13 +6,11 @@ use bevy_ecs::query::{ReadOnlyQueryData, ReleaseStateQueryData};
 use heapless::index_map::FnvIndexMap;
 use heapless::index_set::FnvIndexSet;
 use strum::{EnumCount, IntoEnumIterator};
-use taffy::prelude::*;
 
 /// The Node contains layout info, as position, size, etc...
 #[derive(Component, Clone, Copy, Debug)]
 #[require(UITransform)]
 pub struct UINode {
-    pub(super) node_id: NodeId,
     pub(super) position: Vec2,
     pub(super) size: Vec2,
 
@@ -24,6 +22,17 @@ pub struct UINode {
 }
 
 impl UINode {
+    pub(super) fn new() -> Self {
+        Self {
+            position: Vec2::ZERO,
+            size: Vec2::ONE,
+            local_transform: Mat3::IDENTITY,
+            global_transform: Mat3::IDENTITY,
+            parent_global_transform: Mat3::IDENTITY,
+            global_alpha: 1.0,
+        }
+    }
+
     #[inline]
     pub fn position(&self) -> Vec2 {
         self.position
@@ -248,6 +257,22 @@ impl UIPointer {
 
     pub fn dragging(&self, btn: MouseButton) -> Option<UIDragEvent> {
         self.dragging.get(&btn).cloned()
+    }
+
+    pub(super) fn reset_lifecycle(&mut self) -> bool {
+        self.just_exit = self.is_hover;
+        self.is_hover = false;
+        self.just_enter = false;
+        self.down.clear();
+        self.pressed.clear();
+        self.released.clear();
+        self.clicked.clear();
+        self.init_click.clear();
+        self.init_drag.clear();
+        self.dragging.clear();
+        self.scrolling = None;
+        self.ancestor_eligible = false;
+        self.just_exit
     }
 }
 

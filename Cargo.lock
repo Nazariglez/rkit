@@ -4067,7 +4067,6 @@ dependencies = [
  "gilrs",
  "heapless",
  "image",
- "indexmap",
  "log",
  "macros",
  "nohash-hasher",

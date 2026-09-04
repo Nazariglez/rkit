@@ -2,23 +2,171 @@ use crate::{
     draw::{BaseCam2D, Camera2D, Draw2D},
     math::{Mat3, Mat4, Rect, Vec2, Vec3Swizzles, vec2, vec3},
 };
-use bevy_ecs::prelude::*;
+use bevy_ecs::{change_detection::Tick, prelude::*, query::QueryData};
 use corelib::math::{orthographic, vec4};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::ops::Range;
 use taffy::prelude::*;
 
 use super::{
-    components::{UINode, UIRender, UIScroll},
+    components::{UINode, UIRender, UIScroll, UITransform},
     ctx::{NodeContext, UINodeType, measure},
     style::{UIOverflow, UIStyle},
     widgets::{UIImage, UIRichText, UIText},
 };
+
+#[derive(Component)]
+pub(super) struct UILayoutRoot<T: Component>(std::marker::PhantomData<T>);
+
+impl<T: Component> UILayoutRoot<T> {
+    pub(super) fn new() -> Self {
+        Self(std::marker::PhantomData)
+    }
+}
+
+#[derive(Component, Clone, Copy)]
+pub(super) struct UILayoutOwner {
+    pub(super) root: Entity,
+}
+
+pub(super) type ManagedUI<T> = (With<T>, With<UILayoutOwner>);
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum UINodeGraph {
     Node(Entity),
     Begin(Entity),
     End(Entity),
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(u8)]
+pub(super) enum UIProjectionField {
+    Marker,
+    Owner,
+    Style,
+    NodeType,
+    Node,
+    Transform,
+    Children,
+    Parent,
+}
+
+impl UIProjectionField {
+    const COUNT: usize = Self::Parent as usize + 1;
+}
+
+#[derive(Debug, Default)]
+struct UIProjectionStamp {
+    fields: [Option<Tick>; UIProjectionField::COUNT],
+    intrinsic: Option<Tick>,
+}
+
+impl UIProjectionStamp {
+    fn field(&mut self, field: UIProjectionField) -> &mut Option<Tick> {
+        &mut self.fields[field as usize]
+    }
+
+    fn observe(&mut self, field: UIProjectionField, tick: Tick) -> bool {
+        self.field(field).replace(tick) != Some(tick)
+    }
+
+    fn remove(&mut self, field: UIProjectionField) -> bool {
+        self.field(field).take().is_some()
+    }
+
+    fn observe_intrinsic(&mut self, tick: Tick) -> bool {
+        self.intrinsic.replace(tick) != Some(tick)
+    }
+}
+
+#[derive(QueryData)]
+pub(super) struct UIProjection<T: Component> {
+    pub(super) entity: Entity,
+    pub(super) marker: Option<Ref<'static, T>>,
+    pub(super) owner: Option<Ref<'static, UILayoutOwner>>,
+    pub(super) style: Option<Ref<'static, UIStyle>>,
+    pub(super) typ: Option<Ref<'static, UINodeType>>,
+    pub(super) scroll: Has<UIScroll>,
+    pub(super) node: Option<Ref<'static, UINode>>,
+    pub(super) transform: Option<Ref<'static, UITransform>>,
+    pub(super) children: Option<Ref<'static, Children>>,
+    pub(super) parent: Option<Ref<'static, ChildOf>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum UILayoutRootState {
+    Unbound,
+    Present(Entity),
+    Missing(Entity),
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+enum UIHierarchyProblem {
+    MissingRoot,
+    MissingMarker,
+    MissingOwner,
+    MissingStyle,
+    MissingNodeType,
+    MissingNode,
+    MissingTransform,
+    WrongOwner,
+    WrongParent,
+    Cycle,
+}
+
+impl<T: Component> UIProjectionItem<'_, '_, T> {
+    fn hierarchy_problem(&self, root: Entity, parent: Entity) -> Option<UIHierarchyProblem> {
+        if self.owner.as_ref().is_some_and(|owner| owner.root != root) {
+            Some(UIHierarchyProblem::WrongOwner)
+        } else if self.marker.is_none() {
+            Some(UIHierarchyProblem::MissingMarker)
+        } else if self.owner.is_none() {
+            Some(UIHierarchyProblem::MissingOwner)
+        } else if self.style.is_none() {
+            Some(UIHierarchyProblem::MissingStyle)
+        } else if self.typ.is_none() {
+            Some(UIHierarchyProblem::MissingNodeType)
+        } else if self.node.is_none() {
+            Some(UIHierarchyProblem::MissingNode)
+        } else if self.transform.is_none() {
+            Some(UIHierarchyProblem::MissingTransform)
+        } else if self
+            .parent
+            .as_ref()
+            .is_none_or(|child_of| child_of.parent() != parent)
+        {
+            Some(UIHierarchyProblem::WrongParent)
+        } else {
+            None
+        }
+    }
+
+    pub(super) fn component_tick(&self, field: UIProjectionField) -> Option<Tick> {
+        self.field_tick(field, false)
+    }
+
+    pub(super) fn changed_component_tick(&self, field: UIProjectionField) -> Option<Tick> {
+        self.field_tick(field, true)
+    }
+
+    fn field_tick(&self, field: UIProjectionField, changed_only: bool) -> Option<Tick> {
+        match field {
+            UIProjectionField::Marker => projection_tick(self.marker.as_ref(), changed_only),
+            UIProjectionField::Owner => projection_tick(self.owner.as_ref(), changed_only),
+            UIProjectionField::Style => projection_tick(self.style.as_ref(), changed_only),
+            UIProjectionField::NodeType => projection_tick(self.typ.as_ref(), changed_only),
+            UIProjectionField::Node => projection_tick(self.node.as_ref(), changed_only),
+            UIProjectionField::Transform => projection_tick(self.transform.as_ref(), changed_only),
+            UIProjectionField::Children => projection_tick(self.children.as_ref(), changed_only),
+            UIProjectionField::Parent => projection_tick(self.parent.as_ref(), changed_only),
+        }
+    }
+}
+
+fn projection_tick<C: Component>(value: Option<&Ref<C>>, changed_only: bool) -> Option<Tick> {
+    value
+        .filter(|value| !changed_only || value.is_changed())
+        .map(|value| value.last_changed())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,7 +182,6 @@ pub(super) struct UICameraInfo {
 }
 
 impl UICameraInfo {
-    /// Creates a new UICameraInfo from a Camera2D
     fn from_base(cam: &Camera2D) -> Self {
         let bounds = cam.bounds();
         Self {
@@ -49,77 +196,81 @@ impl UICameraInfo {
         }
     }
 
-    /// Updates the camera size and recalculates related matrices
-    /// Returns true if the size was changed
     fn update_size(&mut self, size: Vec2) -> bool {
-        if self.layout_size == size {
+        if self.layout_size == size || size.x <= 0.0 || size.y <= 0.0 {
             return false;
         }
-
-        let can_update = size.x > 0.0 && size.y > 0.0;
-        if !can_update {
-            return false;
-        }
-
         self.cam_size = size;
         self.layout_size = size;
-        self.projection = orthographic(0.0, self.layout_size.x, self.layout_size.y, 0.0, 0.0, 1.0);
+        self.projection = orthographic(0.0, size.x, size.y, 0.0, 0.0, 1.0);
         self.inverse_projection = self.projection.inverse();
         self.transform = Mat3::IDENTITY;
         self.inverse_transform = Mat3::IDENTITY;
-
         true
     }
 
-    /// Converts screen coordinates to local node coordinates
     pub fn screen_to_local(&self, screen_pos: Vec2, local_inverse_transform: Mat3) -> Vec2 {
         let norm = screen_pos / self.cam_size;
         let mouse_pos = norm * vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-
         let pos = self
             .inverse_projection
             .project_point3(vec3(mouse_pos.x, mouse_pos.y, 1.0));
-
         local_inverse_transform.transform_point2(pos.xy())
     }
 }
 
 #[derive(Debug, Resource)]
-pub struct UILayout<T>
-where
-    T: Component,
-{
+pub struct UILayout<T: Component> {
     _m: std::marker::PhantomData<T>,
-    dirty_layout: bool,
-    dirty_graph: bool,
-    relations: FxHashMap<Entity, NodeId>,
-    tree: TaffyTree<NodeContext>,
+    root_state: UILayoutRootState,
     root: NodeId,
+    tree: TaffyTree<NodeContext>,
+    relations: FxHashMap<Entity, NodeId>,
+    graph_ranges: FxHashMap<Entity, Range<usize>>,
+    diagnosed: FxHashSet<(Entity, UIHierarchyProblem)>,
+    previous_diagnostics: FxHashSet<(Entity, UIHierarchyProblem)>,
+    projection_stamps: FxHashMap<Entity, UIProjectionStamp>,
+    unprojected: Vec<Entity>,
+    reached: FxHashSet<Entity>,
+    draw_ancestors: Vec<Entity>,
+    dirty_layout: bool,
+    dirty_topology: bool,
     pub(super) base_transform: Mat3,
-
     pub(super) graph: Vec<UINodeGraph>,
     pub(super) cam_info: UICameraInfo,
 }
 
-impl<T> Default for UILayout<T>
-where
-    T: Component,
-{
-    /// Creates a default UILayout with an empty tree and default camera info
+impl<T: Component> Default for UILayout<T> {
     fn default() -> Self {
-        let mut tree = TaffyTree::<NodeContext>::new();
+        Self::new(UILayoutRootState::Unbound)
+    }
+}
+
+impl<T: Component> UILayout<T> {
+    pub(super) fn with_root(root: Entity) -> Self {
+        Self::new(UILayoutRootState::Present(root))
+    }
+
+    fn new(root_state: UILayoutRootState) -> Self {
+        let mut tree = TaffyTree::new();
         let root = tree.new_leaf(Style::default()).unwrap();
-        let container = tree.new_leaf(Style::default()).unwrap();
-        tree.add_child(root, container).unwrap();
-
-        Self {
-            _m: Default::default(),
-            dirty_layout: true,
-            dirty_graph: true,
-            relations: FxHashMap::default(),
+        let mut layout = Self {
+            _m: std::marker::PhantomData,
+            root_state,
+            root,
             tree,
-            graph: vec![],
-
+            relations: FxHashMap::default(),
+            graph_ranges: FxHashMap::default(),
+            diagnosed: FxHashSet::default(),
+            previous_diagnostics: FxHashSet::default(),
+            projection_stamps: FxHashMap::default(),
+            unprojected: Vec::new(),
+            reached: FxHashSet::default(),
+            draw_ancestors: Vec::new(),
+            dirty_layout: true,
+            dirty_topology: true,
+            base_transform: Mat3::IDENTITY,
+            graph: Vec::new(),
             cam_info: UICameraInfo {
                 cam_size: Vec2::ZERO,
                 top_left: Vec2::ZERO,
@@ -130,18 +281,11 @@ where
                 inverse_transform: Mat3::IDENTITY,
                 pixel_perfect: false,
             },
-
-            root,
-            base_transform: Mat3::IDENTITY,
-        }
+        };
+        layout.update_root();
+        layout
     }
-}
 
-impl<T> UILayout<T>
-where
-    T: Component,
-{
-    /// Updates the root node style based on the current camera info
     fn update_root(&mut self) {
         self.tree
             .set_style(
@@ -155,57 +299,142 @@ where
                 },
             )
             .unwrap();
-
         self.base_transform = Mat3::from_translation(self.cam_info.top_left);
     }
 
-    /// Returns the parent entity of the given entity in the UI tree
+    pub(super) fn root_entity(&self) -> Entity {
+        match self.root_state {
+            UILayoutRootState::Unbound => panic!("ECS UI layout root is not bound"),
+            UILayoutRootState::Present(root) | UILayoutRootState::Missing(root) => root,
+        }
+    }
+
+    pub(super) fn bind_root(&mut self, installed_root: Entity) -> Entity {
+        match self.root_state {
+            UILayoutRootState::Unbound => {
+                self.root_state = UILayoutRootState::Present(installed_root);
+                self.mark_topology_dirty();
+                installed_root
+            }
+            UILayoutRootState::Present(root) | UILayoutRootState::Missing(root) => {
+                debug_assert_eq!(root, installed_root);
+                root
+            }
+        }
+    }
+
+    pub(super) fn report_missing_root(&mut self) {
+        self.observe_root(false);
+        self.report(self.root_entity(), UIHierarchyProblem::MissingRoot);
+    }
+
+    pub(super) fn mark_topology_dirty(&mut self) {
+        self.dirty_topology = true;
+    }
+
+    pub(super) fn mark_layout_dirty(&mut self) {
+        self.dirty_layout = true;
+    }
+
+    pub(super) fn observe_projection_change(
+        &mut self,
+        entity: Entity,
+        component: UIProjectionField,
+        tick: Tick,
+    ) -> bool {
+        self.projection_stamps
+            .entry(entity)
+            .or_default()
+            .observe(component, tick)
+    }
+
+    pub(super) fn observe_projection_removal(
+        &mut self,
+        entity: Entity,
+        component: UIProjectionField,
+    ) -> bool {
+        self.projection_stamps
+            .get_mut(&entity)
+            .is_some_and(|stamp| stamp.remove(component))
+    }
+
+    fn mark_projection_present(
+        &mut self,
+        entity: Entity,
+        component: UIProjectionField,
+        tick: Tick,
+    ) {
+        self.projection_stamps
+            .entry(entity)
+            .or_default()
+            .observe(component, tick);
+    }
+
+    pub(super) fn observe_root(&mut self, present: bool) {
+        let next = match (self.root_state, present) {
+            (UILayoutRootState::Present(root), false) => UILayoutRootState::Missing(root),
+            (UILayoutRootState::Missing(root), true) => UILayoutRootState::Present(root),
+            _ => return,
+        };
+        self.root_state = next;
+        self.mark_topology_dirty();
+    }
+
+    pub(super) fn forget_projection(&mut self, entity: Entity) {
+        self.projection_stamps.remove(&entity);
+    }
+
+    pub(super) fn take_unprojected(&mut self) -> Vec<Entity> {
+        std::mem::take(&mut self.unprojected)
+    }
+
+    pub(super) fn restore_unprojected(&mut self, entities: Vec<Entity>) {
+        self.unprojected = entities;
+    }
+
+    /// Returns this node's parent in the projected UI hierarchy.
     #[inline]
     pub fn parent(&self, entity: Entity) -> Option<Entity> {
         self.relations
             .get(&entity)
             .and_then(|id| self.tree.parent(*id))
             .and_then(|parent| self.tree.get_node_context(parent))
-            .map(|parent_ctx| parent_ctx.entity)
+            .map(|parent| parent.entity)
     }
 
-    /// Returns how many immediate children this entity has in the UI-tree.
+    /// Returns the number of immediate children in the projected UI hierarchy.
     #[inline]
     pub fn child_count(&self, entity: Entity) -> usize {
-        if let Some(&node_id) = self.relations.get(&entity) {
-            self.tree.child_ids(node_id).count()
-        } else {
-            0
-        }
+        self.relations
+            .get(&entity)
+            .map_or(0, |node| self.tree.child_ids(*node).count())
     }
 
-    /// Returns true if this entity has any children.
+    /// Returns whether this node has children in the projected UI hierarchy.
     #[inline]
     pub fn has_children(&self, entity: Entity) -> bool {
-        if let Some(&node_id) = self.relations.get(&entity) {
-            self.tree.child_ids(node_id).next().is_some()
-        } else {
-            false
-        }
+        self.relations
+            .get(&entity)
+            .is_some_and(|node| self.tree.child_ids(*node).next().is_some())
     }
 
-    /// Returns true if this entity has no children.
+    /// Returns whether this node has no children in the projected UI hierarchy.
     #[inline]
     pub fn is_empty(&self, entity: Entity) -> bool {
         !self.has_children(entity)
     }
 
-    /// Returns an iterator over the immediate children of `parent` in the UI tree.
+    /// Iterates this node's immediate children in projected hierarchy order.
     #[inline]
     pub fn children(&self, parent: Entity) -> impl Iterator<Item = Entity> + '_ {
         self.relations
             .get(&parent)
             .into_iter()
-            .flat_map(move |&parent_id| self.tree.child_ids(parent_id))
-            .filter_map(move |child_id| self.tree.get_node_context(child_id).map(|ctx| ctx.entity))
+            .flat_map(move |node| self.tree.child_ids(*node))
+            .filter_map(move |node| self.tree.get_node_context(node).map(|ctx| ctx.entity))
     }
 
-    /// Converts screen coordinates to node-local coordinates
+    /// Converts screen coordinates to coordinates local to `node`.
     #[inline]
     pub fn screen_to_node(&self, screen_pos: Vec2, node: &UINode) -> Vec2 {
         self.cam_info.screen_to_local(
@@ -214,199 +443,248 @@ where
         )
     }
 
-    /// Converts node-local coordinates to screen coordinates
+    /// Converts coordinates local to `node` into screen coordinates.
     #[inline]
     pub fn node_to_screen(&self, point: Vec2, node: &UINode) -> Vec2 {
         let transform = self.cam_info.transform * node.global_transform();
         let half = self.cam_info.cam_size * 0.5;
-        let pos = transform * vec3(point.x, point.y, 1.0);
-        let pos = self.cam_info.projection * vec4(pos.x, pos.y, pos.z, 1.0);
-        half + (half * vec2(pos.x, -pos.y))
+        let point = transform * vec3(point.x, point.y, 1.0);
+        let point = self.cam_info.projection * vec4(point.x, point.y, point.z, 1.0);
+        half + (half * vec2(point.x, -point.y))
     }
 
-    /// Converts coordinates from one node's local space to another node's local space
+    /// Converts coordinates from `from`'s local space to `to`'s local space.
     #[inline]
     pub fn node_to_node(&self, point: Vec2, from: &UINode, to: &UINode) -> Vec2 {
         self.screen_to_node(self.node_to_screen(point, from), to)
     }
 
-    /// Returns the current layout size
+    /// Returns the current layout size.
     #[inline]
     pub fn size(&self) -> Vec2 {
         self.cam_info.layout_size
     }
 
-    /// Sets the layout size and updates the root node if necessary
+    /// Sets the layout size and schedules a layout recomputation when it changes.
     #[inline]
     pub fn set_size(&mut self, size: Vec2) {
-        let updated = self.cam_info.update_size(size);
-        if updated {
-            self.dirty_layout = true;
+        if self.cam_info.update_size(size) {
+            self.mark_layout_dirty();
             self.update_root();
         }
     }
 
-    /// Updates the camera info from a Camera2D and marks layout as dirty if needed
+    /// Updates layout camera data and schedules a recomputation when it changes.
     #[inline]
     pub fn set_camera(&mut self, cam: &Camera2D) {
-        let cam_size = cam.size();
-        let can_set = cam_size.x > 0.0 && cam_size.y > 0.0;
-        if !can_set {
+        let size = cam.size();
+        if size.x <= 0.0 || size.y <= 0.0 {
             return;
         }
-
         let info = UICameraInfo::from_base(cam);
         if info != self.cam_info {
             self.cam_info = info;
-            self.dirty_layout = true;
+            self.mark_layout_dirty();
             self.update_root();
         }
     }
 
-    /// Updates the layout tree and graph if they're dirty
-    /// Returns true if any computation was performed
-    #[inline]
+    /// Recomputes dirty layout state and returns whether a computation occurred.
     pub fn update(
         &mut self,
         images: Query<&UIImage, With<T>>,
         rich_texts: Query<&UIRichText, With<T>>,
         texts: Query<&UIText, With<T>>,
     ) -> bool {
-        let needs_compute = self.dirty_graph || self.dirty_layout;
-        if needs_compute {
-            self.tree
-                .compute_layout_with_measure(
-                    self.root,
-                    Size {
-                        width: AvailableSpace::Definite(self.cam_info.layout_size.x),
-                        height: AvailableSpace::Definite(self.cam_info.layout_size.y),
-                    },
-                    |known_dimensions, available_space, _node_id, ctx, _style| {
-                        measure(
-                            known_dimensions,
-                            available_space,
-                            ctx,
-                            &images,
-                            &rich_texts,
-                            &texts,
-                        )
+        if !matches!(self.root_state, UILayoutRootState::Present(_)) || !self.dirty_layout {
+            return false;
+        }
+        self.tree
+            .compute_layout_with_measure(
+                self.root,
+                Size {
+                    width: AvailableSpace::Definite(self.cam_info.layout_size.x),
+                    height: AvailableSpace::Definite(self.cam_info.layout_size.y),
+                },
+                |known_dimensions, available_space, _node_id, ctx, _style| {
+                    measure(
+                        known_dimensions,
+                        available_space,
+                        ctx,
+                        &images,
+                        &rich_texts,
+                        &texts,
+                    )
+                },
+            )
+            .unwrap();
+        self.dirty_layout = false;
+        true
+    }
+
+    pub(super) fn project_if_dirty(&mut self, branches: &Query<UIProjection<T>>) -> bool {
+        if !self.dirty_topology {
+            return false;
+        }
+        self.project(branches);
+        matches!(self.root_state, UILayoutRootState::Present(_))
+    }
+
+    pub(super) fn report_unreached(
+        &mut self,
+        owned: &Query<(Entity, &UILayoutOwner), ManagedUI<T>>,
+    ) {
+        let root = self.root_entity();
+        for (entity, owner) in owned {
+            if owner.root == root && !self.reached.contains(&entity) {
+                self.report(entity, UIHierarchyProblem::WrongParent);
+                self.reached.insert(entity);
+            }
+        }
+    }
+
+    fn project(&mut self, branches: &Query<UIProjection<T>>) {
+        self.dirty_topology = false;
+        self.dirty_layout = true;
+        self.previous_diagnostics.clear();
+        std::mem::swap(&mut self.diagnosed, &mut self.previous_diagnostics);
+        self.unprojected.extend(self.relations.keys().copied());
+        self.relations.clear();
+        self.graph.clear();
+        self.graph_ranges.clear();
+        self.tree.clear();
+        self.root = self.tree.new_leaf(Style::default()).unwrap();
+        self.update_root();
+
+        let root = self.root_entity();
+        if matches!(self.root_state, UILayoutRootState::Missing(_)) {
+            self.projection_stamps.retain(|entity, _| *entity == root);
+            self.report(root, UIHierarchyProblem::MissingRoot);
+            return;
+        }
+        let mut reached = std::mem::take(&mut self.reached);
+        reached.clear();
+        reached.insert(root);
+        self.project_children(branches, root, root, self.root, &mut reached);
+        self.unprojected
+            .retain(|entity| !self.relations.contains_key(entity));
+        self.reached = reached;
+    }
+
+    fn project_children(
+        &mut self,
+        branches: &Query<UIProjection<T>>,
+        root: Entity,
+        parent_entity: Entity,
+        parent_node: NodeId,
+        reached: &mut FxHashSet<Entity>,
+    ) {
+        let Ok(parent) = branches.get(parent_entity) else {
+            return;
+        };
+        let Some(children) = parent.children else {
+            return;
+        };
+        for child in children.iter() {
+            if !reached.insert(child) {
+                self.report(child, UIHierarchyProblem::Cycle);
+                continue;
+            }
+            let Ok(branch) = branches.get(child) else {
+                self.report(child, UIHierarchyProblem::MissingMarker);
+                continue;
+            };
+            let problem = branch.hierarchy_problem(root, parent_entity);
+            if let Some(problem) = problem {
+                self.report(child, problem);
+                continue;
+            }
+            for component in [
+                UIProjectionField::Marker,
+                UIProjectionField::Owner,
+                UIProjectionField::Style,
+                UIProjectionField::NodeType,
+                UIProjectionField::Node,
+                UIProjectionField::Transform,
+                UIProjectionField::Children,
+                UIProjectionField::Parent,
+            ] {
+                if let Some(tick) = branch.component_tick(component) {
+                    self.mark_projection_present(child, component, tick);
+                }
+            }
+            let node_id = self
+                .tree
+                .new_leaf_with_context(
+                    branch.style.unwrap().as_taffy_style(branch.scroll),
+                    NodeContext {
+                        entity: child,
+                        typ: *branch.typ.unwrap(),
                     },
                 )
                 .unwrap();
-        }
-
-        if self.dirty_graph {
-            self.graph.clear();
-            process_graph(&mut self.graph, self.root, &self.tree);
-        }
-
-        self.dirty_layout = false;
-        self.dirty_graph = false;
-        needs_compute
-    }
-
-    /// Adds a new node to the layout tree with the given style and type
-    pub(super) fn add_raw_node(
-        &mut self,
-        entity: Entity,
-        style: Style,
-        typ: UINodeType,
-        parent: Option<NodeId>,
-    ) -> NodeId {
-        self.dirty_layout = true;
-        self.dirty_graph = true;
-        let node_id = self
-            .tree
-            .new_leaf_with_context(style, NodeContext { entity, typ })
-            .unwrap();
-        let parent_id = parent.unwrap_or(self.root);
-        self.tree.add_child(parent_id, node_id).unwrap();
-        self.relations.insert(entity, node_id);
-        node_id
-    }
-
-    /// Adds a child node to a parent node, reparenting if necessary
-    pub(super) fn add_child(&mut self, parent: Entity, child: Entity) {
-        if let (Some(parent_id), Some(node_id)) =
-            (self.relations.get(&parent), self.relations.get(&child))
-        {
-            if let Some(prev_parent) = self.tree.parent(*node_id) {
-                self.tree.remove_child(prev_parent, *node_id).unwrap();
-            }
-            self.tree.add_child(*parent_id, *node_id).unwrap();
-            self.dirty_graph = true;
+            self.tree.add_child(parent_node, node_id).unwrap();
+            self.relations.insert(child, node_id);
+            let start = self.graph.len();
+            self.graph.push(UINodeGraph::Begin(child));
+            self.graph.push(UINodeGraph::Node(child));
+            self.project_children(branches, root, child, node_id, reached);
+            self.graph.push(UINodeGraph::End(child));
+            self.graph_ranges.insert(child, start..self.graph.len());
         }
     }
 
-    /// Removes a node and its children from the layout tree
-    pub(super) fn remove_node(&mut self, entity: Entity) {
-        if let Some(node_id) = self.relations.remove(&entity) {
-            self.tree.remove(node_id).unwrap();
-            self.dirty_graph = true;
+    fn report(&mut self, entity: Entity, problem: UIHierarchyProblem) {
+        let diagnostic = (entity, problem);
+        if self.diagnosed.insert(diagnostic) && !self.previous_diagnostics.contains(&diagnostic) {
+            log::warn!("Ignoring invalid ECS UI hierarchy at {entity:?}: {problem:?}");
         }
     }
 
-    /// Returns all entities in the subtree starting from the given entity
-    pub(super) fn tree_from_node(&self, entity: Entity) -> Vec<Entity> {
-        debug_assert!(
-            !self.dirty_graph,
-            "The graph must be updated to get the right tree from a node"
-        );
-        let Some(start_idx) = self.graph.iter().position(|ng| match ng {
-            UINodeGraph::Begin(e) => e == &entity,
-            _ => false,
-        }) else {
-            return vec![];
+    pub(super) fn node_id(&self, entity: Entity) -> Option<NodeId> {
+        self.relations.get(&entity).copied()
+    }
+
+    pub(super) fn contains(&self, entity: Entity) -> bool {
+        self.relations.contains_key(&entity)
+    }
+
+    pub(super) fn set_node_style(&mut self, entity: Entity, style: &UIStyle, scroll: bool) {
+        let Some(node) = self.node_id(entity) else {
+            return;
         };
+        let style = style.as_taffy_style(scroll);
+        if self.tree.style(node).unwrap() != &style {
+            self.tree.set_style(node, style).unwrap();
+            self.mark_layout_dirty();
+        }
+    }
 
-        let Some(end_idx) = self.graph.iter().position(|ng| match ng {
-            UINodeGraph::End(e) => e == &entity,
-            _ => false,
-        }) else {
-            return vec![];
+    pub(super) fn invalidate_intrinsic(&mut self, entity: Entity, tick: Tick) {
+        let changed = self
+            .projection_stamps
+            .entry(entity)
+            .or_default()
+            .observe_intrinsic(tick);
+        if changed && let Some(node) = self.node_id(entity) {
+            self.tree.mark_dirty(node).unwrap();
+            self.mark_layout_dirty();
+        }
+    }
+
+    pub(super) fn scroll_height(&self, entity: Entity) -> Option<f32> {
+        self.node_id(entity)
+            .and_then(|node| self.tree.layout(node).ok())
+            .map(|layout| layout.scroll_height())
+    }
+
+    pub(super) fn set_node_layout(&self, entity: Entity, node: &mut UINode) -> bool {
+        let Some(node_id) = self.node_id(entity) else {
+            return false;
         };
-
-        self.graph[start_idx..=end_idx]
-            .iter()
-            .filter_map(|ng| match ng {
-                UINodeGraph::Node(entity) => Some(*entity),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn graph_slice(&self, from: Option<Entity>) -> Option<&[UINodeGraph]> {
-        let Some(from) = from else {
-            return Some(&self.graph);
-        };
-        let start = self
-            .graph
-            .iter()
-            .position(|event| matches!(event, UINodeGraph::Begin(entity) if *entity == from))?;
-        let end = self.graph[start..]
-            .iter()
-            .position(|event| matches!(event, UINodeGraph::End(entity) if *entity == from))?
-            + start;
-        Some(&self.graph[start..=end])
-    }
-
-    /// Updates the style of a node in the layout tree
-    pub(super) fn set_node_style(&mut self, node: &UINode, style: &UIStyle, scroll: bool) {
-        self.tree
-            .set_style(node.node_id, style.as_taffy_style(scroll))
-            .unwrap();
-        self.dirty_layout = true;
-    }
-
-    pub(super) fn scroll_height(&self, node: &UINode) -> f32 {
-        self.tree.layout(node.node_id).unwrap().scroll_height()
-    }
-
-    /// Updates a node's size and position based on the computed layout
-    pub(super) fn set_node_layout(&self, node: &mut UINode) {
-        let l = self.tree.layout(node.node_id).unwrap();
-        let size = vec2(l.size.width, l.size.height);
-        let position = vec2(l.location.x, l.location.y);
+        let layout = self.tree.layout(node_id).unwrap();
+        let size = vec2(layout.size.width, layout.size.height);
+        let position = vec2(layout.location.x, layout.location.y);
         if self.cam_info.pixel_perfect {
             node.size = size.round();
             node.position = position.round();
@@ -414,23 +692,15 @@ where
             node.size = size;
             node.position = position;
         }
+        true
     }
-}
 
-/// Recursively processes the layout tree to build a flat graph representation
-fn process_graph(graph: &mut Vec<UINodeGraph>, node_id: NodeId, tree: &TaffyTree<NodeContext>) {
-    match tree.get_node_context(node_id).cloned() {
-        Some(ctx) => {
-            graph.push(UINodeGraph::Begin(ctx.entity));
-            graph.push(UINodeGraph::Node(ctx.entity));
-            tree.child_ids(node_id)
-                .for_each(|child_id| process_graph(graph, child_id, tree));
-            graph.push(UINodeGraph::End(ctx.entity));
-        }
-        _ => {
-            tree.child_ids(node_id)
-                .for_each(|child_id| process_graph(graph, child_id, tree));
-        }
+    fn graph_slice(&self, from: Option<Entity>) -> Option<&[UINodeGraph]> {
+        from.map_or(Some(self.graph.as_slice()), |entity| {
+            self.graph_ranges
+                .get(&entity)
+                .map(|range| &self.graph[range.clone()])
+        })
     }
 }
 
@@ -459,24 +729,18 @@ fn push_clip(draw: &mut Draw2D, transform: Mat3, size: Vec2, overflow: UIOverflo
     draw.pop_matrix();
 }
 
-/// Draws the entire UI layout
-pub fn draw_ui_layout<T>(draw: &mut Draw2D, world: &mut World)
-where
-    T: Component,
-{
+pub fn draw_ui_layout<T: Component>(draw: &mut Draw2D, world: &mut World) {
     draw_ui_layout_from::<T>(draw, world, None)
 }
 
-pub fn draw_ui_layout_from<T>(draw: &mut Draw2D, world: &mut World, from: Option<Entity>)
-where
-    T: Component,
-{
-    world.resource_scope(|world: &mut World, layout: Mut<UILayout<T>>| {
-        let Some(graph) = layout.graph_slice(from) else {
-            return;
-        };
-
-        let mut ancestors = Vec::new();
+pub fn draw_ui_layout_from<T: Component>(
+    draw: &mut Draw2D,
+    world: &mut World,
+    from: Option<Entity>,
+) {
+    world.resource_scope(|world: &mut World, mut layout: Mut<UILayout<T>>| {
+        let mut ancestors = std::mem::take(&mut layout.draw_ancestors);
+        ancestors.clear();
         if let Some(from) = from {
             let mut parent = layout.parent(from);
             while let Some(entity) = parent {
@@ -485,15 +749,17 @@ where
             }
             ancestors.reverse();
         }
-
+        let Some(graph) = layout.graph_slice(from) else {
+            layout.draw_ancestors = ancestors;
+            return;
+        };
         let mut seeded_clips = 0;
-        for entity in ancestors {
+        for &entity in &ancestors {
             if let Some((transform, size, overflow)) = clip_state(world, entity) {
                 push_clip(draw, transform, size, overflow);
                 seeded_clips += 1;
             }
         }
-
         for event in graph {
             match event {
                 UINodeGraph::Begin(_) => {}
@@ -501,8 +767,8 @@ where
                     let Some(node) = world.get::<UINode>(*entity).copied() else {
                         continue;
                     };
-                    let last_alpha = draw.alpha();
-                    draw.set_alpha(last_alpha * node.global_alpha);
+                    let alpha = draw.alpha();
+                    draw.set_alpha(alpha * node.global_alpha);
                     draw.push_matrix(node.global_transform);
                     if node.is_visible()
                         && let Some(render) = world.get::<UIRender>(*entity)
@@ -518,7 +784,7 @@ where
                         }
                     }
                     draw.pop_matrix();
-                    draw.set_alpha(last_alpha);
+                    draw.set_alpha(alpha);
                 }
                 UINodeGraph::End(entity) => {
                     if clip_state(world, *entity).is_some() {
@@ -527,9 +793,9 @@ where
                 }
             }
         }
-
         for _ in 0..seeded_clips {
             draw.pop_clip();
         }
+        layout.draw_ancestors = ancestors;
     });
 }

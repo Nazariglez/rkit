@@ -1,8 +1,10 @@
 use std::marker::PhantomData;
 
 use super::prelude::*;
+#[cfg(feature = "logs")]
+use crate::app::LogConfig;
 use crate::{
-    app::{LogConfig, WindowConfig},
+    app::WindowConfig,
     ecs::{
         exit::app_exit_system,
         plugin::{BaseSchedules, Plugin},
@@ -28,6 +30,7 @@ pub struct App {
 
     pub(crate) fixed_updates: Vec<u8>,
     pub(crate) window_config: WindowConfig,
+    #[cfg(feature = "logs")]
     pub(crate) log_config: LogConfig,
 
     exit_sys: SystemId,
@@ -51,6 +54,7 @@ impl App {
             exit_sys,
             fixed_updates: vec![],
             window_config: Default::default(),
+            #[cfg(feature = "logs")]
             log_config: Default::default(),
             extensions: vec![],
         };
@@ -75,6 +79,7 @@ impl App {
         self
     }
 
+    #[cfg(feature = "logs")]
     #[inline]
     pub(crate) fn add_log(&mut self, config: LogConfig) -> &mut Self {
         self.log_config = config;
@@ -161,6 +166,7 @@ impl App {
         let mut world = std::mem::take(&mut self.world);
         let exit_sys = self.exit_sys;
         let window_config = self.window_config.clone();
+        #[cfg(feature = "logs")]
         let log_config = self.log_config.clone();
         let extensions = std::mem::take(&mut self.extensions);
 
@@ -170,7 +176,11 @@ impl App {
             world
         });
 
-        builder = builder.with_window(window_config).with_logs(log_config);
+        builder = builder.with_window(window_config);
+        #[cfg(feature = "logs")]
+        {
+            builder = builder.with_logs(log_config);
+        }
 
         builder = builder.pre_update(|world: &mut World| {
             world.run_schedule(OnEnginePreFrame);

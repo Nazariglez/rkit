@@ -1,6 +1,7 @@
 #[cfg(any(feature = "ui", feature = "egui"))]
 mod input_transition;
 
+#[cfg(all(feature = "assets", feature = "ecs"))]
 pub mod assets2;
 pub mod tween;
 pub mod utils;
@@ -21,6 +22,7 @@ pub mod ui;
 pub mod ecs;
 
 pub mod or_panic;
+#[cfg(feature = "particles")]
 pub mod particles;
 pub mod prelude;
 pub mod timer;

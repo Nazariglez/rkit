@@ -6,6 +6,7 @@ pub use ::utils::fast_cache::*;
 pub use ::utils::helpers::*;
 #[doc(inline)]
 pub use ::utils::ring_buffer::*;
+#[cfg(feature = "random")]
 use arrayvec::ArrayVec;
 
 pub mod local_pool {
@@ -15,8 +16,10 @@ pub mod local_pool {
     pub use ::utils::local_pool::*;
 }
 
+#[cfg(feature = "random")]
 use crate::random;
 
+#[cfg(feature = "random")]
 pub fn create_weighted_vec<T: Clone>(weights: &[(T, f32)], amount: usize) -> Vec<T> {
     // calculate the total weight
     let total: f32 = weights.iter().map(|(_, w)| *w).sum();
@@ -49,6 +52,7 @@ pub fn create_weighted_vec<T: Clone>(weights: &[(T, f32)], amount: usize) -> Vec
     result
 }
 
+#[cfg(feature = "random")]
 pub fn create_const_weighted_vec<T: Clone, const N: usize>(weights: &[(T, f32)]) -> ArrayVec<T, N> {
     // sum of all weights
     let total: f32 = weights.iter().map(|(_, w)| *w).sum();
@@ -81,7 +85,7 @@ pub fn create_const_weighted_vec<T: Clone, const N: usize>(weights: &[(T, f32)])
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "random"))]
 mod tests {
     use super::{create_const_weighted_vec, create_weighted_vec};
 
