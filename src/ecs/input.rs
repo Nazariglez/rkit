@@ -225,6 +225,14 @@ impl<'a> MouseMutHandle<'a> {
     #[inline]
     pub fn set_motion_delta(&mut self, delta: Vec2) {
         self.mouse.motion_delta = delta;
+        self.mouse.moving = delta != Vec2::ZERO;
+    }
+
+    /// Simulates mouse wheel input since last frame.
+    #[inline]
+    pub fn set_wheel_delta(&mut self, delta: Vec2) {
+        self.mouse.wheel_delta = delta;
+        self.mouse.scrolling = delta != Vec2::ZERO;
     }
 
     /// Marks a button as currently held

@@ -16,7 +16,6 @@ pub struct UINode {
 
     pub(super) local_transform: Mat3,
     pub(super) global_transform: Mat3,
-    pub(super) parent_global_transform: Mat3,
 
     pub(super) global_alpha: f32,
 }
@@ -28,7 +27,6 @@ impl UINode {
             size: Vec2::ONE,
             local_transform: Mat3::IDENTITY,
             global_transform: Mat3::IDENTITY,
-            parent_global_transform: Mat3::IDENTITY,
             global_alpha: 1.0,
         }
     }
@@ -90,27 +88,41 @@ impl UINode {
 
         self.local_transform =
             translate * pivot_translate * rotation * scale * pivot_translate_back;
-        self.parent_global_transform = parent;
-        self.global_transform = self.parent_global_transform * self.local_transform;
+        self.global_transform = parent * self.local_transform;
     }
 }
 
 type RenderCb = dyn Fn(&mut Draw2D, &World, Entity) + Send + Sync + 'static;
 
-/// Wrapper for the render callback
+/// Draws one UI node through the shared UI traversal.
+///
+/// [`draw_ui_layout`](super::layout::draw_ui_layout) invokes the callback once while the node's
+/// global transform and inherited alpha are active. Coordinates are local to the node; ancestor
+/// clips apply, while this node's clip applies to its children. Query data is read-only and comes
+/// from the same entity. A missing query match skips rendering. One entity has one `UIRender`;
+/// compose visual layers with children or one callback. The callback records [`Draw2D`] commands
+/// only: camera selection and submission remain the caller's responsibility.
 #[derive(Component)]
 pub struct UIRender {
     pub(super) cb: Box<RenderCb>,
 }
 
 impl UIRender {
+    /// Creates a render callback from read-only data on the same entity.
     pub fn run<Q, F>(cb: F) -> Self
     where
         Q: ReadOnlyQueryData + ReleaseStateQueryData + 'static,
         F: Fn(&mut Draw2D, Q::Item<'_, '_>) + Send + Sync + 'static,
     {
         let wrapped = Box::new(move |draw: &mut Draw2D, world: &World, entity: Entity| {
-            cb(draw, world.entity(entity).components::<Q>());
+            let Some(components) = world
+                .get_entity(entity)
+                .ok()
+                .and_then(|entity| entity.get_components::<Q>().ok())
+            else {
+                return;
+            };
+            cb(draw, components);
         });
         Self { cb: wrapped }
     }
@@ -203,7 +215,7 @@ impl UIPointerConsumePolicy {
 /// Enable Mouse interactivity for the node/entity
 #[derive(Component, Default, Clone, Debug)]
 pub struct UIPointer {
-    pub(super) position: Vec2,
+    position: Option<super::events::UIPointerPosition>,
     pub(super) is_hover: bool,
     pub(super) just_enter: bool,
     pub(super) just_exit: bool,
@@ -220,7 +232,7 @@ pub struct UIPointer {
 
 impl UIPointer {
     pub fn position(&self) -> Vec2 {
-        self.position
+        self.position.map_or(Vec2::ZERO, |position| position.local)
     }
 
     pub fn is_hover(&self) -> bool {
@@ -257,6 +269,14 @@ impl UIPointer {
 
     pub fn dragging(&self, btn: MouseButton) -> Option<UIDragEvent> {
         self.dragging.get(&btn).cloned()
+    }
+
+    pub(super) fn set_position(&mut self, position: super::events::UIPointerPosition) {
+        self.position = Some(position);
+    }
+
+    pub(super) fn last_position(&self) -> Option<super::events::UIPointerPosition> {
+        self.position
     }
 
     pub(super) fn reset_lifecycle(&mut self) -> bool {

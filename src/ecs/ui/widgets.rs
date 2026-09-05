@@ -1,7 +1,10 @@
-use super::components::{UINode, UIRender};
-use super::ctx::UINodeType;
-use super::style::UIStyle;
-use crate::draw::{Draw2D, Font, HAlign, RichTextLayout, Sprite};
+use super::{
+    components::{UINode, UIRender},
+    ctx::UINodeType,
+    measure::{UIAvailableSpace, UIMeasure, UIMeasureInput},
+    style::UIStyle,
+};
+use crate::draw::{Draw2D, Font, HAlign, RichTextLayout, Sprite, text_metrics};
 use crate::gfx::Color;
 use crate::math::{Vec2, vec2};
 use bevy_ecs::prelude::*;
@@ -54,7 +57,12 @@ fn render_container(draw: &mut Draw2D, (container, node): (&UIContainer, &UINode
 
 // -- Image
 #[derive(Component, Debug, Clone)]
-#[require(UIStyle, UIRender = image_render_component(), UINodeType::Image)]
+#[require(
+    UIStyle,
+    UIRender = image_render_component(),
+    UIMeasure = image_measure_component(),
+    UINodeType::Image
+)]
 pub struct UIImage {
     pub sprite: Sprite,
     pub tint: Option<Color>,
@@ -70,6 +78,20 @@ fn image_render_component() -> UIRender {
     UIRender::run::<(&UIImage, &UINode), _>(render_image)
 }
 
+fn image_measure_component() -> UIMeasure {
+    UIMeasure::run::<&UIImage, _>(measure_image)
+}
+
+pub(super) fn measure_image(input: UIMeasureInput, image: &UIImage) -> Vec2 {
+    let size = image.sprite.size();
+    match (input.known_width, input.known_height) {
+        (Some(width), Some(height)) => vec2(width, height),
+        (Some(width), None) => vec2(width, (width / size.x) * size.y),
+        (None, Some(height)) => vec2((height / size.y) * size.x, height),
+        (None, None) => size,
+    }
+}
+
 fn render_image(draw: &mut Draw2D, (image, node): (&UIImage, &UINode)) {
     let scale = node.size() / image.sprite.size();
 
@@ -82,7 +104,12 @@ fn render_image(draw: &mut Draw2D, (image, node): (&UIImage, &UINode)) {
 
 // -- Text
 #[derive(Component, Debug, Clone)]
-#[require(UIStyle, UIRender = text_renderer(), UINodeType::Text)]
+#[require(
+    UIStyle,
+    UIRender = text_renderer(),
+    UIMeasure = text_measure_component(),
+    UINodeType::Text
+)]
 pub struct UIText {
     pub font: Option<Font>,
     pub text: String,
@@ -119,6 +146,43 @@ fn text_renderer() -> UIRender {
     UIRender::run::<(&UIText, &UINode), _>(render_text_sys)
 }
 
+fn text_measure_component() -> UIMeasure {
+    UIMeasure::run::<&UIText, _>(measure_text)
+}
+
+pub(super) fn measure_text(input: UIMeasureInput, text: &UIText) -> Vec2 {
+    if text.text.is_empty() {
+        return Vec2::ZERO;
+    }
+
+    let mut metrics = text_metrics(&text.text).size(text.size);
+    if let Some(font) = &text.font {
+        metrics = metrics.font(font);
+    }
+    if let Some(line_height) = text.line_height {
+        metrics = metrics.line_height(line_height);
+    }
+    if text.color_tags {
+        metrics = metrics.color_tags();
+    }
+    if text.outline_width > 0 {
+        metrics = metrics.outline(text.outline_width);
+    }
+    let max_width = input.known_width.or(match input.available_width {
+        UIAvailableSpace::Definite(width) => Some(width),
+        UIAvailableSpace::MinContent | UIAvailableSpace::MaxContent => None,
+    });
+    if let Some(max_width) = max_width {
+        metrics = metrics.max_width(max_width);
+    }
+
+    let size = metrics.measure().size;
+    vec2(
+        input.known_width.unwrap_or(size.x),
+        input.known_height.unwrap_or(size.y),
+    )
+}
+
 fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
     let data = TextData {
         node_size: node.size(),
@@ -141,7 +205,12 @@ fn render_text_sys(draw: &mut Draw2D, (text, node): (&UIText, &UINode)) {
 
 // -- Rich Text
 #[derive(Component)]
-#[require(UIStyle, UIRender = rich_text_renderer(), UINodeType::RichText)]
+#[require(
+    UIStyle,
+    UIRender = rich_text_renderer(),
+    UIMeasure = rich_text_measure_component(),
+    UINodeType::RichText
+)]
 pub struct UIRichText {
     layout: RichTextLayout,
     pub shadow_color: Color,
@@ -168,6 +237,18 @@ impl UIRichText {
 
 fn rich_text_renderer() -> UIRender {
     UIRender::run::<&UIRichText, _>(render_rich_text)
+}
+
+fn rich_text_measure_component() -> UIMeasure {
+    UIMeasure::run::<&UIRichText, _>(measure_rich_text)
+}
+
+pub(super) fn measure_rich_text(input: UIMeasureInput, rich_text: &UIRichText) -> Vec2 {
+    let size = rich_text.size();
+    vec2(
+        input.known_width.unwrap_or(size.x),
+        input.known_height.unwrap_or(size.y),
+    )
 }
 
 fn render_rich_text(draw: &mut Draw2D, rich_text: &UIRichText) {
