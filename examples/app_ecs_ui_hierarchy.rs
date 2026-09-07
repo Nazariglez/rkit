@@ -1,6 +1,6 @@
 use rkit::{
     draw::create_draw_2d,
-    ecs::ui::experimental::{CommandUISceneExt, UIScene, ui},
+    ecs::ui::{CommandUISceneExt, UIScene, ui},
     gfx::{self, Color},
     prelude::*,
 };

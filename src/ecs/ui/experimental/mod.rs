@@ -1,4 +1,4 @@
-//! Default-off experimental ECS UI APIs.
+//! Compatibility import path for owned ECS UI scene authoring.
 
 mod command;
 mod constructors;

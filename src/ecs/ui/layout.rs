@@ -249,7 +249,6 @@ pub(super) fn valid_layout_root<T: Component>(world: &World, root: Entity) -> bo
     world.get::<UILayoutRoot<T>>(root).is_some() && world.get::<ChildOf>(root).is_none()
 }
 
-#[cfg(feature = "ecs-ui-experimental")]
 pub(super) fn valid_managed_node<T: Component>(
     world: &World,
     entity: Entity,
@@ -260,7 +259,6 @@ pub(super) fn valid_managed_node<T: Component>(
         .is_none()
 }
 
-#[cfg(feature = "ecs-ui-experimental")]
 pub(super) fn valid_managed_branch<T: Component>(
     world: &World,
     entity: Entity,

@@ -157,19 +157,19 @@ rfd = "0.15.4"
 
 [[example]]
 name = "app_ecs_ui_scene"
-required-features = ["ecs-ui-experimental"]
+required-features = ["ecs", "ui"]
 
 [[example]]
 name = "app_ecs_ui_hierarchy"
-required-features = ["ecs-ui-experimental"]
+required-features = ["ecs", "ui"]
 
 [[example]]
 name = "app_ecs_ui_events"
-required-features = ["ecs-ui-experimental"]
+required-features = ["ecs", "ui"]
 
 [[example]]
 name = "app_ecs_ui_custom_content"
-required-features = ["ecs-ui-experimental"]
+required-features = ["ecs", "ui"]
 
 [features]
 default = [

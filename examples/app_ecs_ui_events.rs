@@ -1,6 +1,6 @@
 use rkit::{
     draw::create_draw_2d,
-    ecs::ui::experimental::{
+    ecs::ui::{
         CommandUISceneExt, UIClick, UIDragInput, UIPointerEnter, UIPointerLeave, UIPointerPressed,
         UIPointerReleased, UIScene, UIScrollInput, ui,
     },

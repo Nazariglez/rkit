@@ -13,7 +13,6 @@ pub enum UIHierarchyError {
 }
 
 /// The reason an experimental ECS UI scene was rejected before materialization.
-#[cfg(feature = "ecs-ui-experimental")]
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum UISceneError {
@@ -27,11 +26,9 @@ pub enum UISceneError {
 #[derive(Event, Clone, Debug)]
 #[non_exhaustive]
 pub enum UIRuntimeError {
-    #[cfg(feature = "ecs-ui-experimental")]
     MissingLayout {
         layout: &'static str,
     },
-    #[cfg(feature = "ecs-ui-experimental")]
     InvalidScene {
         root: Entity,
         reason: UISceneError,

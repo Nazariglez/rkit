@@ -412,7 +412,6 @@ pub(super) fn layout_root<T: Component>(world: &mut World) -> Option<Entity> {
     }
 }
 
-#[cfg(feature = "ecs-ui-experimental")]
 pub(super) fn experimental_layout_root<T: Component>(world: &mut World) -> Option<Entity> {
     let root = world.get_resource::<UILayoutInstalled<T>>()?.root;
     let root = world.get_resource_mut::<UILayout<T>>()?.bind_root(root);
