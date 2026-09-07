@@ -198,7 +198,7 @@ struct UIHierarchyState<'a> {
 }
 
 impl UIHierarchyState<'_> {
-    fn problem(&self, root: Entity, expected_parent: Entity) -> Option<UIHierarchyProblem> {
+    fn node_problem(&self, root: Entity) -> Option<UIHierarchyProblem> {
         if self.owner.is_some_and(|owner| owner.root != root) {
             Some(UIHierarchyProblem::WrongOwner)
         } else if !self.marker {
@@ -211,14 +211,28 @@ impl UIHierarchyState<'_> {
             Some(UIHierarchyProblem::MissingNode)
         } else if !self.transform {
             Some(UIHierarchyProblem::MissingTransform)
-        } else if self
-            .parent
-            .is_none_or(|parent| parent.parent() != expected_parent)
-        {
-            Some(UIHierarchyProblem::WrongParent)
         } else {
             None
         }
+    }
+
+    fn problem(&self, root: Entity, expected_parent: Entity) -> Option<UIHierarchyProblem> {
+        self.node_problem(root).or_else(|| {
+            self.parent
+                .is_none_or(|parent| parent.parent() != expected_parent)
+                .then_some(UIHierarchyProblem::WrongParent)
+        })
+    }
+}
+
+fn world_hierarchy_state<T: Component>(world: &World, entity: Entity) -> UIHierarchyState<'_> {
+    UIHierarchyState {
+        marker: world.get::<T>(entity).is_some(),
+        owner: world.get::<UILayoutOwner>(entity),
+        style: world.get::<UIStyle>(entity).is_some(),
+        node: world.get::<UINode>(entity).is_some(),
+        transform: world.get::<UITransform>(entity).is_some(),
+        parent: world.get::<ChildOf>(entity),
     }
 }
 
@@ -228,15 +242,53 @@ fn world_hierarchy_problem<T: Component>(
     root: Entity,
     parent: Entity,
 ) -> Option<UIHierarchyProblem> {
-    UIHierarchyState {
-        marker: world.get::<T>(entity).is_some(),
-        owner: world.get::<UILayoutOwner>(entity),
-        style: world.get::<UIStyle>(entity).is_some(),
-        node: world.get::<UINode>(entity).is_some(),
-        transform: world.get::<UITransform>(entity).is_some(),
-        parent: world.get::<ChildOf>(entity),
+    world_hierarchy_state::<T>(world, entity).problem(root, parent)
+}
+
+pub(super) fn valid_layout_root<T: Component>(world: &World, root: Entity) -> bool {
+    world.get::<UILayoutRoot<T>>(root).is_some() && world.get::<ChildOf>(root).is_none()
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+pub(super) fn valid_managed_node<T: Component>(
+    world: &World,
+    entity: Entity,
+    root: Entity,
+) -> bool {
+    world_hierarchy_state::<T>(world, entity)
+        .node_problem(root)
+        .is_none()
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+pub(super) fn valid_managed_branch<T: Component>(
+    world: &World,
+    entity: Entity,
+    root: Entity,
+) -> bool {
+    let mut entity = entity;
+    let mut reached = FxHashSet::default();
+    loop {
+        if !reached.insert(entity) {
+            return false;
+        }
+        let Some(parent) = world.get::<ChildOf>(entity).map(ChildOf::parent) else {
+            return false;
+        };
+        if world_hierarchy_problem::<T>(world, entity, root, parent).is_some() {
+            return false;
+        }
+        if !world
+            .get::<Children>(parent)
+            .is_some_and(|children| children.iter().any(|child| child == entity))
+        {
+            return false;
+        }
+        if parent == root {
+            return valid_layout_root::<T>(world, root);
+        }
+        entity = parent;
     }
-    .problem(root, parent)
 }
 
 impl<T: Component> UIProjectionItem<'_, '_, T> {
@@ -947,8 +999,7 @@ impl<T: Component> UILayout<T> {
 
     fn draw_root_is_valid(&mut self, world: &World) -> bool {
         let root = self.root_entity();
-        let valid =
-            world.get::<UILayoutRoot<T>>(root).is_some() && world.get::<ChildOf>(root).is_none();
+        let valid = valid_layout_root::<T>(world, root);
         if !valid {
             self.report(root, UIHierarchyProblem::MissingRoot);
         }

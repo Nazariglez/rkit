@@ -9,6 +9,12 @@ pub struct SpawnUICommand<T: Component> {
     plan: UISpawnPlan<T>,
 }
 
+impl<T: Component> SpawnUICommand<T> {
+    pub(crate) fn from_plan(plan: UISpawnPlan<T>) -> Self {
+        Self { plan }
+    }
+}
+
 pub struct AddUIChildCommand<T: Component> {
     _m: std::marker::PhantomData<T>,
     parent: Entity,
@@ -69,9 +75,11 @@ impl<'c, 'w, 's, T: Component + Copy> SpawnUICommandBuilder<'c, 'w, 's, T> {
 
 impl<T: Component + Copy> Drop for SpawnUICommandBuilder<'_, '_, '_, T> {
     fn drop(&mut self) {
-        self.cmds.queue(SpawnUICommand::<T> {
-            plan: UISpawnPlan::compatibility(self.entries.take().unwrap(), self.layout),
-        });
+        self.cmds
+            .queue(SpawnUICommand::from_plan(UISpawnPlan::compatibility(
+                self.entries.take().unwrap(),
+                self.layout,
+            )));
     }
 }
 

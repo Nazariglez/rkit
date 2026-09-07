@@ -8,7 +8,7 @@ use super::{
     },
     layout::{
         ManagedUI, UIIntrinsicSource, UILayout, UILayoutOwner, UILayoutRoot, UINodeGraph,
-        UIProjection, UIProjectionField,
+        UIProjection, UIProjectionField, valid_layout_root,
     },
     measure::UIMeasure,
     style::{Display, UIOverflow, UIStyle},
@@ -147,7 +147,7 @@ fn is_layout_absent<T: Component>(layout: Option<Res<UILayout<T>>>) -> bool {
 }
 
 fn cleanup_orphaned_root_system<T: Component>(
-    roots: Query<Entity, With<UILayoutRoot<T>>>,
+    roots: Query<Entity, (With<UILayoutRoot<T>>, Allow<Disabled>)>,
     mut commands: Commands,
 ) {
     for root in &roots {
@@ -242,7 +242,10 @@ fn sync_projection_system<T: Component>(
     branches: Query<UIProjection<T>, Allow<Disabled>>,
     changed: Query<UIProjection<T>, ChangedUIProjection<T>>,
     owned: Query<(Entity, &UILayoutOwner), ManagedUI<T>>,
-    roots: Query<(Option<Ref<Children>>, Option<Ref<ChildOf>>), With<UILayoutRoot<T>>>,
+    roots: Query<
+        (Option<Ref<Children>>, Option<Ref<ChildOf>>),
+        (With<UILayoutRoot<T>>, Allow<Disabled>),
+    >,
     mut removed: UIProjectionRemovals<T>,
 ) {
     layout.bind_root(installed.root);
@@ -407,6 +410,13 @@ pub(super) fn layout_root<T: Component>(world: &mut World) -> Option<Entity> {
         world.resource_mut::<UILayout<T>>().report_missing_root();
         None
     }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+pub(super) fn experimental_layout_root<T: Component>(world: &mut World) -> Option<Entity> {
+    let root = world.get_resource::<UILayoutInstalled<T>>()?.root;
+    let root = world.get_resource_mut::<UILayout<T>>()?.bind_root(root);
+    valid_layout_root::<T>(world, root).then_some(root)
 }
 
 pub(super) fn refresh_layout<T: Component>(world: &mut World) {

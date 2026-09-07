@@ -1,4 +1,9 @@
 use bevy_ecs::prelude::*;
+#[cfg(feature = "ecs-ui-experimental")]
+use bevy_ecs::{
+    bundle::{BundleFromComponents, NoBundleEffect},
+    component::ComponentId,
+};
 
 use super::{
     components::UINode,
@@ -7,10 +12,28 @@ use super::{
     plugin::{layout_root, refresh_layout},
     style::UIStyle,
 };
+#[cfg(feature = "ecs-ui-experimental")]
+use super::{
+    diagnostics::{UIRuntimeError, UISceneError},
+    layout::{UILayout, UILayoutRoot, valid_managed_branch, valid_managed_node},
+    plugin::experimental_layout_root,
+};
 
 pub(crate) trait UISpawnOperation: Send {
     fn apply(self: Box<Self>, world: &mut World, entity: Entity);
+
+    #[cfg(feature = "ecs-ui-experimental")]
+    fn preflight(
+        &self,
+        _world: &mut World,
+        _forbidden: &[ComponentId],
+    ) -> Result<(), UISceneError> {
+        Ok(())
+    }
 }
+
+#[cfg(feature = "ecs-ui-experimental")]
+pub(crate) type UIObserverInstaller = Box<dyn FnOnce(&mut World, Entity) + Send>;
 
 struct InsertCompatibilityBundle<B>(B);
 
@@ -20,10 +43,84 @@ impl<B: Bundle> UISpawnOperation for InsertCompatibilityBundle<B> {
     }
 }
 
+#[cfg(feature = "ecs-ui-experimental")]
+pub(crate) struct InsertExperimentalBundle<B>(B);
+
+#[cfg(feature = "ecs-ui-experimental")]
+impl<B> InsertExperimentalBundle<B> {
+    pub(crate) fn new(bundle: B) -> Self {
+        Self(bundle)
+    }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+impl<B> UISpawnOperation for InsertExperimentalBundle<B>
+where
+    B: Bundle + BundleFromComponents,
+    B::Effect: NoBundleEffect,
+{
+    fn apply(self: Box<Self>, world: &mut World, entity: Entity) {
+        world.entity_mut(entity).insert(self.0);
+    }
+
+    fn preflight(&self, world: &mut World, forbidden: &[ComponentId]) -> Result<(), UISceneError> {
+        let components = world.register_bundle::<B>().contributed_components();
+        if components
+            .iter()
+            .any(|component| forbidden.contains(component))
+        {
+            return Err(UISceneError::RuntimeOwnedComponent);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+pub(crate) struct PatchStyle<F>(F);
+
+#[cfg(feature = "ecs-ui-experimental")]
+impl<F> PatchStyle<F> {
+    pub(crate) fn new(patch: F) -> Self {
+        Self(patch)
+    }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+impl<F> UISpawnOperation for PatchStyle<F>
+where
+    F: FnOnce(UIStyle) -> UIStyle + Send + 'static,
+{
+    fn apply(self: Box<Self>, world: &mut World, entity: Entity) {
+        let style = *world.entity(entity).get::<UIStyle>().unwrap();
+        world.entity_mut(entity).insert((self.0)(style));
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum UISpawnParent {
+    Root,
+    Plan(Entity),
+    #[cfg(feature = "ecs-ui-experimental")]
+    Existing(Entity),
+}
+
+impl UISpawnParent {
+    fn resolve(self, root: Entity) -> Entity {
+        match self {
+            Self::Root => root,
+            Self::Plan(entity) => entity,
+            #[cfg(feature = "ecs-ui-experimental")]
+            Self::Existing(entity) => entity,
+        }
+    }
+}
+
 pub(crate) struct UISpawnEntry {
     pub(crate) entity: Entity,
-    pub(crate) parent: Option<Entity>,
+    pub(crate) parent: UISpawnParent,
     pub(crate) operations: Vec<Box<dyn UISpawnOperation>>,
+    #[cfg(feature = "ecs-ui-experimental")]
+    pub(crate) observers: Vec<UIObserverInstaller>,
 }
 
 impl UISpawnEntry {
@@ -34,50 +131,302 @@ impl UISpawnEntry {
     ) -> Self {
         Self {
             entity,
-            parent,
+            parent: parent.map_or(UISpawnParent::Root, UISpawnParent::Plan),
             operations: vec![Box::new(InsertCompatibilityBundle(bundle))],
+            #[cfg(feature = "ecs-ui-experimental")]
+            observers: Vec::new(),
         }
     }
+
+    #[cfg(feature = "ecs-ui-experimental")]
+    pub(crate) fn experimental(
+        entity: Entity,
+        parent: UISpawnParent,
+        operations: Vec<Box<dyn UISpawnOperation>>,
+        observers: Vec<UIObserverInstaller>,
+    ) -> Self {
+        Self {
+            entity,
+            parent,
+            operations,
+            observers,
+        }
+    }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+#[derive(Clone, Copy)]
+pub(crate) struct UISpawnRelink {
+    pub(crate) entity: Entity,
+    pub(crate) parent: UISpawnParent,
+}
+
+#[derive(Clone, Copy)]
+enum UISpawnOrigin {
+    Compatibility,
+    #[cfg(feature = "ecs-ui-experimental")]
+    Experimental,
 }
 
 pub(crate) struct UISpawnPlan<T: Component> {
     entries: Vec<UISpawnEntry>,
+    #[cfg(feature = "ecs-ui-experimental")]
+    relinks: Vec<UISpawnRelink>,
     layout: T,
+    origin: UISpawnOrigin,
 }
 
 impl<T: Component + Copy> UISpawnPlan<T> {
     pub(crate) fn compatibility(entries: Vec<UISpawnEntry>, layout: T) -> Self {
-        Self { entries, layout }
+        Self {
+            entries,
+            #[cfg(feature = "ecs-ui-experimental")]
+            relinks: Vec::new(),
+            layout,
+            origin: UISpawnOrigin::Compatibility,
+        }
     }
 
-    pub(crate) fn materialize(self, world: &mut World) {
-        let Self { entries, layout } = self;
-        let Some(root) = layout_root::<T>(world) else {
-            for entry in entries {
-                let _ = world.try_despawn(entry.entity);
+    #[cfg(feature = "ecs-ui-experimental")]
+    pub(crate) fn experimental(
+        entries: Vec<UISpawnEntry>,
+        relinks: Vec<UISpawnRelink>,
+        layout: T,
+    ) -> Self {
+        Self {
+            entries,
+            relinks,
+            layout,
+            origin: UISpawnOrigin::Experimental,
+        }
+    }
+
+    pub(crate) fn materialize(mut self, world: &mut World) {
+        let root = match self.origin {
+            UISpawnOrigin::Compatibility => layout_root::<T>(world),
+            #[cfg(feature = "ecs-ui-experimental")]
+            UISpawnOrigin::Experimental => experimental_layout_root::<T>(world),
+        };
+        let Some(root) = root else {
+            cleanup_scene_entries(world, &self.entries);
+            #[cfg(feature = "ecs-ui-experimental")]
+            if matches!(self.origin, UISpawnOrigin::Experimental) {
+                report_missing_layout::<T>(world);
             }
             return;
         };
 
-        for entry in entries {
-            for operation in entry.operations {
-                operation.apply(world, entry.entity);
+        #[cfg(feature = "ecs-ui-experimental")]
+        if matches!(self.origin, UISpawnOrigin::Experimental) {
+            let invalid_entity = self
+                .entries
+                .first()
+                .map(|entry| entry.entity)
+                .or_else(|| self.relinks.first().map(|relink| relink.entity));
+            let forbidden = runtime_owned_components::<T>(world);
+            if let Err(reason) = preflight_experimental_plan::<T>(
+                world,
+                &self.entries,
+                &self.relinks,
+                root,
+                &forbidden,
+            ) {
+                cleanup_scene_entries(world, &self.entries);
+                if let Some(entity) = invalid_entity {
+                    report_invalid_scene(world, entity, reason);
+                }
+                return;
             }
-            let parent = entry.parent.unwrap_or(root);
-            let mut entity = world.entity_mut(entry.entity);
-            entity
-                .insert_if_new(UIStyle::default())
-                .insert_if_new(UINodeType::Container)
-                .insert((
-                    layout,
-                    UILayoutOwner { root },
-                    ChildOf(parent),
-                    UINode::new(),
-                ));
+
+            for entry in &self.entries {
+                install_runtime_components(
+                    world,
+                    entry.entity,
+                    self.layout,
+                    root,
+                    UISpawnOrigin::Experimental,
+                );
+            }
         }
 
-        refresh_layout::<T>(world);
+        for entry in &mut self.entries {
+            for operation in std::mem::take(&mut entry.operations) {
+                operation.apply(world, entry.entity);
+            }
+            match self.origin {
+                UISpawnOrigin::Compatibility => {
+                    install_runtime_components(
+                        world,
+                        entry.entity,
+                        self.layout,
+                        root,
+                        UISpawnOrigin::Compatibility,
+                    );
+                    link_entity(world, entry.entity, entry.parent, root);
+                }
+                #[cfg(feature = "ecs-ui-experimental")]
+                UISpawnOrigin::Experimental => {
+                    world
+                        .entity_mut(entry.entity)
+                        .insert_if_new(UINodeType::Container);
+                }
+            }
+        }
+
+        #[cfg(feature = "ecs-ui-experimental")]
+        {
+            if matches!(self.origin, UISpawnOrigin::Experimental) {
+                for entry in &self.entries {
+                    link_entity(world, entry.entity, entry.parent, root);
+                }
+            }
+            for relink in self.relinks {
+                link_entity(world, relink.entity, relink.parent, root);
+            }
+            for entry in self.entries {
+                for observer in entry.observers {
+                    observer(world, entry.entity);
+                }
+            }
+        }
+
+        match self.origin {
+            UISpawnOrigin::Compatibility => refresh_layout::<T>(world),
+            #[cfg(feature = "ecs-ui-experimental")]
+            UISpawnOrigin::Experimental => {
+                world.resource_mut::<UILayout<T>>().mark_topology_dirty();
+            }
+        }
     }
+}
+
+fn install_runtime_components<T: Component>(
+    world: &mut World,
+    entity: Entity,
+    layout: T,
+    root: Entity,
+    origin: UISpawnOrigin,
+) {
+    let mut entity = world.entity_mut(entity);
+    entity.insert((layout, UILayoutOwner { root }, UINode::new()));
+    match origin {
+        UISpawnOrigin::Compatibility => {
+            entity
+                .insert_if_new(UIStyle::default())
+                .insert_if_new(UINodeType::Container);
+        }
+        #[cfg(feature = "ecs-ui-experimental")]
+        UISpawnOrigin::Experimental => {
+            entity.insert(UIStyle::default());
+        }
+    }
+}
+
+fn link_entity(world: &mut World, entity: Entity, parent: UISpawnParent, root: Entity) {
+    world
+        .entity_mut(entity)
+        .insert(ChildOf(parent.resolve(root)));
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+fn preflight_experimental_plan<T: Component>(
+    world: &mut World,
+    entries: &[UISpawnEntry],
+    relinks: &[UISpawnRelink],
+    root: Entity,
+    forbidden: &[ComponentId],
+) -> Result<(), UISceneError> {
+    let entries_by_entity = entries
+        .iter()
+        .map(|entry| entry.entity)
+        .collect::<rustc_hash::FxHashSet<_>>();
+    let mut validated_existing_parents = rustc_hash::FxHashSet::default();
+    for entry in entries {
+        if !world.entities().contains(entry.entity) {
+            return Err(UISceneError::MissingEntity);
+        }
+        preflight_parent::<T>(
+            world,
+            entry.parent,
+            &entries_by_entity,
+            &mut validated_existing_parents,
+            root,
+        )?;
+        for operation in &entry.operations {
+            operation.preflight(world, forbidden)?;
+        }
+    }
+    for relink in relinks {
+        if !world.entities().contains(relink.entity) {
+            return Err(UISceneError::MissingEntity);
+        }
+        if !valid_managed_node::<T>(world, relink.entity, root) {
+            return Err(UISceneError::WrongLayout);
+        }
+        preflight_parent::<T>(
+            world,
+            relink.parent,
+            &entries_by_entity,
+            &mut validated_existing_parents,
+            root,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+fn preflight_parent<T: Component>(
+    world: &World,
+    parent: UISpawnParent,
+    entries: &rustc_hash::FxHashSet<Entity>,
+    validated_existing: &mut rustc_hash::FxHashSet<Entity>,
+    root: Entity,
+) -> Result<(), UISceneError> {
+    match parent {
+        UISpawnParent::Root => Ok(()),
+        UISpawnParent::Plan(parent) if entries.contains(&parent) => Ok(()),
+        UISpawnParent::Plan(_) => Err(UISceneError::MissingParent),
+        UISpawnParent::Existing(parent) if !world.entities().contains(parent) => {
+            Err(UISceneError::MissingParent)
+        }
+        UISpawnParent::Existing(parent) if validated_existing.contains(&parent) => Ok(()),
+        UISpawnParent::Existing(parent) if valid_managed_branch::<T>(world, parent, root) => {
+            validated_existing.insert(parent);
+            Ok(())
+        }
+        UISpawnParent::Existing(_) => Err(UISceneError::WrongLayout),
+    }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+fn runtime_owned_components<T: Component>(world: &mut World) -> [ComponentId; 6] {
+    [
+        world.register_component::<ChildOf>(),
+        world.register_component::<Children>(),
+        world.register_component::<UINode>(),
+        world.register_component::<T>(),
+        world.register_component::<UILayoutOwner>(),
+        world.register_component::<UILayoutRoot<T>>(),
+    ]
+}
+
+fn cleanup_scene_entries(world: &mut World, entries: &[UISpawnEntry]) {
+    for entry in entries {
+        let _ = world.try_despawn(entry.entity);
+    }
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+fn report_missing_layout<T: Component>(world: &mut World) {
+    let layout = std::any::type_name::<T>();
+    log::error!("Cannot materialize ECS UI scene: layout {layout} is unavailable");
+    world.trigger(UIRuntimeError::MissingLayout { layout });
+}
+
+#[cfg(feature = "ecs-ui-experimental")]
+fn report_invalid_scene(world: &mut World, root: Entity, reason: UISceneError) {
+    log::error!("Cannot materialize ECS UI scene rooted at {root:?}: {reason:?}");
+    world.trigger(UIRuntimeError::InvalidScene { root, reason });
 }
 
 pub(crate) fn reparent_ui_node<T: Component>(world: &mut World, parent: Entity, child: Entity) {
