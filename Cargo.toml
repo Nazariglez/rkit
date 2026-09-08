@@ -164,8 +164,16 @@ name = "app_ecs_ui_rsx"
 required-features = ["ecs-ui-rsx"]
 
 [[example]]
+name = "app_ecs_ui_rsx_content"
+required-features = ["ecs-ui-rsx"]
+
+[[example]]
 name = "app_ecs_ui_menu"
 required-features = ["ecs", "ui", "draw-default-font", "logs"]
+
+[[example]]
+name = "app_ecs_ui_menu_rsx"
+required-features = ["ecs-ui-rsx", "draw-default-font", "logs"]
 
 [[example]]
 name = "app_ecs_ui_hierarchy"

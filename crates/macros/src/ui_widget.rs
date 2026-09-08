@@ -36,10 +36,10 @@ fn expand_inner(attribute: TokenStream2, item: TokenStream2) -> syn::Result<Toke
             "ui_widget requires exactly one tag identifier",
         )
     })?;
-    if crate::rsx::is_primitive_tag(&tag) {
+    if crate::rsx::is_core_tag(&tag) {
         return Err(Error::new_spanned(
             tag,
-            "ui_widget tag is a reserved primitive name",
+            "ui_widget tag is a reserved core name",
         ));
     }
 
@@ -310,6 +310,29 @@ fn standard_option_inner(ty: &Type) -> Option<&Type> {
     Some(inner)
 }
 
+fn is_standard_string(ty: &Type) -> bool {
+    let Type::Path(path) = ty else {
+        return false;
+    };
+    if path.qself.is_some() {
+        return false;
+    }
+    let segments = &path.path.segments;
+    let matches_path = match segments.len() {
+        1 => path.path.leading_colon.is_none() && segments[0].ident.unraw() == "String",
+        3 => {
+            (segments[0].ident.unraw() == "std" || segments[0].ident.unraw() == "alloc")
+                && segments[1].ident.unraw() == "string"
+                && segments[2].ident.unraw() == "String"
+        }
+        _ => false,
+    };
+    matches_path
+        && segments
+            .iter()
+            .all(|segment| matches!(segment.arguments, syn::PathArguments::None))
+}
+
 fn generate(
     function: ItemFn,
     tag: Ident,
@@ -408,6 +431,7 @@ fn generate(
             PropKind::Optional(inner) => inner.as_ref(),
         };
         let input = format_ident!("__ui_value", span = Span::mixed_site());
+        let string_input = is_standard_string(input_ty);
         let target_state = match &prop.kind {
             PropKind::Required(state) => Some(state),
             PropKind::Optional(_) => None,
@@ -478,10 +502,17 @@ fn generate(
         } else {
             quote!(<#(#setter_generics),*>)
         };
+        let method_input = if string_input {
+            quote!(#input: impl ::core::convert::Into<#input_ty>)
+        } else {
+            quote!(#input: #input_ty)
+        };
+        let conversion = string_input.then(|| quote!(let #input: #input_ty = #input.into();));
         quote! {
             impl #impl_generics #self_type {
                 #[doc(hidden)]
-                pub fn #setter(self, #input: #input_ty) -> #result_type {
+                pub fn #setter(self, #method_input) -> #result_type {
+                    #conversion
                     #tag { #(#fields,)* }
                 }
             }

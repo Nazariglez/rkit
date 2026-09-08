@@ -56,6 +56,9 @@ pub mod layout;
 mod measure;
 pub mod plugin;
 pub(super) mod prelude;
+#[cfg(feature = "ecs-ui-rsx")]
+#[doc(hidden)]
+pub mod rsx_widgets;
 mod spawn;
 pub mod style;
 pub mod widgets;

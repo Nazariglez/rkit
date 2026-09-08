@@ -17,22 +17,6 @@ struct RsxInput {
     tokens: TokenStream2,
 }
 
-#[derive(Clone, Copy)]
-enum Primitive {
-    Node,
-    Row,
-    Column,
-    Container,
-    Text,
-    RichText,
-    Image,
-}
-
-enum Tag<'a> {
-    Primitive(Primitive),
-    Custom(&'a ExprPath),
-}
-
 struct Modifier {
     method: Ident,
     argument: TokenStream2,
@@ -43,26 +27,16 @@ struct WidgetProp {
     value: TokenStream2,
 }
 
-struct AttributeValue {
+struct SpannedTokens {
     tokens: TokenStream2,
-    span: proc_macro2::Span,
+    span: Span,
 }
 
 #[derive(Default)]
 struct ElementAttributes {
-    props: Option<AttributeValue>,
-    children: Option<AttributeValue>,
+    children: Option<SpannedTokens>,
     modifiers: Vec<Modifier>,
     widget_props: Vec<WidgetProp>,
-}
-
-enum ChildSource {
-    None,
-    Syntactic {
-        children: Vec<TokenStream2>,
-        span: proc_macro2::Span,
-    },
-    Explicit(AttributeValue),
 }
 
 impl Parse for RsxInput {
@@ -106,128 +80,60 @@ fn lower_element(
     framework: &Path,
 ) -> syn::Result<TokenStream2> {
     reject_generics(element)?;
-    let tag = classify_tag(element.name())?;
-    let attributes = element_attributes(element, &tag)?;
-    match tag {
-        Tag::Primitive(primitive) => lower_primitive(element, primitive, attributes, framework),
-        Tag::Custom(path) => lower_custom(element, path, attributes, framework),
-    }
-}
+    let tag = tag_path(element.name())?;
+    let core_adapter = (tag.path.segments.len() == 1)
+        .then(|| core_adapter_name(&tag.path.segments[0].ident))
+        .flatten();
+    let is_text = core_adapter == Some("Text");
+    let mut attributes = element_attributes(element)?;
 
-fn lower_primitive(
-    element: &NodeElement<rstml::node::Infallible>,
-    primitive: Primitive,
-    attributes: ElementAttributes,
-    framework: &Path,
-) -> syn::Result<TokenStream2> {
-    let ElementAttributes {
-        props,
-        children,
-        modifiers,
-        widget_props: _,
-    } = attributes;
-
-    if matches!(primitive, Primitive::Text) && children.is_some() {
-        return Err(Error::new_spanned(
-            element.name(),
-            "text does not accept a children attribute",
-        ));
-    }
-
-    let scene = match primitive {
-        Primitive::Node | Primitive::Row | Primitive::Column if props.is_some() => {
+    let source = if is_text {
+        if attributes.children.is_some() {
             return Err(Error::new_spanned(
                 element.name(),
-                "this primitive does not accept a props attribute",
+                "text does not accept ui:children",
             ));
         }
-        Primitive::Node => quote!(#framework::ecs::ui::ui::node()),
-        Primitive::Row => quote!(#framework::ecs::ui::ui::row()),
-        Primitive::Column => quote!(#framework::ecs::ui::ui::column()),
-        Primitive::Container => {
-            let input = props.map_or_else(
-                || quote!(#framework::ecs::ui::widgets::UIContainer::default()),
-                |props| props.tokens,
-            );
-            quote!(#framework::ecs::ui::ui::container(#input))
+        if attributes
+            .widget_props
+            .iter()
+            .any(|prop| prop.setter.unraw() == "text")
+        {
+            return Err(Error::new_spanned(
+                element.name(),
+                "text content belongs in its braced payload, not a text attribute",
+            ));
         }
-        Primitive::Text => {
-            if props.is_some() {
-                return Err(Error::new_spanned(
-                    element.name(),
-                    "text does not accept a props attribute",
-                ));
-            }
-            let payload = text_payload(element)?;
-            quote!(#framework::ecs::ui::ui::text(#payload))
-        }
-        Primitive::RichText => {
-            let Some(input) = props else {
-                return Err(Error::new_spanned(
-                    element.name(),
-                    "rich_text requires props={UIRichText expression}",
-                ));
-            };
-            let input = input.tokens;
-            quote!(#framework::ecs::ui::ui::rich_text(#input))
-        }
-        Primitive::Image => {
-            let Some(input) = props else {
-                return Err(Error::new_spanned(
-                    element.name(),
-                    "image requires props={UIImage expression}",
-                ));
-            };
-            let input = input.tokens;
-            quote!(#framework::ecs::ui::ui::image(#input))
-        }
+        attributes.widget_props.push(WidgetProp {
+            setter: Ident::new("text", element.name().span()),
+            value: text_payload(element)?,
+        });
+        None
+    } else {
+        child_source(element, attributes.children.take(), framework)?
     };
 
-    let scene = apply_modifiers(scene, modifiers);
-    if matches!(primitive, Primitive::Text) {
-        return Ok(scene);
-    }
-
-    Ok(apply_primitive_child_source(
-        scene,
-        child_source(element, children, framework)?,
-    ))
-}
-
-fn lower_custom(
-    element: &NodeElement<rstml::node::Infallible>,
-    path: &ExprPath,
-    attributes: ElementAttributes,
-    framework: &Path,
-) -> syn::Result<TokenStream2> {
-    let ElementAttributes {
-        props: _,
-        children,
-        modifiers,
-        widget_props,
-    } = attributes;
-    let source = child_source(element, children, framework)?;
+    let path = match core_adapter {
+        Some(adapter) => {
+            let adapter = Ident::new(adapter, Span::mixed_site());
+            quote!(#framework::ecs::ui::rsx_widgets::#adapter)
+        }
+        None => quote!(#tag),
+    };
     let tag_span = element.name().span();
     let new_ident = Ident::new(UI_NEW, tag_span);
     let build_ident = Ident::new(UI_BUILD, tag_span);
     let builder = Ident::new("__rkit_rsx_builder", proc_macro2::Span::mixed_site());
     let result = Ident::new("__rkit_rsx_scene", proc_macro2::Span::mixed_site());
-    let setters = widget_props.iter().map(|prop| {
+    let setters = attributes.widget_props.iter().map(|prop| {
         let setter = &prop.setter;
         let value = &prop.value;
         quote!(let #builder = #builder.#setter(#value);)
     });
-    let attach_children = match source {
-        ChildSource::None => quote!(),
-        ChildSource::Syntactic { children, span } => {
-            let children_ident = Ident::new(UI_CHILDREN, span);
-            quote!(let #builder = #builder.#children_ident([#(#children),*]);)
-        }
-        ChildSource::Explicit(AttributeValue { tokens, span }) => {
-            let children_ident = Ident::new(UI_CHILDREN, span);
-            quote!(let #builder = #builder.#children_ident(#tokens);)
-        }
-    };
+    let attach_children = source.map(|SpannedTokens { tokens, span }| {
+        let children_ident = Ident::new(UI_CHILDREN, span);
+        quote!(let #builder = #builder.#children_ident(#tokens);)
+    });
     let scene = quote!({
         let #builder = #path::#new_ident();
         #(#setters)*
@@ -235,7 +141,7 @@ fn lower_custom(
         let #result: #framework::ecs::ui::UIScene = #builder.#build_ident();
         #result
     });
-    Ok(apply_modifiers(scene, modifiers))
+    Ok(apply_modifiers(scene, attributes.modifiers))
 }
 
 fn reject_generics(element: &NodeElement<rstml::node::Infallible>) -> syn::Result<()> {
@@ -259,7 +165,7 @@ fn reject_tag_generics(generics: &syn::Generics) -> syn::Result<()> {
     Ok(())
 }
 
-fn classify_tag(name: &NodeName) -> syn::Result<Tag<'_>> {
+fn tag_path(name: &NodeName) -> syn::Result<&ExprPath> {
     let NodeName::Path(path) = name else {
         return Err(Error::new_spanned(name, "rsx! tags must be Rust paths"));
     };
@@ -276,67 +182,50 @@ fn classify_tag(name: &NodeName) -> syn::Result<Tag<'_>> {
             "rsx! tags must be non-generic Rust paths",
         ));
     }
-    if path.path.segments.len() == 1 {
-        let ident = &path.path.segments[0].ident;
-        if let Some(primitive) = primitive_from_ident(ident) {
-            return Ok(Tag::Primitive(primitive));
-        }
-    }
-    Ok(Tag::Custom(path))
+    Ok(path)
 }
 
-pub(crate) fn is_primitive_tag(ident: &Ident) -> bool {
-    primitive_from_ident(ident).is_some()
+pub(crate) fn is_core_tag(ident: &Ident) -> bool {
+    core_adapter_name(ident).is_some()
 }
 
-fn primitive_from_ident(ident: &Ident) -> Option<Primitive> {
+fn core_adapter_name(ident: &Ident) -> Option<&'static str> {
     match ident.unraw().to_string().as_str() {
-        "node" => Some(Primitive::Node),
-        "row" => Some(Primitive::Row),
-        "column" => Some(Primitive::Column),
-        "container" => Some(Primitive::Container),
-        "text" => Some(Primitive::Text),
-        "rich_text" => Some(Primitive::RichText),
-        "image" => Some(Primitive::Image),
+        "node" => Some("Node"),
+        "row" => Some("Row"),
+        "column" => Some("Column"),
+        "container" => Some("Container"),
+        "text" => Some("Text"),
+        "rich_text" => Some("RichText"),
+        "image" => Some("Image"),
         _ => None,
     }
 }
 
 fn child_source(
     element: &NodeElement<rstml::node::Infallible>,
-    explicit: Option<AttributeValue>,
+    explicit: Option<SpannedTokens>,
     framework: &Path,
-) -> syn::Result<ChildSource> {
-    if let Some(children) = explicit {
-        if let Some(child) = element.children.first() {
-            return Err(Error::new_spanned(
-                child,
-                "children attribute cannot be combined with nested children",
-            ));
-        }
-        return Ok(ChildSource::Explicit(children));
+) -> syn::Result<Option<SpannedTokens>> {
+    let Some(first) = element.children.first() else {
+        return Ok(explicit);
+    };
+    if explicit.is_some() {
+        return Err(Error::new_spanned(
+            first,
+            "ui:children cannot be combined with nested children",
+        ));
     }
 
-    let mut children = Vec::with_capacity(element.children.len());
-    let mut span = None;
-    for child in &element.children {
-        span.get_or_insert_with(|| child.span());
-        children.push(lower_scene_node(child, framework)?);
-    }
-    match span {
-        Some(span) => Ok(ChildSource::Syntactic { children, span }),
-        None => Ok(ChildSource::None),
-    }
-}
-
-fn apply_primitive_child_source(scene: TokenStream2, source: ChildSource) -> TokenStream2 {
-    match source {
-        ChildSource::None => scene,
-        ChildSource::Syntactic { children, .. } => children
-            .into_iter()
-            .fold(scene, |scene, child| quote!(#scene.child(#child))),
-        ChildSource::Explicit(AttributeValue { tokens, .. }) => quote!(#scene.children(#tokens)),
-    }
+    let children = element
+        .children
+        .iter()
+        .map(|child| lower_scene_node(child, framework))
+        .collect::<syn::Result<Vec<_>>>()?;
+    Ok(Some(SpannedTokens {
+        tokens: quote!([#(#children),*]),
+        span: first.span(),
+    }))
 }
 
 fn apply_modifiers(mut scene: TokenStream2, modifiers: Vec<Modifier>) -> TokenStream2 {
@@ -348,9 +237,7 @@ fn apply_modifiers(mut scene: TokenStream2, modifiers: Vec<Modifier>) -> TokenSt
 
 fn element_attributes(
     element: &NodeElement<rstml::node::Infallible>,
-    tag: &Tag<'_>,
 ) -> syn::Result<ElementAttributes> {
-    let custom = matches!(tag, Tag::Custom(_));
     let mut attributes = ElementAttributes::default();
     for attribute in element.attributes() {
         let NodeAttribute::Attribute(attribute) = attribute else {
@@ -362,78 +249,52 @@ fn element_attributes(
         let key = &attribute.key;
         let value = braced_attribute_value(attribute)?;
         if let Some(name) = plain_attribute_name(key) {
-            match name.unraw().to_string().as_str() {
-                "props" if custom => {
-                    return Err(Error::new_spanned(
-                        key,
-                        "custom widgets use prop:name attributes instead of props",
-                    ));
-                }
-                "props" | "children" => {
-                    let slot = if name.unraw() == "props" {
-                        &mut attributes.props
-                    } else {
-                        &mut attributes.children
-                    };
-                    if slot.replace(value).is_some() {
-                        return Err(Error::new_spanned(
-                            key,
-                            format!("duplicate {} attribute", name.unraw()),
-                        ));
-                    }
-                }
-                "insert" | "style" | "observe" | "on_click" => {
-                    attributes.modifiers.push(Modifier {
-                        method: name.clone(),
-                        argument: value.tokens,
-                    });
-                }
-                _ => {
-                    let message = if custom {
-                        "custom widget properties must use prop:name"
-                    } else {
-                        "unsupported primitive attribute"
-                    };
-                    return Err(Error::new_spanned(key, message));
-                }
+            if name.unraw() == "children" {
+                return Err(Error::new_spanned(
+                    name,
+                    "use ui:children for an explicit child source",
+                ));
             }
+            if is_reserved_name(name) {
+                return Err(Error::new_spanned(
+                    name,
+                    "widget property names cannot start with __ui_",
+                ));
+            }
+            if attributes
+                .widget_props
+                .iter()
+                .any(|prop| prop.setter.unraw() == name.unraw())
+            {
+                return Err(Error::new_spanned(name, "duplicate widget prop attribute"));
+            }
+            attributes.widget_props.push(WidgetProp {
+                setter: name.clone(),
+                value: value.tokens,
+            });
             continue;
         }
-        if !custom {
-            return Err(Error::new_spanned(
-                key,
-                "primitive attributes cannot use namespaces",
-            ));
-        }
-        let Some(name) = prop_attribute_name(key) else {
+
+        let Some(name) = control_attribute_name(key) else {
             return Err(Error::new_spanned(
                 key,
                 "unsupported rsx! attribute namespace",
             ));
         };
-        if name.unraw() == "children" {
-            return Err(Error::new_spanned(
-                name,
-                "children is a structural attribute, not a widget prop",
-            ));
+        match name.unraw().to_string().as_str() {
+            "insert" | "style" | "observe" | "on_click" => attributes.modifiers.push(Modifier {
+                method: name.clone(),
+                argument: value.tokens,
+            }),
+            "children" => {
+                if attributes.children.replace(value).is_some() {
+                    return Err(Error::new_spanned(name, "duplicate ui:children attribute"));
+                }
+            }
+            _ => {
+                return Err(Error::new_spanned(name, "unknown ui: control"));
+            }
         }
-        if is_reserved_name(name) {
-            return Err(Error::new_spanned(
-                name,
-                "widget property names cannot start with __ui_",
-            ));
-        }
-        if attributes
-            .widget_props
-            .iter()
-            .any(|prop| prop.setter.unraw() == name.unraw())
-        {
-            return Err(Error::new_spanned(name, "duplicate widget prop attribute"));
-        }
-        attributes.widget_props.push(WidgetProp {
-            setter: name.clone(),
-            value: value.tokens,
-        });
     }
     Ok(attributes)
 }
@@ -452,7 +313,7 @@ fn plain_attribute_name(name: &NodeName) -> Option<&Ident> {
     Some(&path.path.segments[0].ident)
 }
 
-fn prop_attribute_name(name: &NodeName) -> Option<&Ident> {
+fn control_attribute_name(name: &NodeName) -> Option<&Ident> {
     let NodeName::Punctuated(name) = name else {
         return None;
     };
@@ -460,7 +321,7 @@ fn prop_attribute_name(name: &NodeName) -> Option<&Ident> {
     let Pair::Punctuated(NodeNameFragment::Ident(namespace), punctuation) = pairs.next()? else {
         return None;
     };
-    if namespace.unraw() != "prop" || punctuation.as_char() != ':' {
+    if namespace.unraw() != "ui" || punctuation.as_char() != ':' {
         return None;
     }
     let Pair::End(NodeNameFragment::Ident(name)) = pairs.next()? else {
@@ -472,7 +333,7 @@ fn prop_attribute_name(name: &NodeName) -> Option<&Ident> {
     Some(name)
 }
 
-fn braced_attribute_value(attribute: &rstml::node::KeyedAttribute) -> syn::Result<AttributeValue> {
+fn braced_attribute_value(attribute: &rstml::node::KeyedAttribute) -> syn::Result<SpannedTokens> {
     let Some(value) = attribute.value() else {
         return Err(Error::new_spanned(
             attribute,
@@ -491,7 +352,7 @@ fn braced_attribute_value(attribute: &rstml::node::KeyedAttribute) -> syn::Resul
             "rsx! attribute values cannot use outer labels or attributes",
         ));
     }
-    Ok(AttributeValue {
+    Ok(SpannedTokens {
         tokens: quote_block_expression(&block.block),
         span: block.block.span(),
     })

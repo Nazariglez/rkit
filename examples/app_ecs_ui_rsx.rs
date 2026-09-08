@@ -77,26 +77,26 @@ fn setup(mut commands: Commands) {
 
 fn screen() -> UIScene {
     rsx! {
-        <column style={|style| style
+        <column ui:style={|style| style
             .size_full()
             .align_items_center()
             .justify_content_center()
             .padding(20.0)}>
-            <Panel prop:title={"RSX UI scenes".to_string()}>
-                <Label prop:text={"Panel color uses its function-owned fallback.".to_string()}/>
+            <Panel title={"RSX UI scenes"}>
+                <Label text={"Panel color uses its function-owned fallback."}/>
             </Panel>
             <Panel
-                prop:title={"Actions".to_string()}
-                prop:color={Color::rgb(0.16, 0.28, 0.48)}
-                style={|style| style.margin_top(14.0)}
+                title={"Actions"}
+                color={Color::rgb(0.16, 0.28, 0.48)}
+                ui:style={|style| style.margin_top(14.0)}
             >
-                <Label prop:text={"Each button shares one click observer.".to_string()}/>
-                <column children={[Action::Play, Action::Settings, Action::Quit]
+                <Label text={"Each button shares one click observer."}/>
+                <column ui:children={[Action::Play, Action::Settings, Action::Quit]
                     .into_iter()
                     .map(action_button)}/>
                 <Label
-                    prop:text={"Click an action button".to_string()}
-                    insert={ActionStatus}
+                    text={"Click an action button"}
+                    ui:insert={ActionStatus}
                 />
             </Panel>
         </column>
@@ -106,18 +106,15 @@ fn screen() -> UIScene {
 fn action_button(action: Action) -> UIScene {
     rsx! {
         <container
-            props={UIContainer {
-                bg_color: Some(Color::rgb(0.2, 0.38, 0.72)),
-                corner_radius: Some(8.0),
-                ..Default::default()
-            }}
-            insert={(action, UIPointer::default())}
-            style={|style| style
+            bg_color={Color::rgb(0.2, 0.38, 0.72)}
+            corner_radius={8.0}
+            ui:insert={(action, UIPointer::default())}
+            ui:style={|style| style
                 .size(340.0, 38.0)
                 .align_items_center()
                 .justify_content_center()}
         >
-            <Label prop:text={action.label().to_string()}/>
+            <Label text={action.label()}/>
         </container>
     }
 }
