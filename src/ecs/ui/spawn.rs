@@ -108,6 +108,7 @@ pub(crate) struct UISpawnEntry {
     pub(crate) parent: UISpawnParent,
     pub(crate) operations: Vec<Box<dyn UISpawnOperation>>,
     pub(crate) observers: Vec<UIObserverInstaller>,
+    pub(crate) duplicate_binding: bool,
 }
 
 impl UISpawnEntry {
@@ -121,6 +122,7 @@ impl UISpawnEntry {
             parent: parent.map_or(UISpawnParent::Root, UISpawnParent::Plan),
             operations: vec![Box::new(InsertCompatibilityBundle(bundle))],
             observers: Vec::new(),
+            duplicate_binding: false,
         }
     }
 
@@ -129,12 +131,14 @@ impl UISpawnEntry {
         parent: UISpawnParent,
         operations: Vec<Box<dyn UISpawnOperation>>,
         observers: Vec<UIObserverInstaller>,
+        duplicate_binding: bool,
     ) -> Self {
         Self {
             entity,
             parent,
             operations,
             observers,
+            duplicate_binding,
         }
     }
 }
@@ -154,6 +158,7 @@ enum UISpawnOrigin {
 pub(crate) struct UISpawnPlan<T: Component> {
     entries: Vec<UISpawnEntry>,
     relinks: Vec<UISpawnRelink>,
+    allocations: Vec<Entity>,
     layout: T,
     origin: UISpawnOrigin,
 }
@@ -161,6 +166,7 @@ pub(crate) struct UISpawnPlan<T: Component> {
 impl<T: Component + Copy> UISpawnPlan<T> {
     pub(crate) fn compatibility(entries: Vec<UISpawnEntry>, layout: T) -> Self {
         Self {
+            allocations: entries.iter().map(|entry| entry.entity).collect(),
             entries,
             relinks: Vec::new(),
             layout,
@@ -171,11 +177,13 @@ impl<T: Component + Copy> UISpawnPlan<T> {
     pub(crate) fn experimental(
         entries: Vec<UISpawnEntry>,
         relinks: Vec<UISpawnRelink>,
+        allocations: Vec<Entity>,
         layout: T,
     ) -> Self {
         Self {
             entries,
             relinks,
+            allocations,
             layout,
             origin: UISpawnOrigin::Experimental,
         }
@@ -187,7 +195,7 @@ impl<T: Component + Copy> UISpawnPlan<T> {
             UISpawnOrigin::Experimental => experimental_layout_root::<T>(world),
         };
         let Some(root) = root else {
-            cleanup_scene_entries(world, &self.entries);
+            cleanup_owned_entities(world, &self.allocations);
             if matches!(self.origin, UISpawnOrigin::Experimental) {
                 report_missing_layout::<T>(world);
             }
@@ -205,10 +213,11 @@ impl<T: Component + Copy> UISpawnPlan<T> {
                 world,
                 &self.entries,
                 &self.relinks,
+                &self.allocations,
                 root,
                 &forbidden,
             ) {
-                cleanup_scene_entries(world, &self.entries);
+                cleanup_owned_entities(world, &self.allocations);
                 if let Some(entity) = invalid_entity {
                     report_invalid_scene(world, entity, reason);
                 }
@@ -303,13 +312,27 @@ fn preflight_experimental_plan<T: Component>(
     world: &mut World,
     entries: &[UISpawnEntry],
     relinks: &[UISpawnRelink],
+    allocations: &[Entity],
     root: Entity,
     forbidden: &[ComponentId],
 ) -> Result<(), UISceneError> {
-    let entries_by_entity = entries
+    let allocations = allocations
         .iter()
-        .map(|entry| entry.entity)
+        .copied()
         .collect::<rustc_hash::FxHashSet<_>>();
+    let mut entries_by_entity = rustc_hash::FxHashSet::default();
+    for entry in entries {
+        if entry.duplicate_binding || !entries_by_entity.insert(entry.entity) {
+            return Err(UISceneError::DuplicateEntityBinding);
+        }
+        if !allocations.contains(&entry.entity) {
+            return Err(UISceneError::ForeignEntityBinding);
+        }
+    }
+    if entries_by_entity.len() != allocations.len() {
+        return Err(UISceneError::UnboundEntityReservation);
+    }
+
     let mut validated_existing_parents = rustc_hash::FxHashSet::default();
     for entry in entries {
         if !world.entities().contains(entry.entity) {
@@ -378,9 +401,9 @@ fn runtime_owned_components<T: Component>(world: &mut World) -> [ComponentId; 6]
     ]
 }
 
-fn cleanup_scene_entries(world: &mut World, entries: &[UISpawnEntry]) {
-    for entry in entries {
-        let _ = world.try_despawn(entry.entity);
+pub(crate) fn cleanup_owned_entities(world: &mut World, allocations: &[Entity]) {
+    for &entity in allocations {
+        let _ = world.try_despawn(entity);
     }
 }
 

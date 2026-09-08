@@ -4,10 +4,15 @@ mod command;
 mod constructors;
 mod scene;
 
-pub use self::{command::CommandUISceneExt, scene::UIScene};
+pub use self::{
+    command::CommandUISceneExt,
+    scene::{UIEntityScope, UIScene},
+};
 
 pub mod ui {
-    pub use super::constructors::{column, container, image, node, rich_text, row, text};
+    pub use super::constructors::{
+        column, container, image, node, rich_text, row, text, with_entities,
+    };
 }
 pub use super::{
     diagnostics::{UIHierarchyError, UIRuntimeError, UISceneError},

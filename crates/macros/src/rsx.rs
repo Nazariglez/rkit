@@ -35,6 +35,7 @@ struct SpannedTokens {
 #[derive(Default)]
 struct ElementAttributes {
     children: Option<SpannedTokens>,
+    entity: bool,
     modifiers: Vec<Modifier>,
     widget_props: Vec<WidgetProp>,
 }
@@ -286,6 +287,15 @@ fn element_attributes(
                 method: name.clone(),
                 argument: value.tokens,
             }),
+            "entity" => {
+                if std::mem::replace(&mut attributes.entity, true) {
+                    return Err(Error::new_spanned(name, "duplicate ui:entity attribute"));
+                }
+                attributes.modifiers.push(Modifier {
+                    method: Ident::new("entity", name.span()),
+                    argument: value.tokens,
+                });
+            }
             "children" => {
                 if attributes.children.replace(value).is_some() {
                     return Err(Error::new_spanned(name, "duplicate ui:children attribute"));

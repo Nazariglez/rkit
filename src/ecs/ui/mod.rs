@@ -69,7 +69,7 @@ pub use self::{
         UIClick, UIDragInput, UIPointerEnter, UIPointerLeave, UIPointerPosition, UIPointerPressed,
         UIPointerReleased, UIScrollInput,
     },
-    experimental::{CommandUISceneExt, UIScene},
+    experimental::{CommandUISceneExt, UIEntityScope, UIScene},
     measure::{UIAvailableSpace, UIMeasure, UIMeasureInput},
 };
 

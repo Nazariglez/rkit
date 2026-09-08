@@ -1,5 +1,20 @@
 use super::super::widgets::{UIContainer, UIImage, UIRichText, UIText};
-use super::UIScene;
+use super::{UIEntityScope, UIScene};
+
+/// Defers construction until a UI spawn invocation can reserve linked node entities.
+///
+/// The factory runs synchronously while a scene spawn command builds its spawn plan, not when
+/// this function is called or when the deferred command materializes. Dropping the returned
+/// scene does not run the factory.
+pub fn with_entities<F>(build: F) -> UIScene
+where
+    F: FnOnce(&mut UIEntityScope<'_>) -> UIScene + Send + 'static,
+{
+    UIScene {
+        factory: Some(Box::new(build)),
+        ..Default::default()
+    }
+}
 
 pub fn node() -> UIScene {
     UIScene::node()

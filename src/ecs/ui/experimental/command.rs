@@ -3,9 +3,9 @@ use bevy_ecs::prelude::*;
 use super::{
     super::{
         command::SpawnUICommand,
-        spawn::{UISpawnEntry, UISpawnParent, UISpawnPlan, UISpawnRelink},
+        spawn::{UISpawnEntry, UISpawnParent, UISpawnPlan, UISpawnRelink, cleanup_owned_entities},
     },
-    UIScene,
+    UIEntityScope, UIScene,
 };
 
 /// Deferred commands for materializing and moving owned ECS UI scenes.
@@ -36,13 +36,9 @@ impl<'w, 's> CommandUISceneExt<'w, 's> for Commands<'w, 's> {
     where
         T: Component + Copy,
     {
-        let mut entries = Vec::new();
-        let root = lower_scene(self, scene, UISpawnParent::Root, &mut entries);
-        self.queue(SpawnUICommand::from_plan(UISpawnPlan::experimental(
-            entries,
-            Vec::new(),
-            layout,
-        )));
+        let mut lowerer = SceneLowerer::new(self);
+        let root = lowerer.lower_scene(scene, UISpawnParent::Root);
+        lowerer.queue(layout);
         root
     }
 
@@ -51,18 +47,12 @@ impl<'w, 's> CommandUISceneExt<'w, 's> for Commands<'w, 's> {
         T: Component + Copy,
         I: IntoIterator<Item = UIScene>,
     {
-        let mut entries = Vec::new();
-        let roots = children
-            .into_iter()
-            .map(|child| lower_scene(self, child, UISpawnParent::Existing(parent), &mut entries))
-            .collect();
-        if !entries.is_empty() {
-            self.queue(SpawnUICommand::from_plan(UISpawnPlan::experimental(
-                entries,
-                Vec::new(),
-                layout,
-            )));
+        let mut lowerer = SceneLowerer::new(self);
+        let mut roots = Vec::new();
+        for child in children {
+            roots.push(lowerer.lower_scene(child, UISpawnParent::Existing(parent)));
         }
+        lowerer.queue(layout);
         roots
     }
 
@@ -76,28 +66,100 @@ impl<'w, 's> CommandUISceneExt<'w, 's> for Commands<'w, 's> {
                 entity,
                 parent: UISpawnParent::Root,
             }],
+            Vec::new(),
             layout,
         )));
     }
 }
 
-fn lower_scene(
-    commands: &mut Commands,
-    scene: UIScene,
-    parent: UISpawnParent,
-    entries: &mut Vec<UISpawnEntry>,
-) -> Entity {
-    let entity = commands.spawn_empty().id();
-    let UIScene {
-        operations,
-        observers,
-        children,
-    } = scene;
-    entries.push(UISpawnEntry::experimental(
-        entity, parent, operations, observers,
-    ));
-    for child in children {
-        lower_scene(commands, child, UISpawnParent::Plan(entity), entries);
+struct SceneLowerer<'c, 'w, 's> {
+    commands: &'c mut Commands<'w, 's>,
+    entries: Vec<UISpawnEntry>,
+    allocations: Vec<Entity>,
+}
+
+impl<'c, 'w, 's> SceneLowerer<'c, 'w, 's> {
+    fn new(commands: &'c mut Commands<'w, 's>) -> Self {
+        Self {
+            commands,
+            entries: Vec::new(),
+            allocations: Vec::new(),
+        }
     }
-    entity
+
+    fn lower_scene(&mut self, scene: UIScene, parent: UISpawnParent) -> Entity {
+        let UIScene {
+            operations,
+            observers,
+            children,
+            binding,
+            ..
+        } = self.expand_scene(scene);
+        let entity = binding.entity.unwrap_or_else(|| self.allocate());
+        self.entries.push(UISpawnEntry::experimental(
+            entity,
+            parent,
+            operations,
+            observers,
+            binding.duplicate,
+        ));
+        for child in children {
+            self.lower_scene(child, UISpawnParent::Plan(entity));
+        }
+        entity
+    }
+
+    fn expand_scene(&mut self, mut scene: UIScene) -> UIScene {
+        while let Some(factory) = scene.factory.take() {
+            let UIScene {
+                operations,
+                observers,
+                children,
+                binding,
+                ..
+            } = scene;
+            let mut inner = {
+                let mut reserve = || self.allocate();
+                let mut scope = UIEntityScope::new(&mut reserve);
+                factory(&mut scope)
+            };
+            inner.operations.extend(operations);
+            inner.observers.extend(observers);
+            inner.children.extend(children);
+            inner.binding.merge(binding);
+            scene = inner;
+        }
+        scene
+    }
+
+    fn queue<T: Component + Copy>(mut self, layout: T) {
+        if self.entries.is_empty() {
+            return;
+        }
+        self.commands
+            .queue(SpawnUICommand::from_plan(UISpawnPlan::experimental(
+                std::mem::take(&mut self.entries),
+                Vec::new(),
+                std::mem::take(&mut self.allocations),
+                layout,
+            )));
+    }
+
+    fn allocate(&mut self) -> Entity {
+        let entity = self.commands.spawn_empty().id();
+        self.allocations.push(entity);
+        entity
+    }
+}
+
+impl Drop for SceneLowerer<'_, '_, '_> {
+    fn drop(&mut self) {
+        let allocations = std::mem::take(&mut self.allocations);
+        if allocations.is_empty() {
+            return;
+        }
+        self.commands.queue(move |world: &mut World| {
+            cleanup_owned_entities(world, &allocations);
+        });
+    }
 }

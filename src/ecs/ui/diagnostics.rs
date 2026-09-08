@@ -20,6 +20,9 @@ pub enum UISceneError {
     MissingParent,
     WrongLayout,
     RuntimeOwnedComponent,
+    ForeignEntityBinding,
+    DuplicateEntityBinding,
+    UnboundEntityReservation,
 }
 
 /// Reports recoverable failures from the experimental ECS UI API.
