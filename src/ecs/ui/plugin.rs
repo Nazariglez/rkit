@@ -99,9 +99,9 @@ where
             .on_schedule(
                 OnPreUpdate,
                 (
+                    sync_projection_system::<T>,
                     change_style_system::<T>,
                     sync_intrinsic_system::<T>,
-                    sync_projection_system::<T>,
                     flush_hierarchy_errors_system::<T>,
                     update_layout_system::<T>,
                     update_presentation_system::<T>,
@@ -119,9 +119,9 @@ where
             .on_schedule(
                 OnPostUpdate,
                 (
+                    sync_projection_system::<T>,
                     change_style_system::<T>,
                     sync_intrinsic_system::<T>,
-                    sync_projection_system::<T>,
                     flush_hierarchy_errors_system::<T>,
                     update_layout_system::<T>,
                     update_presentation_system::<T>,
@@ -219,9 +219,9 @@ fn observe_removals<T: Component>(
 ) -> bool {
     let mut removed = false;
     for entity in entities {
-        let gone = match branches.get(entity) {
+        let retired = match branches.get(entity) {
             Ok(branch) if branch.component_tick(component).is_some() => continue,
-            Ok(_) => false,
+            Ok(branch) => entity != root && branch.marker.is_none() && branch.owner.is_none(),
             Err(_) => true,
         };
         if (entity == root || layout.contains(entity))
@@ -229,7 +229,7 @@ fn observe_removals<T: Component>(
         {
             removed = true;
         }
-        if gone {
+        if retired {
             layout.forget_projection(entity);
         }
     }
@@ -889,55 +889,47 @@ fn pointer_interactivity_system<T: Component>(
         for btn in MouseButton::iter() {
             let init_click = pointer.init_click.contains_key(&btn);
             let drag_started = pointer.init_drag.contains_key(&btn);
-            let is_down = mouse.is_down(btn);
+            let is_down = down_for_lifecycle.contains(btn);
             let released = released_for_lifecycle.contains(btn);
 
-            if drag_started && (released || !is_down) {
-                let drag = UIDragEvent::End(position.parent);
+            let drag = if drag_started && (released || !is_down) {
                 pointer.init_drag.remove(&btn);
-                pointer.dragging.insert(btn, drag).unwrap();
-                transitions.push(ResolvedPointerTransition::Drag(UIDragInput {
-                    entity,
-                    button: btn,
-                    event: drag,
-                    position,
-                }));
+                Some(UIDragEvent::End(position.parent))
             } else if is_moving && !released {
                 let can_start = init_click && is_down && !drag_started && is_hover;
                 let can_move = drag_started && is_down;
                 if can_start {
                     let start_pos = pointer.init_click.get(&btn).copied().unwrap();
-                    let drag = UIDragEvent::Start(position.parent);
                     pointer
                         .init_drag
                         .insert(btn, (start_pos, position.parent))
                         .unwrap();
-                    pointer.dragging.insert(btn, drag).unwrap();
-                    transitions.push(ResolvedPointerTransition::Drag(UIDragInput {
-                        entity,
-                        button: btn,
-                        event: drag,
-                        position,
-                    }));
+                    Some(UIDragEvent::Start(position.parent))
                 } else if can_move {
                     let (start_pos, previous_pos) = pointer.init_drag.get(&btn).copied().unwrap();
-                    let drag = UIDragEvent::Move {
+                    pointer
+                        .init_drag
+                        .insert(btn, (start_pos, position.parent))
+                        .unwrap();
+                    Some(UIDragEvent::Move {
                         start_pos,
                         current_pos: position.parent,
                         delta: position.parent - previous_pos,
-                    };
-                    pointer.dragging.insert(btn, drag).unwrap();
-                    pointer
-                        .init_drag
-                        .insert(btn, (start_pos, position.parent))
-                        .unwrap();
-                    transitions.push(ResolvedPointerTransition::Drag(UIDragInput {
-                        entity,
-                        button: btn,
-                        event: drag,
-                        position,
-                    }));
+                    })
+                } else {
+                    None
                 }
+            } else {
+                None
+            };
+            if let Some(event) = drag {
+                pointer.dragging.insert(btn, event).unwrap();
+                transitions.push(ResolvedPointerTransition::Drag(UIDragInput {
+                    entity,
+                    button: btn,
+                    event,
+                    position,
+                }));
             }
             if !is_down && !released {
                 pointer.init_click.remove(&btn);

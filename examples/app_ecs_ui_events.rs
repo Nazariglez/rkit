@@ -77,7 +77,7 @@ fn workspace() -> UIScene {
         .style(|style| style.gap(10.0))
         .children([
             ui::text("Pointer events").style(|style| style.size(700.0, 28.0)),
-            ui::text("Orange: hover, click, and drag\nBlue: wheel | C: remove/restore")
+            ui::text("Orange: hold/drag | Shield blocks game\nBlue: wheel | C: remove/restore")
                 .style(|style| style.size(700.0, 40.0)),
             ui::text("")
                 .insert(EventStatus)
@@ -109,7 +109,11 @@ fn event_target() -> UIScene {
         border_size: 2.0,
         corner_radius: Some(10.0),
     })
-    .insert((EventAction("orange child"), UIPointer::default()))
+    .insert((
+        EventAction("orange child"),
+        UIPointer::default(),
+        UIPointerConsumePolicy::only_ui(),
+    ))
     .on_click(local_click)
     .style(|style| {
         style
@@ -117,7 +121,21 @@ fn event_target() -> UIScene {
             .align_items_center()
             .justify_content_center()
     })
-    .child(ui::text("ORANGE TARGET\nlocal click observer"))
+    .child(
+        ui::node()
+            .insert((
+                EventAction("input shield"),
+                UIPointer::default(),
+                UIPointerConsumePolicy::only_global(),
+            ))
+            .style(|style| {
+                style
+                    .size_full()
+                    .align_items_center()
+                    .justify_content_center()
+            })
+            .child(ui::text("ORANGE TARGET\nlocal click observer")),
+    )
 }
 
 fn scroll_zone() -> UIScene {

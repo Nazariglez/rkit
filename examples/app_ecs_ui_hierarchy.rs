@@ -87,10 +87,8 @@ fn workspace() -> UIScene {
         .style(|style| style.gap(8.0))
         .children([
             ui::text("Hierarchy mutation").style(|style| style.size(700.0, 28.0)),
-            ui::text(
-                "1 Append two | 2 Move branch between panels\n3 Make branch top-level | 4 Despawn branch",
-            )
-            .style(|style| style.size(700.0, 44.0)),
+            ui::text("1 Append | 2 Move | 3 Make root\n4 Despawn | 5 Reset layout cache")
+                .style(|style| style.size(700.0, 44.0)),
             ui::text("")
                 .insert(HierarchyStatus)
                 .style(|style| style.size(700.0, 60.0)),
@@ -168,7 +166,14 @@ fn controls(
     child_of: Query<&ChildOf>,
     mut branch_styles: Query<&mut UIStyle, With<Branch>>,
     mut state: ResMut<HierarchyState>,
+    mut layout: ResMut<UILayout<MainLayout>>,
 ) {
+    if keyboard.just_pressed(KeyCode::Digit5) {
+        let size = layout.size();
+        *layout = UILayout::default();
+        layout.set_size(size);
+    }
+
     if keyboard.just_pressed(KeyCode::Digit1) {
         let first = state.next;
         commands.spawn_ui_children(

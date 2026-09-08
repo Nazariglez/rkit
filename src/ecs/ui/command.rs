@@ -41,21 +41,18 @@ where
     current_entity: Entity,
     stack: Vec<Entity>,
     layout: T,
-    entries: Option<Vec<UISpawnEntry>>,
+    entries: Vec<UISpawnEntry>,
 }
 
 impl<'c, 'w, 's, T: Component + Copy> SpawnUICommandBuilder<'c, 'w, 's, T> {
     pub fn add<B: Bundle>(&mut self, bundle: B) -> &mut Self {
         self.current_entity = self.cmds.spawn_empty().id();
         let entity = self.current_entity;
-        self.entries
-            .as_mut()
-            .unwrap()
-            .push(UISpawnEntry::compatibility(
-                entity,
-                self.stack.last().copied(),
-                bundle,
-            ));
+        self.entries.push(UISpawnEntry::compatibility(
+            entity,
+            self.stack.last().copied(),
+            bundle,
+        ));
         self
     }
 
@@ -77,7 +74,7 @@ impl<T: Component + Copy> Drop for SpawnUICommandBuilder<'_, '_, '_, T> {
     fn drop(&mut self) {
         self.cmds
             .queue(SpawnUICommand::from_plan(UISpawnPlan::compatibility(
-                self.entries.take().unwrap(),
+                std::mem::take(&mut self.entries),
                 self.layout,
             )));
     }
@@ -116,15 +113,14 @@ impl<'w, 's> CommandSpawnUIExt<'w, 's> for Commands<'w, 's> {
         T: Component + Copy,
         B: Bundle,
     {
-        let mut builder = SpawnUICommandBuilder {
+        let entity = self.spawn_empty().id();
+        SpawnUICommandBuilder {
             cmds: self,
-            current_entity: Entity::from_raw_u32(0).unwrap(),
-            stack: vec![],
-            entries: Some(vec![]),
+            current_entity: entity,
+            stack: Vec::new(),
+            entries: vec![UISpawnEntry::compatibility(entity, None, bundle)],
             layout,
-        };
-        builder.add(bundle);
-        builder
+        }
     }
 
     fn add_ui_child<T: Component>(&mut self, _layout: T, parent: Entity, child: Entity) {

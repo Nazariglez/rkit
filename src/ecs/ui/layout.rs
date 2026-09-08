@@ -85,9 +85,14 @@ struct UIIntrinsicStamp {
     measure: Option<u64>,
     sources: [UIIntrinsicSourceStamp; UIIntrinsicSource::COUNT],
     revision: u64,
+    invalid_revision: Option<u64>,
 }
 
 impl UIIntrinsicStamp {
+    fn observe_invalid(&mut self) -> bool {
+        self.invalid_revision.replace(self.revision) != Some(self.revision)
+    }
+
     fn observe_measure(&mut self, revision: Option<u64>) -> bool {
         if self.measure == revision {
             return false;
@@ -133,10 +138,6 @@ impl UIProjectionStamp {
 
     fn observe_intrinsic(&mut self, revision: Option<u64>) -> bool {
         self.intrinsic.observe_measure(revision)
-    }
-
-    fn intrinsic_revision(&self) -> u64 {
-        self.intrinsic.revision
     }
 }
 
@@ -401,7 +402,6 @@ pub struct UILayout<T: Component> {
     reached: FxHashSet<Entity>,
     draw_ancestors: Vec<Entity>,
     draw_stack: Vec<UIDrawBranch>,
-    invalid_measures: FxHashMap<Entity, u64>,
     hierarchy_errors: Vec<(Entity, UIHierarchyError)>,
     measure_errors: Vec<(Entity, Vec2)>,
     dirty_layout: bool,
@@ -439,7 +439,6 @@ impl<T: Component> UILayout<T> {
             reached: FxHashSet::default(),
             draw_ancestors: Vec::new(),
             draw_stack: Vec::new(),
-            invalid_measures: FxHashMap::default(),
             hierarchy_errors: Vec::new(),
             measure_errors: Vec::new(),
             dirty_layout: true,
@@ -716,21 +715,23 @@ impl<T: Component> UILayout<T> {
                     let Some(context) = ctx else {
                         return Size::ZERO;
                     };
-                    let (input, consumed) = measure_input(known, available, style);
-                    if consumed.is_full() {
-                        return consumed.overlay(Size::ZERO);
+                    let input = measure_input(known, available, style);
+                    if let (Some(width), Some(height)) = (input.known_width, input.known_height) {
+                        return Size { width, height };
                     }
                     let Some(size) = measure(input, context.entity) else {
                         return Size::ZERO;
                     };
-                    let invalid = (!consumed.width && (!size.x.is_finite() || size.x < 0.0))
-                        || (!consumed.height && (!size.y.is_finite() || size.y < 0.0));
-                    let revision = self
-                        .projection_stamps
-                        .get(&context.entity)
-                        .map_or(0, UIProjectionStamp::intrinsic_revision);
+                    let invalid = (input.known_width.is_none()
+                        && (!size.x.is_finite() || size.x < 0.0))
+                        || (input.known_height.is_none() && (!size.y.is_finite() || size.y < 0.0));
                     if invalid
-                        && self.invalid_measures.insert(context.entity, revision) != Some(revision)
+                        && self
+                            .projection_stamps
+                            .entry(context.entity)
+                            .or_default()
+                            .intrinsic
+                            .observe_invalid()
                     {
                         log::warn!(
                             "Ignoring invalid ECS UI measurement at {:?}: {size:?}",
@@ -738,10 +739,10 @@ impl<T: Component> UILayout<T> {
                         );
                         self.measure_errors.push((context.entity, size));
                     }
-                    consumed.overlay(Size {
-                        width: valid_size(size.x),
-                        height: valid_size(size.y),
-                    })
+                    Size {
+                        width: input.known_width.unwrap_or_else(|| valid_size(size.x)),
+                        height: input.known_height.unwrap_or_else(|| valid_size(size.y)),
+                    }
                 },
             )
             .unwrap();
@@ -794,7 +795,6 @@ impl<T: Component> UILayout<T> {
 
         let root = self.root_entity();
         if matches!(self.root_state, UILayoutRootState::Missing(_)) {
-            self.projection_stamps.retain(|entity, _| *entity == root);
             self.report(root, UIHierarchyProblem::MissingRoot);
             return;
         }
@@ -804,8 +804,6 @@ impl<T: Component> UILayout<T> {
         self.project_children(branches, root, root, self.root, &mut reached);
         self.unprojected
             .retain(|entity| !self.relations.contains_key(entity));
-        self.invalid_measures
-            .retain(|entity, _| self.relations.contains_key(entity));
         self.reached = reached;
     }
 
@@ -857,7 +855,6 @@ impl<T: Component> UILayout<T> {
                     NodeContext { entity: child },
                 )
                 .unwrap();
-            self.tree.add_child(parent_node, node_id).unwrap();
             self.relations.insert(child, node_id);
             self.sync_intrinsic(
                 child,
@@ -867,6 +864,7 @@ impl<T: Component> UILayout<T> {
             self.graph.push(UINodeGraph::Begin(child));
             self.graph.push(UINodeGraph::Node(child));
             self.project_children(branches, root, child, node_id, reached);
+            self.tree.add_child(parent_node, node_id).unwrap();
             self.graph.push(UINodeGraph::End);
             self.graph_ranges.insert(child, start..self.graph.len());
         }
@@ -930,7 +928,9 @@ impl<T: Component> UILayout<T> {
 
     fn invalidate_intrinsic(&mut self, entity: Entity) {
         if let Some(node) = self.node_id(entity) {
-            self.tree.mark_dirty(node).unwrap();
+            if !self.tree.dirty(node).unwrap() {
+                self.tree.mark_dirty(node).unwrap();
+            }
             self.mark_layout_dirty();
         }
     }
@@ -1005,63 +1005,29 @@ impl<T: Component> UILayout<T> {
     }
 }
 
-#[derive(Clone, Copy)]
-struct UIMeasureConsumedAxes {
-    width: bool,
-    height: bool,
-    known: Size<Option<f32>>,
-}
-
-impl UIMeasureConsumedAxes {
-    fn is_full(self) -> bool {
-        self.width && self.height
-    }
-
-    fn overlay(self, size: Size<f32>) -> Size<f32> {
-        Size {
-            width: self.known.width.unwrap_or(size.width),
-            height: self.known.height.unwrap_or(size.height),
-        }
-    }
-}
-
 fn measure_input(
     known: Size<Option<f32>>,
     available: Size<AvailableSpace>,
     style: &Style,
-) -> (UIMeasureInput, UIMeasureConsumedAxes) {
-    let (width, known_width) = semantic_known_axis(known.width, available.width, style.size.width);
-    let (height, known_height) =
-        semantic_known_axis(known.height, available.height, style.size.height);
-    (
-        UIMeasureInput {
-            known_width,
-            known_height,
-            available_width: available_space(available.width),
-            available_height: available_space(available.height),
-        },
-        UIMeasureConsumedAxes {
-            width,
-            height,
-            known: Size {
-                width: known_width,
-                height: known_height,
-            },
-        },
-    )
+) -> UIMeasureInput {
+    UIMeasureInput {
+        known_width: semantic_known_axis(known.width, available.width, style.size.width),
+        known_height: semantic_known_axis(known.height, available.height, style.size.height),
+        available_width: available_space(available.width),
+        available_height: available_space(available.height),
+    }
 }
 
 fn semantic_known_axis(
     known: Option<f32>,
     available: AvailableSpace,
     style: Dimension,
-) -> (bool, Option<f32>) {
+) -> Option<f32> {
     let fixed = known.is_some() || !matches!(style, Dimension::Auto);
-    let content_size = match available {
+    match available {
         AvailableSpace::Definite(size) if fixed => Some(size),
         _ => None,
-    };
-    (content_size.is_some(), content_size)
+    }
 }
 
 fn available_space(space: AvailableSpace) -> UIAvailableSpace {
