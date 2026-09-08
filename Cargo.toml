@@ -160,6 +160,10 @@ name = "app_ecs_ui_scene"
 required-features = ["ecs", "ui"]
 
 [[example]]
+name = "app_ecs_ui_menu"
+required-features = ["ecs", "ui", "draw-default-font", "logs"]
+
+[[example]]
 name = "app_ecs_ui_hierarchy"
 required-features = ["ecs", "ui"]
 
