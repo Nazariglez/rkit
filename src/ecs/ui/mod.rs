@@ -73,3 +73,15 @@ pub use self::{
 pub mod ui {
     pub use super::experimental::ui::*;
 }
+
+#[cfg(feature = "ecs-ui-rsx")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __rkit_rsx {
+    ($($tokens:tt)*) => {
+        $crate::macros::__rkit_rsx!($crate; $($tokens)*)
+    };
+}
+
+#[cfg(feature = "ecs-ui-rsx")]
+pub use crate::{__rkit_rsx as rsx, macros::ui_widget};

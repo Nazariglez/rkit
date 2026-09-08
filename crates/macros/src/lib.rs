@@ -5,7 +5,12 @@ use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{Data, DataStruct, DeriveInput, Error, Fields, LitInt, Token, Type, parse_macro_input};
 
+#[cfg(feature = "assets")]
 mod assets;
+#[cfg(feature = "rsx")]
+mod rsx;
+#[cfg(feature = "rsx")]
+mod ui_widget;
 
 #[proc_macro_derive(Drawable2D, attributes(transform_2d, pipeline_id))]
 pub fn ui_element_derive(input: TokenStream) -> TokenStream {
@@ -591,4 +596,17 @@ pub fn derive_deref_macro(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn assets(attr: TokenStream, item: TokenStream) -> TokenStream {
     assets::assets(attr, item)
+}
+
+#[cfg(feature = "rsx")]
+#[doc(hidden)]
+#[proc_macro]
+pub fn __rkit_rsx(input: TokenStream) -> TokenStream {
+    rsx::expand(input)
+}
+
+#[cfg(feature = "rsx")]
+#[proc_macro_attribute]
+pub fn ui_widget(attribute: TokenStream, item: TokenStream) -> TokenStream {
+    ui_widget::expand(attribute, item)
 }

@@ -160,6 +160,10 @@ name = "app_ecs_ui_scene"
 required-features = ["ecs", "ui"]
 
 [[example]]
+name = "app_ecs_ui_rsx"
+required-features = ["ecs-ui-rsx"]
+
+[[example]]
 name = "app_ecs_ui_menu"
 required-features = ["ecs", "ui", "draw-default-font", "logs"]
 
@@ -234,6 +238,7 @@ ui = [
 ecs = ["dep:bevy_ecs", "dep:bevy_tasks", "macros/ecs", "dep:web-time"]
 # current ECS UI requires both `ecs` and `ui`
 ecs-ui-experimental = ["ecs", "ui"]
+ecs-ui-rsx = ["ecs", "ui", "macros/rsx"]
 # debug bevy ecs
 ecs_debug = ["bevy_ecs/trace", "bevy_ecs/track_location"]
 # enable serialization/deserialization of some internal types
