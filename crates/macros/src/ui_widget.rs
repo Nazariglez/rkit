@@ -94,7 +94,7 @@ fn validate_signature(
         ));
     }
     let (mut lifetimes, lifetime_where) = validate_lifetime_generics(&signature.generics)?;
-    let mut normalizer = LifetimeNormalizer::new(signature);
+    let mut normalizer = LifetimeNormalizer::new(used_states.clone());
     if matches!(signature.output, ReturnType::Default) {
         return Err(Error::new_spanned(
             signature,
@@ -173,8 +173,8 @@ fn validate_signature(
 
         let mut ty = (*argument.ty).clone();
         validate_prop_type(&ty)?;
-        let concrete_field = standard_option_inner(&ty).is_some();
-        normalizer.visit_adapter_type(&mut ty, concrete_field);
+        normalizer.collecting_field_lifetimes = standard_option_inner(&ty).is_some();
+        normalizer.visit_type_mut(&mut ty);
         let kind = if let Some(inner) = standard_option_inner(&ty) {
             PropKind::Optional(Box::new(inner.clone()))
         } else {
@@ -188,13 +188,12 @@ fn validate_signature(
             kind,
         });
     }
-    let (normalized_lifetimes, concrete_field_lifetimes) = normalizer.into_parts();
-    lifetimes.extend(normalized_lifetimes);
+    lifetimes.extend(normalizer.lifetimes);
     Ok(WidgetSignature {
         props,
         children,
         lifetimes,
-        concrete_field_lifetimes,
+        concrete_field_lifetimes: normalizer.concrete_field_lifetimes,
         lifetime_where,
     })
 }
@@ -237,40 +236,14 @@ struct LifetimeNormalizer {
 }
 
 impl LifetimeNormalizer {
-    fn new(signature: &syn::Signature) -> Self {
-        #[derive(Default)]
-        struct Names {
-            idents: Vec<Ident>,
-        }
-
-        impl<'ast> Visit<'ast> for Names {
-            fn visit_lifetime(&mut self, lifetime: &'ast Lifetime) {
-                if lifetime.ident != "_" {
-                    self.idents.push(lifetime.ident.clone());
-                }
-            }
-        }
-
-        let mut names = Names::default();
-        names.visit_signature(signature);
+    fn new(used: Vec<Ident>) -> Self {
         Self {
-            used: names.idents,
+            used,
             lifetimes: Vec::new(),
             concrete_field_lifetimes: Vec::new(),
             bound_depth: 0,
             collecting_field_lifetimes: false,
         }
-    }
-
-    fn into_parts(self) -> (Vec<LifetimeParam>, Vec<Ident>) {
-        (self.lifetimes, self.concrete_field_lifetimes)
-    }
-
-    fn visit_adapter_type(&mut self, ty: &mut Type, concrete_field: bool) {
-        let was_collecting =
-            std::mem::replace(&mut self.collecting_field_lifetimes, concrete_field);
-        self.visit_type_mut(ty);
-        self.collecting_field_lifetimes = was_collecting;
     }
 
     fn next_lifetime(&mut self) -> Lifetime {
@@ -280,8 +253,19 @@ impl LifetimeNormalizer {
         self.lifetimes.push(syn::parse_quote!(#lifetime));
         lifetime
     }
+}
 
-    fn normalize_lifetime(&mut self, lifetime: &mut Lifetime) {
+impl VisitMut for LifetimeNormalizer {
+    fn visit_type_mut(&mut self, ty: &mut Type) {
+        let was_collecting = self.collecting_field_lifetimes;
+        if matches!(ty, Type::Path(_)) && standard_option_inner(ty).is_none() {
+            self.collecting_field_lifetimes = false;
+        }
+        syn::visit_mut::visit_type_mut(self, ty);
+        self.collecting_field_lifetimes = was_collecting;
+    }
+
+    fn visit_lifetime_mut(&mut self, lifetime: &mut Lifetime) {
         if lifetime.ident == "_" {
             if self.bound_depth != 0 {
                 return;
@@ -297,9 +281,7 @@ impl LifetimeNormalizer {
             self.concrete_field_lifetimes.push(lifetime.ident.clone());
         }
     }
-}
 
-impl VisitMut for LifetimeNormalizer {
     fn visit_type_bare_fn_mut(&mut self, function: &mut syn::TypeBareFn) {
         self.bound_depth += 1;
         syn::visit_mut::visit_type_bare_fn_mut(self, function);
@@ -326,30 +308,10 @@ impl VisitMut for LifetimeNormalizer {
     }
 
     fn visit_type_reference_mut(&mut self, reference: &mut TypeReference) {
-        match &mut reference.lifetime {
-            Some(lifetime) => self.normalize_lifetime(lifetime),
-            None if self.bound_depth == 0 => {
-                let mut lifetime = self.next_lifetime();
-                self.normalize_lifetime(&mut lifetime);
-                reference.lifetime = Some(lifetime);
-            }
-            None => {}
+        if reference.lifetime.is_none() && self.bound_depth == 0 {
+            reference.lifetime = Some(self.next_lifetime());
         }
         syn::visit_mut::visit_type_reference_mut(self, reference);
-    }
-
-    fn visit_generic_argument_mut(&mut self, argument: &mut syn::GenericArgument) {
-        if let syn::GenericArgument::Lifetime(lifetime) = argument {
-            self.normalize_lifetime(lifetime);
-        }
-        syn::visit_mut::visit_generic_argument_mut(self, argument);
-    }
-
-    fn visit_type_param_bound_mut(&mut self, bound: &mut syn::TypeParamBound) {
-        if let syn::TypeParamBound::Lifetime(lifetime) = bound {
-            self.normalize_lifetime(lifetime);
-        }
-        syn::visit_mut::visit_type_param_bound_mut(self, bound);
     }
 
     fn visit_expr_mut(&mut self, _: &mut syn::Expr) {}
@@ -521,9 +483,10 @@ fn generate(
     let new_ident = Ident::new(UI_NEW, Span::mixed_site());
     let children_ident = Ident::new(UI_CHILDREN, Span::mixed_site());
     let build_ident = Ident::new(UI_BUILD, Span::mixed_site());
-    let has_optional_string = props
-        .iter()
-        .any(|prop| matches!(&prop.kind, PropKind::Optional(inner) if is_standard_string(inner)));
+    let optional_string = props.iter().find_map(|prop| match &prop.kind {
+        PropKind::Optional(inner) if is_standard_string(inner) => Some(inner),
+        _ => None,
+    });
     let mut helper_names = used_states.clone();
     helper_names.extend(
         lifetimes
@@ -751,7 +714,7 @@ fn generate(
             }
         }
     });
-    let setters = if has_optional_string {
+    let setters = if let Some(string_type) = optional_string {
         quote! {
             const _: () = {
                 #[doc(hidden)]
@@ -762,21 +725,21 @@ fn generate(
 
                 #[doc(hidden)]
                 pub trait #optional_string_trait<#optional_string_kind> {
-                    fn __ui_optional_string(self) -> ::core::option::Option<::std::string::String>;
+                    fn __ui_optional_string(self) -> ::core::option::Option<#string_type>;
                 }
 
-                impl<#optional_string_kind: ::core::convert::Into<::std::string::String>>
+                impl<#optional_string_kind: ::core::convert::Into<#string_type>>
                     #optional_string_trait<#optional_string_bare> for #optional_string_kind
                 {
-                    fn __ui_optional_string(self) -> ::core::option::Option<::std::string::String> {
+                    fn __ui_optional_string(self) -> ::core::option::Option<#string_type> {
                         ::core::option::Option::Some(self.into())
                     }
                 }
 
                 impl #optional_string_trait<#optional_string_option>
-                    for ::core::option::Option<::std::string::String>
+                    for ::core::option::Option<#string_type>
                 {
-                    fn __ui_optional_string(self) -> ::core::option::Option<::std::string::String> {
+                    fn __ui_optional_string(self) -> ::core::option::Option<#string_type> {
                         self
                     }
                 }
