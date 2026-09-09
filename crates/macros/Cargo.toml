@@ -22,7 +22,7 @@ rstml = { version = "0.12.1", default-features = false, optional = true }
 [features]
 default = ["assets", "ecs"]
 ecs = []
-rsx = ["dep:rstml", "syn/visit"]
+rsx = ["dep:rstml", "syn/visit", "syn/visit-mut"]
 assets = [
     "dep:globset",
     "dep:ignore",

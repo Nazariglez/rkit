@@ -9,6 +9,26 @@ use crate::{
     math::Vec2,
 };
 
+#[doc(hidden)]
+pub trait ChildContent {
+    fn append_to(self, children: &mut Vec<UIScene>);
+}
+
+impl ChildContent for UIScene {
+    fn append_to(self, children: &mut Vec<UIScene>) {
+        children.push(self);
+    }
+}
+
+impl<I> ChildContent for I
+where
+    I: IntoIterator<Item = UIScene>,
+{
+    fn append_to(self, children: &mut Vec<UIScene>) {
+        children.extend(self);
+    }
+}
+
 #[ui_widget(Node)]
 pub fn node(children: impl IntoIterator<Item = UIScene>) -> UIScene {
     ui::node().children(children)

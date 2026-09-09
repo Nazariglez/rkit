@@ -223,8 +223,18 @@ fn child_source(
         .iter()
         .map(|child| lower_scene_node(child, framework))
         .collect::<syn::Result<Vec<_>>>()?;
+    let content = Ident::new("__rkit_rsx_children", Span::mixed_site());
     Ok(Some(SpannedTokens {
-        tokens: quote!([#(#children),*]),
+        tokens: quote!({
+            let mut #content = ::std::vec::Vec::new();
+            #(
+                <_ as #framework::ecs::ui::rsx_widgets::ChildContent>::append_to(
+                    #children,
+                    &mut #content,
+                );
+            )*
+            #content
+        }),
         span: first.span(),
     }))
 }

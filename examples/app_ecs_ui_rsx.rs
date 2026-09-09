@@ -58,6 +58,26 @@ fn label(text: String) -> UIScene {
     ui::text(text).style(|style| style.size(340.0, 22.0))
 }
 
+#[ui_widget(PanelContent)]
+fn panel_content(
+    title: String,
+    color: Option<Color>,
+    subtitle: Option<String>,
+    children: impl IntoIterator<Item = UIScene>,
+) -> UIScene {
+    rsx! {
+        <Panel title={title} color={color}>
+            {subtitle.map(label)}
+            {children}
+        </Panel>
+    }
+}
+
+#[ui_widget(BorrowedLabel)]
+fn borrowed_label(text: &str) -> UIScene {
+    ui::text(text).style(|style| style.size(340.0, 22.0))
+}
+
 fn main() -> Result<(), String> {
     App::new()
         .add_plugin(MainPlugins::default())
@@ -76,24 +96,37 @@ fn setup(mut commands: Commands) {
 }
 
 fn screen() -> UIScene {
+    let construction_note =
+        String::from("This label resolves borrowed text during scene construction.");
+    let welcome_color = Some(Color::rgb(0.12, 0.18, 0.3));
+    let welcome_subtitle = Some(String::from(
+        "Optional owned text becomes a child when present.",
+    ));
+    let action_hint = Some("Choose an action");
+    let actions = [Action::Play, Action::Settings, Action::Quit];
+
     rsx! {
         <column ui:style={|style| style
             .size_full()
             .align_items_center()
             .justify_content_center()
             .padding(20.0)}>
-            <Panel title={"RSX UI scenes"}>
-                <Label text={"Panel color uses its function-owned fallback."}/>
-            </Panel>
+            <PanelContent
+                title={"RSX UI scenes"}
+                color={welcome_color}
+                subtitle={welcome_subtitle}
+            >
+                <BorrowedLabel text={construction_note.as_str()}/>
+                <Label text={"The wrapper forwards optional color without branching around its children."}/>
+            </PanelContent>
             <Panel
                 title={"Actions"}
                 color={Color::rgb(0.16, 0.28, 0.48)}
                 ui:style={|style| style.margin_top(14.0)}
             >
                 <Label text={"Each button shares one click observer."}/>
-                <column ui:children={[Action::Play, Action::Settings, Action::Quit]
-                    .into_iter()
-                    .map(action_button)}/>
+                {action_hint.map(|hint| label(hint.to_owned()))}
+                {actions.into_iter().map(action_button)}
                 <Label
                     text={"Click an action button"}
                     ui:insert={ActionStatus}
