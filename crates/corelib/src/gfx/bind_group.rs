@@ -1,12 +1,14 @@
 use crate::backend::gfx::Texture;
 use crate::gfx::consts::{
-    MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE,
+    MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, MAX_STORAGE_BUFFERS_PER_SHADER_STAGE,
+    MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE,
 };
 use crate::gfx::{BindGroupLayoutRef, Buffer, Sampler};
 use arrayvec::ArrayVec;
 
-pub const MAX_BINDING_ENTRIES: usize =
-    MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE + MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE;
+pub const MAX_BINDING_ENTRIES: usize = MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE
+    + MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE
+    + MAX_STORAGE_BUFFERS_PER_SHADER_STAGE;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct BindGroupId(pub(crate) u64);
@@ -46,11 +48,12 @@ impl BindGroupLayout {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) enum BindType {
     Texture,
     Sampler,
     Uniform,
+    StorageReadonly,
 }
 
 #[derive(Copy, Clone)]
@@ -93,6 +96,16 @@ impl BindingType {
         }
     }
 
+    pub fn storage_readonly(location: u32) -> Self {
+        Self {
+            location,
+            typ: BindType::StorageReadonly,
+            visible_fragment: false,
+            visible_vertex: false,
+            visible_compute: false,
+        }
+    }
+
     pub fn with_fragment_visibility(mut self, visible: bool) -> Self {
         self.visible_fragment = visible;
         self
@@ -121,4 +134,5 @@ pub enum BindGroupEntry<'a> {
     Texture { location: u32, texture: &'a Texture },
     Sampler { location: u32, sampler: &'a Sampler },
     Uniform { location: u32, buffer: &'a Buffer },
+    StorageReadonly { location: u32, buffer: &'a Buffer },
 }

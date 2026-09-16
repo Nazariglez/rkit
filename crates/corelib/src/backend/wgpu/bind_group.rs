@@ -1,4 +1,5 @@
-use crate::gfx::{BindGroupId, BindGroupLayoutId};
+use crate::gfx::{BindGroupId, BindGroupLayoutId, BindingType, MAX_BINDING_ENTRIES};
+use arrayvec::ArrayVec;
 use std::sync::Arc;
 use wgpu::{BindGroup as RawBindGroup, BindGroupLayout};
 
@@ -24,6 +25,7 @@ impl BindGroup {
 pub struct BindGroupLayoutRef {
     pub(crate) id: BindGroupLayoutId,
     pub(crate) raw: Arc<BindGroupLayout>,
+    pub(crate) entries: ArrayVec<BindingType, MAX_BINDING_ENTRIES>,
 }
 
 impl BindGroupLayoutRef {

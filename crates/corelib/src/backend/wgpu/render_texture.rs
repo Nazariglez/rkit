@@ -1,12 +1,14 @@
 use crate::backend::wgpu::texture::Texture;
 use crate::gfx::RenderTextureId;
 use crate::math::Vec2;
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
+use wgpu::TextureView;
 
 #[derive(Clone, Debug)]
 pub struct RenderTexture {
     pub(crate) id: RenderTextureId,
     pub(crate) texture: Texture,
+    pub(crate) color_attachment: Arc<TextureView>,
     pub(crate) depth_texture: Option<Texture>,
 }
 

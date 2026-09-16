@@ -16,11 +16,12 @@ use crate::{
         },
     },
     gfx::{
-        BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutRef, BindType, Buffer,
-        BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits, MAX_BINDING_ENTRIES,
-        RenderCommand, RenderPass, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
-        RenderTextureDescriptor, Renderer, Sampler, SamplerDescriptor, Scissor, Stencil, Texture,
-        TextureDescriptor, TextureFormat, TextureId, TextureMipLevel, TextureUpload,
+        BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef,
+        BindType, Buffer, BufferDescriptor, BufferUsage, Color, GpuStats, InnerBuffer, Limits,
+        MAX_BINDING_ENTRIES, RenderCommand, RenderPass, RenderPipeline, RenderPipelineDescriptor,
+        RenderTexture, RenderTextureDescriptor, Renderer, Sampler, SamplerDescriptor, Scissor,
+        Stencil, Texture, TextureDescriptor, TextureFormat, TextureId, TextureMipLevel,
+        TextureUpload,
         consts::{
             MAX_BIND_GROUPS_PER_PIPELINE, MAX_PIPELINE_COMPATIBLE_TEXTURES,
             SURFACE_DEFAULT_DEPTH_FORMAT,
@@ -56,7 +57,18 @@ impl HasDisplayHandle for WebDisplay {
 
 fn resolve_scissor(scissor: Scissor, width: u32, height: u32) -> Result<[u32; 4], String> {
     match scissor {
-        Scissor::Physical(rect) => Ok(rect),
+        Scissor::Physical([x, y, scissor_width, scissor_height]) => {
+            let max_x = x
+                .checked_add(scissor_width)
+                .ok_or_else(|| "Physical scissor edges overflow".to_string())?;
+            let max_y = y
+                .checked_add(scissor_height)
+                .ok_or_else(|| "Physical scissor edges overflow".to_string())?;
+            if scissor_width == 0 || scissor_height == 0 || max_x > width || max_y > height {
+                return Err("Physical scissor must have positive in-target area".to_string());
+            }
+            Ok([x, y, scissor_width, scissor_height])
+        }
         Scissor::Normalized(edges) => {
             if !edges.iter().all(|edge| edge.is_finite()) {
                 return Err("Normalized scissor edges must be finite".to_string());
@@ -154,12 +166,26 @@ fn encode_render_commands(
         }
 
         pass.set_pipeline(&pipeline.inner.raw);
-        let viewport = command.size.unwrap_or(vec2(width as f32, height as f32));
-        if !viewport.is_finite() || viewport.x <= 0.0 || viewport.y <= 0.0 {
+        let viewport = command.viewport.unwrap_or(crate::gfx::Viewport {
+            origin: [0, 0],
+            size: vec2(width as f32, height as f32),
+        });
+        if !viewport.size.is_finite() || viewport.size.x <= 0.0 || viewport.size.y <= 0.0 {
             return Err("Render command viewport size must be finite and positive".to_string());
         }
-        let viewport = viewport.min(vec2(width as f32, height as f32));
-        pass.set_viewport(0.0, 0.0, viewport.x, viewport.y, 0.0, 1.0);
+        let max_x = viewport.origin[0] as f32 + viewport.size.x;
+        let max_y = viewport.origin[1] as f32 + viewport.size.y;
+        if max_x > width as f32 || max_y > height as f32 {
+            return Err("Render command viewport exceeds the render target".to_string());
+        }
+        pass.set_viewport(
+            viewport.origin[0] as f32,
+            viewport.origin[1] as f32,
+            viewport.size.x,
+            viewport.size.y,
+            0.0,
+            1.0,
+        );
 
         let [x, y, scissor_width, scissor_height] = match command.scissors {
             Some(scissor) => resolve_scissor(scissor, width, height)?,
@@ -194,7 +220,7 @@ fn encode_render_commands(
                         pipeline.inner.index_format,
                     );
                 }
-                BufferUsage::Uniform => {}
+                BufferUsage::Uniform | BufferUsage::Storage => {}
             }
         }
 
@@ -429,7 +455,7 @@ impl GfxBackendImpl for GfxBackend {
             }
 
             let color = Some(wgpu::RenderPassColorAttachment {
-                view: &texture.texture.view,
+                view: &texture.color_attachment,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: pass
@@ -491,6 +517,24 @@ impl GfxBackendImpl for GfxBackend {
         desc: RenderPipelineDescriptor,
     ) -> Result<RenderPipeline, String> {
         log::debug!("Creating RenderPipeline (label={:?})", desc.label);
+        let mut vertex_storage_bindings = 0;
+        let mut fragment_storage_bindings = 0;
+        let mut compute_storage_bindings = 0;
+        for layout in &desc.bind_group_layout {
+            self.validate_bind_group_layout(layout)?;
+            for entry in &layout.entries {
+                if entry.typ == BindType::StorageReadonly {
+                    vertex_storage_bindings += usize::from(entry.visible_vertex);
+                    fragment_storage_bindings += usize::from(entry.visible_fragment);
+                    compute_storage_bindings += usize::from(entry.visible_compute);
+                }
+            }
+        }
+        self.validate_storage_stage_counts(
+            vertex_storage_bindings,
+            fragment_storage_bindings,
+            compute_storage_bindings,
+        )?;
 
         let shader = self
             .ctx
@@ -533,6 +577,13 @@ impl GfxBackendImpl for GfxBackend {
                                             has_dynamic_offset: false,
                                             min_binding_size: None,
                                         },
+                                        BindType::StorageReadonly => wgpu::BindingType::Buffer {
+                                            ty: wgpu::BufferBindingType::Storage {
+                                                read_only: true,
+                                            },
+                                            has_dynamic_offset: false,
+                                            min_binding_size: None,
+                                        },
                                     };
                                     wgpu::BindGroupLayoutEntry {
                                         binding,
@@ -548,6 +599,7 @@ impl GfxBackendImpl for GfxBackend {
                     BindGroupLayoutRef {
                         id: resource_id(&mut self.next_resource_id),
                         raw: Arc::new(raw),
+                        entries: layout.entries.clone(),
                     }
                 })
                 .collect::<ArrayVec<_, MAX_BIND_GROUPS_PER_PIPELINE>>();
@@ -629,27 +681,31 @@ impl GfxBackendImpl for GfxBackend {
             desc.label,
             desc.usage
         );
+        let size = if desc.content.is_empty() {
+            1024
+        } else {
+            desc.content.len()
+        };
+        self.validate_buffer_allocation(desc.usage, size)?;
+
         let mut usage = desc.usage.as_wgpu();
         if desc.write {
             usage |= wgpu::BufferUsages::COPY_DST;
         }
 
-        let (raw, size) = if desc.content.is_empty() {
-            let size = 1024;
-            let raw = self.ctx.device.create_buffer(&WBufferDescriptor {
+        let raw = if desc.content.is_empty() {
+            self.ctx.device.create_buffer(&WBufferDescriptor {
                 label: desc.label,
-                size,
+                size: size as _,
                 usage,
                 mapped_at_creation: false,
-            });
-            (raw, size as usize)
+            })
         } else {
-            let raw = self.ctx.device.create_buffer_init(&BufferInitDescriptor {
+            self.ctx.device.create_buffer_init(&BufferInitDescriptor {
                 label: desc.label,
                 contents: desc.content,
                 usage,
-            });
-            (raw, desc.content.len())
+            })
         };
 
         let usage = desc.usage;
@@ -676,11 +732,29 @@ impl GfxBackendImpl for GfxBackend {
     fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String> {
         debug_assert!(buffer.write, "Cannot write data to a static buffer");
 
-        // update inner buffer if the size is not enough
-        if buffer.size() < data.len() {
-            let required = offset as usize + data.len();
-            let next_size = next_buffer_size(buffer.size(), required);
+        let offset = usize::try_from(offset)
+            .map_err(|_| "Buffer write offset does not fit this platform".to_string())?;
+        if offset % 4 != 0 {
+            return Err("Buffer write offsets must be divisible by four bytes".to_string());
+        }
+        if data.len() % 4 != 0 {
+            return Err("Buffer write sizes must be divisible by four bytes".to_string());
+        }
+        let required = offset
+            .checked_add(data.len())
+            .ok_or_else(|| "Buffer write size overflows".to_string())?;
+        self.validate_buffer_allocation(buffer.usage, required)?;
 
+        if buffer.size() < required {
+            if buffer.usage == BufferUsage::Storage {
+                return Err(
+                    "Storage buffer updates cannot grow an allocation; create a replacement buffer and rebuild its bind groups"
+                        .to_string(),
+                );
+            }
+
+            let next_size = next_buffer_size(buffer.size(), required);
+            self.validate_buffer_allocation(buffer.usage, next_size)?;
             log::debug!(
                 "Updating Buffer '{}' size from {} to {}",
                 buffer.inner_label,
@@ -697,12 +771,12 @@ impl GfxBackendImpl for GfxBackend {
                 mapped_at_creation: false,
             });
 
-            // copy current memory to the new one
-            if offset > 0 {
+            let copied = buffer.size().min(offset);
+            if copied > 0 {
                 log::debug!(
                     "Copying Buffer '{}' memory until offset {}",
                     buffer.inner_label,
-                    offset
+                    copied
                 );
                 let mut encoder =
                     self.ctx
@@ -711,7 +785,13 @@ impl GfxBackendImpl for GfxBackend {
                             label: Some("Buffer Copy Encoder"),
                         });
 
-                encoder.copy_buffer_to_buffer(&buffer.inner.borrow().raw, 0, &raw, 0, offset);
+                encoder.copy_buffer_to_buffer(
+                    &buffer.inner.borrow().raw,
+                    0,
+                    &raw,
+                    0,
+                    copied as u64,
+                );
 
                 self.ctx.queue.submit(Some(encoder.finish()));
                 self.current_stats.draw_calls += 1;
@@ -723,12 +803,6 @@ impl GfxBackendImpl for GfxBackend {
             };
         }
 
-        debug_assert!(
-            buffer.size() >= offset as usize + data.len(),
-            "Invalid buffer size '{}' expected '{}'",
-            buffer.size(),
-            offset as usize + data.len()
-        );
         self.ctx
             .queue
             .write_buffer(&buffer.inner.borrow().raw, offset as _, data);
@@ -874,9 +948,22 @@ impl GfxBackendImpl for GfxBackend {
             .filter_map(|tx| TextureFormat::from_wgpu(*tx))
             .collect();
 
+        let (max_storage_binding_size, max_storage_buffers_per_shader_stage) =
+            if self.supports_storage_buffers() {
+                (
+                    raw_limits.max_storage_buffer_binding_size,
+                    raw_limits.max_storage_buffers_per_shader_stage,
+                )
+            } else {
+                (0, 0)
+            };
+
         Limits {
             max_texture_size_2d: raw_limits.max_texture_dimension_2d,
             max_texture_size_3d: raw_limits.max_texture_dimension_3d,
+            max_buffer_size: raw_limits.max_buffer_size,
+            max_storage_binding_size,
+            max_storage_buffers_per_shader_stage,
             surface_formats,
         }
     }
@@ -1037,17 +1124,197 @@ impl GfxBackend {
         Ok(())
     }
 
+    fn supports_storage_buffers(&self) -> bool {
+        let limits = self.ctx.device.limits();
+        !matches!(self.ctx.adapter.get_info().backend, wgpu::Backend::Gl)
+            && limits.max_storage_buffers_per_shader_stage > 0
+            && limits.max_storage_buffer_binding_size > 0
+    }
+
+    fn validate_buffer_allocation(&self, usage: BufferUsage, size: usize) -> Result<(), String> {
+        let limits = self.ctx.device.limits();
+        let max_buffer_size = usize::try_from(limits.max_buffer_size).unwrap_or(usize::MAX);
+        if size > max_buffer_size {
+            return Err(format!(
+                "Buffer allocation of {size} bytes exceeds the device maximum of {max_buffer_size} bytes"
+            ));
+        }
+
+        if usage == BufferUsage::Storage {
+            if size % 4 != 0 {
+                return Err(
+                    "Storage buffer allocations must have a size divisible by four bytes"
+                        .to_string(),
+                );
+            }
+            if !self.supports_storage_buffers() {
+                return Err(
+                    "Read-only storage buffers are unsupported by this graphics backend"
+                        .to_string(),
+                );
+            }
+            let max_storage_binding_size =
+                usize::try_from(limits.max_storage_buffer_binding_size).unwrap_or(usize::MAX);
+            if size > max_storage_binding_size {
+                return Err(format!(
+                    "Storage buffer allocation of {size} bytes exceeds the device binding maximum of {max_storage_binding_size} bytes"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_bind_group_layout(&self, layout: &BindGroupLayout) -> Result<(), String> {
+        for (index, entry) in layout.entries.iter().enumerate() {
+            if layout.entries[..index]
+                .iter()
+                .any(|previous| previous.location == entry.location)
+            {
+                return Err(format!(
+                    "Bind group layout contains duplicate binding {}",
+                    entry.location
+                ));
+            }
+            if entry.typ != BindType::StorageReadonly {
+                continue;
+            }
+            if !self.supports_storage_buffers() {
+                return Err(
+                    "Read-only storage buffers are unsupported by this graphics backend"
+                        .to_string(),
+                );
+            }
+            if !entry.visible_vertex && !entry.visible_fragment && !entry.visible_compute {
+                return Err(format!(
+                    "Storage binding {} is not visible to a shader stage",
+                    entry.location
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_storage_stage_counts(
+        &self,
+        vertex_storage_bindings: usize,
+        fragment_storage_bindings: usize,
+        compute_storage_bindings: usize,
+    ) -> Result<(), String> {
+        let maximum = self
+            .ctx
+            .device
+            .limits()
+            .max_storage_buffers_per_shader_stage as usize;
+        for (stage, count) in [
+            ("vertex", vertex_storage_bindings),
+            ("fragment", fragment_storage_bindings),
+            ("compute", compute_storage_bindings),
+        ] {
+            if count > maximum {
+                return Err(format!(
+                    "Pipeline requires {count} storage buffers in the {stage} stage, but the device supports {maximum}"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_bind_group_entries(
+        &self,
+        layout: &BindGroupLayoutRef,
+        entries: &[BindGroupEntry<'_>],
+    ) -> Result<(), String> {
+        if entries.len() != layout.entries.len() {
+            return Err(format!(
+                "Bind group provides {} entries, but its layout requires {}",
+                entries.len(),
+                layout.entries.len()
+            ));
+        }
+
+        for (index, entry) in entries.iter().enumerate() {
+            let location = match entry {
+                BindGroupEntry::Texture { location, .. }
+                | BindGroupEntry::Sampler { location, .. }
+                | BindGroupEntry::Uniform { location, .. }
+                | BindGroupEntry::StorageReadonly { location, .. } => *location,
+            };
+            if entries[..index].iter().any(|previous| match previous {
+                BindGroupEntry::Texture {
+                    location: previous, ..
+                }
+                | BindGroupEntry::Sampler {
+                    location: previous, ..
+                }
+                | BindGroupEntry::Uniform {
+                    location: previous, ..
+                }
+                | BindGroupEntry::StorageReadonly {
+                    location: previous, ..
+                } => *previous == location,
+            }) {
+                return Err(format!("Bind group contains duplicate binding {location}"));
+            }
+            let expected = layout
+                .entries
+                .iter()
+                .find(|expected| expected.location == location)
+                .ok_or_else(|| format!("Bind group provides unexpected binding {location}"))?;
+            let matches = matches!(
+                (expected.typ, entry),
+                (BindType::Texture, BindGroupEntry::Texture { .. })
+                    | (BindType::Sampler, BindGroupEntry::Sampler { .. })
+                    | (BindType::Uniform, BindGroupEntry::Uniform { .. })
+                    | (
+                        BindType::StorageReadonly,
+                        BindGroupEntry::StorageReadonly { .. }
+                    )
+            );
+            if !matches {
+                return Err(format!(
+                    "Bind group binding {location} does not match its layout"
+                ));
+            }
+            match entry {
+                BindGroupEntry::Uniform { buffer, .. }
+                    if buffer.usage() != BufferUsage::Uniform =>
+                {
+                    return Err(format!(
+                        "Bind group uniform binding {location} requires a uniform buffer"
+                    ));
+                }
+                BindGroupEntry::StorageReadonly { buffer, .. } => {
+                    if buffer.usage() != BufferUsage::Storage {
+                        return Err(format!(
+                            "Bind group storage binding {location} requires a storage buffer"
+                        ));
+                    }
+                    self.validate_buffer_allocation(BufferUsage::Storage, buffer.size())?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn prepare_bind_group(
         &self,
         next_resource_id: &mut u64,
         desc: BindGroupDescriptor,
     ) -> Result<BindGroup, String> {
         log::trace!("Creating BindGroup (label={:?})", desc.label);
+        let layout = desc
+            .layout
+            .ok_or("Cannot create binding group with a missing layout.")?;
+        self.validate_bind_group_entries(layout, &desc.entry)?;
         let buffers: ArrayVec<_, MAX_BINDING_ENTRIES> = desc
             .entry
             .iter()
             .map(|entry| match entry {
-                BindGroupEntry::Uniform { buffer, .. } => Some(buffer.inner.borrow().raw.clone()),
+                BindGroupEntry::Uniform { buffer, .. }
+                | BindGroupEntry::StorageReadonly { buffer, .. } => {
+                    Some(buffer.inner.borrow().raw.clone())
+                }
                 _ => None,
             })
             .collect();
@@ -1060,7 +1327,8 @@ impl GfxBackend {
                     binding: *location,
                     resource: wgpu::BindingResource::TextureView(&texture.view),
                 },
-                BindGroupEntry::Uniform { location, .. } => wgpu::BindGroupEntry {
+                BindGroupEntry::Uniform { location, .. }
+                | BindGroupEntry::StorageReadonly { location, .. } => wgpu::BindGroupEntry {
                     binding: *location,
                     resource: buffers[idx].as_ref().unwrap().as_entire_binding(),
                 },
@@ -1070,9 +1338,6 @@ impl GfxBackend {
                 },
             })
             .collect();
-        let layout = desc
-            .layout
-            .ok_or("Cannot create binding group with a missing layout.")?;
         let raw = self
             .ctx
             .device
@@ -1108,8 +1373,19 @@ impl GfxBackend {
                 format,
                 write: true,
             },
-            TextureUpload::Single(TextureMipLevel::new(&[], desc.width, desc.height)),
+            if desc.mipmaps {
+                TextureUpload::Generate(TextureMipLevel::new(&[], desc.width, desc.height))
+            } else {
+                TextureUpload::Single(TextureMipLevel::new(&[], desc.width, desc.height))
+            },
         )?;
+        let color_attachment = Arc::new(texture.raw.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("RenderTexture level-0 attachment"),
+            format: Some(format.as_wgpu()),
+            base_mip_level: 0,
+            mip_level_count: Some(1),
+            ..Default::default()
+        }));
         let depth_texture = if desc.depth {
             let depth_label = format!("RenderTexture (label={:?}) inner depth texture", desc.label);
             Some(create_texture(
@@ -1129,6 +1405,7 @@ impl GfxBackend {
         Ok(RenderTexture {
             id: resource_id(next_resource_id),
             texture,
+            color_attachment,
             depth_texture,
         })
     }

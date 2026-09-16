@@ -48,6 +48,7 @@ impl BufferUsage {
             BufferUsage::Vertex => BufferUsages::VERTEX,
             BufferUsage::Index => BufferUsages::INDEX,
             BufferUsage::Uniform => BufferUsages::UNIFORM,
+            BufferUsage::Storage => BufferUsages::STORAGE,
         }
     }
 }

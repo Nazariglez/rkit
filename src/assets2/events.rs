@@ -37,6 +37,27 @@ where
     }
 }
 
+#[derive(Event)]
+pub struct AutoLoadErrEvt<T>
+where
+    T: AutoLoad,
+{
+    pub error: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T> AutoLoadErrEvt<T>
+where
+    T: AutoLoad,
+{
+    pub fn new(error: String) -> Self {
+        Self {
+            error,
+            _marker: PhantomData,
+        }
+    }
+}
+
 // #[derive(Event)]
 // pub struct LoadListEvt {
 //     pub id: String,

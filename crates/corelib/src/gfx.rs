@@ -76,6 +76,11 @@ pub fn create_uniform_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> 
 }
 
 #[inline]
+pub fn create_storage_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> {
+    BufferBuilder::new(BufferUsage::Storage, data)
+}
+
+#[inline]
 pub fn create_bind_group<'a>() -> BindGroupBuilder<'a> {
     BindGroupBuilder::new()
 }

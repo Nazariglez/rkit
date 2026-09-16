@@ -83,6 +83,7 @@ impl From<u64> for RenderTextureId {
 pub struct RenderTextureDescriptor<'a> {
     pub label: Option<&'a str>,
     pub depth: bool,
+    pub mipmaps: bool,
     pub width: u32,
     pub height: u32,
     pub format: Option<TextureFormat>,

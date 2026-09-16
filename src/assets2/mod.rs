@@ -22,7 +22,7 @@ use crate::{
     prelude::{App, OnEnginePreFrame, PanicContext, Plugin},
 };
 
-pub use events::AutoLoadEvt;
+pub use events::{AutoLoadErrEvt, AutoLoadEvt};
 
 #[derive(Default)]
 pub struct AssetsPlugin {
@@ -115,6 +115,11 @@ impl AssetLoader {
         self.auto_load.push(AutoLoadState {
             done: false,
             cb: Box::new(move |world: &mut World, loader: &mut AssetLoader| {
+                if let Some(error) = loader.list_error(T::list_id()) {
+                    log::error!("Auto loading list '{}' failed: {error}", T::list_id());
+                    world.trigger(AutoLoadErrEvt::<T>::new(error));
+                    return true;
+                }
                 if !loader.is_loaded(T::list_id()) {
                     return false;
                 }
@@ -125,11 +130,12 @@ impl AssetLoader {
                         world.trigger(AutoLoadEvt::<T>::default());
                         true
                     }
-                    Err(e) => {
-                        log::error!("Auto loading list '{}' failed: {}", T::list_id(), e);
+                    Err(error) => {
+                        log::error!("Auto loading list '{}' failed: {error}", T::list_id());
+                        world.trigger(AutoLoadErrEvt::<T>::new(error));
                         true
                     }
-                    _ => false,
+                    Ok(None) => false,
                 }
             }),
         });
@@ -158,6 +164,16 @@ impl AssetLoader {
         let total = list.len();
         let done = list.iter().filter(|item| self.is_loaded(item)).count();
         (done as f32) / (total as f32)
+    }
+
+    fn list_error(&self, id: &str) -> Option<String> {
+        self.lists.get(id)?.iter().find_map(|item_id| {
+            let state = self.states.get(item_id)?;
+            let LoadState::Err(error) = &state.state else {
+                return None;
+            };
+            Some(format!("{item_id}: {error}"))
+        })
     }
 
     /// Checks if an asset has been loaded and parsed.

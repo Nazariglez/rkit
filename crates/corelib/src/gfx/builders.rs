@@ -168,6 +168,13 @@ impl<'a> BindGroupBuilder<'a> {
         self
     }
 
+    pub fn with_storage_readonly(mut self, location: u32, buffer: &'a Buffer) -> Self {
+        self.desc
+            .entry
+            .push(BindGroupEntry::StorageReadonly { location, buffer });
+        self
+    }
+
     pub fn build(self) -> Result<BindGroup, String> {
         let Self { desc } = self;
         get_mut_backend().gfx().create_bind_group(desc)
@@ -612,6 +619,12 @@ impl<'a> RenderTextureBuilder<'a> {
     #[inline]
     pub fn with_depth(mut self, enabled: bool) -> Self {
         self.desc.depth = enabled;
+        self
+    }
+
+    #[inline]
+    pub fn with_mipmaps(mut self) -> Self {
+        self.desc.mipmaps = true;
         self
     }
 

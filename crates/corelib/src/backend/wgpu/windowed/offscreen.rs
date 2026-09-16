@@ -100,6 +100,7 @@ impl OffscreenSurfaceData {
         let texture = gfx.create_render_texture(RenderTextureDescriptor {
             label: Some("Offscreen Surface"),
             depth: use_depth,
+            mipmaps: false,
             width: gfx.surface.config.width,
             height: gfx.surface.config.height,
             format: None,
@@ -220,6 +221,7 @@ impl OffscreenSurfaceData {
             RenderTextureDescriptor {
                 label: Some("Offscreen Surface"),
                 depth: self.texture.depth_texture.is_some(),
+                mipmaps: false,
                 width: size.x,
                 height: size.y,
                 format: None,

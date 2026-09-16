@@ -30,9 +30,15 @@ pub(crate) enum Scissor {
     Normalized([f32; 4]),
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct Viewport {
+    pub(crate) origin: [u32; 2],
+    pub(crate) size: Vec2,
+}
+
 #[derive(Default, Clone)]
 pub struct RenderCommand<'a> {
-    pub(crate) size: Option<Vec2>,
+    pub(crate) viewport: Option<Viewport>,
     pub(crate) pipeline: Option<&'a RenderPipeline>,
     pub(crate) buffers: ArrayVec<(&'a Buffer, Range<u64>), MAX_BUFFERS>,
     pub(crate) vertices: SmallVec<RPassVertices, 10>,
@@ -47,7 +53,18 @@ impl<'a> RenderCommand<'a> {
     }
 
     pub fn size(&mut self, width: f32, height: f32) -> &mut Self {
-        self.size = Some(vec2(width, height));
+        self.viewport = Some(Viewport {
+            origin: [0, 0],
+            size: vec2(width, height),
+        });
+        self
+    }
+
+    pub fn viewport(&mut self, x: u32, y: u32, width: f32, height: f32) -> &mut Self {
+        self.viewport = Some(Viewport {
+            origin: [x, y],
+            size: vec2(width, height),
+        });
         self
     }
 
@@ -177,6 +194,11 @@ impl<'a> RenderPass<'a> {
 
     pub fn size(&mut self, width: f32, height: f32) -> &mut Self {
         self.command().size(width, height);
+        self
+    }
+
+    pub fn viewport(&mut self, x: u32, y: u32, width: f32, height: f32) -> &mut Self {
+        self.command().viewport(x, y, width, height);
         self
     }
 

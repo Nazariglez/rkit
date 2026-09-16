@@ -8,6 +8,7 @@ pub const MAX_VERTEX_BUFFERS: usize = 8;
 pub const MAX_VERTEX_ATTRIBUTES: usize = 16;
 pub const MAX_SAMPLERS_PER_SHADER_STAGE: usize = 16;
 pub const MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE: usize = 16;
+pub const MAX_STORAGE_BUFFERS_PER_SHADER_STAGE: usize = 8;
 pub const MAX_BIND_GROUPS_PER_PIPELINE: usize = 4;
 pub const MAX_PIPELINE_COMPATIBLE_TEXTURES: usize = 10;
 

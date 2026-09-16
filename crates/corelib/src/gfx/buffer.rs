@@ -18,12 +18,13 @@ pub struct BufferDescriptor<'a> {
     pub write: bool,
 }
 
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BufferUsage {
     #[default]
     Vertex,
     Index,
     Uniform,
+    Storage,
 }
 
 #[derive(Default, Debug, Clone)]
