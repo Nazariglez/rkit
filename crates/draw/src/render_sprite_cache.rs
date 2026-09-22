@@ -1,10 +1,9 @@
-use crate::{SpriteBuilder, create_sprite};
+use crate::SpriteBuilder;
 
 use super::sprite::Sprite;
 use corelib::{
     gfx::{
         RenderTexture, RenderTextureBuilder, Sampler, TextureFilter, TextureFormat, TextureWrap,
-        create_render_texture,
     },
     math::UVec2,
 };
@@ -25,24 +24,14 @@ impl RenderSpriteCache {
 
     pub fn get(&mut self, size: UVec2) -> &RenderSprite {
         self.textures.get_or_insert(size, || {
-            let render_texture = create_render_texture()
-                .with_label(&format!("Cached RenderTexture({size})"))
+            let label = format!("Cached RenderTexture({size})");
+            RenderSpriteBuilder::new()
+                .with_label(&label)
                 .with_size(size.x, size.y)
-                .build()
-                .unwrap();
-
-            let sprite = create_sprite()
-                .with_label(&format!("Cached Sprite({size})"))
                 .with_sampler(&self.sampler)
-                .from_texture(render_texture.texture())
                 .with_write_flag(true)
                 .build()
-                .unwrap();
-
-            RenderSprite {
-                sprite,
-                render_texture,
-            }
+                .unwrap()
         })
     }
 
@@ -157,6 +146,7 @@ impl<'a> RenderSpriteBuilder<'a> {
         let render_texture = rt_builder.build()?;
         let sprite = sprite_builder
             .from_texture(render_texture.texture())
+            .with_premultiplied_source()
             .build()?;
         Ok(RenderSprite {
             sprite,

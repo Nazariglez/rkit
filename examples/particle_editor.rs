@@ -4,7 +4,7 @@ use std::{
 };
 
 use draw::{Sprite, Transform2D, create_sprite};
-use egui::{Align, Color32, load::SizedTexture};
+use egui::{Align, Color32, Image};
 use futures::{future::BoxFuture, task::noop_waker_ref};
 use rfd::{AsyncFileDialog, FileHandle};
 use rkit::{
@@ -29,7 +29,7 @@ enum FileCmd {
 struct FileCmdRes(Option<FileCmd>);
 
 struct EguiSprite {
-    sized: SizedTexture,
+    image: Image<'static>,
     sprite: Sprite,
 }
 
@@ -86,11 +86,11 @@ fn setup_system(
     });
 
     config.iter_sprites().for_each(|(id, sprite)| {
-        let sized_tex = ectx.add_sprite(sprite);
+        let image = ectx.add_sprite(sprite);
         state.sprites.insert(
             id.clone(),
             EguiSprite {
-                sized: sized_tex,
+                image,
                 sprite: sprite.clone(),
             },
         );
@@ -192,7 +192,7 @@ fn update_system(
                                 state.sprites.insert(
                                     id.clone(),
                                     EguiSprite {
-                                        sized: ectx.add_sprite(&sprite),
+                                        image: ectx.add_sprite(&sprite),
                                         sprite: sprite.clone(),
                                     },
                                 );
@@ -754,23 +754,9 @@ fn draw_system(
                                                 });
                                             // .any(|ps| matches!(ps, ParticleSprite::Id(existing) if existing == id));
 
-                                            let frame = es.sprite.frame();
-                                            let min = frame.min();
-                                            let max = frame.max();
-                                            let uv_min = min / es.sprite.texture().size();
-                                            let uv_max = max / es.sprite.texture().size();
-
-                                            let img = egui::Image::new(es.sized)
-                                                .uv(egui::Rect {
-                                                    min: egui::Pos2 {
-                                                        x: uv_min.x,
-                                                        y: uv_min.y,
-                                                    },
-                                                    max: egui::Pos2 {
-                                                        x: uv_max.x,
-                                                        y: uv_max.y,
-                                                    },
-                                                })
+                                            let img = es
+                                                .image
+                                                .clone()
                                                 .fit_to_exact_size(egui::Vec2::new(32.0, 32.0))
                                                 .bg_fill(if selected {
                                                     Color32::from_rgb(50, 50, 100)

@@ -296,7 +296,7 @@ fn draw_text(draw: &mut Draw2D, data: &TextData) {
             d_text
                 .h_align_left()
                 .origin(vec2(0.0, 0.5))
-                .translate(data.node_size * 0.5 * vec2(0.0, 0.5));
+                .translate(data.node_size * vec2(0.0, 0.5));
         }
         HAlign::Center => {
             d_text

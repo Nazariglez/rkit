@@ -16,8 +16,8 @@ use crate::{
     input_transition::{ButtonEdge, ordered_button_edges},
 };
 use draw::Sprite;
+use egui::Event;
 pub use egui::*;
-use egui::{Event, load::SizedTexture};
 
 #[derive(Debug, Default)]
 pub struct EguiPlugin {}
@@ -44,8 +44,24 @@ pub struct EguiContext {
 
 impl EguiContext {
     #[inline]
-    pub fn add_sprite(&mut self, sprite: &Sprite) -> SizedTexture {
-        get_mut_egui_painter().add_sprite(sprite)
+    pub fn add_sprite(&mut self, sprite: &Sprite) -> egui::Image<'static> {
+        let id = get_mut_egui_painter().register_sprite(sprite);
+        let size = sprite.size();
+        let frame = sprite.frame();
+        let texture_size = sprite.texture().size();
+        let uv_min = frame.min() / texture_size;
+        let uv_max = frame.max() / texture_size;
+        let uv = egui::Rect::from_min_max(
+            egui::pos2(uv_min.x, uv_min.y),
+            egui::pos2(uv_max.x, uv_max.y),
+        );
+
+        egui::Image::new((id, egui::vec2(size.x, size.y))).uv(uv)
+    }
+
+    #[inline]
+    pub fn remove_sprite(&mut self, sprite: &Sprite) {
+        get_mut_egui_painter().remove_sprite(sprite);
     }
 
     #[inline]

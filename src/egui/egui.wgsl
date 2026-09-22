@@ -97,10 +97,46 @@ fn vs_main(
 @group(1) @binding(0) var r_tex_color: texture_2d<f32>;
 @group(1) @binding(1) var r_tex_sampler: sampler;
 
+struct TextureLocals {
+    is_srgb: u32,
+    source_kind: u32,
+    _padding_0: u32,
+    _padding_1: u32,
+};
+@group(1) @binding(2) var<uniform> r_texture: TextureLocals;
+
+const TEXTURE_SOURCE_NATIVE: u32 = 0u;
+const TEXTURE_SOURCE_STRAIGHT_SPRITE: u32 = 1u;
+const TEXTURE_SOURCE_PREMULTIPLIED_SPRITE: u32 = 2u;
+
+fn sample_texture_gamma(tex_coord: vec2<f32>) -> vec4<f32> {
+    let sampled = textureSample(r_tex_color, r_tex_sampler, tex_coord);
+    let alpha = sampled.a;
+
+    if r_texture.source_kind == TEXTURE_SOURCE_NATIVE {
+        if r_texture.is_srgb == 1u {
+            return gamma_from_linear_rgba(sampled);
+        }
+        return sampled;
+    }
+
+    if r_texture.source_kind == TEXTURE_SOURCE_STRAIGHT_SPRITE {
+        return vec4<f32>(gamma_from_linear_rgb(sampled.rgb) * alpha, alpha);
+    }
+
+    if r_texture.source_kind == TEXTURE_SOURCE_PREMULTIPLIED_SPRITE {
+        if alpha == 0.0 {
+            return vec4<f32>(gamma_from_linear_rgb(sampled.rgb), alpha);
+        }
+        return vec4<f32>(gamma_from_linear_rgb(sampled.rgb / alpha) * alpha, alpha);
+    }
+
+    return sampled;
+}
+
 @fragment
 fn fs_main_linear_framebuffer(in: VertexOutput) -> @location(0) vec4<f32> {
-    // We expect "normal" textures that are NOT sRGB-aware.
-    let tex_gamma = textureSample(r_tex_color, r_tex_sampler, in.tex_coord);
+    let tex_gamma = sample_texture_gamma(in.tex_coord);
     var out_color_gamma = in.color * tex_gamma;
     // Dither the float color down to eight bits to reduce banding.
     // This step is optional for egui backends.
@@ -116,8 +152,7 @@ fn fs_main_linear_framebuffer(in: VertexOutput) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_main_gamma_framebuffer(in: VertexOutput) -> @location(0) vec4<f32> {
-    // We expect "normal" textures that are NOT sRGB-aware.
-    let tex_gamma = textureSample(r_tex_color, r_tex_sampler, in.tex_coord);
+    let tex_gamma = sample_texture_gamma(in.tex_coord);
     var out_color_gamma = in.color * tex_gamma;
     // Dither the float color down to eight bits to reduce banding.
     // This step is optional for egui backends.

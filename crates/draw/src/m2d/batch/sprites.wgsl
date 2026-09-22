@@ -13,13 +13,15 @@ struct VertexInput {
   @location(3) uv_pos: vec2<f32>,
   @location(4) uv_size: vec2<f32>,
   @location(5) rotation: f32,
-  @location(6) _pad: vec3<f32>,
+  @location(6) source_pm: f32,
+  @location(7) _pad: vec2<f32>,
 };
 
 struct VertexOutput {
   @builtin(position) pos: vec4<f32>,
   @location(0) uv: vec2<f32>,
   @location(1) color: vec4<f32>,
+  @interpolate(flat) @location(2) source_pm: f32,
 };
 
 @vertex
@@ -42,14 +44,15 @@ fn vs_main(@builtin(vertex_index) v_idx: u32, model: VertexInput) -> VertexOutpu
   let norm_uv  = (local_pos * 0.5) + vec2(0.5, 0.5);
   let uv    = model.uv_pos + norm_uv * model.uv_size;
 
-  return VertexOutput(pos, uv, model.color);
+  return VertexOutput(pos, uv, model.color, model.source_pm);
 }
 
-// srg to linear
 {{SRGB_TO_LINEAR}}
+{{SPRITE_OUTPUT}}
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-  let color = srgb_to_linear(in.color);
-  return textureSample(t_texture, s_texture, in.uv) * color;
+  let tint = srgb_to_linear(in.color);
+  let sampled = textureSample(t_texture, s_texture, in.uv);
+  return sprite_sample_to_pm_output(sampled, tint, in.source_pm);
 }

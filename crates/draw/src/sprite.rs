@@ -17,6 +17,7 @@ pub struct Sprite {
     texture: Texture,
     sampler: Sampler,
     frame: Rect,
+    premultiplied_source: bool,
     pub(crate) drop_observer: DropObserver,
 }
 
@@ -27,13 +28,16 @@ impl std::fmt::Debug for Sprite {
             .field("texture", &self.texture)
             .field("sampler", &self.sampler)
             .field("frame", &self.frame)
+            .field("premultiplied_source", &self.premultiplied_source)
             .finish()
     }
 }
 
 impl PartialEq for Sprite {
     fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id() && self.frame == other.frame
+        self.id() == other.id()
+            && self.frame == other.frame
+            && self.premultiplied_source == other.premultiplied_source
     }
 }
 
@@ -74,25 +78,22 @@ impl Sprite {
     }
 
     #[inline]
+    pub fn is_premultiplied_source(&self) -> bool {
+        self.premultiplied_source
+    }
+
+    #[inline]
     pub fn clone_with_frame(&self, frame: Rect) -> Self {
-        Self {
-            id: self.id,
-            texture: self.texture.clone(),
-            sampler: self.sampler.clone(),
-            frame: Rect::new(self.frame.origin + frame.origin, frame.size),
-            drop_observer: self.drop_observer.clone(),
-        }
+        let mut sprite = self.clone();
+        sprite.frame = Rect::new(self.frame.origin + frame.origin, frame.size);
+        sprite
     }
 
     #[inline]
     pub fn clone_without_frame(&self) -> Self {
-        Self {
-            id: self.id,
-            texture: self.texture.clone(),
-            sampler: self.sampler.clone(),
-            frame: Rect::new(Vec2::ZERO, self.texture.size()),
-            drop_observer: self.drop_observer.clone(),
-        }
+        let mut sprite = self.clone();
+        sprite.frame = Rect::new(Vec2::ZERO, self.texture.size());
+        sprite
     }
 }
 
@@ -103,6 +104,7 @@ pub struct SpriteBuilder<'a> {
     texture: Option<Texture>,
     sampler: Option<Sampler>,
     mipmaps: bool,
+    premultiplied_source: bool,
 }
 
 impl<'a> SpriteBuilder<'a> {
@@ -147,6 +149,12 @@ impl<'a> SpriteBuilder<'a> {
     #[inline]
     pub fn with_mipmaps(mut self) -> Self {
         self.mipmaps = true;
+        self
+    }
+
+    #[inline]
+    pub fn with_premultiplied_source(mut self) -> Self {
+        self.premultiplied_source = true;
         self
     }
 
@@ -217,6 +225,7 @@ impl<'a> SpriteBuilder<'a> {
             texture,
             sampler,
             mipmaps,
+            premultiplied_source,
         } = self;
         let texture = match texture {
             None if mipmaps => texture_builder.with_mipmaps().build()?,
@@ -243,6 +252,7 @@ impl<'a> SpriteBuilder<'a> {
             texture,
             sampler,
             frame,
+            premultiplied_source,
             drop_observer,
         })
     }

@@ -4,7 +4,7 @@ use corelib::{
         self, BindGroup, BindGroupLayout, BindingType, BlendMode, Buffer, Color, RenderPipeline,
         Renderer, VertexFormat, VertexLayout, VertexStepMode,
     },
-    math::{Mat3, Mat4, Vec2, Vec3, orthographic},
+    math::{Mat3, Mat4, Vec2, orthographic},
 };
 use encase::{ShaderType, UniformBuffer};
 use rustc_hash::FxHashMap;
@@ -34,7 +34,8 @@ struct GpuSprite {
     uv_pos: Vec2,
     uv_size: Vec2,
     rotation: f32,
-    _pad: Vec3,
+    source_pm: f32,
+    _pad: Vec2,
 }
 
 pub struct SpriteBatcher {
@@ -60,10 +61,15 @@ pub struct SpriteBatcher {
 
 impl SpriteBatcher {
     pub fn new() -> Result<Self, String> {
-        let shader = SHADER.replace(
-            "{{SRGB_TO_LINEAR}}",
-            include_str!("../../resources/to_linear.wgsl"),
-        );
+        let shader = SHADER
+            .replace(
+                "{{SRGB_TO_LINEAR}}",
+                include_str!("../../resources/to_linear.wgsl"),
+            )
+            .replace(
+                "{{SPRITE_OUTPUT}}",
+                include_str!("../../resources/sprite_output.wgsl"),
+            );
 
         let pip = gfx::create_render_pipeline(&shader)
             .with_label("SpriteBatcher RenderPipeline")
@@ -76,7 +82,8 @@ impl SpriteBatcher {
                     .with_attr(3, VertexFormat::Float32x2)
                     .with_attr(4, VertexFormat::Float32x2)
                     .with_attr(5, VertexFormat::Float32)
-                    .with_attr(6, VertexFormat::Float32x3),
+                    .with_attr(6, VertexFormat::Float32)
+                    .with_attr(7, VertexFormat::Float32x2),
             )
             .with_bind_group_layout(
                 BindGroupLayout::new()
@@ -87,7 +94,7 @@ impl SpriteBatcher {
                     .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                     .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
             )
-            .with_blend_mode(BlendMode::NORMAL)
+            .with_blend_mode(BlendMode::NORMAL_PM)
             .build()?;
 
         let vbo = gfx::create_vertex_buffer(&[] as &[f32])
@@ -183,7 +190,8 @@ impl SpriteBatcher {
                 color: Color::WHITE,
                 uv_pos,
                 uv_size,
-                _pad: Vec3::ZERO,
+                source_pm: f32::from(sprite.is_premultiplied_source()),
+                _pad: Vec2::ZERO,
             },
         }
     }

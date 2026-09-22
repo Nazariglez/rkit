@@ -7,11 +7,10 @@ use crate::{
     math::{UVec2, Vec2},
 };
 use atomic_refcell::{AtomicRefCell, AtomicRefMut};
-use draw::{Sprite, create_sprite};
+use draw::{Sprite, SpriteId, create_sprite};
 use egui::{
     ClippedPrimitive, ImageData, Mesh, Rect, TextureId, TextureOptions,
     epaint::{self, ImageDelta},
-    load::SizedTexture,
 };
 use encase::{ShaderType, UniformBuffer};
 use once_cell::sync::Lazy;
@@ -36,6 +35,47 @@ pub(super) struct EguiLocals {
     _pading: u32,
 }
 
+#[repr(u32)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+enum TextureSourceKind {
+    Native = 0,
+    StraightSprite = 1,
+    PremultipliedSprite = 2,
+}
+
+impl TextureSourceKind {
+    fn from_sprite(sprite: &Sprite) -> Self {
+        if sprite.is_premultiplied_source() {
+            Self::PremultipliedSprite
+        } else {
+            Self::StraightSprite
+        }
+    }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+struct ImportedSpriteKey {
+    sprite: SpriteId,
+    source_kind: TextureSourceKind,
+}
+
+impl ImportedSpriteKey {
+    fn new(sprite: &Sprite) -> Self {
+        Self {
+            sprite: sprite.id(),
+            source_kind: TextureSourceKind::from_sprite(sprite),
+        }
+    }
+}
+
+#[derive(Default, Copy, Clone, Debug, PartialEq, ShaderType)]
+struct EguiTextureLocals {
+    is_srgb: u32,
+    source_kind: u32,
+    _padding_0: u32,
+    _padding_1: u32,
+}
+
 pub(super) struct EguiPainter {
     pipeline: RenderPipeline,
     vbo: Buffer,
@@ -44,6 +84,8 @@ pub(super) struct EguiPainter {
     ubs: UniformBuffer<[u8; 16]>,
     ubo_bind: BindGroup,
     textures: FxHashMap<TextureId, CachedTexture>,
+    imported_sprites: FxHashMap<ImportedSpriteKey, TextureId>,
+    next_user_texture_id: u64,
 }
 
 impl Default for EguiPainter {
@@ -102,7 +144,8 @@ impl Default for EguiPainter {
             .with_bind_group_layout(
                 BindGroupLayout::new()
                     .with_entry(BindingType::texture(0).with_fragment_visibility(true))
-                    .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
+                    .with_entry(BindingType::sampler(1).with_fragment_visibility(true))
+                    .with_entry(BindingType::uniform(2).with_fragment_visibility(true)),
             )
             .with_index_format(IndexFormat::UInt32)
             .with_blend_mode(BlendMode {
@@ -138,6 +181,8 @@ impl Default for EguiPainter {
             ubs,
             ubo_bind,
             textures: FxHashMap::default(),
+            imported_sprites: FxHashMap::default(),
+            next_user_texture_id: 0,
         }
     }
 }
@@ -235,26 +280,38 @@ impl EguiPainter {
         }
     }
 
-    pub fn add_sprite(&mut self, sprite: &Sprite) -> SizedTexture {
-        let id = TextureId::User(sprite.texture().id().into());
-        let size = sprite.size();
-        let bind = bind_group_from(
-            sprite.texture(),
-            sprite.sampler(),
-            self.pipeline.bind_group_layout_ref(1).unwrap(),
-        );
-        self.textures.insert(
-            id,
-            CachedTexture {
-                sprite: sprite.clone(),
-                bind,
-            },
-        );
-
-        SizedTexture {
-            id,
-            size: egui::Vec2::new(size.x, size.y),
+    pub(super) fn register_sprite(&mut self, sprite: &Sprite) -> TextureId {
+        let key = ImportedSpriteKey::new(sprite);
+        match self.imported_sprites.get(&key) {
+            Some(&id) => id,
+            None => {
+                let id = self.allocate_user_texture_id();
+                let bind = bind_group_from(
+                    sprite.texture(),
+                    sprite.sampler(),
+                    self.pipeline.bind_group_layout_ref(1).unwrap(),
+                    key.source_kind,
+                );
+                self.textures.insert(
+                    id,
+                    CachedTexture {
+                        sprite: sprite.clone(),
+                        bind,
+                    },
+                );
+                self.imported_sprites.insert(key, id);
+                id
+            }
         }
+    }
+
+    fn allocate_user_texture_id(&mut self) -> TextureId {
+        let id = TextureId::User(self.next_user_texture_id);
+        self.next_user_texture_id = self
+            .next_user_texture_id
+            .checked_add(1)
+            .expect("Egui user texture IDs exhausted");
+        id
     }
 
     pub fn set_texture(&mut self, id: TextureId, delta: &ImageDelta) {
@@ -269,6 +326,7 @@ impl EguiPainter {
                     &tex,
                     &sampler,
                     self.pipeline.bind_group_layout_ref(1).unwrap(),
+                    TextureSourceKind::Native,
                 );
                 let sprite = create_sprite()
                     .from_texture(&tex)
@@ -321,6 +379,7 @@ impl EguiPainter {
             &tex,
             &sampler,
             self.pipeline.bind_group_layout_ref(1).unwrap(),
+            TextureSourceKind::Native,
         );
         let sprite = create_sprite()
             .from_texture(&tex)
@@ -330,17 +389,45 @@ impl EguiPainter {
         self.textures.insert(id, CachedTexture { sprite, bind });
     }
 
+    pub(super) fn remove_sprite(&mut self, sprite: &Sprite) {
+        let key = ImportedSpriteKey::new(sprite);
+        if let Some(&id) = self.imported_sprites.get(&key) {
+            self.remove_texture(id);
+        }
+    }
+
     pub fn remove_texture(&mut self, id: impl Into<TextureId>) {
-        self.textures.remove(&id.into());
+        if let Some(cached) = self.textures.remove(&id.into()) {
+            self.imported_sprites
+                .remove(&ImportedSpriteKey::new(&cached.sprite));
+        }
     }
 }
 
-fn bind_group_from(tex: &Texture, sampler: &Sampler, layout: &BindGroupLayoutRef) -> BindGroup {
+fn bind_group_from(
+    tex: &Texture,
+    sampler: &Sampler,
+    layout: &BindGroupLayoutRef,
+    source_kind: TextureSourceKind,
+) -> BindGroup {
+    let mut ubs = UniformBuffer::new([0; 16]);
+    ubs.write(&EguiTextureLocals {
+        is_srgb: u32::from(tex.format().is_srgb()),
+        source_kind: source_kind as u32,
+        ..Default::default()
+    })
+    .unwrap();
+    let ubo = gfx::create_uniform_buffer(ubs.as_ref())
+        .with_label("EguiPainter Texture UBO")
+        .build()
+        .unwrap();
+
     gfx::create_bind_group()
         .with_label("EguiPainter Texture BindGroup")
         .with_layout(layout)
         .with_texture(0, tex)
         .with_sampler(1, sampler)
+        .with_uniform(2, &ubo)
         .build()
         .unwrap()
 }

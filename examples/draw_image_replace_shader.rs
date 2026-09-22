@@ -16,6 +16,7 @@ struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) uvs: vec2<f32>,
     @location(2) color: vec4<f32>,
+    @location(3) source_pm: f32,
 };
 
 struct VertexOutput {
@@ -60,7 +61,8 @@ pub fn pixelated_pipeline(res: PipelineResources) -> Result<PipelineContext, Str
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)
-                .with_attr(2, VertexFormat::Float32x4),
+                .with_attr(2, VertexFormat::Float32x4)
+                .with_attr(3, VertexFormat::Float32),
         )
         // we must use the same uniform layout as group 0
         .with_bind_group_layout(
@@ -88,7 +90,7 @@ pub fn pixelated_pipeline(res: PipelineResources) -> Result<PipelineContext, Str
             res.sprite_bind_group.clone(), // reuse the binding group for texture/samplers
         ])
             .to_bind_groups(),
-        vertex_offset: 8,
+        vertex_offset: 9,
         x_pos: 0,
         y_pos: 1,
         alpha_pos: Some(7),

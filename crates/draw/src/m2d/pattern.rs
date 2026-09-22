@@ -20,6 +20,7 @@ struct VertexInput {
     @location(1) uvs: vec2<f32>,
     @location(2) frame: vec4<f32>,
     @location(3) color: vec4<f32>,
+    @location(4) source_pm: f32,
 };
 
 struct VertexOutput {
@@ -27,6 +28,7 @@ struct VertexOutput {
     @location(0) uvs: vec2<f32>,
     @location(1) frame: vec4<f32>,
     @location(2) color: vec4<f32>,
+    @interpolate(flat) @location(3) source_pm: f32,
 };
 
 @vertex
@@ -37,6 +39,7 @@ fn vs_main(
     out.frame = model.frame;
     out.color = model.color;
     out.uvs = model.uvs;
+    out.source_pm = model.source_pm;
     out.position = transform.mvp * vec4(model.position, 0.0, 1.0);
     return out;
 }
@@ -46,22 +49,28 @@ var t_texture: texture_2d<f32>;
 @group(1) @binding(1)
 var s_texture: sampler;
 
-// srg to linear
 {{SRGB_TO_LINEAR}}
+{{SPRITE_OUTPUT}}
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let in_color = srgb_to_linear(in.color);
+    let tint = srgb_to_linear(in.color);
     let coords = in.frame.xy + fract(in.uvs) * in.frame.zw;
-    return textureSample(t_texture, s_texture, coords) * in_color;
+    let sampled = textureSample(t_texture, s_texture, coords);
+    return sprite_sample_to_pm_output(sampled, tint, in.source_pm);
 }
 "#;
 
 pub fn create_pattern_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
-    let shader = SHADER.replace(
-        "{{SRGB_TO_LINEAR}}",
-        include_str!("../resources/to_linear.wgsl"),
-    );
+    let shader = SHADER
+        .replace(
+            "{{SRGB_TO_LINEAR}}",
+            include_str!("../resources/to_linear.wgsl"),
+        )
+        .replace(
+            "{{SPRITE_OUTPUT}}",
+            include_str!("../resources/sprite_output.wgsl"),
+        );
     let pip = gfx::create_render_pipeline(&shader)
         .with_label("Draw2D pattern default pipeline")
         .with_vertex_layout(
@@ -69,7 +78,8 @@ pub fn create_pattern_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<Pipeline
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)
                 .with_attr(2, VertexFormat::Float32x4)
-                .with_attr(3, VertexFormat::Float32x4),
+                .with_attr(3, VertexFormat::Float32x4)
+                .with_attr(4, VertexFormat::Float32),
         )
         .with_bind_group_layout(
             BindGroupLayout::new().with_entry(BindingType::uniform(0).with_vertex_visibility(true)),
@@ -79,7 +89,7 @@ pub fn create_pattern_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<Pipeline
                 .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
         )
-        .with_blend_mode(BlendMode::NORMAL)
+        .with_blend_mode(BlendMode::NORMAL_PM)
         .build()?;
 
     let bind_group = gfx::create_bind_group()
@@ -91,7 +101,7 @@ pub fn create_pattern_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<Pipeline
     Ok(PipelineContext {
         pipeline: pip,
         groups: (&[bind_group] as &[_]).try_into().unwrap(),
-        vertex_offset: 12,
+        vertex_offset: 13,
         x_pos: 0,
         y_pos: 1,
         alpha_pos: Some(11),
@@ -184,12 +194,13 @@ impl Element2D for Pattern2D {
         let Vec2 { x: fx, y: fy } = frame.origin / base_size;
         let Vec2 { x: fw, y: fh } = frame.size / base_size;
 
+        let source_pm = f32::from(self.sprite.is_premultiplied_source());
         #[rustfmt::skip]
         let mut vertices = [
-            x1, y1, u1, v1, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
-            x2, y1, u2, v1, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
-            x1, y2, u1, v2, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
-            x2, y2, u2, v2, fx, fy, fw, fh, c.r, c.g, c.b, c.a,
+            x1, y1, u1, v1, fx, fy, fw, fh, c.r, c.g, c.b, c.a, source_pm,
+            x2, y1, u2, v1, fx, fy, fw, fh, c.r, c.g, c.b, c.a, source_pm,
+            x1, y2, u1, v2, fx, fy, fw, fh, c.r, c.g, c.b, c.a, source_pm,
+            x2, y2, u2, v2, fx, fy, fw, fh, c.r, c.g, c.b, c.a, source_pm,
         ];
 
         let indices = [0, 1, 2, 2, 1, 3];

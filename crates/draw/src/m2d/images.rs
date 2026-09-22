@@ -21,12 +21,14 @@ struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) uvs: vec2<f32>,
     @location(2) color: vec4<f32>,
+    @location(3) source_pm: f32,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uvs: vec2<f32>,
     @location(1) color: vec4<f32>,
+    @interpolate(flat) @location(2) source_pm: f32,
 };
 
 @vertex
@@ -36,6 +38,7 @@ fn vs_main(
     var out: VertexOutput;
     out.color = model.color;
     out.uvs = model.uvs;
+    out.source_pm = model.source_pm;
     out.position = transform.mvp * vec4(model.position, 0.0, 1.0);
     return out;
 }
@@ -45,28 +48,35 @@ var t_texture: texture_2d<f32>;
 @group(1) @binding(1)
 var s_texture: sampler;
 
-// srg to linear
 {{SRGB_TO_LINEAR}}
+{{SPRITE_OUTPUT}}
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let in_color = srgb_to_linear(in.color);
-    return textureSample(t_texture, s_texture, in.uvs) * in_color;
+    let tint = srgb_to_linear(in.color);
+    let sampled = textureSample(t_texture, s_texture, in.uvs);
+    return sprite_sample_to_pm_output(sampled, tint, in.source_pm);
 }
 "#;
 
 pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineContext, String> {
-    let shader = SHADER.replace(
-        "{{SRGB_TO_LINEAR}}",
-        include_str!("../resources/to_linear.wgsl"),
-    );
+    let shader = SHADER
+        .replace(
+            "{{SRGB_TO_LINEAR}}",
+            include_str!("../resources/to_linear.wgsl"),
+        )
+        .replace(
+            "{{SPRITE_OUTPUT}}",
+            include_str!("../resources/sprite_output.wgsl"),
+        );
     let pip = gfx::create_render_pipeline(&shader)
-        .with_label("Draw2D images default pipeline")
+        .with_label("Draw2D images pipeline")
         .with_vertex_layout(
             VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)
-                .with_attr(2, VertexFormat::Float32x4),
+                .with_attr(2, VertexFormat::Float32x4)
+                .with_attr(3, VertexFormat::Float32),
         )
         .with_bind_group_layout(
             BindGroupLayout::new().with_entry(BindingType::uniform(0).with_vertex_visibility(true)),
@@ -76,7 +86,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
                 .with_entry(BindingType::texture(0).with_fragment_visibility(true))
                 .with_entry(BindingType::sampler(1).with_fragment_visibility(true)),
         )
-        .with_blend_mode(BlendMode::NORMAL)
+        .with_blend_mode(BlendMode::NORMAL_PM)
         .build()?;
 
     let bind_group = gfx::create_bind_group()
@@ -88,7 +98,7 @@ pub fn create_images_2d_pipeline_ctx(ubo_transform: &Buffer) -> Result<PipelineC
     Ok(PipelineContext {
         pipeline: pip,
         groups: (&[bind_group]).to_bind_groups(),
-        vertex_offset: 8,
+        vertex_offset: 9,
         x_pos: 0,
         y_pos: 1,
         alpha_pos: Some(7),
@@ -180,12 +190,13 @@ impl Element2D for Image2D {
             (u1, v1, u2, v2)
         };
 
+        let source_pm = f32::from(self.sprite.is_premultiplied_source());
         #[rustfmt::skip]
         let mut vertices = [
-            x1, y1, u1, v1, c.r, c.g, c.b, c.a,
-            x2, y1, u2, v1, c.r, c.g, c.b, c.a,
-            x1, y2, u1, v2, c.r, c.g, c.b, c.a,
-            x2, y2, u2, v2, c.r, c.g, c.b, c.a,
+            x1, y1, u1, v1, c.r, c.g, c.b, c.a, source_pm,
+            x2, y1, u2, v1, c.r, c.g, c.b, c.a, source_pm,
+            x1, y2, u1, v2, c.r, c.g, c.b, c.a, source_pm,
+            x2, y2, u2, v2, c.r, c.g, c.b, c.a, source_pm,
         ];
 
         let indices = [0, 1, 2, 2, 1, 3];
