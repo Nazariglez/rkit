@@ -465,7 +465,7 @@ fn create_sampler_from(opts: &TextureOptions) -> Sampler {
 fn empty_texture(width: u32, height: u32) -> Texture {
     gfx::create_texture()
         .with_label("EguiPainter Texture")
-        .with_empty_size(width, height)
+        .with_size(width, height)
         .with_write_flag(true)
         // .with_format(TextureFormat::Rgba8UNorm)
         .build()

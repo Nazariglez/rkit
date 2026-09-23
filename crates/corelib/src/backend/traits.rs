@@ -1,6 +1,7 @@
 use crate::{
     gfx::{
-        BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, GpuStats, Limits, RenderPipeline,
+        BindGroup, BindGroupDescriptor, Buffer, BufferDescriptor, Compute, ComputePipeline,
+        ComputePipelineDescriptor, GpuStats, Limits, ReadbackTicket, RenderPipeline,
         RenderPipelineDescriptor, RenderTexture, RenderTextureDescriptor, Renderer, Sampler,
         SamplerDescriptor, Stencil, Texture, TextureDescriptor, TextureUpload,
     },
@@ -44,15 +45,22 @@ pub(crate) trait BackendImpl<G: GfxBackendImpl> {
 pub(crate) trait GfxBackendImpl {
     fn frame_size(&self) -> UVec2;
     fn prepare_frame(&mut self) -> Result<(), String>;
+    fn progress_readbacks(&mut self) -> bool;
+    fn cancel_readbacks(&mut self);
     fn present_frame(&mut self);
 
     fn render(&mut self, renderer: &Renderer) -> Result<(), String>;
     fn render_to(&mut self, texture: &RenderTexture, renderer: &Renderer) -> Result<(), String>;
 
+    fn create_shader(&mut self, source: &str) -> Result<crate::gfx::Shader, String>;
     fn create_render_pipeline(
         &mut self,
         desc: RenderPipelineDescriptor,
     ) -> Result<RenderPipeline, String>;
+    fn create_compute_pipeline(
+        &mut self,
+        desc: ComputePipelineDescriptor,
+    ) -> Result<ComputePipeline, String>;
     fn create_stencil_variant(
         &mut self,
         base: &RenderPipeline,
@@ -61,6 +69,13 @@ pub(crate) trait GfxBackendImpl {
     fn create_buffer(&mut self, desc: BufferDescriptor) -> Result<Buffer, String>;
     fn create_bind_group(&mut self, desc: BindGroupDescriptor) -> Result<BindGroup, String>;
     fn write_buffer(&mut self, buffer: &Buffer, offset: u64, data: &[u8]) -> Result<(), String>;
+    fn read_buffer(
+        &mut self,
+        buffer: &Buffer,
+        bytes: std::ops::Range<u64>,
+    ) -> Result<ReadbackTicket, String>;
+    fn read_texture(&mut self, texture: &Texture) -> Result<ReadbackTicket, String>;
+    fn compute(&mut self, compute: &Compute<'_>) -> Result<(), String>;
     fn create_sampler(&mut self, desc: SamplerDescriptor) -> Result<Sampler, String>;
     fn create_texture(
         &mut self,

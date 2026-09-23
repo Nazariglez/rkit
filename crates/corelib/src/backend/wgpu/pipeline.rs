@@ -2,12 +2,31 @@ use crate::gfx::consts::{
     MAX_BIND_GROUPS_PER_PIPELINE, MAX_PIPELINE_COMPATIBLE_TEXTURES, MAX_VERTEX_BUFFERS,
 };
 use crate::gfx::{
-    BindGroupLayoutRef, ColorMask, CullMode, DepthStencil, PipelineId, Primitive, Stencil,
-    VertexLayout,
+    BindGroupLayoutRef, BindingType, ColorMask, CullMode, DepthStencil, MAX_BINDING_ENTRIES,
+    PipelineId, Primitive, Stencil, VertexLayout,
 };
 use arrayvec::ArrayVec;
 use std::sync::Arc;
-use wgpu::{ColorWrites, RenderPipeline as RawRenderPipeline};
+use wgpu::{
+    ColorWrites, ComputePipeline as RawComputePipeline, RenderPipeline as RawRenderPipeline,
+};
+
+#[derive(Clone)]
+pub(crate) struct BindingRequirement {
+    pub(crate) binding: BindingType,
+    pub(crate) min_buffer_size: Option<u64>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ShaderGroup {
+    pub(crate) group: u32,
+    pub(crate) bindings: ArrayVec<BindingRequirement, MAX_BINDING_ENTRIES>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct ShaderInterface {
+    pub(crate) groups: ArrayVec<ShaderGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
+}
 
 #[derive(Clone)]
 pub(crate) struct PipelineRecipe {
@@ -19,8 +38,8 @@ pub(crate) struct PipelineRecipe {
     pub depth: Option<DepthStencil>,
     pub stencil: Option<Stencil>,
     pub targets: ArrayVec<Option<wgpu::ColorTargetState>, MAX_PIPELINE_COMPATIBLE_TEXTURES>,
-    pub vs_entry: Option<String>,
-    pub fs_entry: Option<String>,
+    pub vs_entry: String,
+    pub fs_entry: String,
 }
 
 pub(crate) struct PipelineInner {
@@ -30,6 +49,7 @@ pub(crate) struct PipelineInner {
     pub uses_depth: bool,
     pub uses_stencil: bool,
     pub bind_group_layout: ArrayVec<BindGroupLayoutRef, MAX_BIND_GROUPS_PER_PIPELINE>,
+    pub interface: ShaderInterface,
     pub recipe: PipelineRecipe,
 }
 
@@ -64,6 +84,31 @@ impl RenderPipeline {
             .bind_group_layout
             .get(index as usize)
             .ok_or_else(|| format!("Invalid Bind Group '{index}' in pipeline"))
+    }
+}
+
+pub(crate) struct ComputePipelineInner {
+    pub raw: RawComputePipeline,
+    pub bind_group_layout: ArrayVec<BindGroupLayoutRef, MAX_BIND_GROUPS_PER_PIPELINE>,
+    pub interface: ShaderInterface,
+    pub workgroup_size: [u32; 3],
+}
+
+#[derive(Clone)]
+pub struct ComputePipeline {
+    pub(crate) inner: Arc<ComputePipelineInner>,
+}
+
+impl ComputePipeline {
+    pub fn bind_group_layout_ref(&self, index: u32) -> Result<&BindGroupLayoutRef, String> {
+        self.inner
+            .bind_group_layout
+            .get(index as usize)
+            .ok_or_else(|| format!("Invalid Bind Group '{index}' in compute pipeline"))
+    }
+
+    pub(crate) fn workgroup_size(&self) -> [u32; 3] {
+        self.inner.workgroup_size
     }
 }
 

@@ -2,6 +2,8 @@ mod context;
 mod frame;
 mod gfx;
 mod offscreen;
+mod readback;
+mod shader;
 mod surface;
 mod utils;
 

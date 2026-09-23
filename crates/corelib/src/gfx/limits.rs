@@ -11,5 +11,9 @@ pub struct Limits {
     pub max_buffer_size: u64,
     pub max_storage_binding_size: u64,
     pub max_storage_buffers_per_shader_stage: u32,
+    pub compute_supported: bool,
+    pub max_compute_workgroups_per_dimension: u32,
+    pub max_compute_workgroup_size: [u32; 3],
+    pub max_compute_invocations_per_workgroup: u32,
     pub surface_formats: ArrayVec<TextureFormat, { TextureFormat::COUNT }>,
 }

@@ -196,7 +196,7 @@ impl Default for Painter2D {
 
             let texture = gfx::create_texture()
                 .with_label("Draw2D Dummy Texture")
-                .with_empty_size(1, 1)
+                .with_size(1, 1)
                 .build()
                 .unwrap();
 

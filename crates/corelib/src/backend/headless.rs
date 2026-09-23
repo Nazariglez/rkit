@@ -25,6 +25,12 @@ impl GfxBackendImpl for HeadlessGfx {
         Ok(())
     }
 
+    fn progress_readbacks(&mut self) -> bool {
+        false
+    }
+
+    fn cancel_readbacks(&mut self) {}
+
     fn present_frame(&mut self) {}
 
     fn render(&mut self, _renderer: &crate::gfx::Renderer) -> Result<(), String> {
@@ -39,11 +45,22 @@ impl GfxBackendImpl for HeadlessGfx {
         Ok(())
     }
 
+    fn create_shader(&mut self, _source: &str) -> Result<crate::gfx::Shader, String> {
+        Err("Shaders are unavailable in the headless backend".to_string())
+    }
+
     fn create_render_pipeline(
         &mut self,
         _desc: crate::gfx::RenderPipelineDescriptor,
     ) -> Result<super::gfx::RenderPipeline, String> {
-        unreachable!()
+        Err("Render pipelines are unavailable in the headless backend".to_string())
+    }
+
+    fn create_compute_pipeline(
+        &mut self,
+        _desc: crate::gfx::ComputePipelineDescriptor,
+    ) -> Result<crate::gfx::ComputePipeline, String> {
+        Err("Compute pipelines are unavailable in the headless backend".to_string())
     }
 
     fn create_stencil_variant(
@@ -58,7 +75,7 @@ impl GfxBackendImpl for HeadlessGfx {
         &mut self,
         _desc: crate::gfx::BufferDescriptor,
     ) -> Result<super::gfx::Buffer, String> {
-        unreachable!()
+        Err("Buffers are unavailable in the headless backend".to_string())
     }
 
     fn create_bind_group(
@@ -77,6 +94,25 @@ impl GfxBackendImpl for HeadlessGfx {
         unreachable!()
     }
 
+    fn read_buffer(
+        &mut self,
+        _buffer: &crate::gfx::Buffer,
+        _bytes: std::ops::Range<u64>,
+    ) -> Result<crate::gfx::ReadbackTicket, String> {
+        Err("Readback is unavailable in the headless backend".to_string())
+    }
+
+    fn read_texture(
+        &mut self,
+        _texture: &crate::gfx::Texture,
+    ) -> Result<crate::gfx::ReadbackTicket, String> {
+        Err("Readback is unavailable in the headless backend".to_string())
+    }
+
+    fn compute(&mut self, _compute: &crate::gfx::Compute<'_>) -> Result<(), String> {
+        Err("Compute commands are unavailable in the headless backend".to_string())
+    }
+
     fn create_sampler(
         &mut self,
         _desc: crate::gfx::SamplerDescriptor,
@@ -89,7 +125,7 @@ impl GfxBackendImpl for HeadlessGfx {
         _desc: crate::gfx::TextureDescriptor,
         _upload: crate::gfx::TextureUpload,
     ) -> Result<super::gfx::Texture, String> {
-        unreachable!()
+        Err("Textures are unavailable in the headless backend".to_string())
     }
 
     fn generate_mipmaps(&mut self, _texture: &super::gfx::Texture) -> Result<(), String> {
@@ -114,7 +150,18 @@ impl GfxBackendImpl for HeadlessGfx {
     }
 
     fn limits(&self) -> crate::gfx::Limits {
-        unreachable!()
+        crate::gfx::Limits {
+            max_texture_size_2d: 0,
+            max_texture_size_3d: 0,
+            max_buffer_size: 0,
+            max_storage_binding_size: 0,
+            max_storage_buffers_per_shader_stage: 0,
+            compute_supported: false,
+            max_compute_workgroups_per_dimension: 0,
+            max_compute_workgroup_size: [0; 3],
+            max_compute_invocations_per_workgroup: 0,
+            surface_formats: Default::default(),
+        }
     }
 
     fn stats(&self) -> crate::gfx::GpuStats {

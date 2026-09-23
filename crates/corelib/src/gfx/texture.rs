@@ -20,6 +20,7 @@ pub struct TextureDescriptor<'a> {
     pub label: Option<&'a str>,
     pub format: TextureFormat,
     pub write: bool,
+    pub(crate) storage: bool,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -106,7 +107,7 @@ pub enum TextureFilter {
 
 /// Enum representing texture formats supported by WebGL2
 /// which is the min compatibility layer we aim for
-#[derive(Debug, Copy, Clone, EnumCount, PartialEq)]
+#[derive(Debug, Copy, Clone, EnumCount, PartialEq, Eq, Hash)]
 pub enum TextureFormat {
     // Single channel 8-bit textures
     R8UNorm, // WebGL2: GL_R8

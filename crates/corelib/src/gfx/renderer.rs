@@ -1,7 +1,7 @@
 use crate::{
     backend::{BackendImpl, GfxBackendImpl, get_mut_backend, gfx::BindGroup},
     gfx::{
-        Buffer, Color, RenderPipeline, RenderTexture,
+        Buffer, Color, DrawArgs, IndirectBuffer, RenderPipeline, RenderTexture,
         consts::{
             MAX_BIND_GROUPS_PER_PIPELINE, MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE, MAX_VERTEX_BUFFERS,
         },
@@ -24,6 +24,12 @@ pub(crate) struct RPassVertices {
     pub(crate) instances: Option<u32>,
 }
 
+#[derive(Clone)]
+pub(crate) enum RenderOperation<'a> {
+    Direct(RPassVertices),
+    Indirect(&'a IndirectBuffer<DrawArgs>),
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum Scissor {
     Physical([u32; 4]),
@@ -41,7 +47,7 @@ pub struct RenderCommand<'a> {
     pub(crate) viewport: Option<Viewport>,
     pub(crate) pipeline: Option<&'a RenderPipeline>,
     pub(crate) buffers: ArrayVec<(&'a Buffer, Range<u64>), MAX_BUFFERS>,
-    pub(crate) vertices: SmallVec<RPassVertices, 10>,
+    pub(crate) operations: SmallVec<RenderOperation<'a>, 10>,
     pub(crate) bind_groups: ArrayVec<&'a BindGroup, MAX_BIND_GROUPS_PER_PIPELINE>,
     pub(crate) stencil_ref: Option<u8>,
     pub(crate) scissors: Option<Scissor>,
@@ -138,18 +144,23 @@ impl<'a> RenderCommand<'a> {
     }
 
     pub fn draw(&mut self, vertices: Range<u32>) -> &mut Self {
-        self.vertices.push(RPassVertices {
+        self.operations.push(RenderOperation::Direct(RPassVertices {
             range: vertices,
             instances: None,
-        });
+        }));
         self
     }
 
     pub fn draw_instanced(&mut self, vertices: Range<u32>, instances: u32) -> &mut Self {
-        self.vertices.push(RPassVertices {
+        self.operations.push(RenderOperation::Direct(RPassVertices {
             range: vertices,
             instances: Some(instances),
-        });
+        }));
+        self
+    }
+
+    pub fn draw_indirect(&mut self, arguments: &'a IndirectBuffer<DrawArgs>) -> &mut Self {
+        self.operations.push(RenderOperation::Indirect(arguments));
         self
     }
 }
@@ -255,6 +266,11 @@ impl<'a> RenderPass<'a> {
 
     pub fn draw_instanced(&mut self, vertices: Range<u32>, instances: u32) -> &mut Self {
         self.command().draw_instanced(vertices, instances);
+        self
+    }
+
+    pub fn draw_indirect(&mut self, arguments: &'a IndirectBuffer<DrawArgs>) -> &mut Self {
+        self.command().draw_indirect(arguments);
         self
     }
 }

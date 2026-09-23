@@ -3,10 +3,13 @@ mod blend_mode;
 mod buffer;
 mod builders;
 mod color;
+mod compute;
 pub mod consts;
 mod limits;
 mod pipeline;
+mod readback;
 mod renderer;
+mod shader;
 mod stats;
 mod texture;
 
@@ -17,9 +20,12 @@ pub use blend_mode::*;
 pub use buffer::*;
 pub use builders::*;
 pub use color::*;
+pub use compute::*;
 pub use limits::*;
 pub use pipeline::*;
+pub use readback::*;
 pub use renderer::*;
+pub use shader::*;
 pub use stats::*;
 pub use texture::*;
 
@@ -46,8 +52,20 @@ where
 }
 
 #[inline]
-pub fn create_render_pipeline(shader: &str) -> RenderPipelineBuilder<'_> {
-    RenderPipelineBuilder::new(shader)
+pub fn create_shader(source: &str) -> ShaderBuilder<'_> {
+    ShaderBuilder::new(source)
+}
+
+#[inline]
+pub fn create_render_pipeline(source: &str) -> RenderPipelineBuilder<'_> {
+    RenderPipelineBuilder::new(ShaderInput::Source(source))
+}
+
+#[inline]
+pub fn create_compute_pipeline<'a>(
+    input: impl Into<ShaderInput<'a>>,
+) -> ComputePipelineBuilder<'a> {
+    ComputePipelineBuilder::new(input.into())
 }
 
 #[doc(hidden)]
@@ -81,6 +99,18 @@ pub fn create_storage_buffer<D: bytemuck::Pod>(data: &[D]) -> BufferBuilder<'_> 
 }
 
 #[inline]
+pub fn create_packed_storage_buffer<T: StorageData>(
+    values: &[T],
+) -> PackedStorageBufferBuilder<'_, T> {
+    PackedStorageBufferBuilder::new(values)
+}
+
+#[inline]
+pub fn create_indirect_buffer<A: IndirectArgs>() -> IndirectBufferBuilder<A> {
+    IndirectBufferBuilder::new()
+}
+
+#[inline]
 pub fn create_bind_group<'a>() -> BindGroupBuilder<'a> {
     BindGroupBuilder::new()
 }
@@ -88,6 +118,21 @@ pub fn create_bind_group<'a>() -> BindGroupBuilder<'a> {
 #[inline]
 pub fn write_buffer(buffer: &Buffer) -> BufferWriteBuilder<'_> {
     BufferWriteBuilder::new(buffer)
+}
+
+#[inline]
+pub fn read_buffer(buffer: &Buffer) -> BufferReadbackBuilder<'_> {
+    BufferReadbackBuilder::new(buffer)
+}
+
+#[inline]
+pub fn read_texture(texture: &Texture) -> TextureReadbackBuilder<'_> {
+    TextureReadbackBuilder::new(texture)
+}
+
+#[inline]
+pub fn compute(compute: &Compute<'_>) -> Result<(), String> {
+    get_mut_backend().gfx().compute(compute)
 }
 
 #[inline]
@@ -108,6 +153,11 @@ pub fn create_sampler<'a>() -> SamplerBuilder<'a> {
 #[inline]
 pub fn create_texture<'a>() -> TextureBuilder<'a> {
     TextureBuilder::new()
+}
+
+#[inline]
+pub fn create_storage_texture<'a>() -> TextureBuilder<'a> {
+    TextureBuilder::storage()
 }
 
 #[inline]

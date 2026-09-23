@@ -48,6 +48,20 @@ pub(crate) struct WinitBackend {
     gfx: Option<GfxBackend>,
 }
 
+impl WinitBackend {
+    fn cancel_readbacks(&mut self) {
+        if let Some(gfx) = &mut self.gfx {
+            gfx.cancel_readbacks();
+        }
+    }
+
+    fn shutdown(&mut self) {
+        self.gfx = None;
+        self.window = None;
+        self.request_close = false;
+    }
+}
+
 impl Default for WinitBackend {
     fn default() -> Self {
         Self {
@@ -384,13 +398,15 @@ impl<S> ApplicationHandler for Runner<S> {
             return;
         }
 
+        let readbacks_pending = get_mut_backend().gfx().progress_readbacks();
+
         let monitor_hz = monitor_fps();
         self.fps_limiter.update(monitor_hz);
 
         // if necessary sleep until the next frame
         self.fps_limiter.tick();
 
-        let can_render = !self.lazy || self.request_redraw;
+        let can_render = readbacks_pending || !self.lazy || self.request_redraw;
         if can_render {
             get_backend().window.as_ref().unwrap().request_redraw();
             self.request_redraw = false;
@@ -572,21 +588,25 @@ where
     };
 
     let run_result = event_loop.run_app(&mut runner);
+    get_mut_backend().cancel_readbacks();
     let graphics_error = runner.graphics_error.take();
-    if graphics_error.is_none() {
-        run_result.map_err(|e| e.to_string())?;
-    }
+    let result = (|| {
+        if graphics_error.is_none() {
+            run_result.map_err(|error| error.to_string())?;
+        }
 
-    // at this point the runner is not in use, the app is closing
-    let Some(state) = runner.state.as_mut() else {
-        return Err(graphics_error
-            .unwrap_or_else(|| "Application exited before initialization".to_string()));
-    };
-    cleanup_cb(state);
-
-    CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
-
-    graphics_error.map_or(Ok(()), Err)
+        match runner.state.as_mut() {
+            Some(state) => {
+                cleanup_cb(state);
+                CORE_EVENTS_MAP.borrow().trigger(CoreEvent::CleanUp);
+                graphics_error.map_or(Ok(()), Err)
+            }
+            None => Err(graphics_error
+                .unwrap_or_else(|| "Application exited before initialization".to_string())),
+        }
+    })();
+    get_mut_backend().shutdown();
+    result
 }
 
 #[inline]

@@ -3,7 +3,7 @@ use crate::gfx::consts::{
     MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, MAX_STORAGE_BUFFERS_PER_SHADER_STAGE,
     MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE,
 };
-use crate::gfx::{BindGroupLayoutRef, Buffer, Sampler};
+use crate::gfx::{BindGroupLayoutRef, Buffer, Sampler, TextureFormat};
 use arrayvec::ArrayVec;
 
 pub const MAX_BINDING_ENTRIES: usize = MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE
@@ -48,15 +48,36 @@ impl BindGroupLayout {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum BindType {
-    Texture,
-    Sampler,
+    Texture(SampledTextureType),
+    Sampler {
+        filtering: bool,
+    },
     Uniform,
     StorageReadonly,
+    StorageReadwrite,
+    StorageTexture {
+        format: TextureFormat,
+        access: StorageTextureAccess,
+    },
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum SampledTextureType {
+    Float { filterable: bool },
+    Sint,
+    Uint,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub enum StorageTextureAccess {
+    Readonly,
+    Writeonly,
+    Readwrite,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct BindingType {
     pub(crate) location: u32,
     pub(crate) typ: BindType,
@@ -69,7 +90,7 @@ impl BindingType {
     pub fn texture(location: u32) -> Self {
         Self {
             location,
-            typ: BindType::Texture,
+            typ: BindType::Texture(SampledTextureType::Float { filterable: true }),
             visible_fragment: false,
             visible_vertex: false,
             visible_compute: false,
@@ -79,7 +100,7 @@ impl BindingType {
     pub fn sampler(location: u32) -> Self {
         Self {
             location,
-            typ: BindType::Sampler,
+            typ: BindType::Sampler { filtering: true },
             visible_fragment: false,
             visible_vertex: false,
             visible_compute: false,
@@ -100,6 +121,16 @@ impl BindingType {
         Self {
             location,
             typ: BindType::StorageReadonly,
+            visible_fragment: false,
+            visible_vertex: false,
+            visible_compute: false,
+        }
+    }
+
+    pub fn storage_readwrite(location: u32) -> Self {
+        Self {
+            location,
+            typ: BindType::StorageReadwrite,
             visible_fragment: false,
             visible_vertex: false,
             visible_compute: false,
@@ -131,8 +162,29 @@ pub struct BindGroupDescriptor<'a> {
 
 #[derive(Copy, Clone)]
 pub enum BindGroupEntry<'a> {
-    Texture { location: u32, texture: &'a Texture },
-    Sampler { location: u32, sampler: &'a Sampler },
-    Uniform { location: u32, buffer: &'a Buffer },
-    StorageReadonly { location: u32, buffer: &'a Buffer },
+    Texture {
+        location: u32,
+        texture: &'a Texture,
+    },
+    Sampler {
+        location: u32,
+        sampler: &'a Sampler,
+    },
+    Uniform {
+        location: u32,
+        buffer: &'a Buffer,
+    },
+    StorageReadonly {
+        location: u32,
+        buffer: &'a Buffer,
+    },
+    StorageReadwrite {
+        location: u32,
+        buffer: &'a Buffer,
+    },
+    StorageTexture {
+        location: u32,
+        texture: &'a Texture,
+        access: StorageTextureAccess,
+    },
 }

@@ -17,6 +17,8 @@ pub struct Texture {
     pub(crate) view: Arc<TextureView>,
     pub(crate) size: Vec2,
     pub(crate) write: bool,
+    pub(crate) storage: bool,
+    pub(crate) copyable: bool,
     pub(crate) format: TextureFormat,
     pub(crate) mip_level_count: u32,
     pub(crate) revision: Arc<AtomicU32>,
@@ -55,6 +57,11 @@ impl Texture {
     }
 
     #[inline]
+    pub(crate) fn is_storage(&self) -> bool {
+        self.storage
+    }
+
+    #[inline]
     pub fn format(&self) -> TextureFormat {
         self.format
     }
@@ -81,6 +88,7 @@ impl Debug for Texture {
             .field("id", &self.id)
             .field("size", &self.size)
             .field("write", &self.write)
+            .field("storage", &self.storage)
             .field("format", &self.format)
             .field("mip_level_count", &self.mip_level_count)
             .finish()
@@ -88,6 +96,54 @@ impl Debug for Texture {
 }
 
 impl TextureFormat {
+    pub(crate) fn from_naga_storage(format: wgpu::naga::StorageFormat) -> Option<Self> {
+        use wgpu::naga::StorageFormat;
+
+        Some(match format {
+            StorageFormat::R8Unorm => Self::R8UNorm,
+            StorageFormat::R8Snorm => Self::R8INorm,
+            StorageFormat::R8Uint => Self::R8UInt,
+            StorageFormat::R8Sint => Self::R8Int,
+            StorageFormat::R16Unorm => Self::R16UNorm,
+            StorageFormat::R16Snorm => Self::R16INorm,
+            StorageFormat::R16Uint => Self::R16UInt,
+            StorageFormat::R16Sint => Self::R16Int,
+            StorageFormat::R16Float => Self::R16Float,
+            StorageFormat::Rg8Unorm => Self::Rg8UNorm,
+            StorageFormat::Rg8Snorm => Self::Rg8INorm,
+            StorageFormat::Rg8Uint => Self::Rg8UInt,
+            StorageFormat::Rg8Sint => Self::Rg8Int,
+            StorageFormat::Rg16Unorm => Self::Rg16UNorm,
+            StorageFormat::Rg16Snorm => Self::Rg16INorm,
+            StorageFormat::Rg16Uint => Self::Rg16UInt,
+            StorageFormat::Rg16Sint => Self::Rg16Int,
+            StorageFormat::Rg16Float => Self::Rg16Float,
+            StorageFormat::R32Uint => Self::R32UInt,
+            StorageFormat::R32Sint => Self::R32Int,
+            StorageFormat::R32Float => Self::R32Float,
+            StorageFormat::Rg32Uint => Self::Rg32UInt,
+            StorageFormat::Rg32Sint => Self::Rg32Int,
+            StorageFormat::Rg32Float => Self::Rg32Float,
+            StorageFormat::Rgba8Unorm => Self::Rgba8UNorm,
+            StorageFormat::Rgba8Snorm => Self::Rgba8INorm,
+            StorageFormat::Rgba8Uint => Self::Rgba8UInt,
+            StorageFormat::Rgba8Sint => Self::Rgba8Int,
+            StorageFormat::Bgra8Unorm => Self::Bgra8UNorm,
+            StorageFormat::Rgba16Unorm => Self::Rgba16UNorm,
+            StorageFormat::Rgba16Snorm => Self::Rgba16INorm,
+            StorageFormat::Rgba16Uint => Self::Rgba16UInt,
+            StorageFormat::Rgba16Sint => Self::Rgba16Int,
+            StorageFormat::Rgba16Float => Self::Rgba16Float,
+            StorageFormat::Rgba32Uint => Self::Rgba32UInt,
+            StorageFormat::Rgba32Sint => Self::Rgba32Int,
+            StorageFormat::Rgba32Float => Self::Rgba32Float,
+            StorageFormat::R64Uint
+            | StorageFormat::Rgb10a2Uint
+            | StorageFormat::Rgb10a2Unorm
+            | StorageFormat::Rg11b10Ufloat => return None,
+        })
+    }
+
     pub(crate) fn view_formats(&self) -> ArrayVec<WTextureFormat, 1> {
         let mut v = ArrayVec::default();
         match self {
@@ -285,6 +341,15 @@ impl Sampler {
 
     pub fn mipmap_filter(&self) -> TextureFilter {
         self.mipmap_filter
+    }
+
+    pub(crate) fn is_filtering(&self) -> bool {
+        matches!(
+            (self.min_filter, self.mag_filter, self.mipmap_filter),
+            (TextureFilter::Linear, _, _)
+                | (_, TextureFilter::Linear, _)
+                | (_, _, TextureFilter::Linear)
+        )
     }
 }
 

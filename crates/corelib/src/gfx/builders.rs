@@ -1,20 +1,51 @@
 use crate::backend::{BackendImpl, GfxBackendImpl, get_mut_backend};
 use crate::gfx::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutRef, BlendMode,
-    Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, CullMode, DepthStencil,
-    IndexFormat, Primitive, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
-    RenderTextureDescriptor, Sampler, SamplerDescriptor, Stencil, Texture, TextureDescriptor,
-    TextureFilter, TextureFormat, TextureMipLevel, TextureUpload, TextureWrap, VertexLayout,
+    Buffer, BufferDescriptor, BufferUsage, ColorMask, CompareMode, ComputePipeline,
+    ComputePipelineDescriptor, CullMode, DepthStencil, IndexFormat, IndirectArgs, IndirectBuffer,
+    PackedStorageBuffer, Primitive, RenderPipeline, RenderPipelineDescriptor, RenderTexture,
+    RenderTextureDescriptor, Sampler, SamplerDescriptor, ShaderInput, Stencil,
+    StorageTextureAccess, Texture, TextureDescriptor, TextureFilter, TextureFormat,
+    TextureMipLevel, TextureUpload, TextureWrap, VertexLayout,
 };
 use glam::{UVec2, uvec2};
 use image::EncodableLayout;
+
+pub struct ComputePipelineBuilder<'a> {
+    desc: ComputePipelineDescriptor<'a>,
+}
+
+impl<'a> ComputePipelineBuilder<'a> {
+    pub(crate) fn new(shader: ShaderInput<'a>) -> Self {
+        Self {
+            desc: ComputePipelineDescriptor {
+                shader,
+                ..Default::default()
+            },
+        }
+    }
+
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.desc.label = Some(label);
+        self
+    }
+
+    pub fn with_entry(mut self, entry: &'a str) -> Self {
+        self.desc.entry = Some(entry);
+        self
+    }
+
+    pub fn build(self) -> Result<ComputePipeline, String> {
+        get_mut_backend().gfx().create_compute_pipeline(self.desc)
+    }
+}
 
 pub struct RenderPipelineBuilder<'a> {
     desc: RenderPipelineDescriptor<'a>,
 }
 
 impl<'a> RenderPipelineBuilder<'a> {
-    pub(crate) fn new(shader: &'a str) -> Self {
+    pub(crate) fn new(shader: ShaderInput<'a>) -> Self {
         let desc = RenderPipelineDescriptor {
             shader,
             ..Default::default()
@@ -126,6 +157,99 @@ impl<'a> BufferBuilder<'a> {
     }
 }
 
+pub struct PackedStorageBufferBuilder<'a, T> {
+    values: &'a [T],
+    capacity: Option<usize>,
+    label: Option<&'a str>,
+    write: bool,
+}
+
+impl<'a, T: crate::gfx::StorageData> PackedStorageBufferBuilder<'a, T> {
+    pub(crate) fn new(values: &'a [T]) -> Self {
+        Self {
+            values,
+            capacity: None,
+            label: None,
+            write: false,
+        }
+    }
+
+    pub fn with_capacity(mut self, capacity: usize) -> Self {
+        self.capacity = Some(capacity);
+        self
+    }
+
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.label = Some(label);
+        self
+    }
+
+    pub fn with_write_flag(mut self, writable: bool) -> Self {
+        self.write = writable;
+        self
+    }
+
+    pub fn build(self) -> Result<PackedStorageBuffer<T>, String> {
+        let capacity = self.capacity.unwrap_or(self.values.len());
+        if capacity == 0 {
+            return Err("Packed storage capacity must be nonzero".to_string());
+        }
+        if capacity < self.values.len() {
+            return Err("Packed storage capacity cannot be below its initial values".to_string());
+        }
+        let allocation_size = crate::gfx::storage_byte_len::<T>(capacity)?;
+        let content = crate::gfx::encode_storage_values(self.values)?;
+        let buffer = get_mut_backend().gfx().create_buffer(BufferDescriptor {
+            label: self.label,
+            usage: BufferUsage::Storage,
+            content: &content,
+            write: self.write,
+            allocation_size: Some(allocation_size),
+            indirect: false,
+        })?;
+        Ok(PackedStorageBuffer::new(buffer))
+    }
+}
+
+pub struct IndirectBufferBuilder<A> {
+    label: Option<String>,
+    write: bool,
+    marker: std::marker::PhantomData<A>,
+}
+
+impl<A: IndirectArgs> IndirectBufferBuilder<A> {
+    pub(crate) fn new() -> Self {
+        Self {
+            label: None,
+            write: false,
+            marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn with_label(mut self, label: &str) -> Self {
+        self.label = Some(label.to_string());
+        self
+    }
+
+    pub fn with_write_flag(mut self, writable: bool) -> Self {
+        self.write = writable;
+        self
+    }
+
+    pub fn build(self) -> Result<IndirectBuffer<A>, String> {
+        let content = vec![0; A::BYTE_SIZE];
+        let buffer = get_mut_backend().gfx().create_buffer(BufferDescriptor {
+            label: self.label.as_deref(),
+            usage: BufferUsage::Storage,
+            content: &content,
+            write: self.write,
+            allocation_size: Some(A::BYTE_SIZE),
+            indirect: true,
+        })?;
+        Ok(IndirectBuffer::new(buffer))
+    }
+}
+
 pub struct BindGroupBuilder<'a> {
     desc: BindGroupDescriptor<'a>,
 }
@@ -175,6 +299,39 @@ impl<'a> BindGroupBuilder<'a> {
         self
     }
 
+    pub fn with_storage_readwrite(mut self, location: u32, buffer: &'a Buffer) -> Self {
+        self.desc
+            .entry
+            .push(BindGroupEntry::StorageReadwrite { location, buffer });
+        self
+    }
+
+    fn with_storage_texture(
+        mut self,
+        location: u32,
+        texture: &'a Texture,
+        access: StorageTextureAccess,
+    ) -> Self {
+        self.desc.entry.push(BindGroupEntry::StorageTexture {
+            location,
+            texture,
+            access,
+        });
+        self
+    }
+
+    pub fn with_storage_texture_readonly(self, location: u32, texture: &'a Texture) -> Self {
+        self.with_storage_texture(location, texture, StorageTextureAccess::Readonly)
+    }
+
+    pub fn with_storage_texture_writeonly(self, location: u32, texture: &'a Texture) -> Self {
+        self.with_storage_texture(location, texture, StorageTextureAccess::Writeonly)
+    }
+
+    pub fn with_storage_texture_readwrite(self, location: u32, texture: &'a Texture) -> Self {
+        self.with_storage_texture(location, texture, StorageTextureAccess::Readwrite)
+    }
+
     pub fn build(self) -> Result<BindGroup, String> {
         let Self { desc } = self;
         get_mut_backend().gfx().create_bind_group(desc)
@@ -213,11 +370,13 @@ impl<'a> BufferWriteBuilder<'a> {
             data,
         } = self;
 
-        if !buffer.is_writable() {
-            return Err("Buffer is not Writable".to_string());
-        }
-
         let data = data.unwrap_or(&[]);
+        crate::gfx::validate_buffer_write(
+            buffer,
+            offset,
+            data.len(),
+            crate::gfx::BufferWriteMode::Immediate,
+        )?;
         get_mut_backend().gfx().write_buffer(buffer, offset, data)
     }
 }
@@ -373,6 +532,7 @@ impl<'a> TextureWriteBuilder<'a> {
 pub struct TextureBuilder<'a> {
     desc: TextureDescriptor<'a>,
     source: TextureSource<'a>,
+    size: Option<(u32, u32)>,
     mipmaps: bool,
 }
 
@@ -384,6 +544,7 @@ impl Default for TextureBuilder<'_> {
                 width: 1,
                 height: 1,
             },
+            size: None,
             mipmaps: false,
         }
     }
@@ -392,6 +553,13 @@ impl Default for TextureBuilder<'_> {
 impl<'a> TextureBuilder<'a> {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn storage() -> Self {
+        let mut builder = Self::new();
+        builder.desc.format = TextureFormat::Rgba8UNorm;
+        builder.desc.storage = true;
+        builder
     }
 
     pub fn from_image(mut self, image: &'a [u8]) -> Self {
@@ -409,11 +577,14 @@ impl<'a> TextureBuilder<'a> {
         self
     }
 
-    pub fn with_empty_size(mut self, width: u32, height: u32) -> Self {
-        if matches!(self.source, TextureSource::Empty { .. }) {
-            self.source = TextureSource::Empty { width, height };
-        }
+    pub fn with_size(mut self, width: u32, height: u32) -> Self {
+        self.size = Some((width, height));
         self
+    }
+
+    #[deprecated(note = "use with_size")]
+    pub fn with_empty_size(self, width: u32, height: u32) -> Self {
+        self.with_size(width, height)
     }
 
     pub fn with_label(mut self, label: &'a str) -> Self {
@@ -440,8 +611,12 @@ impl<'a> TextureBuilder<'a> {
         let Self {
             desc,
             source,
+            size,
             mipmaps,
         } = self;
+        if let Some((width, height)) = size {
+            validate_size(desc.label, width, height)?;
+        }
         if mipmaps && matches!(source, TextureSource::Mipmaps(_)) {
             return Err(texture_error(
                 desc.label,
@@ -449,8 +624,16 @@ impl<'a> TextureBuilder<'a> {
             ));
         }
 
+        if desc.storage && (mipmaps || matches!(source, TextureSource::Mipmaps(_))) {
+            return Err(texture_error(
+                desc.label,
+                "storage textures cannot have mipmaps",
+            ));
+        }
+
         match source {
             TextureSource::Empty { width, height } => {
+                let (width, height) = size.unwrap_or((width, height));
                 validate_size(desc.label, width, height)?;
                 if desc.format.is_depth() {
                     if mipmaps {
@@ -483,13 +666,20 @@ impl<'a> TextureBuilder<'a> {
                 })?;
                 let rgba = image.to_rgba8();
                 let level = TextureMipLevel::new(rgba.as_bytes(), rgba.width(), rgba.height());
+                validate_source_size(desc.label, size, level)?;
                 create_texture(desc, level, mipmaps)
             }
             TextureSource::Raw(level) => {
+                validate_source_size(desc.label, size, level)?;
                 validate_level(desc, level, 0)?;
                 create_texture(desc, level, mipmaps)
             }
             TextureSource::Mipmaps(levels) => {
+                let base = levels
+                    .first()
+                    .copied()
+                    .ok_or_else(|| texture_error(desc.label, "mipmap chain cannot be empty"))?;
+                validate_source_size(desc.label, size, base)?;
                 validate_mipmaps(desc, levels)?;
                 get_mut_backend()
                     .gfx()
@@ -510,6 +700,26 @@ fn create_texture(
         TextureUpload::Single(level)
     };
     get_mut_backend().gfx().create_texture(desc, upload)
+}
+
+fn validate_source_size(
+    label: Option<&str>,
+    requested: Option<(u32, u32)>,
+    level: TextureMipLevel<'_>,
+) -> Result<(), String> {
+    let Some((width, height)) = requested else {
+        return Ok(());
+    };
+    if level.width == width && level.height == height {
+        return Ok(());
+    }
+    Err(texture_error(
+        label,
+        &format!(
+            "requested size {width}x{height} does not match source size {}x{}",
+            level.width, level.height
+        ),
+    ))
 }
 
 fn validate_mipmaps(

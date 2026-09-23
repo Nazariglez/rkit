@@ -14,10 +14,8 @@ pub(crate) struct InnerBuffer {
 #[derive(Clone)]
 pub struct Buffer {
     pub(crate) id: BufferId,
-    // NOTE: this ugly double Arc is because to create the raw binding we need a reference
-    // to Buffer that cannot be under a borrow because lifetime issues, and the atomic
-    // refcell is necessary to update the buffer when the size is too small on write
-    // operations if the performance is not acceptable we can think about unsafe I guess
+    // Bindable allocations never change. Vertex and index buffers retain their existing
+    // grow-on-write behavior, so their shared inner allocation remains mutable.
     pub(crate) inner: Arc<AtomicRefCell<InnerBuffer>>,
     pub(crate) usage: BufferUsage,
     pub(crate) write: bool,
@@ -44,11 +42,16 @@ impl Buffer {
 
 impl BufferUsage {
     pub(crate) fn as_wgpu(&self) -> wgpu::BufferUsages {
-        match self {
+        let binding = match self {
             BufferUsage::Vertex => BufferUsages::VERTEX,
             BufferUsage::Index => BufferUsages::INDEX,
             BufferUsage::Uniform => BufferUsages::UNIFORM,
             BufferUsage::Storage => BufferUsages::STORAGE,
+        };
+        if matches!(self, BufferUsage::Uniform | BufferUsage::Storage) {
+            binding | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
+        } else {
+            binding
         }
     }
 }

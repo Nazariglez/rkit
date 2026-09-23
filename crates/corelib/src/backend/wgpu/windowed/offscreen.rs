@@ -129,7 +129,7 @@ impl OffscreenSurfaceData {
 
         let pip = gfx.create_render_pipeline(RenderPipelineDescriptor {
             label: Some("Offscreen Surface Pipeline"),
-            shader: &format!("{vert}\n{frag}"),
+            shader: crate::gfx::ShaderInput::Source(&format!("{vert}\n{frag}")),
             vertex_layout: (&[VertexLayout::new()
                 .with_attr(0, VertexFormat::Float32x2)
                 .with_attr(1, VertexFormat::Float32x2)] as &[_])
@@ -163,6 +163,7 @@ impl OffscreenSurfaceData {
             usage: BufferUsage::Vertex,
             content: bytemuck::cast_slice(vertices),
             write: false,
+            ..Default::default()
         })?;
 
         #[rustfmt::skip]
@@ -176,6 +177,7 @@ impl OffscreenSurfaceData {
             usage: BufferUsage::Index,
             content: bytemuck::cast_slice(indices),
             write: false,
+            ..Default::default()
         })?;
 
         let bind_group = gfx.create_bind_group(BindGroupDescriptor {

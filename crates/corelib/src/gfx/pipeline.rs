@@ -1,7 +1,9 @@
 use super::consts::{
     MAX_BIND_GROUPS_PER_PIPELINE, MAX_PIPELINE_COMPATIBLE_TEXTURES, MAX_VERTEX_BUFFERS,
 };
-use crate::gfx::{BindGroupLayout, BlendMode, Color, IndexFormat, TextureFormat, VertexLayout};
+use crate::gfx::{
+    BindGroupLayout, BlendMode, Color, IndexFormat, ShaderInput, TextureFormat, VertexLayout,
+};
 use arrayvec::ArrayVec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -13,10 +15,10 @@ impl From<u64> for PipelineId {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct RenderPipelineDescriptor<'a> {
     pub label: Option<&'a str>,
-    pub shader: &'a str,
+    pub shader: ShaderInput<'a>,
     pub depth_stencil: Option<DepthStencil>,
     pub stencil: Option<Stencil>,
     pub vertex_layout: ArrayVec<VertexLayout, MAX_VERTEX_BUFFERS>,
@@ -29,6 +31,44 @@ pub struct RenderPipelineDescriptor<'a> {
     pub fs_entry: Option<&'a str>,
     pub color_mask: ColorMask,
     pub compatible_textures: ArrayVec<TextureFormat, MAX_PIPELINE_COMPATIBLE_TEXTURES>,
+}
+
+#[derive(Clone)]
+pub struct ComputePipelineDescriptor<'a> {
+    pub label: Option<&'a str>,
+    pub shader: ShaderInput<'a>,
+    pub entry: Option<&'a str>,
+}
+
+impl Default for ComputePipelineDescriptor<'_> {
+    fn default() -> Self {
+        Self {
+            label: None,
+            shader: ShaderInput::Source(""),
+            entry: None,
+        }
+    }
+}
+
+impl Default for RenderPipelineDescriptor<'_> {
+    fn default() -> Self {
+        Self {
+            label: None,
+            shader: ShaderInput::Source(""),
+            depth_stencil: None,
+            stencil: None,
+            vertex_layout: Default::default(),
+            primitive: Default::default(),
+            index_format: Default::default(),
+            bind_group_layout: Default::default(),
+            blend_mode: None,
+            cull_mode: None,
+            vs_entry: None,
+            fs_entry: None,
+            color_mask: Default::default(),
+            compatible_textures: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
