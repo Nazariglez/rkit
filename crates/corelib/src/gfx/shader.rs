@@ -3,8 +3,8 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct Shader {
     pub(crate) raw: Arc<wgpu::ShaderModule>,
-    pub(crate) module: Arc<wgpu::naga::Module>,
-    pub(crate) info: Arc<wgpu::naga::valid::ModuleInfo>,
+    pub(crate) module: Arc<naga::Module>,
+    pub(crate) info: Arc<naga::valid::ModuleInfo>,
 }
 
 #[derive(Clone)]

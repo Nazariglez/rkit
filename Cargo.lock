@@ -1035,6 +1035,7 @@ dependencies = [
  "image",
  "js-sys",
  "log",
+ "naga",
  "nohash-hasher",
  "once_cell",
  "pollster",

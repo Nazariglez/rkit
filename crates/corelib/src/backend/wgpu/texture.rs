@@ -96,8 +96,8 @@ impl Debug for Texture {
 }
 
 impl TextureFormat {
-    pub(crate) fn from_naga_storage(format: wgpu::naga::StorageFormat) -> Option<Self> {
-        use wgpu::naga::StorageFormat;
+    pub(crate) fn from_naga_storage(format: naga::StorageFormat) -> Option<Self> {
+        use naga::StorageFormat;
 
         Some(match format {
             StorageFormat::R8Unorm => Self::R8UNorm,

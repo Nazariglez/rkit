@@ -6,17 +6,17 @@ use crate::{
     },
 };
 use arrayvec::ArrayVec;
-use std::{collections::BTreeMap, sync::Arc};
-use wgpu::naga::{
+use naga::{
     AddressSpace, GlobalVariable, Handle, ImageClass, ImageDimension, Module, ScalarKind,
     ShaderStage, StorageAccess, TypeInner,
     valid::{Capabilities, FunctionInfo, ValidationFlags, Validator},
 };
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::gfx::consts::MAX_BIND_GROUPS_PER_PIPELINE;
 
 pub(crate) fn create_shader(device: &wgpu::Device, source: &str) -> Result<Shader, String> {
-    let module = wgpu::naga::front::wgsl::parse_str(source).map_err(|error| {
+    let module = naga::front::wgsl::parse_str(source).map_err(|error| {
         format!(
             "Invalid WGSL shader source:\n{}",
             error.emit_to_string(source)
